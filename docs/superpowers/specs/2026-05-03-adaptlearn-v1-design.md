@@ -13,7 +13,7 @@ This document supersedes `AdaptLearn_Spec.md` and `AdaptLearn_DevPlan.md` for v1
 | Constraint | Decision | Reason |
 |---|---|---|
 | Deliverable | Full app + 2-3 min walkthrough screencast | Portfolio piece |
-| Duration | 6 weeks, public deadline | Stall prevention |
+| Duration | 7 weeks, public deadline | Stall prevention; bumped from 6 to absorb full-pyramid test cost |
 | Profile depth | Mid (not full spec) | LLM tool-call reliability risk; user has no agent experience |
 | Agent framework | LiteLLM direct | Avoid ADK + agent-pattern double unknown |
 | LLM | Gemini 2.5 Pro via LiteLLM (free tier) | Cost; paid Claude as fallback if reliability issues |
@@ -22,7 +22,7 @@ This document supersedes `AdaptLearn_Spec.md` and `AdaptLearn_DevPlan.md` for v1
 | Frontend | Vue 3 + Vite + PrimeVue + Pinia | Portfolio recognizability |
 | Auth | None (localStorage userId) | v1 scope |
 | Streaming | None | v1 scope |
-| CI | None | v1 scope |
+| CI | Full pyramid: pytest + Vitest + Playwright + GitHub Actions | Portfolio bullet + regression safety |
 
 ---
 
@@ -221,17 +221,63 @@ Tool call: update_topic_profile(...)
 
 ## 6. Testing strategy
 
-Manual end-to-end per phase. No unit tests in v1.
+Full pyramid: unit + integration + e2e + CI. Tests written per-phase as units come online.
 
-**Phase 0 spike** is the only formal pass/fail gate (see §7 Phase 0).
+### 6.1 Layers
 
-**Reliability checkpoints:**
+**Backend unit (pytest)**
+- `profile_service` — promotion/demotion rules, evidence-type filtering, focus_target_gap set/clear
+- `keyword_index` — Porter stem, frequency threshold, build/match
+- `chunking` — token boundaries, overlap, page mapping
+- `rate_limit` — increment, 24h reset, cap enforcement
+- Pydantic schema validation — accept valid, reject malformed
+
+**Backend integration (FastAPI TestClient + pytest)**
+- POST `/api/chat` — mocked LiteLLM, asserts ChatMessage persisted, tool dispatch fires, daily cap returns 429
+- POST `/api/upload` — small fixture PDF, asserts ChromaDB collection populated (against in-process Chroma)
+- `/api/sessions` CRUD — Resume seeding copies profile, end_session_now sets session_ended
+- Tool handler dispatch — invalid schema returns error to agent loop
+
+**Frontend unit (Vitest + @vue/test-utils)**
+- ChatWindow — renders messages, send button POSTs, loading state during request
+- OnboardingCard — emits select on click
+- Pinia stores — user.js persists to localStorage, session.js loads messages
+
+**E2E (Playwright)**
+- Onboarding → home → new session → chat happy path
+- Resume flow: end session → start same topic → profile carried
+- PDF upload → ingestion banner → ready → cited chat response
+- Daily cap reached → toast + disabled input
+
+**LLM-touching tests:** mock LiteLLM responses with deterministic fixtures. Real LLM calls are dogfood/manual only — too flaky and expensive for CI.
+
+### 6.2 CI (GitHub Actions)
+
+`.github/workflows/ci.yml`:
+- Trigger: push, PR
+- Jobs: backend (pytest), frontend (vitest), e2e (Playwright in container)
+- e2e job runs `docker-compose up` then Playwright against running stack
+- All jobs must pass to merge
+
+Coverage targets (informational, not gate):
+- Backend unit: ≥70% on services/lib modules
+- Frontend unit: ≥50% on components/stores
+- e2e: 4 happy-path scenarios above
+
+### 6.3 Reliability checkpoints (LLM-driven, manual)
+
 - End of v1 Phase 2: tool-call reliability ≥85% on `update_topic_profile`. Failure → swap to paid Claude Sonnet or iterate prompts.
 - End of v1 Phase 3: `focus_target_gap` clearing reliability ≥85% across 4 patterns (linear, topic-shift, tangent, vague-signal). Failure → 3 prompt iterations, then swap model.
 
+These run against real LLM, hand-scripted, not in CI.
+
+### 6.4 Phase 0 spike
+
+Only formal pass/fail gate for the premise itself (see §7 Phase 0). Spike has its own minimal pytest harness for output diffing — not part of main CI.
+
 ---
 
-## 7. Phase plan (collapsed from 11 to 6)
+## 7. Phase plan (collapsed from 11 to 6, 7 weeks total)
 
 ### Phase 0 — Validation spike (Week 1, days 1–2, BLOCKING)
 
@@ -243,27 +289,48 @@ Standalone Python script using LiteLLM + Gemini. Three profile pairs (knowledge,
 
 Also during Week 1: docker-compose smoke test, ChromaDB integration smoke test, Gemini tool-calling smoke test (verify ≥85% reliability on `update_topic_profile` shape).
 
-### Phase 1 — Scaffold + chat loop (Week 2)
+### Phase 1 — Scaffold + chat loop + CI baseline (Week 2)
 
-`docker-compose up` boots Vue + FastAPI + ChromaDB. SQLAlchemy models, Pydantic schemas, FastAPI routes stubbed. Tutor agent with LiteLLM, no tools yet. Single chat round-trip works. Daily cap enforced.
+**Code:**
+- `docker-compose up` boots Vue + FastAPI + ChromaDB
+- SQLAlchemy models, Pydantic schemas, FastAPI routes stubbed
+- Tutor agent with LiteLLM, no tools yet
+- Single chat round-trip works
+- Daily cap enforced
+
+**CI scaffolding (~3 days):**
+- Backend: pytest + pytest-asyncio + FastAPI TestClient + httpx, conftest fixtures (in-memory SQLite, mocked LiteLLM, fake ChromaDB)
+- Frontend: Vitest + @vue/test-utils + jsdom, basic component test
+- E2E: Playwright + docker-compose ci profile
+- `.github/workflows/ci.yml` with backend/frontend/e2e jobs
+
+**Tests written this phase:** rate_limit unit, health endpoint integration, App.vue smoke render, e2e "load home" happy path.
 
 ### Phase 2 — Tools + mid-profile (Week 3)
 
-3 tools wired. profile_service applies mid-profile rules. focus_target_gap set/clear with end-of-focus check questions. `/api/profile/{id}` JSON debug route. Tool-call reliability checkpoint at end (see §6).
+**Code:** 3 tools wired. profile_service applies mid-profile rules. focus_target_gap set/clear with end-of-focus check questions. `/api/profile/{id}` JSON debug route. **Tool-call reliability checkpoint at end (see §6.3).**
+
+**Tests:** profile_service unit (all promotion/demotion paths, evidence-type filtering, focus set/clear), Pydantic schema validation suite, chat route integration with mocked LiteLLM emitting tool_calls, e2e "send message → tool fires → profile shows in /dev route".
 
 ### Phase 3 — Sessions + Resume + onboarding (Week 4)
 
-Session creation with 2-way Fresh/Resume toggle. Resume copies prior profile + summary. Single-card onboarding. Quiz Me button. HomeView lists sessions grouped by topic.
+**Code:** Session creation with 2-way Fresh/Resume toggle. Resume copies prior profile + summary. Single-card onboarding. Quiz Me button. HomeView lists sessions grouped by topic.
 
 **MLP checkpoint at week 4 end:** 2 days dogfooding without RAG. Decision recorded in `analysis/mlp_checkpoint.md`. Decide whether to build RAG.
 
+**Tests:** sessions CRUD integration, Resume seeding copies profile, end_session_now sets session_ended, OnboardingCard component, user store with localStorage, e2e "onboard → new session → chat → close → resume same topic".
+
 ### Phase 4 — PDF + RAG (Week 5)
 
-PDF upload, background ingestion, ChromaDB collection per session, keyword index, retrieve_chunks tool, citation rendering, ingestion banner with polling.
+**Code:** PDF upload, background ingestion, ChromaDB collection per session, keyword index, retrieve_chunks tool, citation rendering, ingestion banner with polling.
 
-### Phase 5 — Profile view + polish + deploy + record (Week 6)
+**Tests:** chunking unit (token boundaries, overlap, page mapping), keyword_index unit (Porter stem, frequency threshold, build/match), upload route integration with fixture PDF + in-process Chroma, retrieve_chunks tool returns no_results during pending, ChatWindow renders citations, e2e "upload PDF → wait ready → ask note-related question → see citation".
 
-ProfileView with editable lists, LearningEvents grouped, Settings page, error toasts, daily-cap UI. Production docker-compose with nginx. Deploy locally + record 2-3 min walkthrough screencast. Push public.
+### Phase 5 — Profile view + polish + deploy + record (Weeks 6–7)
+
+**Code:** ProfileView with editable lists, LearningEvents grouped, Settings page, error toasts, daily-cap UI. **Focus-clearing reliability checkpoint (see §6.3).** Production docker-compose with nginx. Deploy locally + record 2-3 min walkthrough screencast. Push public.
+
+**Tests:** ProfileView component (renders all sections, delete button writes back), Settings retake flow, e2e "daily cap reached → toast → input disabled". Coverage final pass: gap-fill any missed branches in profile_service, keyword_index, chunking. CI green on main as merge gate.
 
 ---
 
@@ -298,8 +365,11 @@ ProfileView with editable lists, LearningEvents grouped, Settings page, error to
 | `focus_target_gap` clearing unreliable | v1 Phase 3 check; 3 prompt iterations then swap model. |
 | ChromaDB integration unfamiliar | Smoke test in Week 1 (3 hours). |
 | Vue 3 + Pinia + PrimeVue learning curve | Time-box: if Phase 1 not running by end of Week 2, drop PrimeVue, plain HTML. |
-| Stall risk (no exam) | Public 6-week deadline + weekly progress posts on X/LinkedIn. |
+| Stall risk (no exam) | Public 7-week deadline + weekly progress posts on X/LinkedIn. |
 | Scope creep | This doc is the contract. Anything not in §7 phase plan = v2. |
+| Playwright e2e flakiness on CI | Run e2e job non-blocking (warn only) for first 2 weeks; flip to required once stable. Container-level retries=2. |
+| Test maintenance eats build time | If any phase falls behind, drop e2e tests for that phase to unit+integration only. Don't drop unit tests. |
+| Gemini free-tier limits hit during smoke tests in CI | CI never calls real LLM. All LLM calls mocked. Real-LLM reliability runs are manual. |
 
 ---
 
@@ -308,9 +378,10 @@ ProfileView with editable lists, LearningEvents grouped, Settings page, error to
 1. Phase 0 spike passes (turn 1 AND turn 8 differences).
 2. MLP checkpoint passes (no-RAG version is worth continuing).
 3. Tool-call reliability ≥85% on profile updates by end of Week 3.
-4. Focus clearing reliability ≥85% by end of Week 5.
-5. 2-3 min walkthrough screencast recorded by end of Week 6.
-6. Public repo + writeup posted.
+4. Focus clearing reliability ≥85% by end of Week 4.
+5. CI green on main: backend unit ≥70%, frontend unit ≥50%, all e2e scenarios passing.
+6. 2-3 min walkthrough screencast recorded by end of Week 7.
+7. Public repo + writeup posted.
 
 ---
 
@@ -327,7 +398,6 @@ ProfileView with editable lists, LearningEvents grouped, Settings page, error to
 - Friend sharing (Phase 11 from original)
 - OCR / scanned PDFs
 - Per-subtopic knowledge level
-- CI / unit tests
 - Production hosting (cloud deploy)
 
 ---
