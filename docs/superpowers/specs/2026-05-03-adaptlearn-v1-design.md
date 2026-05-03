@@ -1,0 +1,342 @@
+# AdaptLearn v1 — Design
+
+**Date:** 2026-05-03
+**Status:** Approved (brainstorm phase)
+**Goal:** Portfolio-grade adaptive AI tutor with RAG. Full app + recorded walkthrough. 6-week public deadline.
+
+This document supersedes `AdaptLearn_Spec.md` and `AdaptLearn_DevPlan.md` for v1 scope. The originals remain as reference for v2 features.
+
+---
+
+## 1. Constraints (locked during brainstorm)
+
+| Constraint | Decision | Reason |
+|---|---|---|
+| Deliverable | Full app + 2-3 min walkthrough screencast | Portfolio piece |
+| Duration | 6 weeks, public deadline | Stall prevention |
+| Profile depth | Mid (not full spec) | LLM tool-call reliability risk; user has no agent experience |
+| Agent framework | LiteLLM direct | Avoid ADK + agent-pattern double unknown |
+| LLM | Gemini 2.5 Pro via LiteLLM (free tier) | Cost; paid Claude as fallback if reliability issues |
+| Embeddings | Gemini text-embedding-004 (free, 768-dim) | Same |
+| Backend | FastAPI + SQLite + ChromaDB, dockerized | User said no Firebase; local-first reproducible |
+| Frontend | Vue 3 + Vite + PrimeVue + Pinia | Portfolio recognizability |
+| Auth | None (localStorage userId) | v1 scope |
+| Streaming | None | v1 scope |
+| CI | None | v1 scope |
+
+---
+
+## 2. Architecture
+
+```
+docker-compose.yml
+├── frontend  : Vue 3 + Vite (dev) / nginx static (prod). Port 5173.
+├── backend   : FastAPI + Uvicorn. Port 8000.
+└── chromadb  : chromadb/chroma server. Port 8001.
+
+Volumes:
+  ./data/app.db       (SQLite, mounted in backend)
+  ./data/uploads/     (PDFs, mounted in backend)
+  ./data/chroma/      (ChromaDB persistence)
+```
+
+**Why this shape:**
+- `docker-compose up` boots whole app — reproducibility + portfolio bullet
+- SQLite for relational, ChromaDB for vectors — zero-ops, single-file backups
+- ChromaDB server mode (not embedded) — clean separation, scales beyond v1
+- FastAPI = Pydantic native, async, OpenAPI auto-docs
+
+**Latency budget:**
+- Backend non-LLM response: <100ms
+- LLM call dominates wall time (Gemini 2.5 Pro: 3-8s typical)
+- No cold start (local docker)
+
+---
+
+## 3. Components
+
+### 3.1 Backend layout
+
+```
+backend/
+  main.py                    # FastAPI app, CORS, route registration
+  agent/
+    tutor.py                 # LiteLLM agent loop, tool dispatch
+    prompts.py               # IMMUTABLE_RULES + DYNAMIC_CONTEXT_TEMPLATE
+    tools.py                 # 3 tool definitions + dispatch handlers
+  routes/
+    chat.py                  # POST /api/chat
+    sessions.py              # /api/sessions CRUD + /end + /quiz
+    upload.py                # POST /api/upload (multipart)
+    profile.py               # GET /api/profile/{session_id}
+  services/
+    profile_service.py       # update_topic_profile mid-rules
+    retrieval_service.py     # ChromaDB query
+    ingestion_service.py     # PDF chunk + embed + index
+    summary_service.py       # end_session_now LLM call
+    rate_limit.py            # Per-user daily cap
+  db/
+    models.py                # SQLAlchemy: User, Session, ChatMessage, LearningEvent
+    schemas.py               # Pydantic DTOs + TopicProfile schema
+    database.py              # Engine + session factory
+  lib/
+    keyword_index.py         # Porter stem, build/match
+    chunking.py              # tiktoken 500-token chunks, 50 overlap
+  config.py                  # env vars
+```
+
+### 3.2 Frontend layout
+
+```
+frontend/src/
+  main.js, App.vue, router/index.js
+  stores/
+    user.js                  # userId, name, prefs, onboarding state
+    session.js               # current session, messages, profile
+  api/client.js              # axios baseURL=http://localhost:8000/api
+  components/
+    ChatWindow.vue           # messages, input, Quiz Me button
+    OnboardingCard.vue       # title + 2 options
+    ProfileSection.vue       # reusable read/edit field
+  views/
+    HomeView.vue             # sessions grouped by topic
+    OnboardingView.vue       # single card (cut from 2)
+    SettingsView.vue         # read-only prefs, retake
+    NewSessionView.vue       # topic + PDF + 2-way [Fresh/Resume]
+    SessionView.vue          # ChatWindow + ingestion banner
+    ProfileView.vue          # read-only profile + LearningEvents
+```
+
+### 3.3 Tools (LiteLLM format)
+
+Three tools registered on the tutor agent:
+
+1. **`update_topic_profile(session_id, knowledge_level?, add_confirmed_gap?, add_mastered_concept?, focus_target_gap?, evidence_type)`** — Pydantic-validated patch.
+2. **`retrieve_chunks(session_id, query, k=5)`** — ChromaDB vector search.
+3. **`record_learning_event(session_id, gap_tested, question, correct)`** — log check-question. Side-effect: if `correct=false` and `gap_tested` is in `mastered_concepts`, server-side demote (remove from list).
+
+### 3.4 Mid-profile (simplified vs original spec)
+
+**Kept fields:**
+```json
+{
+  "knowledge_level": "beginner|intermediate|advanced",
+  "confirmed_gaps": ["string"],
+  "mastered_concepts": ["string"],
+  "focus_target_gap": "string|null",
+  "last_session_summary": "string|null"
+}
+```
+
+**Dropped:** mastered_candidates, observed_gaps, evidence_count, tested_positive_count, asymmetric promotion, canonicalization, focus_areas snapshotting, draft summary, stale candidate display.
+
+**Promotion rule (simple):** declared mastery enters `mastered_concepts` directly. Re-test miss removes it. No counters, no candidate gate.
+
+**Evidence types still tracked** (declared/inferred/tested) but only used for filtering: `inferred` mastery is ignored; `declared` and `tested` mastery accepted.
+
+**End-of-focus protocol:** when agent clears `focus_target_gap`, system prompt instructs: generate 2–3 check questions, log each via `record_learning_event`.
+
+---
+
+## 4. Data flow
+
+### 4.1 Chat turn (hot path)
+
+```
+ChatWindow → POST /api/chat → routes/chat.py:
+  1. rate_limit.check_and_increment → 429 on cap
+  2. Load Session + last 20 ChatMessages
+  3. keyword_index.match(message, session.kw_index) → retrieval_required
+  4. prompts.build(immutable + dynamic_context)
+  5. agent.tutor.run(messages, system_prompt, tools)
+       on tool_call: dispatch to profile/retrieval/learning_event service
+       loop until assistant text final
+  6. Persist user + assistant ChatMessage (tool_calls JSON column)
+  7. Return { assistant_message, tool_calls, citations }
+```
+
+### 4.2 PDF ingestion (background)
+
+```
+Upload → save file → ingestion_status="pending" → BackgroundTasks.add()
+Background:
+  pypdf extract → tiktoken chunk → Gemini embed → ChromaDB add
+  build keyword_index, merge into Session
+  ingestion_status="ready" (or "failed")
+
+Frontend polls GET /api/sessions/{id} every 3s while banner shown.
+```
+
+### 4.3 Session lifecycle
+
+```
+NewSession submit:
+  if prior session exists:
+    if !session_ended: synchronously summary_service.end_now(prior)
+    copy topic_profile + last_session_summary
+    seed_mode = "resume"
+  else:
+    seed_mode = "fresh", empty profile
+  insert Session, navigate /session/{id}
+
+Close session:
+  POST /api/sessions/{id}/end → summary_service.end_now → set session_ended
+```
+
+### 4.4 Profile update
+
+```
+Tool call: update_topic_profile(...)
+  → profile_service.update:
+     validate Pydantic
+     load Session.topic_profile (JSON column)
+     apply patch:
+       knowledge_level: overwrite
+       add_confirmed_gap: append if not duplicate (string match)
+       add_mastered_concept: append if evidence_type in (declared, tested)
+       focus_target_gap: set or clear
+     save
+     return {ok: bool}
+```
+
+---
+
+## 5. Error handling
+
+| Failure | Response |
+|---|---|
+| Daily cap hit | 429 → toast, disable input until midnight UTC |
+| LiteLLM timeout (>30s) | Retry once shorter context → 503 + Retry toast |
+| Gemini free-tier rate limit | 429 + countdown toast |
+| Tool schema invalid | Agent retry once, then log `tool_calls[].status="failed"`, inline muted notice |
+| Retrieval pending/down | Tool returns `{status: "no_results", reason}`, agent continues |
+| PDF ingestion failure | `ingestion_status="failed"`, banner shows error |
+| `end_session_now` LLM failure | Return `{ok: false}`, fallback to last-5-messages summary |
+| SQLite locked | SQLAlchemy WAL retry; persistent fail → 503 |
+| Frontend network drop | axios retry once + reload toast |
+
+**Logging:** Python stdlib `logging` to stdout (docker logs). Structured JSON in prod. Tool-call outcomes always persisted on `ChatMessage.tool_calls`.
+
+---
+
+## 6. Testing strategy
+
+Manual end-to-end per phase. No unit tests in v1.
+
+**Phase 0 spike** is the only formal pass/fail gate (see §7 Phase 0).
+
+**Reliability checkpoints:**
+- End of v1 Phase 2: tool-call reliability ≥85% on `update_topic_profile`. Failure → swap to paid Claude Sonnet or iterate prompts.
+- End of v1 Phase 3: `focus_target_gap` clearing reliability ≥85% across 4 patterns (linear, topic-shift, tangent, vague-signal). Failure → 3 prompt iterations, then swap model.
+
+---
+
+## 7. Phase plan (collapsed from 11 to 6)
+
+### Phase 0 — Validation spike (Week 1, days 1–2, BLOCKING)
+
+Standalone Python script using LiteLLM + Gemini. Three profile pairs (knowledge, guidance, engagement). Run "Teach me about [topic]" through both profiles, 8-turn scripted conversation each. Save outputs side-by-side.
+
+**Pass:** all three pairs differ at turn 1 AND turn 8.
+**Knowledge-only pass:** drop interaction_preferences, profile-only.
+**Fail:** stop. Pivot or abandon.
+
+Also during Week 1: docker-compose smoke test, ChromaDB integration smoke test, Gemini tool-calling smoke test (verify ≥85% reliability on `update_topic_profile` shape).
+
+### Phase 1 — Scaffold + chat loop (Week 2)
+
+`docker-compose up` boots Vue + FastAPI + ChromaDB. SQLAlchemy models, Pydantic schemas, FastAPI routes stubbed. Tutor agent with LiteLLM, no tools yet. Single chat round-trip works. Daily cap enforced.
+
+### Phase 2 — Tools + mid-profile (Week 3)
+
+3 tools wired. profile_service applies mid-profile rules. focus_target_gap set/clear with end-of-focus check questions. `/api/profile/{id}` JSON debug route. Tool-call reliability checkpoint at end (see §6).
+
+### Phase 3 — Sessions + Resume + onboarding (Week 4)
+
+Session creation with 2-way Fresh/Resume toggle. Resume copies prior profile + summary. Single-card onboarding. Quiz Me button. HomeView lists sessions grouped by topic.
+
+**MLP checkpoint at week 4 end:** 2 days dogfooding without RAG. Decision recorded in `analysis/mlp_checkpoint.md`. Decide whether to build RAG.
+
+### Phase 4 — PDF + RAG (Week 5)
+
+PDF upload, background ingestion, ChromaDB collection per session, keyword index, retrieve_chunks tool, citation rendering, ingestion banner with polling.
+
+### Phase 5 — Profile view + polish + deploy + record (Week 6)
+
+ProfileView with editable lists, LearningEvents grouped, Settings page, error toasts, daily-cap UI. Production docker-compose with nginx. Deploy locally + record 2-3 min walkthrough screencast. Push public.
+
+---
+
+## 8. Cuts vs original spec
+
+| Original | v1 cut | Reason |
+|---|---|---|
+| ADK + LiteLLM | LiteLLM only | Avoid framework risk |
+| Firebase Cloud Functions | FastAPI in docker | User said no Firebase |
+| Firestore vector | ChromaDB | Local-first, no cloud lock-in |
+| OpenAI embeddings | Gemini embeddings | Free tier |
+| Asymmetric promotion + tightened gate | Direct promotion + retest demotion | LLM-driven complexity risk |
+| mastered_candidates, evidence_count, tested_positive_count | None | Same |
+| Canonicalization (0.88 cosine) | String match dedup | Manual cleanup via Profile View |
+| Three-way Resume toggle | 2-way Fresh/Resume | Simplicity |
+| Scheduled finalize_stale_sessions | Synchronous-only end_session_now | No background jobs in v1 |
+| Draft + final summary | Final only on close | Simplicity |
+| Stale candidate display | Dropped (no candidates) | Cascading from above |
+| Two-card onboarding | Single card | YAGNI |
+| Focus_areas snapshotting with mode | Just focus_target_gap | YAGNI |
+| Phase 11 sharing | Out of scope | Portfolio = walkthrough, not friends |
+
+---
+
+## 9. Risks + mitigations
+
+| Risk | Mitigation |
+|---|---|
+| Phase 0 spike fails | Pivot to RAG-only or abandon. 2-day budget. |
+| Gemini tool-call reliability <85% | Verify in Phase 0 smoke test. Fallback: paid Claude Sonnet (~$10-20 across 6 weeks). |
+| Gemini free-tier rate limits during dogfooding | $5-20 paid spend at Phase 4-5 if hitting walls. |
+| `focus_target_gap` clearing unreliable | v1 Phase 3 check; 3 prompt iterations then swap model. |
+| ChromaDB integration unfamiliar | Smoke test in Week 1 (3 hours). |
+| Vue 3 + Pinia + PrimeVue learning curve | Time-box: if Phase 1 not running by end of Week 2, drop PrimeVue, plain HTML. |
+| Stall risk (no exam) | Public 6-week deadline + weekly progress posts on X/LinkedIn. |
+| Scope creep | This doc is the contract. Anything not in §7 phase plan = v2. |
+
+---
+
+## 10. Success criteria
+
+1. Phase 0 spike passes (turn 1 AND turn 8 differences).
+2. MLP checkpoint passes (no-RAG version is worth continuing).
+3. Tool-call reliability ≥85% on profile updates by end of Week 3.
+4. Focus clearing reliability ≥85% by end of Week 5.
+5. 2-3 min walkthrough screencast recorded by end of Week 6.
+6. Public repo + writeup posted.
+
+---
+
+## 11. Out of scope (v2 backlog)
+
+- User auth (currently localStorage userId)
+- Streaming responses
+- Asymmetric profile promotion
+- Canonicalization with embeddings
+- Three-way Resume (Review gaps mode)
+- Scheduled background jobs (finalize_stale_sessions)
+- Draft summary maintenance
+- Spaced repetition / mastery decay
+- Friend sharing (Phase 11 from original)
+- OCR / scanned PDFs
+- Per-subtopic knowledge level
+- CI / unit tests
+- Production hosting (cloud deploy)
+
+---
+
+## Appendix A: Original spec → v1 mapping
+
+Original phases 0, 1, 1.5, 2 → **v1 Phase 0–1**
+Original phase 3 → **v1 Phase 2** (simplified)
+Original phases 4, 5, 5.5 → **v1 Phase 3** (with MLP checkpoint embedded)
+Original phases 6, 7 → **v1 Phase 4**
+Original phases 8, 9, 10 → **v1 Phase 5**
+Original phase 11 → **v2 backlog**
