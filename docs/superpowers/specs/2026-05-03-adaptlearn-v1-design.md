@@ -111,7 +111,7 @@ frontend/src/
 
 Three tools registered on the tutor agent:
 
-1. **`update_topic_profile(session_id, knowledge_level?, add_confirmed_gap?, add_mastered_concept?, focus_target_gap?, evidence_type)`** — Pydantic-validated patch.
+1. **`update_topic_profile(session_id, knowledge_level?, add_confirmed_gap?, add_mastered_concept?, focus_target_gap?, focus_clear_reason?, evidence_type)`** — Pydantic-validated patch. `focus_clear_reason` required when clearing focus (server-side guard rail, see §4.4).
 2. **`retrieve_chunks(session_id, query, k=5)`** — ChromaDB vector search.
 3. **`record_learning_event(session_id, gap_tested, question, correct)`** — log check-question. Side-effect: if `correct=false` and `gap_tested` is in `mastered_concepts`, server-side demote (remove from list).
 
@@ -186,7 +186,7 @@ Close session:
 ### 4.4 Profile update
 
 ```
-Tool call: update_topic_profile(...)
+Tool call: update_topic_profile(..., focus_clear_reason?)
   → profile_service.update:
      validate Pydantic
      load Session.topic_profile (JSON column)
@@ -194,10 +194,36 @@ Tool call: update_topic_profile(...)
        knowledge_level: overwrite
        add_confirmed_gap: append if not duplicate (string match)
        add_mastered_concept: append if evidence_type in (declared, tested)
-       focus_target_gap: set or clear
+       focus_target_gap: set or clear (with guard rail, see below)
      save
-     return {ok: bool}
+     return {ok: bool, error?: string}
 ```
+
+**Focus-clear guard rail (server-side):**
+
+Agent reliability on `focus_target_gap` clearing is a known risk (§9). Server enforces:
+
+```python
+if current_profile.focus_target_gap is not None and patch.focus_target_gap is None:
+    # Agent attempting to clear focus
+    if not patch.focus_clear_reason:
+        return {ok: False, error: "focus_clear_reason required when clearing focus"}
+
+    if patch.focus_clear_reason == "tested_correct":
+        # Require a LearningEvent logged this turn for the focused gap with correct=true
+        recent = get_learning_events(session_id, turn=current_turn,
+                                     gap_tested=current_profile.focus_target_gap)
+        if not any(e.correct for e in recent):
+            return {ok: False, error: "tested_correct claim requires logged correct event"}
+
+    # Other reasons (demonstrated, user_redirected) accepted but logged for audit
+    log_focus_clear(session_id, current_profile.focus_target_gap,
+                    patch.focus_clear_reason, current_turn)
+```
+
+`focus_clear_reason` enum: `"demonstrated" | "tested_correct" | "user_redirected"`.
+
+Effect: agent cannot silently clear focus. Either it must log a correct check question that turn (verifiable), or attest a reason that gets recorded for later review. Reduces the "clears too eagerly" failure mode.
 
 ---
 
@@ -243,11 +269,15 @@ Full pyramid: unit + integration + e2e + CI. Tests written per-phase as units co
 - OnboardingCard — emits select on click
 - Pinia stores — user.js persists to localStorage, session.js loads messages
 
-**E2E (Playwright)**
-- Onboarding → home → new session → chat happy path
-- Resume flow: end session → start same topic → profile carried
-- PDF upload → ingestion banner → ready → cited chat response
-- Daily cap reached → toast + disabled input
+**E2E (Playwright) — introduced Week 4+**
+- Phase 1 scaffolding does NOT include Playwright. Backend pytest + frontend Vitest only in Week 2.
+- Playwright introduced in Phase 3 (Week 4) once core flows stabilize.
+- Scenarios:
+  - Onboarding → home → new session → chat happy path (Phase 3)
+  - Resume flow: end session → start same topic → profile carried (Phase 3)
+  - PDF upload → ingestion banner → ready → cited chat response (Phase 4)
+  - Daily cap reached → toast + disabled input (Phase 5)
+- Rationale: e2e on shifting UI burns time on test rewrites. Defer until views stabilize.
 
 **LLM-touching tests:** mock LiteLLM responses with deterministic fixtures. Real LLM calls are dogfood/manual only — too flaky and expensive for CI.
 
@@ -298,13 +328,13 @@ Also during Week 1: docker-compose smoke test, ChromaDB integration smoke test, 
 - Single chat round-trip works
 - Daily cap enforced
 
-**CI scaffolding (~3 days):**
+**CI scaffolding (~2 days, Playwright deferred):**
 - Backend: pytest + pytest-asyncio + FastAPI TestClient + httpx, conftest fixtures (in-memory SQLite, mocked LiteLLM, fake ChromaDB)
 - Frontend: Vitest + @vue/test-utils + jsdom, basic component test
-- E2E: Playwright + docker-compose ci profile
-- `.github/workflows/ci.yml` with backend/frontend/e2e jobs
+- `.github/workflows/ci.yml` with backend + frontend jobs only (e2e job added Phase 3)
+- Playwright NOT installed yet — added in Phase 3 once views stabilize
 
-**Tests written this phase:** rate_limit unit, health endpoint integration, App.vue smoke render, e2e "load home" happy path.
+**Tests written this phase:** rate_limit unit, health endpoint integration, App.vue smoke render. No e2e yet.
 
 ### Phase 2 — Tools + mid-profile (Week 3)
 
@@ -318,7 +348,7 @@ Also during Week 1: docker-compose smoke test, ChromaDB integration smoke test, 
 
 **MLP checkpoint at week 4 end:** 2 days dogfooding without RAG. Decision recorded in `analysis/mlp_checkpoint.md`. Decide whether to build RAG.
 
-**Tests:** sessions CRUD integration, Resume seeding copies profile, end_session_now sets session_ended, OnboardingCard component, user store with localStorage, e2e "onboard → new session → chat → close → resume same topic".
+**Tests:** sessions CRUD integration, Resume seeding copies profile, end_session_now sets session_ended, OnboardingCard component, user store with localStorage. **Playwright introduced this phase** — install + add `e2e` job to GH Actions + first 2 scenarios: "onboard → new session → chat" and "end session → resume same topic carries profile".
 
 ### Phase 4 — PDF + RAG (Week 5)
 
@@ -328,9 +358,11 @@ Also during Week 1: docker-compose smoke test, ChromaDB integration smoke test, 
 
 ### Phase 5 — Profile view + polish + deploy + record (Weeks 6–7)
 
-**Code:** ProfileView with editable lists, LearningEvents grouped, Settings page, error toasts, daily-cap UI. **Focus-clearing reliability checkpoint (see §6.3).** Production docker-compose with nginx. Deploy locally + record 2-3 min walkthrough screencast. Push public.
+**Code:** ProfileView **read-only** (renders all profile sections + LearningEvents grouped, no editing). Settings page, error toasts, daily-cap UI. **Focus-clearing reliability checkpoint (see §6.3).** Production docker-compose with nginx. Deploy locally + record 2-3 min walkthrough screencast. Push public.
 
-**Tests:** ProfileView component (renders all sections, delete button writes back), Settings retake flow, e2e "daily cap reached → toast → input disabled". Coverage final pass: gap-fill any missed branches in profile_service, keyword_index, chunking. CI green on main as merge gate.
+**Editable profile lists deferred to v2** (see §11). Reason: editing UI + write-back routes + optimistic concurrency adds ~3 days. Read-only view is enough for the walkthrough story (shows the system's beliefs about the learner — which is the portfolio point). Manual cleanup of stale gaps deferred until needed.
+
+**Tests:** ProfileView component (renders all sections), Settings retake flow, e2e "daily cap reached → toast → input disabled". Coverage final pass: gap-fill any missed branches in profile_service, keyword_index, chunking. CI green on main as merge gate.
 
 ---
 
@@ -399,6 +431,76 @@ Also during Week 1: docker-compose smoke test, ChromaDB integration smoke test, 
 - OCR / scanned PDFs
 - Per-subtopic knowledge level
 - Production hosting (cloud deploy)
+- **Editable ProfileView** (delete buttons writing back to topic_profile, edit forms for gap/concept lists). Phase 5 ships read-only.
+
+---
+
+## 12. Mid-build alternatives (swap triggers)
+
+Inherited from original spec §13. Defined in advance so swap decisions are mechanical, not panic.
+
+### LLM (tutor model)
+
+**Default:** `gemini/gemini-2.5-pro` via LiteLLM, free tier.
+
+**Swap triggers:**
+- Tool-call reliability <85% on `update_topic_profile` after 2 prompt iterations (Phase 2 checkpoint).
+- Focus-clearing reliability <85% across 4 patterns after 3 prompt iterations (Phase 3 checkpoint).
+- Free-tier rate limits block dogfooding cadence (>10 retry-after rejections per session).
+
+**Swap path:** change `TUTOR_MODEL` env var. LiteLLM handles. Candidates in order:
+1. `anthropic/claude-sonnet-4-6` (paid, ~$3/M input). Strongest tool-call reliability.
+2. `gemini/gemini-2.5-pro` paid tier (higher rate limits, same model).
+3. `openai/gpt-4.1-mini` (paid, fallback if Anthropic unavailable).
+
+Cost estimate at swap: $10–30 across remaining phases.
+
+### Embedding model
+
+**Default:** `gemini/text-embedding-004`, 768-dim, free.
+
+**Swap triggers:**
+- Phase 4 retrieval: top-k results don't include obviously relevant chunks across 5 hand-picked queries.
+
+**Swap path:** change `EMBEDDING_MODEL` env var. All chunks must be re-embedded; `embedding_model` field on ChromaDB metadata allows partial re-embedding without full reset. Vector index dimension may need to change (drop and recreate collection).
+
+Candidates: `voyage/voyage-3` (technical content), `openai/text-embedding-3-small` (768-dim drop-in), `cohere/embed-english-v3`.
+
+### Stemmer (keyword index)
+
+**Default:** Porter stemmer via NLTK.
+
+**Swap triggers:** dogfooding reveals false-positive triggers (e.g., "normalization" and "normal form" stem to same root) or false-negative misses on important variants.
+
+**Swap path:** change stemmer in `lib/keyword_index.py`. Porter → Snowball one line. Porter → WordNet lemmatizer adds POS tagging. Re-tokenize all sessions' keyword indexes.
+
+### Vector store
+
+**Default:** ChromaDB server mode in docker-compose.
+
+**Swap triggers:** ChromaDB perf degrades past ~10k chunks (unlikely in v1 dogfooding scope), or operability issues (data corruption, restart loops).
+
+**Swap path:** swap to pgvector (Postgres) — bigger lift, ~2 days. Avoid in v1 unless forced.
+
+### Frontend framework
+
+**Default:** Vue 3 + Pinia + PrimeVue.
+
+**Swap triggers:** PrimeVue learning curve eating Phase 1. Time-box: if `docker-compose up` not showing 6 routes by end of Week 2, drop PrimeVue → plain HTML + minimal CSS.
+
+**Do NOT swap Vue → React** mid-build. That's full rewrite.
+
+### Backend runtime
+
+**Default:** FastAPI + Uvicorn + Python 3.11+ in docker.
+
+**No swap** in v1. Only sane alternative is Node + Hono, which is full rewrite.
+
+### Test pyramid (already deferred Playwright)
+
+**Default after revisions:** pytest + Vitest in Phase 1 (Week 2), Playwright introduced in Phase 3 (Week 4).
+
+**Swap triggers:** any phase falls behind by ≥2 days → drop Playwright tests for that phase, keep unit + integration only. Never drop unit tests.
 
 ---
 
