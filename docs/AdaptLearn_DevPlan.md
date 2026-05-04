@@ -13,9 +13,9 @@ Build plan for Claude Code. Sequential phases with verifiable checkpoints. Read 
 
 ---
 
-## Phase 0 — Validation Spike (DEFERRED, originally BLOCKING)
+## Phase 0 — Validation Spike (COMPLETE — Knowledge-dominant pass)
 
-> **Status (2026-05-04):** Deferred at user direction. Project structure (Phase 1) was scaffolded ahead of the spike. Risk acknowledged: if the inferred-profile premise fails the spike, Phase 2+ work needs the spec rebuilt around a different premise. Run this spike before Phase 2.
+> **Status (2026-05-04):** Spike executed. Decision: knowledge-level differentiation confirmed at turn 1 and turn 8 (clear pass). Guidance + engagement differentiation present but delayed (weak pass on gemini-2.5-flash-lite; re-validate on Claude in Phase 3). `interaction_preferences` retained in spec provisionally. See `spike/decision.md` for full analysis.
 
 **Goal:** Determine whether two manually-crafted profiles produce structurally different tutor responses on the same topic, AND whether the differences hold across a longer conversation.
 

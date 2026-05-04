@@ -50,7 +50,9 @@ Thumbs.db
 *.sln
 *.sw?
 
-# Phase 0 spike (deferred — kept ignored so a future spike doesn't pollute commits)
-spike/outputs/
+# Phase 0 spike — ignore raw turn files; transcripts and decision.md are committed
+spike/outputs/**/*_turn1.md
+spike/outputs/**/*_turn8.md
+spike/.env
 
 CLAUDE.md
