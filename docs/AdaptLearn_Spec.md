@@ -320,6 +320,10 @@ The `keyword_index` is intentionally absent from this template.
 | Auth | None (v1) |
 | Hosting | Firebase Hosting (preview channel through Phase 10) |
 
+**Local-first dev (Phases 1–8):** The Firebase Emulator Suite runs in Docker (`docker compose up`) — Firestore, Storage, Functions, and Hosting all served from `localhost`. The frontend SDK auto-routes to emulator hosts when `VITE_USE_EMULATOR=true`. Cloud deploy is gated to Phase 9.
+
+> Caveat: Firestore vector search is not implemented in the emulator. Phase 7 retrieval will need a stub (cosine search in Python over locally stored chunks) until cloud deploy. The on-cloud path uses real Firestore vector search unchanged.
+
 ADK is justified by VetBot architectural overlap. Without that, LiteLLM direct would be the simpler choice.
 
 ---

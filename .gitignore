@@ -1,1 +1,56 @@
+# Secrets
 .env
+.env.example
+.env.local
+.env.*.local
+adaptlearn/.env
+adaptlearn/.env.local
+adaptlearn/.env.*.local
+
+# Node / Vue / Vite
+node_modules/
+adaptlearn/node_modules/
+adaptlearn/dist/
+adaptlearn/dist-ssr/
+adaptlearn/coverage/
+*.log
+.eslintcache
+*.timestamp-*-*.mjs
+
+# Python / Functions
+__pycache__/
+*.pyc
+*.pyo
+adaptlearn/functions/venv/
+adaptlearn/functions/.venv/
+adaptlearn/functions/.venv-test/
+adaptlearn/functions/.pytest_cache/
+adaptlearn/functions/htmlcov/
+adaptlearn/functions/.coverage
+
+# Firebase
+adaptlearn/.firebase/
+adaptlearn/.firebase-data/
+adaptlearn/firebase-debug.log
+adaptlearn/firestore-debug.log
+adaptlearn/storage-debug.log
+adaptlearn/ui-debug.log
+adaptlearn/database-debug.log
+adaptlearn/firestore-export-metadata.json
+
+# Editors / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Phase 0 spike (deferred — kept ignored so a future spike doesn't pollute commits)
+spike/outputs/
+
+CLAUDE.md

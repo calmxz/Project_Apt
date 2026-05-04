@@ -13,7 +13,9 @@ Build plan for Claude Code. Sequential phases with verifiable checkpoints. Read 
 
 ---
 
-## Phase 0 — Validation Spike (1–2 days, BLOCKING)
+## Phase 0 — Validation Spike (DEFERRED, originally BLOCKING)
+
+> **Status (2026-05-04):** Deferred at user direction. Project structure (Phase 1) was scaffolded ahead of the spike. Risk acknowledged: if the inferred-profile premise fails the spike, Phase 2+ work needs the spec rebuilt around a different premise. Run this spike before Phase 2.
 
 **Goal:** Determine whether two manually-crafted profiles produce structurally different tutor responses on the same topic, AND whether the differences hold across a longer conversation.
 
@@ -47,31 +49,38 @@ Zero infrastructure. Just a Python script calling the LLM API with the tutor pro
 
 ---
 
-## Phase 1 — Project Setup
+## Phase 1 — Project Setup (Local-First, Dockerized Emulators)
 
-**Goal:** Scaffold Vue + Vite + Firebase + Python Cloud Functions + ADK. Blank app, deployable health-check function.
+**Goal:** Scaffold Vue + Vite + Firebase Emulator Suite (in Docker) + Python Cloud Functions + ADK. Blank app, locally running `health_check` function. **No cloud deploy in v1 until Phase 9.**
 
 ### Tasks
 
-1. Delete `spike/`.
-2. `npm create vue@latest adaptlearn` → TypeScript: No, Vue Router: Yes, Pinia: Yes, ESLint: Yes, Prettier: Yes.
+1. Phase 0 spike is deferred (see §Phase 0). Don't delete `spike/` — it isn't there.
+2. `npm create vue@latest adaptlearn -- --router --pinia --vitest --eslint --prettier` (no TypeScript).
 3. `cd adaptlearn && npm install`.
-4. `npm install firebase primevue primeicons`.
-5. Create `src/firebase.js` initializing from `.env.local`. Export `db` and `storage`.
-6. Create `.env.local` (gitignored) with placeholder Firebase config.
-7. Set up PrimeVue in `src/main.js`.
+4. `npm install firebase primevue primeicons @primeuix/themes`.
+5. `src/firebase.js` initializes from `.env.local` and connects to emulators when `VITE_USE_EMULATOR=true`. Exports `db`, `storage`, `functions`.
+6. `.env.local` (gitignored) with `VITE_USE_EMULATOR=true`, `VITE_FIREBASE_PROJECT_ID=demo-adaptlearn`. `.env.example` checked in.
+7. Set up PrimeVue (Aura preset) in `src/main.js`.
 8. `src/App.vue` with top nav (title + settings icon) + `<router-view />`.
-9. Route stubs in `src/router/index.js`: `/`, `/onboarding`, `/settings`, `/new`, `/session/:id`, `/session/:id/profile`.
-10. `firebase init functions` → Python.
-11. `functions/requirements.txt`: `firebase-functions`, `google-adk`, `litellm`, `pydantic`, `nltk`. Install in venv.
-12. `functions/main.py`: stub HTTPS function `health_check` that imports ADK and returns `{"status": "ok", "adk_version": <version>}`.
-13. Use Firebase Hosting **preview channel** through Phase 10 (private URL).
+9. Route stubs in `src/router/index.js`: `/`, `/onboarding`, `/settings`, `/new`, `/session/:id`, `/session/:id/profile`. Stub views in `src/views/`.
+10. Manually scaffold `functions/`: `main.py`, `requirements.txt`, `requirements-dev.txt`, `tests/`, `agents/`, `tools/`, `lib/`. (No `firebase init` — keeps the project flat and Docker-managed.)
+11. `functions/requirements.txt`: `firebase-functions`, `firebase-admin`, `google-adk`, `litellm`, `pydantic`, `nltk`, `pypdf`, `tiktoken`. Installed inside the Docker emulator container's venv on first start.
+12. `functions/main.py`: `health_check` HTTPS function returning `{"status": "ok", "adk_version": <version>}`. Smoke pytest verifies the file parses and exposes `health_check`.
+13. Project root: `firebase.json` (emulator config), `.firebaserc`, `firestore.rules`, `firestore.indexes.json`, `storage.rules`.
+14. **Docker setup** (`Dockerfile.emulator` + `docker-compose.yml`): single container with Node 22 + JRE 17 + Python 3.12 + firebase-tools. Exposes ports 4000 (UI), 5000 (Hosting), 5001 (Functions), 8080 (Firestore), 9199 (Storage). Mounts repo and persists Firestore data to `./.firebase-data/` (gitignored).
+15. **CI from day one** (`.github/workflows/ci.yml`): Vitest + frontend lint + build, plus pytest smoke. Both must pass on every PR.
 
 ### Verification
 
-- `npm run dev` clean; route stubs render placeholders.
-- Deployed `health_check` returns 200 with ADK version.
-- No console errors.
+- `npm run dev` clean; route stubs render placeholders. No console errors.
+- `docker compose up emulator` starts the suite; UI reachable at `localhost:4000`.
+- `curl http://localhost:5001/demo-adaptlearn/us-central1/health_check` returns 200 with ADK version.
+- `npm run test:unit -- --run` passes (frontend smoke).
+- `pytest functions/tests` passes (functions smoke).
+- GitHub Actions CI green on the initial commit.
+
+**Cloud deploy is intentionally not part of Phase 1.** The spec target stack (Firebase) is preserved; only the local-first run path is added.
 
 ---
 
@@ -341,7 +350,9 @@ Force Quiz events also produce LearningEvents with `focus_area_index` linking; v
 
 ## Phase 9 — Settings, Polish, Internal Deploy
 
-**Goal:** Settings page, error handling, security rules, preview deploy. **No public URL.**
+**Goal:** Settings page, error handling, security rules, FIRST cloud deploy (preview channel). **No public URL.**
+
+This phase is the first time anything leaves the developer's machine. Phases 1–8 ran entirely against the Dockerized emulator suite.
 
 ### Tasks
 
@@ -413,7 +424,18 @@ Entry condition: Phase 10 produced "go." This phase is genuinely optional. Don't
 
 ## Testing Strategy
 
-No unit tests in v1. Per-phase verification + re-verifying prior phase. Manual end-to-end.
+CI gates every push from Phase 1 onward. Two suites:
+
+- **Frontend (Vitest):** unit + component tests in `adaptlearn/src/__tests__/` and `adaptlearn/src/**/*.test.js`. Required to pass before merge.
+- **Functions (pytest):** unit tests in `adaptlearn/functions/tests/`. Smoke tier runs on every push (no heavy deps); full tier runs once Phase 2 is complete and `firebase-functions` becomes a real dependency.
+
+GitHub Actions workflow at `.github/workflows/ci.yml`. Phase verification (manual end-to-end) is still the primary correctness check; CI catches regressions and import-time breakage.
+
+Test pyramid expectations per phase:
+- Phase 1: smoke tests only (1 frontend + 1 functions, both green).
+- Phase 2 onward: every Cloud Function gets a unit test; every Vue view that does non-trivial work gets a component test.
+- Phase 8: end-to-end Playwright suite added (deferred from Phase 5 per design doc §12).
+- Phase 10: full pyramid coverage check.
 
 ---
 

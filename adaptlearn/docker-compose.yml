@@ -1,0 +1,47 @@
+services:
+  emulator:
+    build:
+      context: .
+      dockerfile: Dockerfile.emulator
+    image: adaptlearn/emulator:dev
+    container_name: adaptlearn-emulator
+    working_dir: /workspace
+    volumes:
+      - ./:/workspace
+      - emulator-cache:/root/.cache
+      - functions-venv:/workspace/functions/venv
+    ports:
+      - "4000:4000"   # Emulator UI
+      - "5000:5000"   # Hosting
+      - "5001:5001"   # Functions
+      - "8080:8080"   # Firestore
+      - "9099:9099"   # Auth (reserved)
+      - "9199:9199"   # Storage
+    environment:
+      FIREBASE_PROJECT_ID: demo-adaptlearn
+    # Provision venv once. Named volume always exists, so check for the pip binary
+    # (proof of a successful install) rather than the directory itself.
+    # Provision a Python 3.12 venv that matches firebase.json runtime: python312.
+    # Marker = firebase_functions site-package present. Upgrades or python-version
+    # mismatches force a clean reinstall.
+    command: >
+      sh -c "
+        set -e &&
+        mkdir -p /workspace/.firebase-data &&
+        VENV=/workspace/functions/venv &&
+        MARKER=$$VENV/lib/python3.12/site-packages/firebase_functions/__init__.py &&
+        if [ ! -f $$MARKER ]; then
+          echo '[init] (re)creating Python 3.12 venv and installing functions deps' &&
+          rm -rf $$VENV/* $$VENV/.[!.]* 2>/dev/null;
+          python3.12 -m venv $$VENV &&
+          $$VENV/bin/pip install --upgrade pip &&
+          $$VENV/bin/pip install -r /workspace/functions/requirements.txt;
+        else
+          echo '[init] venv already provisioned';
+        fi &&
+        firebase emulators:start --project demo-adaptlearn --import=./.firebase-data --export-on-exit
+      "
+
+volumes:
+  emulator-cache:
+  functions-venv:
