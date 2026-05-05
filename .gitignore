@@ -1,42 +1,35 @@
 # Secrets
 .env
-.env.example
 .env.local
 .env.*.local
-adaptlearn/.env
-adaptlearn/.env.local
-adaptlearn/.env.*.local
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
 
 # Node / Vue / Vite
 node_modules/
-adaptlearn/node_modules/
-adaptlearn/dist/
-adaptlearn/dist-ssr/
-adaptlearn/coverage/
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/coverage/
 *.log
 .eslintcache
 *.timestamp-*-*.mjs
 
-# Python / Functions
+# Python / Backend
 __pycache__/
 *.pyc
 *.pyo
-adaptlearn/functions/venv/
-adaptlearn/functions/.venv/
-adaptlearn/functions/.venv-test/
-adaptlearn/functions/.pytest_cache/
-adaptlearn/functions/htmlcov/
-adaptlearn/functions/.coverage
+backend/.venv/
+backend/venv/
+backend/.pytest_cache/
+backend/htmlcov/
+backend/.coverage
 
-# Firebase
-adaptlearn/.firebase/
-adaptlearn/.firebase-data/
-adaptlearn/firebase-debug.log
-adaptlearn/firestore-debug.log
-adaptlearn/storage-debug.log
-adaptlearn/ui-debug.log
-adaptlearn/database-debug.log
-adaptlearn/firestore-export-metadata.json
+# Data volumes (never commit SQLite, uploads, or ChromaDB)
+data/app.db
+data/uploads/
+data/chroma/
 
 # Editors / OS
 .vscode/*
