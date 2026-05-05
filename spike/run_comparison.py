@@ -23,7 +23,7 @@ from profiles import PAIRS, BASE_SESSION
 
 load_dotenv(Path(__file__).parent / ".env")
 
-MODEL = "gemini/gemini-2.5-flash-lite"
+MODEL = "gemini/gemini-3.1-flash-lite-preview"
 TEMPERATURE = 0
 OPENING_MESSAGE = "Teach me about database normalization. I have about 30 minutes."
 OUTPUTS_DIR = Path(__file__).parent / "outputs"
