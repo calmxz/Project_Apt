@@ -20,6 +20,7 @@ frontend/coverage/
 __pycache__/
 *.pyc
 *.pyo
+*.egg-info/
 backend/.venv/
 backend/venv/
 backend/.pytest_cache/

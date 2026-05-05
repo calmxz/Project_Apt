@@ -1,6 +1,0 @@
-agent
-db
-lib
-routes
-services
-tests
