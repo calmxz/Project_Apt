@@ -5,6 +5,7 @@
 frontend/.env
 frontend/.env.local
 frontend/.env.*.local
+.claude/
 
 # Node / Vue / Vite
 node_modules/
@@ -31,6 +32,9 @@ backend/.coverage
 data/app.db
 data/uploads/
 data/chroma/
+
+# Orphaned old scaffold dir (node_modules lock prevents deletion while VS Code is open)
+adaptlearn/
 
 # Editors / OS
 .vscode/*
