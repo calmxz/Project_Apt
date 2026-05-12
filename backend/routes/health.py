@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from db.schemas import HealthResponse
+from contracts import HealthResponse
 
 router = APIRouter()
 
