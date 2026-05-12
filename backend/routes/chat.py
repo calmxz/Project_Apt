@@ -31,12 +31,9 @@ async def chat(req: ChatRequest, db: Session = Depends(get_db)):
         db.add(User(id=req.user_id))
         db.flush()
 
-    # Phase 2: auto-create the session if missing. Phase 3 removes this and 404s.
     session = db.get(SessionModel, req.session_id)
     if session is None:
-        session = SessionModel(id=req.session_id, user_id=req.user_id)
-        db.add(session)
-        db.flush()
+        raise HTTPException(status_code=404, detail="session not found")
 
     history = db.execute(
         select(ChatMessage)
