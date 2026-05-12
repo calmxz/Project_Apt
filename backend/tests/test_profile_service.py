@@ -1,0 +1,181 @@
+"""TDD: profile_service.apply_patch + focus-clear guard rail."""
+
+from datetime import datetime, timedelta, timezone
+
+import pytest
+
+from agent.types import ToolContext
+from contracts import TopicProfile, UpdateTopicProfileArgs
+from db.models import LearningEvent, Session as SessionModel, User
+from services import profile_service
+
+
+SESSION_ID = "sess_1"
+USER_ID = "u1"
+
+
+@pytest.fixture
+def session_row(db_session):
+    db_session.add(User(id=USER_ID))
+    db_session.flush()
+    db_session.add(
+        SessionModel(
+            id=SESSION_ID,
+            user_id=USER_ID,
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.commit()
+    return db_session.get(SessionModel, SESSION_ID)
+
+
+@pytest.fixture
+def ctx(db_session):
+    return ToolContext(
+        db=db_session,
+        session_id=SESSION_ID,
+        user_id=USER_ID,
+        turn_started_at=datetime.now(timezone.utc),
+    )
+
+
+def _patch(**kw) -> UpdateTopicProfileArgs:
+    kw.setdefault("session_id", SESSION_ID)
+    kw.setdefault("evidence_type", "declared")
+    return UpdateTopicProfileArgs(**kw)
+
+
+def test_declared_mastery_promotes(session_row, ctx, db_session):
+    result = profile_service.apply_patch(
+        db_session, ctx, _patch(add_mastered_concept="joins", evidence_type="declared")
+    )
+    assert result.ok is True
+    assert result.status == "ok"
+    profile = profile_service.load_profile(db_session, SESSION_ID)
+    assert "joins" in profile.mastered_concepts
+
+
+def test_inferred_mastery_ignored(session_row, ctx, db_session):
+    result = profile_service.apply_patch(
+        db_session, ctx, _patch(add_mastered_concept="joins", evidence_type="inferred")
+    )
+    assert result.ok is True
+    profile = profile_service.load_profile(db_session, SESSION_ID)
+    assert "joins" not in profile.mastered_concepts
+
+
+def test_tested_mastery_promotes(session_row, ctx, db_session):
+    result = profile_service.apply_patch(
+        db_session, ctx, _patch(add_mastered_concept="joins", evidence_type="tested")
+    )
+    assert result.ok is True
+    profile = profile_service.load_profile(db_session, SESSION_ID)
+    assert "joins" in profile.mastered_concepts
+
+
+def test_duplicate_gap_is_noop(session_row, ctx, db_session):
+    profile_service.apply_patch(
+        db_session, ctx, _patch(add_confirmed_gap="foreign_keys", evidence_type="declared")
+    )
+    profile_service.apply_patch(
+        db_session, ctx, _patch(add_confirmed_gap="foreign_keys", evidence_type="declared")
+    )
+    profile = profile_service.load_profile(db_session, SESSION_ID)
+    assert profile.confirmed_gaps.count("foreign_keys") == 1
+
+
+def test_knowledge_level_overwrites(session_row, ctx, db_session):
+    profile_service.apply_patch(
+        db_session, ctx, _patch(knowledge_level="beginner", evidence_type="declared")
+    )
+    profile_service.apply_patch(
+        db_session, ctx, _patch(knowledge_level="intermediate", evidence_type="declared")
+    )
+    profile = profile_service.load_profile(db_session, SESSION_ID)
+    assert profile.knowledge_level == "intermediate"
+
+
+def test_focus_target_gap_set_from_none(session_row, ctx, db_session):
+    result = profile_service.apply_patch(
+        db_session, ctx, _patch(focus_target_gap="joins", evidence_type="inferred")
+    )
+    assert result.ok is True
+    profile = profile_service.load_profile(db_session, SESSION_ID)
+    assert profile.focus_target_gap == "joins"
+
+
+def _set_focus(db_session, ctx, gap: str):
+    profile_service.apply_patch(
+        db_session, ctx, _patch(focus_target_gap=gap, evidence_type="inferred")
+    )
+
+
+def test_focus_clear_without_reason_fails(session_row, ctx, db_session):
+    _set_focus(db_session, ctx, "joins")
+    result = profile_service.apply_patch(
+        db_session, ctx, _patch(focus_target_gap=None, evidence_type="inferred")
+    )
+    assert result.ok is False
+    assert result.status == "failed"
+    assert "focus_clear_reason" in (result.error or "")
+    profile = profile_service.load_profile(db_session, SESSION_ID)
+    assert profile.focus_target_gap == "joins"
+
+
+def test_focus_clear_tested_correct_without_event_fails(session_row, ctx, db_session):
+    _set_focus(db_session, ctx, "joins")
+    result = profile_service.apply_patch(
+        db_session,
+        ctx,
+        _patch(
+            focus_target_gap=None,
+            focus_clear_reason="tested_correct",
+            evidence_type="tested",
+        ),
+    )
+    assert result.ok is False
+    assert result.status == "failed"
+    assert "tested_correct" in (result.error or "")
+
+
+def test_focus_clear_tested_correct_with_event_ok(session_row, ctx, db_session):
+    _set_focus(db_session, ctx, "joins")
+    db_session.add(
+        LearningEvent(
+            session_id=SESSION_ID,
+            gap_tested="joins",
+            question="what is an inner join?",
+            correct=True,
+            created_at=ctx.turn_started_at + timedelta(seconds=1),
+        )
+    )
+    db_session.commit()
+    result = profile_service.apply_patch(
+        db_session,
+        ctx,
+        _patch(
+            focus_target_gap=None,
+            focus_clear_reason="tested_correct",
+            evidence_type="tested",
+        ),
+    )
+    assert result.ok is True
+    profile = profile_service.load_profile(db_session, SESSION_ID)
+    assert profile.focus_target_gap is None
+
+
+def test_focus_clear_user_redirected_ok(session_row, ctx, db_session):
+    _set_focus(db_session, ctx, "joins")
+    result = profile_service.apply_patch(
+        db_session,
+        ctx,
+        _patch(
+            focus_target_gap=None,
+            focus_clear_reason="user_redirected",
+            evidence_type="inferred",
+        ),
+    )
+    assert result.ok is True
+    profile = profile_service.load_profile(db_session, SESSION_ID)
+    assert profile.focus_target_gap is None
