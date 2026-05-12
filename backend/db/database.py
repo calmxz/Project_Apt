@@ -23,6 +23,9 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 _MIGRATIONS: tuple[str, ...] = (
     "ALTER TABLE chat_messages ADD COLUMN tool_calls_json TEXT NOT NULL DEFAULT '[]'",
     "ALTER TABLE chat_messages ADD COLUMN citations_json TEXT NOT NULL DEFAULT '[]'",
+    "ALTER TABLE sessions ADD COLUMN kw_index_json TEXT NOT NULL DEFAULT '[]'",
+    "ALTER TABLE documents ADD COLUMN error TEXT",
+    "ALTER TABLE documents ADD COLUMN page_count INTEGER",
 )
 
 
