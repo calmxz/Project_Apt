@@ -50,16 +50,3 @@ function safeJson(text) {
 
 export const apiGet = (path, params) => request('GET', path, { params })
 export const apiPost = (path, body) => request('POST', path, { body })
-export const apiPostForm = async (path, formData) => {
-  const url = `${BASE_URL}${path}`
-  let resp
-  try {
-    resp = await fetch(url, { method: 'POST', body: formData })
-  } catch (e) {
-    throw new ApiError(0, { detail: e.message }, path)
-  }
-  const text = await resp.text()
-  const parsed = text ? safeJson(text) : null
-  if (!resp.ok) throw new ApiError(resp.status, parsed ?? text, path)
-  return parsed
-}

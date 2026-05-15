@@ -66,6 +66,7 @@ import SelectButton from 'primevue/selectbutton'
 
 import { useSessionStore } from '../stores/session.js'
 import { useUserStore } from '../stores/user.js'
+import { formatDate } from '../utils/formatDate.js'
 
 const router = useRouter()
 const store = useSessionStore()
@@ -82,6 +83,7 @@ const modeOptions = [
 ]
 
 onMounted(async () => {
+  // Reuse cache if HomeView already loaded the list this navigation cycle.
   if (user.userId && !store.sessions.length) {
     await store.listSessions(user.userId).catch(() => {})
   }
@@ -93,7 +95,7 @@ const resumableSessions = computed(() => {
   return store.sessions
     .filter((s) => s.ended_at && s.topic.toLowerCase() === t)
     .map((s) => ({
-      label: `${s.topic} — ended ${new Date(s.ended_at).toLocaleString()}`,
+      label: `${s.topic} — ended ${formatDate(s.ended_at)}`,
       value: s.id,
     }))
 })

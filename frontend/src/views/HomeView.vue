@@ -51,6 +51,7 @@ import Tag from 'primevue/tag'
 
 import { useSessionStore } from '../stores/session.js'
 import { useUserStore } from '../stores/user.js'
+import { formatDate } from '../utils/formatDate.js'
 
 const router = useRouter()
 const store = useSessionStore()
@@ -66,12 +67,6 @@ function goNew() {
 
 function onRowClick({ data }) {
   router.push({ name: 'session', params: { id: data.id } })
-}
-
-function formatDate(iso) {
-  if (!iso) return ''
-  const d = new Date(iso)
-  return d.toLocaleString()
 }
 </script>
 
