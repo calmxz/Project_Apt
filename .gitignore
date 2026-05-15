@@ -1,5 +1,6 @@
 # Secrets
 .env
+.env.example
 .env.local
 .env.*.local
 frontend/.env
@@ -29,9 +30,14 @@ backend/htmlcov/
 backend/.coverage
 
 # Data volumes (never commit SQLite, uploads, or ChromaDB)
-data/app.db
+data/*.db
 data/uploads/
 data/chroma/
+
+# Playwright artifacts
+frontend/test-results/
+frontend/playwright-report/
+frontend/.auth/
 
 # Orphaned old scaffold dir (node_modules lock prevents deletion while VS Code is open)
 adaptlearn/

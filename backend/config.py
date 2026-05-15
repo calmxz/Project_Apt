@@ -6,6 +6,9 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 _DATA_DIR = _REPO_ROOT / "data"
 
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=str(_REPO_ROOT / ".env"),
