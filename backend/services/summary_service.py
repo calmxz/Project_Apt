@@ -51,19 +51,22 @@ async def generate_and_persist(db: Session, session: SessionModel) -> str:
     )
 
     summary: str
-    try:
-        resp = await litellm.acompletion(
-            model=settings.model,
-            messages=[
-                {"role": "system", "content": SUMMARY_SYSTEM},
-                {"role": "user", "content": user_prompt},
-            ],
-        )
-        content = (resp.choices[0].message.content or "").strip()
-        summary = content if content else _mechanical_fallback(messages)
-    except Exception as e:
-        log.warning("summary LLM failed, using mechanical fallback: %s", e)
+    if settings.llm_stub_enabled:
         summary = _mechanical_fallback(messages)
+    else:
+        try:
+            resp = await litellm.acompletion(
+                model=settings.model,
+                messages=[
+                    {"role": "system", "content": SUMMARY_SYSTEM},
+                    {"role": "user", "content": user_prompt},
+                ],
+            )
+            content = (resp.choices[0].message.content or "").strip()
+            summary = content if content else _mechanical_fallback(messages)
+        except Exception as e:
+            log.warning("summary LLM failed, using mechanical fallback: %s", e)
+            summary = _mechanical_fallback(messages)
 
     profile.last_session_summary = summary
     profile_service.save_profile(db, session.id, profile)

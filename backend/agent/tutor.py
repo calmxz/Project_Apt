@@ -11,6 +11,7 @@ import logging
 import litellm
 
 from agent import tools
+from agent._stub import stub_response
 from agent.types import ToolContext
 from config import settings
 from contracts import Citation, ToolCallRecord
@@ -46,6 +47,9 @@ async def run(
     ctx: ToolContext,
     max_iters: int = MAX_ITERS,
 ) -> tuple[str, list[ToolCallRecord], list[Citation]]:
+    if settings.llm_stub_enabled:
+        return (stub_response(messages, system_prompt), [], [])
+
     full: list[dict] = [{"role": "system", "content": system_prompt}] + list(messages)
     tool_calls_record: list[ToolCallRecord] = []
     citations: list[Citation] = []
