@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     database_url: str = f"sqlite:///{(_DATA_DIR / 'app.db').as_posix()}"
     chroma_path: str = (_DATA_DIR / "chroma").as_posix()
     uploads_path: str = (_DATA_DIR / "uploads").as_posix()
+    llm_stub: bool = False
+
+    @property
+    def llm_stub_enabled(self) -> bool:
+        return self.llm_stub or self.gemini_api_key == "test"
 
 
 settings = Settings()
