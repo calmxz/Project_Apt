@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from agent import prompts, tutor
 from db.database import get_db
 from db.models import ChatMessage, Session as SessionModel, User
-from db.schemas import ChatRequest, ChatResponse
+from contracts import ChatRequest, ChatResponse
 from services import rate_limit
 
 router = APIRouter(prefix="/api")

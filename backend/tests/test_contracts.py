@@ -1,0 +1,155 @@
+import pytest
+from pydantic import ValidationError
+
+from contracts import (
+    ChatRequest,
+    ChatResponse,
+    HealthResponse,
+    ProfileResponse,
+    RecordLearningEventArgs,
+    RetrieveChunksArgs,
+    SessionCreateRequest,
+    ToolCallRecord,
+    ToolResult,
+    TopicProfile,
+    UpdateTopicProfileArgs,
+)
+
+
+def test_topic_profile_defaults():
+    p = TopicProfile()
+    dump = p.model_dump()
+    assert dump["knowledge_level"] is None
+    assert dump["confirmed_gaps"] == []
+    assert dump["mastered_concepts"] == []
+    assert dump["focus_target_gap"] is None
+    assert dump["last_session_summary"] is None
+
+
+def test_topic_profile_round_trip_json():
+    raw = '{"knowledge_level":"intermediate","confirmed_gaps":["g1"],"mastered_concepts":[],"focus_target_gap":"g1","last_session_summary":null}'
+    p = TopicProfile.model_validate_json(raw)
+    assert p.knowledge_level == "intermediate"
+    assert p.focus_target_gap == "g1"
+    assert "g1" in p.model_dump_json()
+
+
+def test_update_topic_profile_args_minimal_ok():
+    args = UpdateTopicProfileArgs(session_id="s1", evidence_type="declared")
+    assert args.session_id == "s1"
+    assert args.evidence_type == "declared"
+    assert args.focus_clear_reason is None
+
+
+def test_update_topic_profile_args_missing_evidence_type_rejected():
+    with pytest.raises(ValidationError):
+        UpdateTopicProfileArgs(session_id="s1")
+
+
+def test_update_topic_profile_args_invalid_focus_clear_reason_rejected():
+    with pytest.raises(ValidationError):
+        UpdateTopicProfileArgs(
+            session_id="s1",
+            evidence_type="declared",
+            focus_clear_reason="bogus",
+        )
+
+
+def test_update_topic_profile_args_invalid_evidence_type_rejected():
+    with pytest.raises(ValidationError):
+        UpdateTopicProfileArgs(session_id="s1", evidence_type="guessed")
+
+
+def test_update_topic_profile_args_extra_fields_rejected():
+    with pytest.raises(ValidationError):
+        UpdateTopicProfileArgs(
+            session_id="s1", evidence_type="declared", surprise="x"
+        )
+
+
+def test_retrieve_chunks_default_k():
+    args = RetrieveChunksArgs(session_id="s1", query="what is X")
+    assert args.k == 5
+
+
+def test_retrieve_chunks_k_bounds():
+    with pytest.raises(ValidationError):
+        RetrieveChunksArgs(session_id="s1", query="q", k=0)
+    with pytest.raises(ValidationError):
+        RetrieveChunksArgs(session_id="s1", query="q", k=21)
+
+
+def test_record_learning_event_args_required():
+    args = RecordLearningEventArgs(
+        session_id="s1", gap_tested="g1", question="?", correct=True
+    )
+    assert args.correct is True
+    with pytest.raises(ValidationError):
+        RecordLearningEventArgs(session_id="s1", gap_tested="g1", question="?")
+
+
+def test_tool_result_minimal():
+    r = ToolResult(ok=True, status="ok")
+    assert r.error is None
+    assert r.data is None
+
+
+def test_tool_result_status_enum():
+    with pytest.raises(ValidationError):
+        ToolResult(ok=False, status="weird")
+
+
+def test_chat_response_defaults():
+    r = ChatResponse(assistant_message="hi", message_id=1)
+    assert r.tool_calls == []
+    assert r.citations == []
+
+
+def test_chat_response_with_tool_calls():
+    r = ChatResponse(
+        assistant_message="ok",
+        message_id=2,
+        tool_calls=[
+            ToolCallRecord(name="update_topic_profile", args={"x": 1}, status="ok"),
+            ToolCallRecord(name="retrieve_chunks", args={}, status="no_results"),
+        ],
+    )
+    assert len(r.tool_calls) == 2
+    assert r.tool_calls[1].status == "no_results"
+
+
+def test_chat_request_required_fields():
+    with pytest.raises(ValidationError):
+        ChatRequest(user_id="u", session_id="s")  # missing message
+
+
+def test_session_create_request_seed_mode_enum():
+    SessionCreateRequest(user_id="u", topic="t", seed_mode="fresh")
+    SessionCreateRequest(user_id="u", topic="t", seed_mode="resume")
+    with pytest.raises(ValidationError):
+        SessionCreateRequest(user_id="u", topic="t", seed_mode="continue")
+
+
+def test_profile_response_shape():
+    pr = ProfileResponse(profile=TopicProfile(), recent_learning_events=[])
+    assert pr.profile.knowledge_level is None
+    assert pr.recent_learning_events == []
+
+
+def test_health_response():
+    assert HealthResponse(status="ok").status == "ok"
+
+
+def test_array_fields_accept_none_quirk():
+    """Codegen quirk: OpenAPI `default: []` produces `list[T] | None = []`.
+
+    Pinned so any change is intentional. Phase 2+ consumers must treat
+    these as possibly-None or normalize at the boundary.
+    """
+    p = TopicProfile(confirmed_gaps=None, mastered_concepts=None)
+    assert p.confirmed_gaps is None
+    assert p.mastered_concepts is None
+
+    r = ChatResponse(assistant_message="x", message_id=1, tool_calls=None, citations=None)
+    assert r.tool_calls is None
+    assert r.citations is None

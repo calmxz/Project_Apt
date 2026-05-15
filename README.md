@@ -17,10 +17,11 @@ Adaptive AI study companion. A web app that teaches a chosen topic and updates i
 Read in this order before non-trivial changes:
 
 1. [`docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md`](docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md) — **primary source of truth.** Supersedes everything below.
-2. [`docs/superpowers/plans/2026-05-03-phase-0-validation-spike.md`](docs/superpowers/plans/2026-05-03-phase-0-validation-spike.md) — Phase 0 plan (complete).
-3. [`docs/AdaptLearn_Spec.md`](docs/AdaptLearn_Spec.md) — original spec, v2 reference only.
-4. [`docs/AdaptLearn_DevPlan.md`](docs/AdaptLearn_DevPlan.md) — original dev plan, v2 reference only.
-5. [`CLAUDE.md`](CLAUDE.md) — agent guardrails and repo conventions.
+2. [`docs/api/openapi.yaml`](docs/api/openapi.yaml) — **API contract source of truth.** Pydantic models under `backend/contracts/` are generated from this; never hand-edit the generated package. Regenerate with `python backend/scripts/gen_contracts.py`.
+3. [`docs/superpowers/plans/2026-05-03-phase-0-validation-spike.md`](docs/superpowers/plans/2026-05-03-phase-0-validation-spike.md) — Phase 0 plan (complete).
+4. [`docs/AdaptLearn_Spec.md`](docs/AdaptLearn_Spec.md) — original spec, v2 reference only.
+5. [`docs/AdaptLearn_DevPlan.md`](docs/AdaptLearn_DevPlan.md) — original dev plan, v2 reference only.
+6. [`CLAUDE.md`](CLAUDE.md) — agent guardrails and repo conventions.
 
 If docs conflict, the design doc wins. Surface the conflict — don't silently pick.
 
@@ -40,7 +41,9 @@ Project_Apt/
 │   ├── agent/                  tutor.py, prompts.py, tools.py
 │   ├── routes/                 chat.py, sessions.py, upload.py, profile.py
 │   ├── services/               profile, retrieval, ingestion, summary, rate_limit
-│   ├── db/                     models.py, schemas.py, database.py
+│   ├── db/                     models.py, database.py (SQLAlchemy ORM)
+│   ├── contracts/              GENERATED Pydantic DTOs (do not edit; see docs/api/openapi.yaml)
+│   ├── scripts/gen_contracts.py  Codegen wrapper for contracts/
 │   ├── lib/                    keyword_index.py, chunking.py
 │   └── tests/
 ├── data/                       Persisted volumes (sqlite, uploads, chroma)

@@ -1,0 +1,461 @@
+openapi: 3.1.0
+info:
+  title: AdaptLearn API
+  version: 0.1.0
+  summary: Backend contract for AdaptLearn v1 (Phases 2-5).
+  description: |
+    Source of truth for AdaptLearn HTTP contracts. Pydantic models under
+    `backend/contracts/` are generated from this document via
+    `backend/scripts/gen_contracts.py`. Edit YAML, then regen.
+
+    See `docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md`
+    sections 3.3, 3.4, 4.1-4.4, 5 for upstream design constraints.
+
+servers:
+  - url: http://localhost:8000
+    description: Local development backend
+
+tags:
+  - name: health
+    description: Liveness check.
+  - name: chat
+    description: Chat turn (tutor agent loop).
+  - name: sessions
+    description: Session lifecycle (create, list, end, resume).
+  - name: profile
+    description: Topic profile debug + read (Phase 2+).
+  - name: upload
+    description: PDF ingestion (Phase 4).
+
+paths:
+  /health:
+    get:
+      tags: [health]
+      summary: Health probe.
+      operationId: getHealth
+      responses:
+        "200":
+          description: Service is up.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /api/chat:
+    post:
+      tags: [chat]
+      summary: Send a chat message and receive tutor response.
+      operationId: postChat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatRequest"
+      responses:
+        "200":
+          description: Tutor response with any tool calls and citations.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          $ref: "#/components/responses/UpstreamUnavailable"
+
+  /api/sessions:
+    post:
+      tags: [sessions]
+      summary: Create a new session (fresh or resume).
+      operationId: createSession
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionCreateRequest"
+      responses:
+        "201":
+          description: Session created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+    get:
+      tags: [sessions]
+      summary: List sessions for a user.
+      operationId: listSessions
+      parameters:
+        - in: query
+          name: user_id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Sessions grouped/sorted by recency.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SessionListItem"
+
+  /api/sessions/{session_id}:
+    get:
+      tags: [sessions]
+      summary: Get a single session (used for ingestion polling too).
+      operationId: getSession
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          description: Session detail.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/sessions/{session_id}/end:
+    post:
+      tags: [sessions]
+      summary: End a session and produce a summary.
+      operationId: endSession
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          description: Session ended.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionEndResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/upload:
+    post:
+      tags: [upload]
+      summary: Upload a PDF to attach to a session (background ingestion).
+      operationId: uploadPdf
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [session_id, file]
+              properties:
+                session_id:
+                  type: string
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "202":
+          description: Accepted; ingestion runs in background.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/profile/{session_id}:
+    get:
+      tags: [profile]
+      summary: Read a session's topic profile plus recent learning events.
+      operationId: getProfile
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          description: Profile snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+  parameters:
+    SessionId:
+      in: path
+      name: session_id
+      required: true
+      schema: { type: string }
+
+  responses:
+    BadRequest:
+      description: Malformed request.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    NotFound:
+      description: Resource not found.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    RateLimited:
+      description: Daily usage cap reached.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    UpstreamUnavailable:
+      description: LLM provider timeout or unavailable.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  schemas:
+    # ---- Enums (string literals) ----
+    KnowledgeLevel:
+      type: string
+      enum: [beginner, intermediate, advanced]
+
+    EvidenceType:
+      type: string
+      enum: [declared, inferred, tested]
+
+    FocusClearReason:
+      type: string
+      enum: [demonstrated, tested_correct, user_redirected]
+
+    IngestionStatus:
+      type: string
+      enum: [pending, ready, failed]
+
+    ToolStatus:
+      type: string
+      enum: [ok, failed, no_results]
+
+    SeedMode:
+      type: string
+      enum: [fresh, resume]
+
+    # ---- Core domain ----
+    TopicProfile:
+      type: object
+      additionalProperties: false
+      properties:
+        knowledge_level:
+          oneOf:
+            - $ref: "#/components/schemas/KnowledgeLevel"
+            - type: "null"
+          default: null
+        confirmed_gaps:
+          type: array
+          items: { type: string }
+          default: []
+        mastered_concepts:
+          type: array
+          items: { type: string }
+          default: []
+        focus_target_gap:
+          type: [string, "null"]
+          default: null
+        last_session_summary:
+          type: [string, "null"]
+          default: null
+
+    Citation:
+      type: object
+      additionalProperties: false
+      required: [doc_id, text]
+      properties:
+        doc_id: { type: string }
+        text:   { type: string }
+
+    ToolCallRecord:
+      type: object
+      additionalProperties: false
+      required: [name, args, status]
+      properties:
+        name:   { type: string }
+        args:   { type: object, additionalProperties: true }
+        status: { $ref: "#/components/schemas/ToolStatus" }
+        error:
+          type: [string, "null"]
+          default: null
+
+    LearningEventResponse:
+      type: object
+      additionalProperties: false
+      required: [id, session_id, gap_tested, question, correct, created_at]
+      properties:
+        id:          { type: integer }
+        session_id:  { type: string }
+        gap_tested:  { type: string }
+        question:    { type: string }
+        correct:     { type: boolean }
+        created_at:  { type: string, format: date-time }
+
+    # ---- Tool argument schemas (LiteLLM tool params) ----
+    UpdateTopicProfileArgs:
+      type: object
+      additionalProperties: false
+      required: [session_id, evidence_type]
+      description: |
+        Patch operation for a session's TopicProfile. Sending
+        `focus_target_gap: null` explicitly clears focus and requires
+        `focus_clear_reason` (server-side guard rail).
+      properties:
+        session_id:           { type: string }
+        knowledge_level:
+          oneOf:
+            - $ref: "#/components/schemas/KnowledgeLevel"
+            - type: "null"
+          default: null
+        add_confirmed_gap:    { type: [string, "null"], default: null }
+        add_mastered_concept: { type: [string, "null"], default: null }
+        focus_target_gap:     { type: [string, "null"], default: null }
+        focus_clear_reason:
+          oneOf:
+            - $ref: "#/components/schemas/FocusClearReason"
+            - type: "null"
+          default: null
+        evidence_type:        { $ref: "#/components/schemas/EvidenceType" }
+
+    RetrieveChunksArgs:
+      type: object
+      additionalProperties: false
+      required: [session_id, query]
+      properties:
+        session_id: { type: string }
+        query:      { type: string }
+        k:          { type: integer, default: 5, minimum: 1, maximum: 20 }
+
+    RecordLearningEventArgs:
+      type: object
+      additionalProperties: false
+      required: [session_id, gap_tested, question, correct]
+      properties:
+        session_id: { type: string }
+        gap_tested: { type: string }
+        question:   { type: string }
+        correct:    { type: boolean }
+
+    ToolResult:
+      type: object
+      additionalProperties: false
+      required: [ok, status]
+      properties:
+        ok:     { type: boolean }
+        status: { $ref: "#/components/schemas/ToolStatus" }
+        error:  { type: [string, "null"], default: null }
+        data:
+          type: [object, "null"]
+          additionalProperties: true
+          default: null
+
+    # ---- Request / response envelopes ----
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: { type: string }
+
+    ChatRequest:
+      type: object
+      additionalProperties: false
+      required: [user_id, session_id, message]
+      properties:
+        user_id:    { type: string }
+        session_id: { type: string }
+        message:    { type: string }
+
+    ChatResponse:
+      type: object
+      additionalProperties: false
+      required: [assistant_message, message_id]
+      properties:
+        assistant_message: { type: string }
+        message_id:        { type: integer }
+        tool_calls:
+          type: array
+          items: { $ref: "#/components/schemas/ToolCallRecord" }
+          default: []
+        citations:
+          type: array
+          items: { $ref: "#/components/schemas/Citation" }
+          default: []
+
+    SessionCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [user_id, topic, seed_mode]
+      properties:
+        user_id:           { type: string }
+        topic:             { type: string }
+        seed_mode:         { $ref: "#/components/schemas/SeedMode" }
+        prior_session_id:  { type: [string, "null"], default: null }
+
+    SessionResponse:
+      type: object
+      additionalProperties: false
+      required: [id, user_id, topic, topic_profile, created_at]
+      properties:
+        id:                { type: string }
+        user_id:           { type: string }
+        topic:             { type: string }
+        topic_profile:     { $ref: "#/components/schemas/TopicProfile" }
+        created_at:        { type: string, format: date-time }
+        ended_at:          { type: [string, "null"], format: date-time, default: null }
+        ingestion_status:
+          oneOf:
+            - $ref: "#/components/schemas/IngestionStatus"
+            - type: "null"
+          default: null
+
+    SessionListItem:
+      type: object
+      additionalProperties: false
+      required: [id, topic, created_at]
+      properties:
+        id:         { type: string }
+        topic:      { type: string }
+        created_at: { type: string, format: date-time }
+        ended_at:   { type: [string, "null"], format: date-time, default: null }
+
+    SessionEndResponse:
+      type: object
+      additionalProperties: false
+      required: [id, ended_at, summary]
+      properties:
+        id:       { type: string }
+        ended_at: { type: string, format: date-time }
+        summary:  { type: string }
+
+    UploadResponse:
+      type: object
+      additionalProperties: false
+      required: [document_id, session_id, filename, status]
+      properties:
+        document_id: { type: integer }
+        session_id:  { type: string }
+        filename:    { type: string }
+        status:      { $ref: "#/components/schemas/IngestionStatus" }
+
+    ProfileResponse:
+      type: object
+      additionalProperties: false
+      required: [profile, recent_learning_events]
+      properties:
+        profile: { $ref: "#/components/schemas/TopicProfile" }
+        recent_learning_events:
+          type: array
+          items: { $ref: "#/components/schemas/LearningEventResponse" }
+
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [detail]
+      properties:
+        detail: { type: string }
