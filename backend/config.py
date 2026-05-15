@@ -2,32 +2,39 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+_DATA_DIR = _REPO_ROOT / "data"
+
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=str(_REPO_ROOT / ".env"),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     gemini_api_key: str = ""
     model: str = "gemini/gemini-2.5-pro"
+    embedding_model: str = "gemini/text-embedding-004"
     daily_cap: int = 50
-    database_url: str = f"sqlite:///{(REPO_ROOT / 'data' / 'app.db').as_posix()}"
-    embedding_model: str = "text-embedding-3-small"
-    chroma_path: str = str(REPO_ROOT / "data" / "chroma")
-    uploads_path: str = str(REPO_ROOT / "data" / "uploads")
-
-    # Deterministic LLM stub for e2e and offline dev. Trigger by setting
-    # LLM_STUB=1 in env, or by setting GEMINI_API_KEY=test.
-    llm_stub: bool = False
-
-    @property
-    def llm_stub_enabled(self) -> bool:
-        return self.llm_stub or self.gemini_api_key == "test"
+    database_url: str = f"sqlite:///{(_DATA_DIR / 'app.db').as_posix()}"
+    chroma_path: str = (_DATA_DIR / "chroma").as_posix()
+    uploads_path: str = (_DATA_DIR / "uploads").as_posix()
 
 
 settings = Settings()
 
-# Ensure data dirs exist on import so callers can rely on them.
-Path(settings.chroma_path).mkdir(parents=True, exist_ok=True)
-Path(settings.uploads_path).mkdir(parents=True, exist_ok=True)
+# Ensure runtime directories exist (data/, data/chroma/, data/uploads/, and
+# parent of the sqlite file). SQLite creates the file but not its parent dir.
+for _p in (
+    Path(settings.chroma_path),
+    Path(settings.uploads_path),
+    Path(settings.database_url.replace("sqlite:///", "", 1)).parent
+    if settings.database_url.startswith("sqlite:///")
+    else None,
+):
+    if _p is not None:
+        _p.mkdir(parents=True, exist_ok=True)

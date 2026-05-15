@@ -10,6 +10,7 @@ from agent.types import ToolContext
 from contracts import ChatRequest, ChatResponse, ToolCallRecord, Citation
 from db.database import get_db
 from db.models import ChatMessage, Document, Session as SessionModel, User
+from lib import keyword_index
 from services import profile_service, rate_limit
 
 
@@ -59,11 +60,15 @@ async def chat(req: ChatRequest, db: Session = Depends(get_db)):
     ).scalars().first()
     ingestion_status = latest_doc.status if latest_doc else None
 
+    retrieval_required = keyword_index.match_required(
+        req.message, json.loads(session.kw_index_json or "[]")
+    )
+
     prompt_state = {
         "topic": session.topic,
         "profile": profile,
         "ingestion_status": ingestion_status,
-        "retrieval_required": False,  # Phase 4 computes from keyword index
+        "retrieval_required": retrieval_required,
         "seed_mode": None,
         "last_session_summary": profile.last_session_summary,
     }

@@ -29,6 +29,7 @@ class Session(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
     topic: Mapped[str] = mapped_column(String, default="")
     topic_profile_json: Mapped[str] = mapped_column(Text, default="{}")
+    kw_index_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -83,6 +84,8 @@ class Document(Base):
     session_id: Mapped[str] = mapped_column(ForeignKey("sessions.id"), nullable=False)
     filename: Mapped[str] = mapped_column(String, nullable=False)
     status: Mapped[str] = mapped_column(String, default="pending")
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     session: Mapped["Session"] = relationship("Session", back_populates="documents")
