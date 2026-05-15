@@ -1,12 +1,17 @@
+import json
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from agent import prompts, tutor
+from agent.types import ToolContext
+from contracts import ChatRequest, ChatResponse, ToolCallRecord, Citation
 from db.database import get_db
-from db.models import ChatMessage, Session as SessionModel, User
-from contracts import ChatRequest, ChatResponse
-from services import rate_limit
+from db.models import ChatMessage, Document, Session as SessionModel, User
+from services import profile_service, rate_limit
+
 
 router = APIRouter(prefix="/api")
 
@@ -16,15 +21,21 @@ async def chat(req: ChatRequest, db: Session = Depends(get_db)):
     if not rate_limit.check_and_increment(db, req.user_id):
         raise HTTPException(
             status_code=429,
-            detail={"message": "Daily cap reached", "reset_at": rate_limit.midnight_utc_iso()},
+            detail={
+                "message": "Daily cap reached",
+                "reset_at": rate_limit.midnight_utc_iso(),
+            },
         )
 
     if not db.get(User, req.user_id):
         db.add(User(id=req.user_id))
         db.flush()
 
-    if not db.get(SessionModel, req.session_id):
-        db.add(SessionModel(id=req.session_id, user_id=req.user_id))
+    # Phase 2: auto-create the session if missing. Phase 3 removes this and 404s.
+    session = db.get(SessionModel, req.session_id)
+    if session is None:
+        session = SessionModel(id=req.session_id, user_id=req.user_id)
+        db.add(session)
         db.flush()
 
     history = db.execute(
@@ -42,12 +53,47 @@ async def chat(req: ChatRequest, db: Session = Depends(get_db)):
     db.add(user_msg)
     db.flush()
 
-    system_prompt = prompts.build_system_prompt()
-    reply = await tutor.run(messages, system_prompt)
+    profile = profile_service.load_profile(db, req.session_id)
+    latest_doc = db.execute(
+        select(Document)
+        .where(Document.session_id == req.session_id)
+        .order_by(Document.created_at.desc())
+        .limit(1)
+    ).scalars().first()
+    ingestion_status = latest_doc.status if latest_doc else None
 
-    assistant_msg = ChatMessage(session_id=req.session_id, role="assistant", content=reply)
+    prompt_state = {
+        "topic": session.topic,
+        "profile": profile,
+        "ingestion_status": ingestion_status,
+        "retrieval_required": False,  # Phase 4 computes from keyword index
+        "seed_mode": None,
+        "last_session_summary": profile.last_session_summary,
+    }
+    system_prompt = prompts.build_system_prompt(prompt_state)
+
+    ctx = ToolContext(
+        db=db,
+        session_id=req.session_id,
+        user_id=req.user_id,
+        turn_started_at=datetime.now(timezone.utc),
+    )
+    reply, tool_calls, citations = await tutor.run(messages, system_prompt, ctx)
+
+    assistant_msg = ChatMessage(
+        session_id=req.session_id,
+        role="assistant",
+        content=reply,
+        tool_calls_json=json.dumps([tc.model_dump() for tc in tool_calls]),
+        citations_json=json.dumps([c.model_dump() for c in citations]),
+    )
     db.add(assistant_msg)
     db.commit()
     db.refresh(assistant_msg)
 
-    return ChatResponse(assistant_message=reply, message_id=assistant_msg.id)
+    return ChatResponse(
+        assistant_message=reply,
+        message_id=assistant_msg.id,
+        tool_calls=tool_calls,
+        citations=citations,
+    )
