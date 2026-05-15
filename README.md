@@ -2,7 +2,7 @@
 
 Adaptive AI study companion. A web app that teaches a chosen topic and updates its model of the learner continuously, grounded in the user's own course material via RAG.
 
-**Status:** Phase 1 scaffold landed. Phase 0 validation spike passed (profile differentiation confirmed across knowledge, guidance, and engagement axes).
+**Status:** Phase 4 in progress on `phase/4-rag` — PDF upload, ChromaDB ingestion, vector retrieval, and keyword index landed. Phases 0-3 complete (Phase 0 validation spike, Phase 1 scaffold + chat loop, Phase 2 tools + mid-profile, Phase 3 sessions + summary).
 
 ## Stack
 
@@ -53,34 +53,48 @@ Project_Apt/
 
 ## Quick Start
 
-### Full stack (recommended)
+### Full stack (Docker, recommended)
 
 ```bash
-cp .env.example .env          # add GEMINI_API_KEY
-docker compose up
+cp .env.example .env          # then fill in GEMINI_API_KEY
+docker compose up             # add --build after Dockerfile or deps changes
 ```
 
 - Frontend: http://localhost:5173
-- Backend API: http://localhost:8000 (health: `/health`, chat: `/api/chat`)
+- Backend API: http://localhost:8000 (health: `/health`, chat: `POST /api/chat`)
 - ChromaDB: http://localhost:8001
 
-Stop: `docker compose down`. Volumes (`./data/`) persist between runs.
+Common variants:
 
-### Local development
+```bash
+docker compose up -d             # detached
+docker compose up backend        # backend + chromadb only
+docker compose logs -f backend
+docker compose exec backend pytest -v
+docker compose down              # stop; data/ persists
+docker compose down -v           # also drop named volumes
+```
 
-**Backend** (from `backend/`):
+Bind mount: `./data` ↔ `/data` in the backend container. SQLite DB, uploads, and Chroma persistence all live there and survive restarts. Detailed docker reference: [`backend/README.md`](backend/README.md#docker).
+
+### Local development (no Docker)
+
+**Backend** — from `backend/`:
 
 ```bash
 python -m venv .venv
-.venv\Scripts\activate        # Windows; use source .venv/bin/activate elsewhere
+.venv\Scripts\activate           # Windows; source .venv/bin/activate elsewhere
 pip install -e .[dev]
 uvicorn main:app --reload
 ```
 
-**Frontend** (from `frontend/`):
+Or from repo root: `uvicorn main:app --reload --app-dir backend`. `config.py` anchors `.env` and `data/` paths to the repo root, so cwd no longer matters. `data/app.db`, `data/chroma/`, `data/uploads/` auto-create on first boot.
+
+**Frontend** — from `frontend/`:
 
 ```bash
 npm install
+cp .env.example .env.local       # adjust VITE_API_BASE_URL if backend not on :8000
 npm run dev
 ```
 
@@ -89,9 +103,14 @@ npm run dev
 | Task | Command |
 |---|---|
 | Start full stack | `docker compose up` |
+| Rebuild backend image | `docker compose build backend` |
+| Backend logs | `docker compose logs -f backend` |
+| Shell into backend container | `docker compose exec backend bash` |
 | Stop stack | `docker compose down` |
-| Backend tests | from `backend/`: `pytest` |
+| Backend tests (local) | from `backend/`: `pytest` |
+| Backend tests (container) | `docker compose exec backend pytest -v` |
 | Single backend test | from `backend/`: `pytest tests/test_foo.py::test_bar` |
+| Regenerate API contracts | from repo root: `python backend/scripts/gen_contracts.py` |
 | Frontend dev server | from `frontend/`: `npm run dev` |
 | Frontend unit tests | from `frontend/`: `npm run test:unit -- --run` |
 | Lint / format | from `frontend/`: `npm run lint` / `npm run format` |
@@ -128,9 +147,9 @@ System prompt = immutable rules (`agent/prompts.py`) + dynamic context rebuilt p
 |---|---|---|
 | 0 | Validation spike — profile differentiation confirmed | Complete |
 | 1 | Scaffold + docker + chat loop + CI baseline | Complete |
-| 2 | 3 tools + mid-profile + tool-call reliability checkpoint | Next |
-| 3 | Sessions + resume + onboarding + Playwright intro | Pending |
-| 4 | PDF + RAG + ChromaDB + citations | Pending |
+| 2 | 3 tools + mid-profile + tool-call reliability checkpoint | Complete |
+| 3 | Sessions CRUD + summary service + resume | Complete |
+| 4 | PDF upload + ChromaDB ingestion + RAG + citations | In progress (`phase/4-rag`) |
 | 5 | ProfileView (read-only) + polish + deploy + screencast | Pending |
 
 LLM reliability checkpoints — Phase 2: `update_topic_profile` ≥85%. Phase 3: `focus_target_gap` clearing ≥85%. Below threshold → 2-3 prompt iterations, then swap to `anthropic/claude-sonnet-4-6`.
