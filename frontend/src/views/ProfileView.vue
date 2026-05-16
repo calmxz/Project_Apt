@@ -1,11 +1,14 @@
 <template>
   <section>
+    <BackButton />
     <h1>Profile</h1>
-    <p class="muted">Read-only profile dashboard for session {{ id }} lands here in Phase 8.</p>
+    <p class="muted">Read-only profile dashboard for session {{ id }} lands here in Phase 5.</p>
   </section>
 </template>
 
 <script setup>
+import BackButton from '../components/BackButton.vue'
+
 defineProps({ id: { type: String, required: true } })
 </script>
 

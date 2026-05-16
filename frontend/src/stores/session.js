@@ -17,6 +17,10 @@ export const useSessionStore = defineStore('session', () => {
     throw e
   }
 
+  function setError(msg) {
+    error.value = msg
+  }
+
   async function listSessions(userId) {
     loading.value = true
     error.value = null
@@ -111,6 +115,26 @@ export const useSessionStore = defineStore('session', () => {
           last_session_summary: resp.summary,
         }
       }
+      const idx = sessions.value.findIndex((s) => s.id === currentSessionId.value)
+      if (idx !== -1) sessions.value[idx].ended_at = resp.ended_at
+      return resp
+    } catch (e) {
+      _setError(e)
+    } finally {
+      loading.value = false
+    }
+  }
+
+  async function reopenSession(sessionId) {
+    loading.value = true
+    error.value = null
+    try {
+      const resp = await sessionsApi.reopenSession(sessionId)
+      if (currentSession.value && currentSession.value.id === sessionId) {
+        currentSession.value.ended_at = null
+      }
+      const idx = sessions.value.findIndex((s) => s.id === sessionId)
+      if (idx !== -1) sessions.value[idx].ended_at = null
       return resp
     } catch (e) {
       _setError(e)
@@ -139,6 +163,8 @@ export const useSessionStore = defineStore('session', () => {
     loadSession,
     sendMessage,
     endSession,
+    reopenSession,
+    setError,
     reset,
   }
 })

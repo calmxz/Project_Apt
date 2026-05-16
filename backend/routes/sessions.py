@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -19,6 +20,15 @@ from services import profile_service, summary_service
 router = APIRouter(prefix="/api")
 
 
+def _aware_utc(dt: datetime | None) -> datetime | None:
+    # SQLite drops tzinfo on read even when the column is DateTime(timezone=True).
+    # Attach UTC explicitly so Pydantic serializes ISO 8601 with offset; otherwise
+    # the frontend's `new Date(iso)` parses the naive string as local time.
+    if dt is None:
+        return None
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+
+
 def _latest_ingestion_status(db: Session, session_id: str) -> str | None:
     doc = db.execute(
         select(Document)
@@ -35,8 +45,8 @@ def _to_response(db: Session, row: SessionModel) -> SessionResponse:
         user_id=row.user_id,
         topic=row.topic,
         topic_profile=profile_service.load_profile(db, row.id),
-        created_at=row.created_at,
-        ended_at=row.ended_at,
+        created_at=_aware_utc(row.created_at),
+        ended_at=_aware_utc(row.ended_at),
         ingestion_status=_latest_ingestion_status(db, row.id),
     )
 
@@ -93,7 +103,10 @@ def list_sessions(user_id: str, db: Session = Depends(get_db)):
     ).scalars().all()
     return [
         SessionListItem(
-            id=r.id, topic=r.topic, created_at=r.created_at, ended_at=r.ended_at
+            id=r.id,
+            topic=r.topic,
+            created_at=_aware_utc(r.created_at),
+            ended_at=_aware_utc(r.ended_at),
         )
         for r in rows
     ]
@@ -117,10 +130,22 @@ async def end_session(session_id: str, db: Session = Depends(get_db)):
         profile = profile_service.load_profile(db, session_id)
         return SessionEndResponse(
             id=row.id,
-            ended_at=row.ended_at,
+            ended_at=_aware_utc(row.ended_at),
             summary=profile.last_session_summary or "",
         )
 
     summary = await summary_service.generate_and_persist(db, row)
     db.refresh(row)
-    return SessionEndResponse(id=row.id, ended_at=row.ended_at, summary=summary)
+    return SessionEndResponse(id=row.id, ended_at=_aware_utc(row.ended_at), summary=summary)
+
+
+@router.post("/sessions/{session_id}/reopen", response_model=SessionResponse)
+def reopen_session(session_id: str, db: Session = Depends(get_db)):
+    row = db.get(SessionModel, session_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="session not found")
+    if row.ended_at is not None:
+        row.ended_at = None
+        db.commit()
+        db.refresh(row)
+    return _to_response(db, row)
