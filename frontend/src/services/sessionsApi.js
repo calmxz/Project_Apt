@@ -14,3 +14,5 @@ export const listSessions = (userId) => apiGet('/sessions', { user_id: userId })
 export const getSession = (sessionId) => apiGet(`/sessions/${sessionId}`)
 
 export const endSession = (sessionId) => apiPost(`/sessions/${sessionId}/end`, {})
+
+export const reopenSession = (sessionId) => apiPost(`/sessions/${sessionId}/reopen`, {})

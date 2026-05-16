@@ -134,6 +134,27 @@ def test_get_list_filters_by_user_desc(client, db_session, seeded_user):
     assert [row["id"] for row in rows] == ["s_new", "s_old"]
 
 
+def test_list_returns_tz_aware_timestamps(client, db_session, seeded_user):
+    # SQLite drops tzinfo on read; the route must re-attach UTC so the wire format
+    # includes an offset and the frontend can parse it as an absolute instant.
+    db_session.add(
+        SessionModel(
+            id="s_tz",
+            user_id=USER_ID,
+            topic="x",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.commit()
+
+    r = client.get(f"/api/sessions?user_id={USER_ID}")
+    assert r.status_code == 200
+    rows = r.json()
+    assert rows, "expected at least one session"
+    iso = rows[0]["created_at"]
+    assert iso.endswith("+00:00") or iso.endswith("Z"), iso
+
+
 def test_get_single_404_missing(client):
     r = client.get("/api/sessions/does_not_exist")
     assert r.status_code == 404
@@ -175,6 +196,32 @@ def test_post_end_idempotent_when_already_ended(client, db_session, seeded_user)
     assert r.status_code == 200
     body = r.json()
     assert body["summary"] == "existing summary"
+
+
+def test_reopen_flips_ended_at_to_null(client, db_session, seeded_user):
+    db_session.add(
+        SessionModel(
+            id="s_re",
+            user_id=USER_ID,
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+            ended_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.commit()
+
+    r = client.post("/api/sessions/s_re/reopen")
+    assert r.status_code == 200, r.text
+    assert r.json()["ended_at"] is None
+    # idempotent: reopening an already-active session is a no-op
+    r2 = client.post("/api/sessions/s_re/reopen")
+    assert r2.status_code == 200
+    assert r2.json()["ended_at"] is None
+
+
+def test_reopen_404_when_missing(client):
+    r = client.post("/api/sessions/no_such/reopen")
+    assert r.status_code == 404
 
 
 def test_post_end_generates_summary(
