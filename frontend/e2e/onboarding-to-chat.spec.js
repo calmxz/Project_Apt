@@ -25,7 +25,7 @@ test.describe('onboarding to chat', () => {
     await page.getByTestId('onboarding-submit').click()
 
     await expect(page).toHaveURL(/\/$/)
-    await expect(page.getByTestId('home-empty')).toBeVisible()
+    await expect(page.getByTestId('home-empty-active')).toBeVisible()
 
     await page.getByTestId('home-new-session').click()
     await expect(page).toHaveURL(/\/new$/)

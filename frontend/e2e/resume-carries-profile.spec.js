@@ -12,7 +12,7 @@ test.describe('resume carries profile', () => {
     })
   })
 
-  test('end session A, resume on same topic, assistant reply marks it as resumed', async ({
+  test('end session A, reopen from Ended tab, assistant reply marks it as resumed', async ({
     page,
   }) => {
     const topic = `Recursion-${Date.now()}`
@@ -28,6 +28,9 @@ test.describe('resume carries profile', () => {
     await page.getByTestId('new-submit').click()
     await expect(page).toHaveURL(/\/session\//)
 
+    // Capture session id from URL so we can target the Resume button later.
+    const sessionId = page.url().split('/session/')[1].split(/[?#]/)[0]
+
     await page.getByTestId('session-input').fill('teach me base cases')
     await page.getByTestId('session-send').click()
     await expect(page.getByTestId('msg-assistant').last()).toContainText('[STUB:fresh]')
@@ -39,19 +42,11 @@ test.describe('resume carries profile', () => {
     await page.getByTestId('session-summary-close').click()
     await expect(page).toHaveURL(/\/$/)
 
-    // Session B: resume on same topic.
-    await page.getByTestId('home-new-session').click()
-    await page.getByTestId('new-topic').fill(topic)
-
-    // Switch to resume mode.
-    await page.getByTestId('new-mode').getByText('Resume').click()
-
-    // Pick the only prior session.
-    await page.getByTestId('new-prior').click()
-    await page.getByRole('option').first().click()
-
-    await page.getByTestId('new-submit').click()
-    await expect(page).toHaveURL(/\/session\//)
+    // Resume now lives on the Ended tab as a per-row button that hits the
+    // /sessions/{id}/reopen endpoint and navigates back into the same session.
+    await page.getByTestId('home-tab-ended').click()
+    await page.getByTestId(`home-resume-${sessionId}`).click()
+    await expect(page).toHaveURL(new RegExp(`/session/${sessionId}$`))
 
     await page.getByTestId('session-input').fill('continue')
     await page.getByTestId('session-send').click()
