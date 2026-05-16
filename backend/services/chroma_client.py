@@ -1,4 +1,4 @@
-"""ChromaDB client singleton. Tests override get_chroma() via monkeypatch."""
+"""ChromaDB HTTP client singleton. Tests override get_chroma() via monkeypatch."""
 
 import chromadb
 
@@ -11,7 +11,7 @@ _client = None
 def get_chroma():
     global _client
     if _client is None:
-        _client = chromadb.PersistentClient(path=settings.chroma_path)
+        _client = chromadb.HttpClient(host=settings.chroma_host, port=settings.chroma_port)
     return _client
 
 

@@ -23,7 +23,9 @@ MODEL=gemini/gemini-2.5-pro
 DAILY_CAP=50
 ```
 
-Optional overrides: `EMBEDDING_MODEL`, `DATABASE_URL`, `CHROMA_PATH`, `UPLOADS_PATH`.
+Optional overrides: `EMBEDDING_MODEL`, `DATABASE_URL`, `CHROMA_HOST`, `CHROMA_PORT`, `UPLOADS_PATH`.
+
+Backend connects to ChromaDB via HTTP (`chromadb.HttpClient`). Default `CHROMA_HOST=localhost`, `CHROMA_PORT=8001` — matches the chromadb container exposed by `docker-compose.yml`.
 
 Paths in `config.py` are anchored to the repo root, so the server runs correctly from any working directory. `data/app.db`, `data/chroma/`, `data/uploads/` are auto-created on first boot.
 
@@ -56,90 +58,54 @@ Tests use in-memory SQLite — no filesystem dependency.
 
 ## Docker
 
-Run the full stack (frontend + backend + chromadb) from repo root.
+Only ChromaDB runs in Docker. Frontend (`npm run dev`) and backend (`uvicorn`) run natively against it.
 
 ### Prerequisites
 
 - Docker Desktop running (Windows/macOS) or Docker Engine + compose plugin (Linux).
-- `.env` at repo root with `GEMINI_API_KEY` populated. Compose reads it via `env_file: .env`.
+- `.env` at repo root with `GEMINI_API_KEY` populated. Read directly by `config.py`.
 
-### Start
+### Start ChromaDB
 
 From repo root:
 
 ```bash
-docker compose up              # foreground, logs in terminal
+docker compose up              # foreground
 docker compose up -d           # detached
-docker compose up backend      # backend + chromadb only (skip frontend)
-docker compose up --build      # rebuild images after Dockerfile or deps change
 ```
-
-Services:
 
 | Service  | Host port | Container port | Notes |
 |----------|-----------|----------------|-------|
-| frontend | 5173      | 5173           | Vite dev server |
-| backend  | 8000      | 8000           | FastAPI / Uvicorn |
-| chromadb | 8001      | 8000           | Mapped off 8000 to avoid backend collision |
+| chromadb | 8001      | 8000           | HTTP API. Backend connects via `localhost:8001`. |
 
-Verify backend:
+Verify:
 
 ```bash
-curl http://localhost:8000/health
-# {"status":"ok"}
+curl http://localhost:8001/api/v2/heartbeat
+```
+
+### Run backend + frontend natively
+
+Backend (from `backend/`):
+
+```bash
+uvicorn main:app --reload
+```
+
+Frontend (from `frontend/`):
+
+```bash
+npm run dev
 ```
 
 ### Volumes
 
-`./data` (repo root) is bind-mounted to `/data` in the backend container. SQLite DB, uploaded PDFs, and Chroma persistence all live there — survives container restarts.
-
-| Host                 | Container        | Contents |
-|----------------------|------------------|----------|
-| `./data/app.db`      | `/data/app.db`   | SQLite database |
-| `./data/uploads/`    | `/data/uploads/` | Uploaded PDFs |
-| `./data/chroma/`     | `/chroma/chroma` | Chroma persistence (mounted into chromadb container) |
-
-### Env overrides in compose
-
-`docker-compose.yml` sets two backend env vars that override `config.py` defaults:
-
-- `DATABASE_URL=sqlite:////data/app.db` — absolute path inside container.
-- `CHROMA_HOST=chromadb`, `CHROMA_PORT=8000` — point backend at the chromadb service over the internal network.
-
-Add more via `env_file: .env` or an `environment:` block.
-
-### Logs
-
-```bash
-docker compose logs -f backend
-docker compose logs -f --tail=100 backend chromadb
-```
-
-### Shell into backend
-
-```bash
-docker compose exec backend bash
-docker compose exec backend pytest -v        # run tests inside container
-```
-
-### Rebuild after dependency change
-
-```bash
-docker compose build backend
-docker compose up -d backend
-```
-
-Or force a fresh build ignoring cache:
-
-```bash
-docker compose build --no-cache backend
-```
+`./data/chroma` is bind-mounted into the chromadb container — vector data survives restarts. SQLite (`./data/app.db`) and uploaded PDFs (`./data/uploads/`) live on the host and are read directly by the native backend.
 
 ### Stop / reset
 
 ```bash
-docker compose down              # stop + remove containers (keeps volumes/data)
-docker compose down -v           # also wipe named volumes (won't touch bind mount ./data)
+docker compose down              # stop chromadb (keeps ./data/chroma)
 rm -rf data/                     # nuke local data (PowerShell: Remove-Item -Recurse -Force data)
 ```
 
@@ -147,10 +113,10 @@ rm -rf data/                     # nuke local data (PowerShell: Remove-Item -Rec
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Backend exits with `unable to open database file` | `./data` missing or not writable | `mkdir data` at repo root before `docker compose up` |
-| `GEMINI_API_KEY` empty in container | `.env` missing at repo root | create `.env` next to `docker-compose.yml` |
-| `chromadb` connection refused | backend started before chromadb healthy | re-run; `depends_on` doesn't wait for readiness, only start |
-| Port 8000/5173/8001 already in use | host port collision | stop the local process or remap in compose (e.g. `"8002:8000"`) |
+| `chromadb` connection refused from backend | container not running | `docker compose up -d chromadb` |
+| Port 8001 already in use | host port collision | stop the process or remap in compose (e.g. `"8002:8000"`) |
+| Backend hits `data/app.db` permission error | `./data` missing or not writable | `mkdir data` at repo root |
+| `GEMINI_API_KEY` empty | `.env` missing at repo root | create `.env` next to `docker-compose.yml` |
 
 ## Contracts
 
