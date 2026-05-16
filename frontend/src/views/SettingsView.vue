@@ -2,7 +2,13 @@
   <section>
     <BackButton />
     <h1>Settings</h1>
-    <p class="muted">Preferences and retake-onboarding land here in Phase 9.</p>
+    <p class="muted">Preferences and retake-onboarding will land in a later phase.</p>
+    <p class="muted">
+      Want to redo onboarding now?
+      <router-link to="/onboarding?retake=1" data-testid="settings-retake-onboarding">
+        Retake onboarding
+      </router-link>
+    </p>
   </section>
 </template>
 

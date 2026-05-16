@@ -92,9 +92,57 @@
         </article>
       </div>
 
-      <p v-if="store.error" class="error" data-testid="session-error">{{ store.error }}</p>
+      <div
+        v-if="store.error || lastError"
+        class="error-banner"
+        role="alert"
+        data-testid="session-error"
+      >
+        <p class="error-message">{{ friendlyError(lastError || store.error) }}</p>
+        <button
+          v-if="canRetry"
+          type="button"
+          class="error-retry"
+          data-testid="session-error-retry"
+          @click="retryLastMessage"
+        >
+          Retry
+        </button>
+        <details v-if="rawErrorDetail" class="error-details">
+          <summary>Technical details</summary>
+          <pre>{{ rawErrorDetail }}</pre>
+        </details>
+      </div>
+
+      <p
+        v-if="uploadStatus"
+        class="upload-status"
+        :data-testid="`upload-status-${uploadStatus.kind}`"
+        :class="`upload-status-${uploadStatus.kind}`"
+      >
+        {{ uploadStatus.text }}
+      </p>
 
       <div v-if="!isEnded" class="composer">
+        <input
+          ref="fileInputEl"
+          type="file"
+          accept="application/pdf"
+          data-testid="session-upload-input"
+          hidden
+          @change="onUploadFile"
+        />
+        <button
+          type="button"
+          class="attach-btn"
+          data-testid="session-upload-btn"
+          :disabled="!canSend || uploading"
+          aria-label="Attach a PDF to this session"
+          @click="openFilePicker"
+        >
+          <span class="attach-icon" aria-hidden="true">+</span>
+          <span class="attach-label">{{ uploading ? 'Uploading…' : 'Attach PDF' }}</span>
+        </button>
         <Textarea
           ref="composerEl"
           v-model="draft"
@@ -126,7 +174,12 @@
         data-testid="session-summary-dialog"
         class="summary-dialog"
       >
-        <p class="summary">{{ summaryText }}</p>
+        <p
+          class="summary"
+          :data-testid="`session-summary-${summaryKind}`"
+        >
+          {{ summaryText }}
+        </p>
         <template #footer>
           <Button label="Close" data-testid="session-summary-close" @click="goHome" />
         </template>
@@ -145,8 +198,10 @@ import Textarea from 'primevue/textarea'
 
 import BackButton from '../components/BackButton.vue'
 import SessionEndedBanner from '../components/SessionEndedBanner.vue'
+import { friendlyError } from '../lib/errors.js'
 import { useSessionStore } from '../stores/session.js'
 import { useUserStore } from '../stores/user.js'
+import { getUploadStatus, uploadPdf } from '../services/uploadApi.js'
 
 const props = defineProps({ id: { type: String, required: true } })
 
@@ -155,13 +210,19 @@ const store = useSessionStore()
 const user = useUserStore()
 
 const draft = ref('')
+const lastSentText = ref('')
 const summaryDialog = ref(false)
 const summaryText = ref('')
+const summaryKind = ref('summary')
 const notFound = ref(false)
 const resuming = ref(false)
 const sending = ref(false)
 const messagesEl = ref(null)
 const composerEl = ref(null)
+const fileInputEl = ref(null)
+const uploading = ref(false)
+const uploadStatus = ref(null)
+const lastError = ref(null)
 
 const isEnded = computed(() => Boolean(store.currentSession?.ended_at))
 const canEnd = computed(() => Boolean(store.currentSession && !store.currentSession.ended_at))
@@ -227,26 +288,105 @@ function useQuickPrompt(text) {
   focusComposer()
 }
 
+const canRetry = computed(() => Boolean(lastSentText.value) && !sending.value && !isEnded.value)
+
+const rawErrorDetail = computed(() => {
+  const e = lastError.value || (store.error ? { message: store.error } : null)
+  if (!e || typeof e !== 'object') return null
+  const parts = []
+  if (e.status != null) parts.push(`status: ${e.status}`)
+  if (e.path) parts.push(`path: ${e.path}`)
+  if (e.body) parts.push(`body: ${typeof e.body === 'string' ? e.body : JSON.stringify(e.body)}`)
+  return parts.length ? parts.join('\n') : null
+})
+
 async function send() {
   const text = draft.value
+  if (!text.trim()) return
   draft.value = ''
+  lastSentText.value = text
+  lastError.value = null
   sending.value = true
   try {
     await store.sendMessage({ userId: user.userId, text })
-  } catch {
+    lastSentText.value = ''
+  } catch (e) {
     draft.value = text
+    lastError.value = e
   } finally {
     sending.value = false
   }
 }
 
+async function retryLastMessage() {
+  if (!lastSentText.value) return
+  draft.value = lastSentText.value
+  await send()
+}
+
 async function end() {
   try {
     const resp = await store.endSession()
-    summaryText.value = resp?.summary || 'Session ended.'
+    const summary = resp?.summary
+    summaryKind.value = summary?.kind || 'summary'
+    summaryText.value =
+      summary?.text || (summary?.kind === 'no_exchanges'
+        ? 'This session ended without any exchanges. Start a new session to continue.'
+        : 'Session ended.')
     summaryDialog.value = true
   } catch {
     /* error already surfaced via store.error */
+  }
+}
+
+function openFilePicker() {
+  fileInputEl.value?.click()
+}
+
+async function onUploadFile(ev) {
+  const file = ev.target.files?.[0]
+  ev.target.value = ''
+  if (!file) return
+  uploading.value = true
+  uploadStatus.value = { kind: 'pending', text: `Uploading ${file.name}…` }
+  try {
+    const resp = await uploadPdf({ sessionId: props.id, file })
+    await pollUploadStatus(resp.document_id, file.name)
+  } catch (e) {
+    uploadStatus.value = {
+      kind: 'failed',
+      text: `Upload failed: ${friendlyError(e)}`,
+    }
+  } finally {
+    uploading.value = false
+  }
+}
+
+async function pollUploadStatus(documentId, filename) {
+  for (let i = 0; i < 30; i += 1) {
+    let s
+    try {
+      s = await getUploadStatus(documentId)
+    } catch (e) {
+      uploadStatus.value = { kind: 'failed', text: `Upload status unavailable: ${friendlyError(e)}` }
+      return
+    }
+    if (s.status === 'ready') {
+      uploadStatus.value = { kind: 'ready', text: `${filename} is ready. Ask a question about it.` }
+      return
+    }
+    if (s.status === 'failed') {
+      uploadStatus.value = {
+        kind: 'failed',
+        text: `Upload failed: ${s.error || 'ingestion error'}`,
+      }
+      return
+    }
+    await new Promise((r) => setTimeout(r, 1000))
+  }
+  uploadStatus.value = {
+    kind: 'pending',
+    text: `${filename} is still processing. You can keep asking while it finishes.`,
   }
 }
 
@@ -528,6 +668,107 @@ function goHome() {
     transform: translateY(-4px);
     opacity: 1;
   }
+}
+
+.error-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.875rem 1.125rem;
+  background: var(--color-accent-soft, rgba(207, 138, 138, 0.18));
+  border: 1px solid var(--color-border-strong, #b78b8b);
+  border-radius: var(--radius-md, 6px);
+  color: var(--color-text, inherit);
+}
+
+.error-message {
+  margin: 0;
+  flex: 1 1 auto;
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+}
+
+.error-retry {
+  flex: 0 0 auto;
+  background: transparent;
+  color: var(--color-heading);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm, 4px);
+  padding: 0.35rem 0.875rem;
+  font-family: var(--font-sans);
+  cursor: pointer;
+}
+
+.error-retry:hover,
+.error-retry:focus-visible {
+  background: var(--color-accent-soft);
+  outline: none;
+}
+
+.error-details {
+  flex: 1 0 100%;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--color-text-faint);
+}
+
+.error-details pre {
+  white-space: pre-wrap;
+  margin: 0.4rem 0 0;
+}
+
+.upload-status {
+  margin: 0;
+  padding: 0.5rem 0.875rem;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  border-radius: var(--radius-sm, 4px);
+  background: var(--color-accent-soft);
+  color: var(--color-text-muted);
+}
+
+.upload-status-ready {
+  color: var(--color-heading);
+}
+
+.upload-status-failed {
+  background: var(--color-accent-soft, rgba(207, 138, 138, 0.18));
+  color: var(--color-heading);
+}
+
+.attach-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: transparent;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm, 4px);
+  padding: 0.5rem 0.75rem;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  cursor: pointer;
+  flex: 0 0 auto;
+  align-self: stretch;
+}
+
+.attach-btn:hover:not(:disabled),
+.attach-btn:focus-visible {
+  border-color: var(--color-accent);
+  color: var(--color-heading);
+  outline: none;
+}
+
+.attach-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.attach-icon {
+  font-weight: 600;
+  font-size: 1rem;
+  line-height: 1;
 }
 
 .composer {

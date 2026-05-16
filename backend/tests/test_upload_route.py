@@ -70,6 +70,35 @@ def test_unknown_session_id_400(client, seeded):
     assert r.status_code == 400
 
 
+def test_get_upload_status_returns_current_doc_state(client, seeded, db_session):
+    files = {"file": ("notes.pdf", io.BytesIO(b"%PDF-fake"), "application/pdf")}
+    r = client.post("/api/upload", data={"session_id": SESSION_ID}, files=files)
+    doc_id = r.json()["document_id"]
+
+    r2 = client.get(f"/api/upload/{doc_id}")
+    assert r2.status_code == 200, r2.text
+    body = r2.json()
+    assert body["id"] == doc_id
+    assert body["status"] == "pending"
+    assert body["error"] is None
+
+    doc = db_session.get(Document, doc_id)
+    doc.status = "failed"
+    doc.error = "embedding service unreachable"
+    db_session.commit()
+
+    r3 = client.get(f"/api/upload/{doc_id}")
+    assert r3.status_code == 200
+    body3 = r3.json()
+    assert body3["status"] == "failed"
+    assert body3["error"] == "embedding service unreachable"
+
+
+def test_get_upload_status_404_for_missing(client):
+    r = client.get("/api/upload/99999")
+    assert r.status_code == 404
+
+
 def test_background_task_scheduled(client, seeded, monkeypatch):
     seen = []
 

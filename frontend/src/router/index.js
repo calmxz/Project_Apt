@@ -45,7 +45,7 @@ router.beforeEach((to) => {
   if (!user.onboardingComplete && to.name !== 'onboarding') {
     return { name: 'onboarding' }
   }
-  if (user.onboardingComplete && to.name === 'onboarding') {
+  if (user.onboardingComplete && to.name === 'onboarding' && to.query.retake !== '1') {
     return { name: 'home' }
   }
 })

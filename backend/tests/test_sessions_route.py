@@ -195,7 +195,57 @@ def test_post_end_idempotent_when_already_ended(client, db_session, seeded_user)
     r = client.post("/api/sessions/s1/end")
     assert r.status_code == 200
     body = r.json()
-    assert body["summary"] == "existing summary"
+    assert body["summary"] == {"kind": "summary", "text": "existing summary"}
+
+
+def test_post_end_returns_no_exchanges_kind_for_empty_session(
+    client, db_session, seeded_user, mock_litellm, llm_text, monkeypatch
+):
+    async def fake_acompletion(**kwargs):
+        return llm_text("")
+
+    monkeypatch.setattr("services.summary_service.litellm.acompletion", fake_acompletion)
+
+    db_session.add(
+        SessionModel(
+            id="s_empty",
+            user_id=USER_ID,
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.commit()
+
+    r = client.post("/api/sessions/s_empty/end")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["summary"]["kind"] == "no_exchanges"
+    assert "without any exchanges" in body["summary"]["text"].lower()
+
+
+def test_get_session_returns_messages_array(client, db_session, seeded_user):
+    from db.models import ChatMessage
+
+    db_session.add(
+        SessionModel(
+            id="s_msgs",
+            user_id=USER_ID,
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.add(ChatMessage(session_id="s_msgs", role="user", content="hi"))
+    db_session.add(ChatMessage(session_id="s_msgs", role="assistant", content="hello back"))
+    db_session.commit()
+
+    r = client.get("/api/sessions/s_msgs")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["id"] == "s_msgs"
+    assert [(m["role"], m["content"]) for m in body["messages"]] == [
+        ("user", "hi"),
+        ("assistant", "hello back"),
+    ]
 
 
 def test_reopen_flips_ended_at_to_null(client, db_session, seeded_user):
@@ -245,5 +295,5 @@ def test_post_end_generates_summary(
     r = client.post("/api/sessions/s1/end")
     assert r.status_code == 200
     body = r.json()
-    assert body["summary"] == "learner covered joins"
+    assert body["summary"] == {"kind": "summary", "text": "learner covered joins"}
     assert body["ended_at"] is not None

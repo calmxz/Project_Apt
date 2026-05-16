@@ -13,7 +13,7 @@ from fastapi import (
 from sqlalchemy.orm import Session
 
 from config import settings
-from contracts import UploadResponse
+from contracts import UploadResponse, UploadStatus
 from db.database import get_db
 from db.models import Document, Session as SessionModel
 from services import ingestion_service
@@ -57,3 +57,11 @@ def upload_pdf(
         filename=doc.filename,
         status="pending",
     )
+
+
+@router.get("/upload/{document_id}", response_model=UploadStatus)
+def get_upload_status(document_id: int, db: Session = Depends(get_db)):
+    doc = db.get(Document, document_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="document not found")
+    return UploadStatus(id=doc.id, status=doc.status, error=doc.error)

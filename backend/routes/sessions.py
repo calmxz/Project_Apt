@@ -1,3 +1,4 @@
+import json
 import uuid
 from datetime import datetime, timezone
 
@@ -6,15 +7,23 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from contracts import (
+    Citation,
+    Message,
     SessionCreateRequest,
+    SessionDetail,
     SessionEndResponse,
+    SessionEndSummary,
     SessionListItem,
     SessionResponse,
     TopicProfile,
 )
 from db.database import get_db
-from db.models import Document, Session as SessionModel, User
+from db.models import ChatMessage, Document, Session as SessionModel, User
 from services import profile_service, summary_service
+
+NO_EXCHANGES_TEXT = (
+    "This session ended without any exchanges. Start a new session to continue."
+)
 
 
 router = APIRouter(prefix="/api")
@@ -112,12 +121,52 @@ def list_sessions(user_id: str, db: Session = Depends(get_db)):
     ]
 
 
-@router.get("/sessions/{session_id}", response_model=SessionResponse)
+def _load_messages(db: Session, session_id: str) -> list[Message]:
+    rows = db.execute(
+        select(ChatMessage)
+        .where(ChatMessage.session_id == session_id)
+        .order_by(ChatMessage.created_at.asc(), ChatMessage.id.asc())
+    ).scalars().all()
+    out: list[Message] = []
+    for m in rows:
+        try:
+            citations = [Citation(**c) for c in json.loads(m.citations_json or "[]")]
+        except (ValueError, TypeError):
+            citations = []
+        out.append(
+            Message(
+                id=m.id,
+                role=m.role,
+                content=m.content,
+                created_at=_aware_utc(m.created_at),
+                citations=citations,
+            )
+        )
+    return out
+
+
+def _build_end_summary(db: Session, session_id: str, text: str) -> SessionEndSummary:
+    cleaned = (text or "").removeprefix("[auto] ").strip()
+    if not cleaned or cleaned == "no exchanges recorded":
+        return SessionEndSummary(kind="no_exchanges", text=NO_EXCHANGES_TEXT)
+    return SessionEndSummary(kind="summary", text=cleaned)
+
+
+@router.get("/sessions/{session_id}", response_model=SessionDetail)
 def get_session(session_id: str, db: Session = Depends(get_db)):
     row = db.get(SessionModel, session_id)
     if row is None:
         raise HTTPException(status_code=404, detail="session not found")
-    return _to_response(db, row)
+    return SessionDetail(
+        id=row.id,
+        user_id=row.user_id,
+        topic=row.topic,
+        topic_profile=profile_service.load_profile(db, row.id),
+        created_at=_aware_utc(row.created_at),
+        ended_at=_aware_utc(row.ended_at),
+        ingestion_status=_latest_ingestion_status(db, row.id),
+        messages=_load_messages(db, row.id),
+    )
 
 
 @router.post("/sessions/{session_id}/end", response_model=SessionEndResponse)
@@ -131,12 +180,16 @@ async def end_session(session_id: str, db: Session = Depends(get_db)):
         return SessionEndResponse(
             id=row.id,
             ended_at=_aware_utc(row.ended_at),
-            summary=profile.last_session_summary or "",
+            summary=_build_end_summary(db, session_id, profile.last_session_summary or ""),
         )
 
-    summary = await summary_service.generate_and_persist(db, row)
+    summary_text = await summary_service.generate_and_persist(db, row)
     db.refresh(row)
-    return SessionEndResponse(id=row.id, ended_at=_aware_utc(row.ended_at), summary=summary)
+    return SessionEndResponse(
+        id=row.id,
+        ended_at=_aware_utc(row.ended_at),
+        summary=_build_end_summary(db, session_id, summary_text),
+    )
 
 
 @router.post("/sessions/{session_id}/reopen", response_model=SessionResponse)

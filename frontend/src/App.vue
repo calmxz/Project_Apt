@@ -64,7 +64,7 @@ const { isDark, toggle } = useTheme()
   display: inline-flex;
   align-items: baseline;
   gap: 0.625rem;
-  color: var(--color-heading);
+  color: var(--color-wordmark, var(--color-heading));
   text-decoration: none;
   font-family: var(--font-serif);
   font-weight: 500;

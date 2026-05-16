@@ -62,9 +62,13 @@ export const useSessionStore = defineStore('session', () => {
       const s = await sessionsApi.getSession(id)
       currentSession.value = s
       currentSessionId.value = s.id
-      // Backend does not yet return historical messages on GET /sessions/{id};
-      // SessionView starts with empty transcript and appends from sendMessage.
-      messages.value = []
+      messages.value = (s.messages || []).map((m) => ({
+        role: m.role,
+        content: m.content,
+        message_id: m.id,
+        citations: m.citations || [],
+        created_at: m.created_at,
+      }))
       return s
     } catch (e) {
       _setError(e)
@@ -108,11 +112,12 @@ export const useSessionStore = defineStore('session', () => {
     error.value = null
     try {
       const resp = await sessionsApi.endSession(currentSessionId.value)
+      const summaryText = resp?.summary?.text ?? ''
       if (currentSession.value) {
         currentSession.value.ended_at = resp.ended_at
         currentSession.value.topic_profile = {
           ...currentSession.value.topic_profile,
-          last_session_summary: resp.summary,
+          last_session_summary: summaryText,
         }
       }
       const idx = sessions.value.findIndex((s) => s.id === currentSessionId.value)

@@ -65,6 +65,8 @@
   --color-accent: var(--accent-amber);
   --color-accent-soft: var(--accent-amber-tint);
   --color-accent-hover: var(--accent-ink);
+  --color-wordmark: var(--ink-900);
+  --color-stub-heading: var(--ink-700);
 }
 
 :root[data-theme="dark"] {
@@ -80,6 +82,8 @@
   --color-accent: var(--accent-amber-soft);
   --color-accent-soft: rgba(212, 165, 116, 0.14);
   --color-accent-hover: var(--accent-amber-tint);
+  --color-wordmark: var(--ink-50);
+  --color-stub-heading: var(--ink-100);
 
   --shadow-paper: 0 1px 0 rgba(0, 0, 0, 0.3), 0 12px 28px -16px rgba(0, 0, 0, 0.6);
   --shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.4), 0 16px 40px -20px rgba(0, 0, 0, 0.7);
@@ -99,6 +103,8 @@
     --color-accent: var(--accent-amber-soft);
     --color-accent-soft: rgba(212, 165, 116, 0.14);
     --color-accent-hover: var(--accent-amber-tint);
+    --color-wordmark: var(--ink-50);
+    --color-stub-heading: var(--ink-100);
 
     --shadow-paper: 0 1px 0 rgba(0, 0, 0, 0.3), 0 12px 28px -16px rgba(0, 0, 0, 0.6);
     --shadow-lift: 0 2px 4px rgba(0, 0, 0, 0.4), 0 16px 40px -20px rgba(0, 0, 0, 0.7);

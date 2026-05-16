@@ -160,13 +160,60 @@ class SessionListItem(BaseModel):
     ended_at: datetime | None = None
 
 
+class Message(BaseModel):
+    """
+    A single chat turn persisted in the session transcript.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    id: int
+    role: str
+    content: str
+    created_at: datetime
+    citations: list[Citation] | None = []
+
+
+class SessionDetail(BaseModel):
+    """
+    SessionResponse plus full message transcript.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    id: str
+    user_id: str
+    topic: str
+    topic_profile: TopicProfile
+    created_at: datetime
+    ended_at: datetime | None = None
+    ingestion_status: Literal["pending", "ready", "failed"] | None = None
+    messages: list[Message]
+
+
+class SessionEndSummary(BaseModel):
+    """
+    Structured payload describing how a session ended. Frontend branches on
+    `kind` to render friendly copy. Legacy [auto] strings have been removed.
+
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    kind: Literal["summary", "no_exchanges"]
+    text: str
+
+
 class SessionEndResponse(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
     id: str
     ended_at: datetime
-    summary: str
+    summary: SessionEndSummary
 
 
 class UploadResponse(BaseModel):
@@ -177,6 +224,19 @@ class UploadResponse(BaseModel):
     session_id: str
     filename: str
     status: Literal["pending", "ready", "failed"]
+
+
+class UploadStatus(BaseModel):
+    """
+    Ingestion state for an uploaded document; polled by the UI.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    id: int
+    status: Literal["pending", "ready", "failed"]
+    error: str | None = None
 
 
 class ProfileResponse(BaseModel):

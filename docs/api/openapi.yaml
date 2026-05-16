@@ -108,17 +108,17 @@ paths:
   /api/sessions/{session_id}:
     get:
       tags: [sessions]
-      summary: Get a single session (used for ingestion polling too).
+      summary: Get a single session with its full message transcript.
       operationId: getSession
       parameters:
         - $ref: "#/components/parameters/SessionId"
       responses:
         "200":
-          description: Session detail.
+          description: Session detail with messages.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SessionResponse"
+                $ref: "#/components/schemas/SessionDetail"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -184,6 +184,26 @@ paths:
                 $ref: "#/components/schemas/UploadResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+
+  /api/upload/{document_id}:
+    get:
+      tags: [upload]
+      summary: Poll ingestion status for an uploaded document.
+      operationId: getUploadStatus
+      parameters:
+        - in: path
+          name: document_id
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Current ingestion status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadStatus"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /api/profile/{session_id}:
     get:
@@ -443,6 +463,57 @@ components:
         created_at: { type: string, format: date-time }
         ended_at:   { type: [string, "null"], format: date-time, default: null }
 
+    Message:
+      type: object
+      additionalProperties: false
+      required: [id, role, content, created_at]
+      description: A single chat turn persisted in the session transcript.
+      properties:
+        id:         { type: integer }
+        role:       { type: string }
+        content:    { type: string }
+        created_at: { type: string, format: date-time }
+        citations:
+          type: array
+          items: { $ref: "#/components/schemas/Citation" }
+          default: []
+
+    SessionDetail:
+      type: object
+      additionalProperties: false
+      required: [id, user_id, topic, topic_profile, created_at, messages]
+      description: SessionResponse plus full message transcript.
+      properties:
+        id:                { type: string }
+        user_id:           { type: string }
+        topic:             { type: string }
+        topic_profile:     { $ref: "#/components/schemas/TopicProfile" }
+        created_at:        { type: string, format: date-time }
+        ended_at:          { type: [string, "null"], format: date-time, default: null }
+        ingestion_status:
+          oneOf:
+            - $ref: "#/components/schemas/IngestionStatus"
+            - type: "null"
+          default: null
+        messages:
+          type: array
+          items: { $ref: "#/components/schemas/Message" }
+
+    SessionEndSummaryKind:
+      type: string
+      enum: [summary, no_exchanges]
+
+    SessionEndSummary:
+      type: object
+      additionalProperties: false
+      required: [kind, text]
+      description: |
+        Structured payload describing how a session ended. Frontend branches on
+        `kind` to render friendly copy. Legacy [auto] strings have been removed.
+      properties:
+        kind: { $ref: "#/components/schemas/SessionEndSummaryKind" }
+        text: { type: string }
+
     SessionEndResponse:
       type: object
       additionalProperties: false
@@ -450,7 +521,7 @@ components:
       properties:
         id:       { type: string }
         ended_at: { type: string, format: date-time }
-        summary:  { type: string }
+        summary:  { $ref: "#/components/schemas/SessionEndSummary" }
 
     UploadResponse:
       type: object
@@ -461,6 +532,16 @@ components:
         session_id:  { type: string }
         filename:    { type: string }
         status:      { $ref: "#/components/schemas/IngestionStatus" }
+
+    UploadStatus:
+      type: object
+      additionalProperties: false
+      required: [id, status]
+      description: Ingestion state for an uploaded document; polled by the UI.
+      properties:
+        id:     { type: integer }
+        status: { $ref: "#/components/schemas/IngestionStatus" }
+        error:  { type: [string, "null"], default: null }
 
     ProfileResponse:
       type: object

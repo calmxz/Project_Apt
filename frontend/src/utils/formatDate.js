@@ -1,4 +1,13 @@
-export const formatDate = (iso) => (iso ? new Date(iso).toLocaleString() : '')
+const DATE_FMT = new Intl.DateTimeFormat(undefined, {
+  year: 'numeric',
+  month: 'numeric',
+  day: 'numeric',
+  hour: 'numeric',
+  minute: '2-digit',
+  timeZoneName: 'short',
+})
+
+export const formatDate = (iso) => (iso ? DATE_FMT.format(new Date(iso)) : '')
 
 const RTF = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
 

@@ -91,14 +91,20 @@
         :value="activeSessions"
         data-testid="home-sessions"
         class="table"
+        :row-class="() => 'session-row'"
         @row-click="onRowClick"
       >
         <Column field="topic" header="Topic">
           <template #body="{ data }">
-            <div class="topic-block">
+            <router-link
+              :to="{ name: 'session', params: { id: data.id } }"
+              class="topic-block row-link"
+              :aria-label="rowLabel(data, 'active')"
+              :data-testid="`home-row-active-${data.id}`"
+            >
               <span class="topic-cell">{{ data.topic }}</span>
               <span class="row-id">#{{ shortId(data.id) }}</span>
-            </div>
+            </router-link>
           </template>
         </Column>
         <Column header="Started">
@@ -124,13 +130,20 @@
         :value="endedSessions"
         data-testid="home-sessions-ended"
         class="table table-ended"
+        :row-class="() => 'session-row'"
+        @row-click="onRowClick"
       >
         <Column field="topic" header="Topic">
           <template #body="{ data }">
-            <div class="topic-block">
+            <router-link
+              :to="{ name: 'session', params: { id: data.id } }"
+              class="topic-block row-link"
+              :aria-label="rowLabel(data, 'ended')"
+              :data-testid="`home-row-ended-${data.id}`"
+            >
               <span class="topic-cell">{{ data.topic }}</span>
               <span class="row-id">#{{ shortId(data.id) }}</span>
-            </div>
+            </router-link>
           </template>
         </Column>
         <Column header="Ended">
@@ -223,7 +236,15 @@ function goNew() {
   router.push({ name: 'new-session' })
 }
 
-function onRowClick({ data }) {
+function rowLabel(data, status) {
+  const when = data.ended_at || data.created_at
+  return `Open ${status} session: ${data.topic || 'untitled'}, ${formatRelative(when)}`
+}
+
+function onRowClick({ data, originalEvent }) {
+  // Skip when click landed on the inner topic-link (it already navigates) or a button.
+  const target = originalEvent?.target
+  if (target?.closest?.('.row-link, button, a')) return
   router.push({ name: 'session', params: { id: data.id } })
 }
 
@@ -335,6 +356,28 @@ async function cleanupDuplicates() {
 .tab-active {
   color: var(--color-heading);
   border-bottom-color: var(--color-heading);
+}
+
+.table :deep(tr.session-row) {
+  cursor: pointer;
+}
+
+.row-link {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  color: inherit;
+  text-decoration: none;
+  border-radius: var(--radius-sm, 4px);
+}
+
+.row-link:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.row-link:hover .topic-cell {
+  color: var(--color-accent);
 }
 
 .tab-count {
