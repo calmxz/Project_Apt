@@ -61,6 +61,17 @@ export const useUserStore = defineStore('user', () => {
     if (typeof localStorage !== 'undefined') localStorage.removeItem(STORAGE_KEY)
   }
 
+  function updateProfile({ name: displayName, feedback }) {
+    if (displayName != null) name.value = displayName.trim() || 'Learner'
+    if (feedback != null) {
+      interactionPreferences.value = {
+        ...interactionPreferences.value,
+        feedback,
+      }
+    }
+    persist()
+  }
+
   return {
     userId,
     name,
@@ -69,5 +80,6 @@ export const useUserStore = defineStore('user', () => {
     loadFromLocalStorage,
     completeOnboarding,
     resetOnboarding,
+    updateProfile,
   }
 })

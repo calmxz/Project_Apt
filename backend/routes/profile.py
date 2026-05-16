@@ -1,14 +1,26 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from contracts import LearningEventResponse, ProfileResponse
+from contracts import (
+    AggregateProfileResponse,
+    LearningEventResponse,
+    ProfileResponse,
+)
 from db.database import get_db
 from db.models import LearningEvent, Session as SessionModel
 from services import profile_service
 
 
 router = APIRouter(prefix="/api")
+
+
+@router.get("/profile/aggregate", response_model=AggregateProfileResponse)
+def get_aggregate_profile(
+    user_id: str = Query(...),
+    db: Session = Depends(get_db),
+):
+    return profile_service.aggregate_for_user(db, user_id)
 
 
 @router.get("/profile/{session_id}", response_model=ProfileResponse)

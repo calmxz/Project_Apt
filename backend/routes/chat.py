@@ -7,10 +7,12 @@ from sqlalchemy.orm import Session
 
 from agent import prompts, tutor
 from agent.types import ToolContext
+from config import settings
 from contracts import ChatRequest, ChatResponse, ToolCallRecord, Citation
 from db.database import get_db
 from db.models import ChatMessage, Document, Session as SessionModel, User
 from lib import keyword_index
+from lib.error_codes import DAILY_CAP_REACHED
 from services import profile_service, rate_limit
 
 
@@ -19,12 +21,15 @@ router = APIRouter(prefix="/api")
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest, db: Session = Depends(get_db)):
-    if not rate_limit.check_and_increment(db, req.user_id):
+    allowed, used = rate_limit.check_and_increment(db, req.user_id)
+    if not allowed:
         raise HTTPException(
             status_code=429,
             detail={
-                "message": "Daily cap reached",
-                "reset_at": rate_limit.midnight_utc_iso(),
+                "code": DAILY_CAP_REACHED,
+                "cap": settings.daily_cap,
+                "used": used,
+                "resets_at": rate_limit.midnight_utc_iso(),
             },
         )
 

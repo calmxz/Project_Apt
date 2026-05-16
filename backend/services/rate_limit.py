@@ -19,8 +19,12 @@ def midnight_utc_iso() -> str:
     return tomorrow.isoformat()
 
 
-def check_and_increment(db: Session, user_id: str) -> bool:
-    """Return True if the request is allowed, False if the daily cap is reached."""
+def check_and_increment(db: Session, user_id: str) -> tuple[bool, int]:
+    """Return (allowed, current_used_count_after_call).
+
+    If the cap is already reached, count is not incremented and `allowed=False`.
+    Otherwise count is bumped and returned in its post-increment state.
+    """
     date_utc = _today_utc()
 
     row = db.execute(
@@ -36,8 +40,8 @@ def check_and_increment(db: Session, user_id: str) -> bool:
         db.flush()
 
     if row.count >= settings.daily_cap:
-        return False
+        return False, row.count
 
     row.count += 1
     db.commit()
-    return True
+    return True, row.count

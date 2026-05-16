@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     chroma_port: int = 8001
     uploads_path: str = (_DATA_DIR / "uploads").as_posix()
     llm_stub: bool = False
+    cors_origins: str = "http://localhost:5173"
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
     @property
     def llm_stub_enabled(self) -> bool:

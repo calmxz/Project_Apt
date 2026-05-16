@@ -20,18 +20,42 @@
           <h1 class="topic">{{ store.currentSession?.topic || 'Session' }}</h1>
           <p class="muted" data-testid="session-id">id · {{ id }}</p>
         </div>
-        <Button
-          v-if="!isEnded"
-          label="End session"
-          icon="pi pi-flag"
-          icon-pos="right"
-          severity="secondary"
-          data-testid="session-end"
-          :disabled="!canEnd"
-          class="end-btn"
-          @click="end"
-        />
+        <div class="head-actions">
+          <router-link
+            :to="{ name: 'session-profile', params: { id } }"
+            class="profile-link profile-link-compact"
+            data-testid="session-profile-link"
+            aria-label="View this session's profile"
+          >
+            <i class="pi pi-id-card" aria-hidden="true" />
+            <span>Profile</span>
+          </router-link>
+          <Button
+            v-if="!isEnded"
+            label="End session"
+            icon="pi pi-flag"
+            icon-pos="right"
+            severity="secondary"
+            data-testid="session-end"
+            :disabled="!canEnd"
+            class="end-btn"
+            @click="end"
+          />
+        </div>
       </header>
+
+      <div
+        v-if="store.dailyCapReached"
+        class="cap-banner"
+        role="alert"
+        data-testid="session-cap-banner"
+      >
+        <strong>Daily limit reached.</strong>
+        <span v-if="store.dailyCapInfo">
+          {{ store.dailyCapInfo.used }}/{{ store.dailyCapInfo.cap }} requests today.
+          Resets at {{ formatShortDateTime(store.dailyCapInfo.resets_at) || 'midnight UTC' }}.
+        </span>
+      </div>
 
       <hr class="hairline" />
 
@@ -201,7 +225,9 @@ import SessionEndedBanner from '../components/SessionEndedBanner.vue'
 import { friendlyError } from '../lib/errors.js'
 import { useSessionStore } from '../stores/session.js'
 import { useUserStore } from '../stores/user.js'
+import { useToast } from '../composables/useToast.js'
 import { getUploadStatus, uploadPdf } from '../services/uploadApi.js'
+import { formatShortDateTime } from '../utils/formatDate.js'
 
 const props = defineProps({ id: { type: String, required: true } })
 
@@ -226,7 +252,20 @@ const lastError = ref(null)
 
 const isEnded = computed(() => Boolean(store.currentSession?.ended_at))
 const canEnd = computed(() => Boolean(store.currentSession && !store.currentSession.ended_at))
-const canSend = computed(() => canEnd.value)
+const canSend = computed(() => canEnd.value && !store.dailyCapReached)
+
+const { showError } = useToast()
+watch(
+  () => store.dailyCapReached,
+  (now) => {
+    if (!now || !store.dailyCapInfo) return
+    const when = formatShortDateTime(store.dailyCapInfo.resets_at) || 'midnight UTC'
+    showError(
+      `Daily limit reached (${store.dailyCapInfo.used}/${store.dailyCapInfo.cap}). Resets at ${when}.`,
+      { summary: 'Cap reached', life: 8000 },
+    )
+  },
+)
 
 // Show the "typing" placeholder when we've appended the user message but the
 // tutor reply hasn't arrived yet. Driven by `sending` rather than `store.loading`
@@ -841,6 +880,28 @@ function goHome() {
   color: var(--signal-error);
   border-color: var(--signal-error);
 }
+
+.head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.cap-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid var(--signal-error);
+  border-left: 3px solid var(--signal-error);
+  background: color-mix(in srgb, var(--signal-error) 8%, transparent);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-size: 0.9375rem;
+}
+
+.cap-banner strong { color: var(--signal-error); }
 
 .error {
   color: var(--signal-error);

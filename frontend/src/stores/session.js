@@ -1,8 +1,9 @@
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import * as sessionsApi from '../services/sessionsApi.js'
 import { postChat } from '../services/chatApi.js'
+import { ERR_DAILY_CAP_REACHED } from '../lib/errorCodes.js'
 
 export const useSessionStore = defineStore('session', () => {
   const currentSessionId = ref(null)
@@ -11,6 +12,8 @@ export const useSessionStore = defineStore('session', () => {
   const messages = ref([])
   const loading = ref(false)
   const error = ref(null)
+  const dailyCapInfo = ref(null) // { cap, used, resets_at }
+  const dailyCapReached = computed(() => dailyCapInfo.value !== null)
 
   function _setError(e) {
     error.value = e instanceof Error ? e.message : String(e)
@@ -100,10 +103,21 @@ export const useSessionStore = defineStore('session', () => {
       })
       return resp
     } catch (e) {
+      if (e?.status === 429 && e?.body?.detail?.code === ERR_DAILY_CAP_REACHED) {
+        dailyCapInfo.value = {
+          cap: e.body.detail.cap,
+          used: e.body.detail.used,
+          resets_at: e.body.detail.resets_at,
+        }
+      }
       _setError(e)
     } finally {
       loading.value = false
     }
+  }
+
+  function clearDailyCap() {
+    dailyCapInfo.value = null
   }
 
   async function endSession() {
@@ -154,6 +168,7 @@ export const useSessionStore = defineStore('session', () => {
     sessions.value = []
     messages.value = []
     error.value = null
+    dailyCapInfo.value = null
   }
 
   return {
@@ -163,6 +178,8 @@ export const useSessionStore = defineStore('session', () => {
     messages,
     loading,
     error,
+    dailyCapReached,
+    dailyCapInfo,
     listSessions,
     createSession,
     loadSession,
@@ -170,6 +187,7 @@ export const useSessionStore = defineStore('session', () => {
     endSession,
     reopenSession,
     setError,
+    clearDailyCap,
     reset,
   }
 })

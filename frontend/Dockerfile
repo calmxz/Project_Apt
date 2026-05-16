@@ -1,7 +1,17 @@
-FROM node:22-alpine
+# Build stage: compile Vite bundle.
+FROM node:20-alpine AS build
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY . .
-EXPOSE 5173
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+# VITE_API_BASE_URL is baked into the bundle. Prod nginx reverse-proxies /api
+# back to the backend service so the SPA uses a same-origin relative URL.
+ENV VITE_API_BASE_URL=/api
+RUN npm run build
+
+# Serve stage: lean nginx with SPA fallback + /api proxy.
+FROM nginx:1.27-alpine
+COPY --from=build /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

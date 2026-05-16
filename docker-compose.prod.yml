@@ -1,0 +1,52 @@
+# Production stack: nginx-served frontend + uvicorn backend + ChromaDB.
+# Run from repo root:
+#   docker compose -f docker-compose.prod.yml --env-file backend/.env up --build
+# Public URL via:
+#   ngrok http 80      (any --domain flag is fine for stable URLs)
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  backend:
+    build:
+      context: ./backend
+    expose:
+      - "8000"
+    environment:
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      MODEL: ${MODEL:-gemini/gemini-3.1-flash-lite}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-gemini/text-embedding-004}
+      DAILY_CAP: ${DAILY_CAP:-50}
+      DATABASE_URL: sqlite:////data/app.db
+      UPLOADS_PATH: /data/uploads
+      CHROMA_HOST: chromadb
+      CHROMA_PORT: 8000
+      # Same-origin via nginx — no browser-side CORS preflight needed.
+      # Keep the localhost dev origin too in case you reverse-proxy directly.
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost,http://localhost:5173}
+      LLM_STUB: ${LLM_STUB:-}
+    volumes:
+      - ./data:/data
+    depends_on:
+      chromadb:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  chromadb:
+    image: chromadb/chroma:0.5.20
+    expose:
+      - "8000"
+    volumes:
+      - ./data/chroma:/chroma/chroma

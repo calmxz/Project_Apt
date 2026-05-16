@@ -7,3 +7,32 @@
   flex-direction: column;
   isolation: isolate;
 }
+
+/* Shared "subtle button" link style used for the per-session and combined
+   profile entry points in HomeView and SessionView headers. */
+.profile-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.875rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-strong);
+  background: transparent;
+  color: var(--color-text-muted);
+  text-decoration: none;
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  transition: color 180ms ease, background 180ms ease, border-color 180ms ease;
+}
+
+.profile-link.profile-link-compact {
+  padding: 0.45rem 0.75rem;
+}
+
+.profile-link:hover,
+.profile-link:focus-visible {
+  color: var(--color-heading);
+  background: var(--color-surface);
+  border-color: var(--color-heading);
+  outline: none;
+}

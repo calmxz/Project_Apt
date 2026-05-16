@@ -12,11 +12,19 @@ Rules:
 
 import logging
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from agent.types import ToolContext
-from contracts import ToolResult, TopicProfile, UpdateTopicProfileArgs
+from contracts import (
+    AggregateConceptCount,
+    AggregateProfileResponse,
+    KnowledgeLevelDistribution,
+    RecentSessionSummary,
+    ToolResult,
+    TopicProfile,
+    UpdateTopicProfileArgs,
+)
 from db.models import LearningEvent, Session as SessionModel
 
 
@@ -111,3 +119,92 @@ def apply_patch(
     save_profile(db, ctx.session_id, profile)
 
     return ToolResult(ok=True, status="ok")
+
+
+def aggregate_for_user(db: Session, user_id: str) -> AggregateProfileResponse:
+    """Cross-session aggregate. Pure SQL + Python, no LLM calls."""
+    sessions: list[SessionModel] = db.execute(
+        select(SessionModel)
+        .where(SessionModel.user_id == user_id)
+        .order_by(SessionModel.created_at.asc())
+    ).scalars().all()
+
+    total = len(sessions)
+    active = sum(1 for s in sessions if s.ended_at is None)
+    ended = total - active
+
+    mastered_counts: dict[str, dict] = {}
+    gap_counts: dict[str, dict] = {}
+    level_dist = {"beginner": 0, "intermediate": 0, "advanced": 0, "unknown": 0}
+    last_active_at = None
+
+    for s in sessions:
+        profile = TopicProfile.model_validate_json(s.topic_profile_json or "{}")
+
+        level_key = profile.knowledge_level or "unknown"
+        level_dist[level_key] = level_dist.get(level_key, 0) + 1
+
+        for concept in profile.mastered_concepts or []:
+            entry = mastered_counts.setdefault(
+                concept, {"count": 0, "first_seen_session_id": s.id}
+            )
+            entry["count"] += 1
+
+        for gap in profile.confirmed_gaps or []:
+            entry = gap_counts.setdefault(
+                gap, {"count": 0, "first_seen_session_id": s.id}
+            )
+            entry["count"] += 1
+
+        candidate = s.ended_at or s.created_at
+        if candidate is not None and (
+            last_active_at is None or candidate > last_active_at
+        ):
+            last_active_at = candidate
+
+    def _to_sorted_list(d: dict[str, dict]) -> list[AggregateConceptCount]:
+        return sorted(
+            (
+                AggregateConceptCount(
+                    concept=name,
+                    count=v["count"],
+                    first_seen_session_id=v["first_seen_session_id"],
+                )
+                for name, v in d.items()
+            ),
+            key=lambda x: (-x.count, x.concept),
+        )
+
+    session_ids = [s.id for s in sessions]
+    if session_ids:
+        total_events = db.execute(
+            select(func.count(LearningEvent.id)).where(
+                LearningEvent.session_id.in_(session_ids)
+            )
+        ).scalar_one()
+    else:
+        total_events = 0
+
+    # `sessions` already ordered by created_at asc; last 5 reversed = newest first.
+    recent = list(reversed(sessions[-5:]))
+    recent_topics = [
+        RecentSessionSummary(
+            id=s.id,
+            topic=s.topic or "",
+            created_at=s.created_at,
+            ended_at=s.ended_at,
+        )
+        for s in recent
+    ]
+
+    return AggregateProfileResponse(
+        total_sessions=total,
+        active_sessions=active,
+        ended_sessions=ended,
+        total_learning_events=int(total_events or 0),
+        last_active_at=last_active_at,
+        combined_mastered_concepts=_to_sorted_list(mastered_counts),
+        combined_confirmed_gaps=_to_sorted_list(gap_counts),
+        knowledge_level_distribution=KnowledgeLevelDistribution(**level_dist),
+        recent_topics=recent_topics,
+    )

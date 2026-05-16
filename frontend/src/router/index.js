@@ -21,6 +21,11 @@ const router = createRouter({
       component: () => import('../views/SettingsView.vue'),
     },
     {
+      path: '/profile',
+      name: 'profile-aggregate',
+      component: () => import('../views/AggregateProfileView.vue'),
+    },
+    {
       path: '/new',
       name: 'new-session',
       component: () => import('../views/NewSessionView.vue'),

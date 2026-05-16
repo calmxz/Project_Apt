@@ -13,14 +13,25 @@
           </template>
         </p>
       </div>
-      <Button
-        label="New session"
-        icon="pi pi-plus"
-        icon-pos="right"
-        data-testid="home-new-session"
-        class="cta"
-        @click="goNew"
-      />
+      <div class="head-cta">
+        <router-link
+          to="/profile"
+          class="profile-link"
+          data-testid="home-profile-link"
+          aria-label="View combined learning profile"
+        >
+          <i class="pi pi-user" aria-hidden="true" />
+          <span>Combined profile</span>
+        </router-link>
+        <Button
+          label="New session"
+          icon="pi pi-plus"
+          icon-pos="right"
+          data-testid="home-new-session"
+          class="cta"
+          @click="goNew"
+        />
+      </div>
     </header>
 
     <div class="tabs" role="tablist" data-testid="home-tabs">
@@ -522,6 +533,13 @@ async function cleanupDuplicates() {
   font-size: 0.7rem;
   letter-spacing: 0.04em;
   color: var(--color-text-faint);
+}
+
+.head-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .cta :deep(.p-button),
