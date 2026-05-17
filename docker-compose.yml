@@ -2,7 +2,7 @@ services:
   # Only ChromaDB runs in Docker. Frontend (npm run dev) and backend (uvicorn) run natively.
   # Backend connects via chromadb.HttpClient(host=localhost, port=8001).
   chromadb:
-    image: chromadb/chroma:0.5.20
+    image: chromadb/chroma:1.5.9
     ports:
       - "8001:8000"
     volumes:

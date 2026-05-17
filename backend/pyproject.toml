@@ -7,18 +7,18 @@ name = "adaptlearn-backend"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
-    "fastapi>=0.115,<0.120",
+    "fastapi>=0.120,<0.137",
     "uvicorn[standard]>=0.32",
     "sqlalchemy>=2.0,<3.0",
     "pydantic>=2.7,<3.0",
     "pydantic-settings>=2.4",
-    "litellm>=1.52.0,<2.0",
+    "litellm>=1.83.7,<2.0",
     "python-dotenv>=1.0",
-    "python-multipart>=0.0.9,<1.0",
-    "pypdf>=4.3,<6.0",
+    "python-multipart>=0.0.18,<1.0",
+    "pypdf>=6.10.2,<7.0",
     "tiktoken>=0.7,<1.0",
     "snowballstemmer>=2.2,<4.0",
-    "chromadb>=0.5,<2.0",
+    "chromadb>=1.5,<2.0",
 ]
 
 [project.optional-dependencies]
