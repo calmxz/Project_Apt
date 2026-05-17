@@ -247,6 +247,72 @@ class ProfileResponse(BaseModel):
     recent_learning_events: list[LearningEventResponse]
 
 
+class AggregateConceptCount(BaseModel):
+    """
+    Concept (mastered or gap) plus how many sessions it appears in and the
+    earliest session id where it was recorded.
+
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    concept: str
+    count: conint(ge=1)
+    first_seen_session_id: str
+
+
+class KnowledgeLevelDistribution(BaseModel):
+    """
+    Count of sessions per knowledge_level (unknown = null knowledge_level).
+
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    beginner: conint(ge=0)
+    intermediate: conint(ge=0)
+    advanced: conint(ge=0)
+    unknown: conint(ge=0)
+
+
+class RecentSessionSummary(BaseModel):
+    """
+    Compact session header for the "recent topics" widget.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    id: str
+    topic: str
+    created_at: datetime
+    ended_at: datetime | None = None
+
+
+class AggregateProfileResponse(BaseModel):
+    """
+    Cross-session aggregate view powering the top-level /profile dashboard.
+    All arrays are sorted by count desc (mastered + gaps) or created_at desc
+    (recent_topics).
+
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    total_sessions: conint(ge=0)
+    active_sessions: conint(ge=0)
+    ended_sessions: conint(ge=0)
+    total_learning_events: conint(ge=0)
+    last_active_at: datetime | None = None
+    combined_mastered_concepts: list[AggregateConceptCount]
+    combined_confirmed_gaps: list[AggregateConceptCount]
+    knowledge_level_distribution: KnowledgeLevelDistribution
+    recent_topics: list[RecentSessionSummary]
+
+
 class ErrorResponse(BaseModel):
     model_config = ConfigDict(
         extra="forbid",

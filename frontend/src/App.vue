@@ -1,5 +1,6 @@
 <script setup>
 import { RouterLink, RouterView } from 'vue-router'
+import Toast from 'primevue/toast'
 import { useTheme } from './composables/useTheme.js'
 
 const { isDark, toggle } = useTheme()
@@ -13,6 +14,14 @@ const { isDark, toggle } = useTheme()
         <span class="brand-name">AdaptLearn</span>
       </RouterLink>
       <nav class="actions">
+        <RouterLink
+          to="/profile"
+          class="icon-btn"
+          aria-label="Combined profile"
+          data-testid="nav-profile"
+        >
+          <i class="pi pi-user" />
+        </RouterLink>
         <button
           type="button"
           class="icon-btn theme-toggle"
@@ -37,6 +46,7 @@ const { isDark, toggle } = useTheme()
       </RouterView>
     </div>
   </main>
+  <Toast position="top-right" />
 </template>
 
 <style>

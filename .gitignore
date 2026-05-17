@@ -1,11 +1,12 @@
 # Secrets
 .env
-.env.example
 .env.local
 .env.*.local
 frontend/.env
 frontend/.env.local
 frontend/.env.*.local
+# .env.example files DO get committed (they're templates with no secrets).
+!**/.env.example
 .claude/
 
 reports/

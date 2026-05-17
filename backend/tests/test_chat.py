@@ -4,6 +4,7 @@ from sqlalchemy import select
 from config import settings
 from contracts import TopicProfile
 from db.models import ChatMessage, Session as SessionModel, User
+from lib.error_codes import DAILY_CAP_REACHED
 
 
 SESSION_ID = "s1"
@@ -60,7 +61,11 @@ def test_chat_429_on_cap(client, mock_litellm):
         json={"user_id": USER_ID, "session_id": SESSION_ID, "message": "x"},
     )
     assert r.status_code == 429
-    assert "reset_at" in r.json()["detail"]
+    detail = r.json()["detail"]
+    assert detail["code"] == DAILY_CAP_REACHED
+    assert detail["cap"] == settings.daily_cap
+    assert detail["used"] == settings.daily_cap
+    assert "resets_at" in detail
 
 
 def test_chat_404_when_session_missing(client, mock_litellm):

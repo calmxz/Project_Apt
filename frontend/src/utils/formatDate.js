@@ -9,6 +9,14 @@ const DATE_FMT = new Intl.DateTimeFormat(undefined, {
 
 export const formatDate = (iso) => (iso ? DATE_FMT.format(new Date(iso)) : '')
 
+const SHORT_FMT = new Intl.DateTimeFormat(undefined, {
+  dateStyle: 'short',
+  timeStyle: 'short',
+})
+
+export const formatShortDateTime = (iso) =>
+  iso ? SHORT_FMT.format(new Date(iso)) : ''
+
 const RTF = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
 
 const STEPS = [
