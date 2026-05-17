@@ -1,5 +1,5 @@
 # Build stage: compile Vite bundle.
-FROM node:20-alpine AS build
+FROM node:20.20.2-alpine AS build
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
@@ -10,7 +10,7 @@ ENV VITE_API_BASE_URL=/api
 RUN npm run build
 
 # Serve stage: lean nginx with SPA fallback + /api proxy.
-FROM nginx:1.27-alpine
+FROM nginx:1.27.5-alpine
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80

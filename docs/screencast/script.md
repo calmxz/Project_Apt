@@ -8,8 +8,8 @@ Total target: **150-180 seconds**. Run a stopwatch.
 
 ## Setup (off-camera)
 
-- `docker compose -f docker-compose.prod.yml --env-file backend/.env up -d`
-- Set `DAILY_CAP=50` in `backend/.env` (avoid hitting the cap mid-recording).
+- `docker compose -f docker-compose.prod.yml --env-file .env up -d`
+- Set `DAILY_CAP=50` in `.env` (repo root, avoid hitting the cap mid-recording).
 - Clear `data/app.db` and `data/chroma/` so the demo starts clean.
 - Pre-stage a short PDF (e.g. a 2-page primer on SQL joins).
 - Browser at 1280x800. Hide bookmarks bar. Use light theme.
