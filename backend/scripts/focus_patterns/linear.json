@@ -1,0 +1,35 @@
+[
+  {
+    "topic": "Python decorators",
+    "focus_gap": "understanding closures",
+    "user_turns": [
+      "What's a closure in Python?",
+      "So when I do `def outer(): x = 1; def inner(): return x; return inner` the inner function captures x?",
+      "Right, and calling `outer()()` returns 1 because inner remembers x even after outer returned. That feels solid now.",
+      "Great. Can we move on to how decorators actually use this?"
+    ],
+    "expected_clear_at_turn": 4
+  },
+  {
+    "topic": "Linear algebra",
+    "focus_gap": "matrix multiplication",
+    "user_turns": [
+      "How do you multiply two 2x2 matrices?",
+      "So for each output cell I take a row from the left and a column from the right, multiply pairwise, and sum.",
+      "Let me try: [[1,2],[3,4]] times [[5,6],[7,8]] equals [[19,22],[43,50]]. That right?",
+      "OK I think I have this. What's the next concept?"
+    ],
+    "expected_clear_at_turn": 4
+  },
+  {
+    "topic": "Web fundamentals",
+    "focus_gap": "HTTP status codes",
+    "user_turns": [
+      "Walk me through what HTTP status codes mean.",
+      "So 2xx is success, 3xx is redirect, 4xx is client error, 5xx is server error.",
+      "And 401 is unauthorized, 403 is forbidden, 404 not found, 500 internal server error. I use these every day.",
+      "What's the difference between PUT and PATCH next?"
+    ],
+    "expected_clear_at_turn": 4
+  }
+]

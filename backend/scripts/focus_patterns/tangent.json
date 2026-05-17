@@ -1,0 +1,22 @@
+[
+  {
+    "topic": "Probability",
+    "focus_gap": "Bayes theorem",
+    "user_turns": [
+      "Explain conditional probability — when do I use P(A|B)?",
+      "Quick aside: is probability theory the same field as statistics, or different?",
+      "OK back to Bayes — given my answer above, when would I actually compute the posterior?"
+    ],
+    "expected_clear_at_turn": null
+  },
+  {
+    "topic": "Operating systems",
+    "focus_gap": "virtual memory paging",
+    "user_turns": [
+      "What's the point of virtual memory?",
+      "Random thought — is mmap the same thing as swap? I always confuse them.",
+      "Anyway, going back to paging — what triggers a page fault?"
+    ],
+    "expected_clear_at_turn": null
+  }
+]

@@ -1,0 +1,73 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { mount } from '@vue/test-utils'
+
+import BackButton from '@/components/BackButton.vue'
+import SessionEndedBanner from '@/components/SessionEndedBanner.vue'
+
+const back = vi.fn()
+const push = vi.fn()
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ back, push }),
+}))
+
+describe('BackButton', () => {
+  beforeEach(() => {
+    back.mockClear()
+    push.mockClear()
+  })
+
+  it('renders provided label', () => {
+    const wrapper = mount(BackButton, { props: { label: 'Sessions' } })
+    expect(wrapper.text()).toContain('Sessions')
+  })
+
+  it('calls router.back when history has a back entry', async () => {
+    Object.defineProperty(window, 'history', {
+      value: { length: 5, state: { back: '/x' } },
+      configurable: true,
+    })
+    const wrapper = mount(BackButton, { props: { label: 'Back', fallback: '/' } })
+    await wrapper.get('[data-testid="back-button"]').trigger('click')
+    expect(back).toHaveBeenCalledOnce()
+    expect(push).not.toHaveBeenCalled()
+  })
+
+  it('falls back to router.push when history has no back entry', async () => {
+    Object.defineProperty(window, 'history', {
+      value: { length: 1, state: null },
+      configurable: true,
+    })
+    const wrapper = mount(BackButton, { props: { label: 'Back', fallback: '/home' } })
+    await wrapper.get('[data-testid="back-button"]').trigger('click')
+    expect(push).toHaveBeenCalledWith('/home')
+    expect(back).not.toHaveBeenCalled()
+  })
+})
+
+describe('SessionEndedBanner', () => {
+  const stubs = {
+    Button: {
+      props: ['loading', 'label'],
+      template:
+        '<button :disabled="loading" @click="$emit(\'click\')"><slot>{{ label }}</slot></button>',
+    },
+  }
+
+  it('renders the ended-at date and read-only sub copy', () => {
+    const wrapper = mount(SessionEndedBanner, {
+      props: { endedAt: '2026-01-01T00:00:00Z' },
+      global: { stubs },
+    })
+    expect(wrapper.text()).toContain('archived')
+    expect(wrapper.text()).toContain('Read-only')
+  })
+
+  it('emits resume on button click', async () => {
+    const wrapper = mount(SessionEndedBanner, {
+      props: { endedAt: '2026-01-01T00:00:00Z' },
+      global: { stubs },
+    })
+    await wrapper.get('[data-testid="session-resume"]').trigger('click')
+    expect(wrapper.emitted('resume')?.length).toBeGreaterThan(0)
+  })
+})

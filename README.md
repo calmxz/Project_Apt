@@ -2,7 +2,7 @@
 
 Adaptive AI study companion. A web app that teaches a chosen topic and updates its model of the learner continuously, grounded in the user's own course material via RAG.
 
-**Status:** Phase 5 in progress on `polish/design-system` — ProfileView, SettingsView, daily-cap UI, prod deploy, and screencast pending. Phases 0-4 complete (Phase 0 validation spike, Phase 1 scaffold + chat loop, Phase 2 tools + mid-profile, Phase 3 sessions + summary, Phase 4 PDF upload + ChromaDB ingestion + RAG + citations).
+**Status:** Phase 5 closeout — code/CI work complete on `phase/5-finish-closeout`. Remaining: record screencast and push to public remote. Phases 0-4 complete (Phase 0 validation spike, Phase 1 scaffold + chat loop, Phase 2 tools + mid-profile, Phase 3 sessions + summary, Phase 4 PDF upload + ChromaDB ingestion + RAG + citations).
 
 ## Stack
 
@@ -150,11 +150,35 @@ System prompt = immutable rules (`agent/prompts.py`) + dynamic context rebuilt p
 | 2 | 3 tools + mid-profile + tool-call reliability checkpoint | Complete |
 | 3 | Sessions CRUD + summary service + resume | Complete |
 | 4 | PDF upload + ChromaDB ingestion + RAG + citations | Complete |
-| 5 | ProfileView (read-only) + polish + deploy + screencast | In progress (`polish/design-system`) |
+| 5 | ProfileView (read-only) + polish + deploy + screencast | Closeout (`phase/5-finish-closeout`) |
 
 LLM reliability checkpoints — Phase 2: `update_topic_profile` ≥85%. Phase 3: `focus_target_gap` clearing ≥85%. Below threshold → 2-3 prompt iterations, then swap to `anthropic/claude-sonnet-4-6`.
 
 **One phase at a time. No combining or jumping ahead.**
+
+## Public Release Checklist
+
+Final manual steps once Phase 5 CI is green:
+
+1. **Clear stale ChromaDB data** before bringing up the prod stack — chromadb 1.5.9 cannot read 0.5.x SQLite files:
+   ```bash
+   rm -rf data/chroma/*
+   ```
+2. **Boot the prod stack** per [`docs/deploy/ngrok.md`](docs/deploy/ngrok.md):
+   ```bash
+   docker compose -f docker-compose.prod.yml up
+   ```
+3. **Record screencast** following [`docs/screencast/script.md`](docs/screencast/script.md) (9 scenes, 2-3 min). Save as `docs/screencast/adaptlearn-walkthrough.mp4`.
+4. **Run focus-clearing reliability checkpoint (§6.3)**:
+   ```bash
+   GEMINI_API_KEY=... python backend/scripts/reliability_focus_clear.py --runs 10
+   ```
+   Must be ≥85% per pattern. If any fail: iterate `agent/prompts.py` up to 3 times, then swap to `anthropic/claude-sonnet-4-6` per spec.
+5. **Push to public remote**:
+   ```bash
+   git remote add public <public-url>
+   git push public main
+   ```
 
 ## Ground Rules
 

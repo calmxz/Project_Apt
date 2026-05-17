@@ -1,5 +1,8 @@
+import { reportApiError } from './errorBus.js'
+
 // Set VITE_API_BASE_URL in frontend/.env or frontend/.env.local to override.
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+// Default mirrors uploadApi.js — backend routers all mount under /api.
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
 
 export class ApiError extends Error {
   constructor(status, body, path) {
@@ -11,7 +14,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request(method, path, { body, params } = {}) {
+async function request(method, path, { body, params, silent = false } = {}) {
   let url = `${BASE_URL}${path}`
   if (params) {
     const qs = new URLSearchParams(
@@ -30,13 +33,19 @@ async function request(method, path, { body, params } = {}) {
   try {
     resp = await fetch(url, init)
   } catch (e) {
-    throw new ApiError(0, { detail: e.message }, path)
+    const err = new ApiError(0, { detail: e.message }, path)
+    if (!silent) reportApiError(err)
+    throw err
   }
 
   const text = await resp.text()
   const parsed = text ? safeJson(text) : null
 
-  if (!resp.ok) throw new ApiError(resp.status, parsed ?? text, path)
+  if (!resp.ok) {
+    const err = new ApiError(resp.status, parsed ?? text, path)
+    if (!silent) reportApiError(err)
+    throw err
+  }
   return parsed
 }
 
@@ -48,5 +57,5 @@ function safeJson(text) {
   }
 }
 
-export const apiGet = (path, params) => request('GET', path, { params })
-export const apiPost = (path, body) => request('POST', path, { body })
+export const apiGet = (path, params, opts = {}) => request('GET', path, { params, ...opts })
+export const apiPost = (path, body, opts = {}) => request('POST', path, { body, ...opts })
