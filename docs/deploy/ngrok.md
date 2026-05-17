@@ -13,16 +13,16 @@ cloud bills, no DNS, no Kubernetes.
 ## 2. Configure secrets
 
 ```bash
-cp backend/.env.example backend/.env
-# edit backend/.env, fill in GEMINI_API_KEY at minimum.
+cp .env.example .env
+# edit .env, fill in GEMINI_API_KEY at minimum.
 ```
 
-`docker-compose.prod.yml` reads secrets from `backend/.env` via `--env-file`.
+`docker-compose.prod.yml` reads secrets from `.env` (repo root) via `--env-file`.
 
 ## 3. Bring the stack up
 
 ```bash
-docker compose -f docker-compose.prod.yml --env-file backend/.env up --build -d
+docker compose -f docker-compose.prod.yml --env-file .env up --build -d
 docker compose -f docker-compose.prod.yml ps
 ```
 
@@ -69,7 +69,7 @@ rm -rf data/*
   Most often a missing or invalid `GEMINI_API_KEY`.
 - **ChromaDB volume permissions on Linux** — `chown -R 1000:1000 data/chroma`
   before first `up` if you see write errors.
-- **Daily cap demo** — set `DAILY_CAP=2` in `backend/.env` and restart the
+- **Daily cap demo** — set `DAILY_CAP=2` in `.env` (repo root) and restart the
   `backend` service to exercise the cap banner during the screencast.
 - **ngrok rate limits on free tier** — fine for a 2-3 min walkthrough, not
   for a live demo to a class. Use a reserved domain or pay-as-you-go if it

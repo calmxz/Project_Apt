@@ -1,6 +1,6 @@
 # Production stack: nginx-served frontend + uvicorn backend + ChromaDB.
 # Run from repo root:
-#   docker compose -f docker-compose.prod.yml --env-file backend/.env up --build
+#   docker compose -f docker-compose.prod.yml --env-file .env up --build
 # Public URL via:
 #   ngrok http 80      (any --domain flag is fine for stable URLs)
 
