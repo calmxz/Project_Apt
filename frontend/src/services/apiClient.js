@@ -1,7 +1,8 @@
 import { reportApiError } from './errorBus.js'
 
 // Set VITE_API_BASE_URL in frontend/.env or frontend/.env.local to override.
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000'
+// Default mirrors uploadApi.js — backend routers all mount under /api.
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
 
 export class ApiError extends Error {
   constructor(status, body, path) {
