@@ -1,0 +1,22 @@
+[
+  {
+    "topic": "Networking",
+    "focus_gap": "TCP three-way handshake",
+    "user_turns": [
+      "Tell me about how a TCP connection gets established.",
+      "Mhm.",
+      "OK."
+    ],
+    "expected_clear_at_turn": null
+  },
+  {
+    "topic": "Cryptography",
+    "focus_gap": "public-key encryption",
+    "user_turns": [
+      "Walk me through how RSA encryption works.",
+      "Sort of.",
+      "I think so."
+    ],
+    "expected_clear_at_turn": null
+  }
+]

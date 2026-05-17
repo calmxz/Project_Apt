@@ -1,0 +1,22 @@
+[
+  {
+    "topic": "Calculus",
+    "focus_gap": "chain rule",
+    "user_turns": [
+      "Can you remind me what the chain rule is for?",
+      "Actually, hold on — I want to skip ahead to integration by parts. Forget derivatives for now.",
+      "How does the integration-by-parts formula work?"
+    ],
+    "expected_clear_at_turn": 3
+  },
+  {
+    "topic": "Databases",
+    "focus_gap": "B-tree indexes",
+    "user_turns": [
+      "Why do we use B-trees for indexes?",
+      "You know what, let me drop this and talk about replication instead — that's what I actually need today.",
+      "What are the trade-offs between leader-follower and multi-leader replication?"
+    ],
+    "expected_clear_at_turn": 3
+  }
+]

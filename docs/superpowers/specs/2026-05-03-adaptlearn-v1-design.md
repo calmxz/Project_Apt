@@ -301,6 +301,14 @@ Coverage targets (informational, not gate):
 
 These run against real LLM, hand-scripted, not in CI.
 
+Runner for the Phase 3/5 focus-clearing checkpoint:
+
+```
+GEMINI_API_KEY=... python backend/scripts/reliability_focus_clear.py --runs 10
+```
+
+Loads fixtures from `backend/scripts/focus_patterns/{linear,topic_shift,tangent,vague_signal}.json`, drives `agent.tutor.run` against an in-memory SQLite, reports per-pattern pass rate, and exits 1 if any pattern <85%.
+
 ### 6.4 Phase 0 spike
 
 Only formal pass/fail gate for the premise itself (see §7 Phase 0). Spike has its own minimal pytest harness for output diffing — not part of main CI.

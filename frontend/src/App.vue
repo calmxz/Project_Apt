@@ -1,9 +1,24 @@
 <script setup>
+import { onBeforeUnmount, onMounted } from 'vue'
 import { RouterLink, RouterView } from 'vue-router'
 import Toast from 'primevue/toast'
 import { useTheme } from './composables/useTheme.js'
+import { useToast } from './composables/useToast.js'
+import { errorBus } from './services/errorBus.js'
 
 const { isDark, toggle } = useTheme()
+const { showError } = useToast()
+
+// Skip 429 (daily-cap has dedicated banner+toast in SessionView) and 404
+// (consumers typically render "not found" inline; double-surfacing is noisy).
+const onApiError = (e) => {
+  const err = e.detail
+  if (!err || err.status === 429 || err.status === 404) return
+  const msg = err?.body?.detail || err?.message || 'Request failed'
+  showError(typeof msg === 'string' ? msg : JSON.stringify(msg))
+}
+onMounted(() => errorBus.addEventListener('api-error', onApiError))
+onBeforeUnmount(() => errorBus.removeEventListener('api-error', onApiError))
 </script>
 
 <template>
