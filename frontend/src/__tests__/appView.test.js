@@ -15,7 +15,7 @@ vi.mock('primevue/toast', () => ({
 }))
 
 import App from '@/App.vue'
-import { reportApiError, errorBus } from '@/services/errorBus.js'
+import { reportApiError } from '@/services/errorBus.js'
 
 describe('App.vue error listener', () => {
   let wrapper

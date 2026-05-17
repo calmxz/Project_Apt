@@ -110,7 +110,7 @@ describe('session store', () => {
     )
     const s = useSessionStore()
     await s.createSession({ userId: 'u', topic: 't' })
-    await expect(s.sendMessage({ userId: 'u', text: 'x' })).rejects.toThrow()
+    await expect(s.sendMessage({ userId: 'u', text: 'x' })).rejects.toThrow('api error')
     expect(s.dailyCapReached).toBe(true)
     expect(s.dailyCapInfo.cap).toBe(10)
     s.clearDailyCap()
