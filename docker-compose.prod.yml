@@ -31,7 +31,7 @@ services:
       # Same-origin via nginx — no browser-side CORS preflight needed.
       # Keep the localhost dev origin too in case you reverse-proxy directly.
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost,http://localhost:5173}
-      LLM_STUB: ${LLM_STUB:-}
+      LLM_STUB: ${LLM_STUB:-0}
     volumes:
       - ./data:/data
     depends_on:
