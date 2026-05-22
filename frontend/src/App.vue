@@ -5,6 +5,7 @@ import Toast from 'primevue/toast'
 import { useTheme } from './composables/useTheme.js'
 import { useToast } from './composables/useToast.js'
 import { errorBus } from './services/errorBus.js'
+import Logo from './components/Logo.vue'
 
 const { isDark, toggle } = useTheme()
 const { showError } = useToast()
@@ -25,25 +26,7 @@ onBeforeUnmount(() => errorBus.removeEventListener('api-error', onApiError))
   <header class="topnav">
     <div class="topnav-inner">
       <RouterLink to="/" class="brand" aria-label="AdaptLearn home">
-        <svg
-          class="brand-mark"
-          viewBox="0 0 24 24"
-          width="28"
-          height="28"
-          aria-hidden="true"
-          focusable="false"
-        >
-          <path
-            d="M12 0.5 L13.6 10.4 L23.5 12 L13.6 13.6 L12 23.5 L10.4 13.6 L0.5 12 L10.4 10.4 Z"
-            fill="currentColor"
-          />
-          <path
-            d="M19 2.5 L19.7 5.3 L22.5 6 L19.7 6.7 L19 9.5 L18.3 6.7 L15.5 6 L18.3 5.3 Z"
-            fill="currentColor"
-            opacity="0.55"
-          />
-        </svg>
-        <span class="brand-name">AdaptLearn</span>
+        <Logo size="md" variant="full" />
       </RouterLink>
       <nav class="actions">
         <RouterLink
@@ -113,34 +96,21 @@ onBeforeUnmount(() => errorBus.removeEventListener('api-error', onApiError))
 
 .brand {
   display: inline-flex;
-  align-items: center;
-  gap: 0.625rem;
-  color: var(--color-wordmark, var(--color-heading));
   text-decoration: none;
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 1.1875rem;
-  letter-spacing: var(--tracking-tight);
-  transition: color var(--motion-fast) ease, transform var(--motion-base) var(--motion-bounce);
+  transition: transform var(--motion-base) var(--motion-bounce);
 }
 
 .brand:hover {
   transform: translateY(-1px);
 }
 
-.brand-mark {
-  color: var(--color-accent);
-  flex-shrink: 0;
-  transition: filter var(--motion-base) ease, transform var(--motion-base) var(--motion-bounce);
-}
-
-.brand:hover .brand-mark {
+.brand:hover :deep(.logo-mark) {
   filter: drop-shadow(0 0 6px rgba(255, 107, 92, 0.55));
   transform: rotate(15deg) scale(1.06);
 }
 
-.brand-name {
-  font-feature-settings: 'ss01' on;
+.brand :deep(.logo-mark) {
+  transition: filter var(--motion-base) ease, transform var(--motion-base) var(--motion-bounce);
 }
 
 .actions {
