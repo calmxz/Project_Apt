@@ -1,13 +1,9 @@
 <template>
   <section class="onboarding">
-    <div class="meta">
-      <span class="folio">chapter 01</span>
-      <hr class="hairline" />
-    </div>
     <header class="head">
-      <h1 class="title">
-        Welcome to <em>AdaptLearn</em>.
-      </h1>
+      <Logo size="lg" variant="mark-only" />
+      <span class="folio">welcome</span>
+      <h1 class="title">Welcome to AdaptLearn.</h1>
       <p class="lede">Tell us how you like to learn — we'll tune the tutor before you begin.</p>
     </header>
 
@@ -45,22 +41,17 @@
       </div>
 
       <div class="actions" style="--delay: 120ms">
-        <Button
-          label="Begin"
-          icon="pi pi-arrow-right"
-          icon-pos="right"
+        <button
+          type="submit"
+          class="cta"
           data-testid="onboarding-submit"
           :disabled="!canSubmit"
-          class="cta"
-          @click="submit"
-        />
+        >
+          <span>Begin</span>
+          <i class="pi pi-arrow-right" aria-hidden="true" />
+        </button>
       </div>
     </form>
-
-    <footer class="foot">
-      <hr class="hairline" />
-      <span class="folio">page 01</span>
-    </footer>
   </section>
 </template>
 
@@ -68,10 +59,10 @@
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
-import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import SelectButton from 'primevue/selectbutton'
 
+import Logo from '../components/Logo.vue'
 import { useUserStore } from '../stores/user.js'
 
 const router = useRouter()
@@ -98,70 +89,67 @@ function submit() {
 
 <style scoped>
 .onboarding {
-  max-width: 36rem;
+  max-width: 38rem;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 2rem;
-}
-
-.meta,
-.foot {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.foot {
-  justify-content: flex-end;
-}
-
-.meta .hairline,
-.foot .hairline {
-  flex: 1;
-  background: var(--color-border);
-}
-
-.folio {
-  font-family: var(--font-mono);
-  font-size: var(--fs-label);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  color: var(--color-text-faint);
+  gap: 2.5rem;
 }
 
 .head {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  align-items: center;
+  text-align: center;
+  gap: 0.625rem;
 }
 
-.title {
-  font-family: var(--font-serif);
-  font-size: var(--fs-display);
-  font-weight: 400;
-  font-variation-settings: 'opsz' 144;
-  line-height: var(--lh-display);
-  letter-spacing: var(--tracking-display);
-  color: var(--color-heading);
+.head :deep(.logo-mark) {
+  filter: drop-shadow(0 4px 16px rgba(255, 107, 92, 0.35));
+  animation: gentle-spin 8s ease-in-out infinite;
 }
 
-.title em {
-  font-style: italic;
-  font-weight: 500;
+@keyframes gentle-spin {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(12deg); }
+}
+
+.folio {
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  font-weight: 600;
   color: var(--color-accent);
 }
 
+.title {
+  font-family: var(--font-display);
+  font-size: clamp(2.25rem, 5vw, 3rem);
+  font-weight: 700;
+  letter-spacing: var(--tracking-display);
+  line-height: 1.05;
+  color: var(--color-heading);
+  margin: 0;
+}
+
 .lede {
+  margin: 0;
   font-size: 1.0625rem;
   color: var(--color-text-muted);
-  max-width: 32rem;
+  max-width: 30rem;
+  line-height: var(--lh-body);
 }
 
 .form {
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1.75rem;
+  padding: 2rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-lift);
 }
 
 .field {
@@ -176,7 +164,7 @@ function submit() {
 .label {
   font-family: var(--font-sans);
   font-size: var(--fs-label);
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;
   color: var(--color-text-muted);
@@ -184,9 +172,8 @@ function submit() {
 
 .help {
   margin: 0;
-  font-size: var(--fs-caption);
-  color: var(--color-text-faint);
-  font-style: italic;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
 }
 
 .actions {
@@ -200,74 +187,104 @@ function submit() {
 
 .input :deep(input),
 .input.p-inputtext {
-  font-family: var(--font-serif);
-  font-size: 1.125rem;
-  font-weight: 400;
-  background: transparent;
-  border: 0;
-  border-bottom: 1px solid var(--color-border-strong);
-  border-radius: 0;
-  padding: 0.5rem 0.25rem;
+  font-family: var(--font-sans);
+  font-size: 1.0625rem;
+  font-weight: 500;
+  background: var(--color-surface-soft);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  padding: 0.75rem 1.25rem;
   color: var(--color-heading);
   width: 100%;
-  transition: border-color 180ms ease;
+  transition: border-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease;
 }
 
 .input :deep(input):focus,
 .input.p-inputtext:focus {
-  border-bottom-color: var(--color-accent);
+  border-color: var(--color-accent);
   outline: none;
-  box-shadow: none;
+  box-shadow: 0 0 0 4px var(--color-accent-ring);
+}
+
+/* Pill-chip SelectButton */
+.select :deep(.p-selectbutton) {
+  display: inline-flex;
+  gap: 0.5rem;
+  background: transparent;
+  border: 0;
+  padding: 0;
 }
 
 .select :deep(.p-togglebutton),
 .select :deep(.p-selectbutton .p-button) {
-  background: transparent;
-  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface-soft);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
   color: var(--color-text-muted);
   font-family: var(--font-sans);
-  font-weight: 500;
-  letter-spacing: 0.02em;
+  font-weight: 600;
+  font-size: 0.9375rem;
   padding: 0.625rem 1.25rem;
-  transition: all 180ms ease;
+  transition: background var(--motion-fast) ease, color var(--motion-fast) ease, border-color var(--motion-fast) ease, transform var(--motion-fast) var(--motion-bounce);
+}
+
+.select :deep(.p-togglebutton:hover),
+.select :deep(.p-selectbutton .p-button:hover) {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  border-color: var(--color-accent-soft);
+  transform: translateY(-1px);
 }
 
 .select :deep(.p-togglebutton.p-togglebutton-checked),
 .select :deep(.p-selectbutton .p-button.p-highlight) {
   background: var(--color-accent);
-  color: var(--ink-50);
+  color: #FFFFFF;
   border-color: var(--color-accent);
+  box-shadow: var(--shadow-pop);
 }
 
-.cta :deep(.p-button),
-.cta.p-button {
-  background: var(--color-heading);
-  color: var(--color-background);
-  border: 1px solid var(--color-heading);
-  font-family: var(--font-sans);
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  padding: 0.75rem 1.75rem;
-  border-radius: var(--radius-sm);
-  transition: background 180ms ease, transform 180ms ease;
-}
-
-.cta :deep(.p-button):not(:disabled):hover,
-.cta.p-button:not(:disabled):hover {
+.cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.9rem 1.75rem;
+  border-radius: var(--radius-pill);
   background: var(--color-accent);
-  border-color: var(--color-accent);
-  transform: translateX(2px);
+  color: #FFFFFF;
+  border: 0;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  box-shadow: var(--shadow-pop);
+  transition: transform var(--motion-fast) var(--motion-bounce), box-shadow var(--motion-fast) ease, opacity var(--motion-fast) ease;
 }
 
-.cta :deep(.p-button):disabled,
-.cta.p-button:disabled {
-  opacity: 0.4;
+.cta:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+.cta:active:not(:disabled) {
+  transform: translateY(4px);
+  box-shadow: var(--shadow-pop-pressed);
+}
+
+.cta:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.cta:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 3px;
 }
 
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(10px);
   }
   to {
     opacity: 1;

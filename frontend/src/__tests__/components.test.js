@@ -58,7 +58,7 @@ describe('SessionEndedBanner', () => {
       props: { endedAt: '2026-01-01T00:00:00Z' },
       global: { stubs },
     })
-    expect(wrapper.text()).toContain('archived')
+    expect(wrapper.text()).toContain('This session ended')
     expect(wrapper.text()).toContain('Read-only')
   })
 

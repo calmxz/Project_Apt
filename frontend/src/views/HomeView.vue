@@ -9,28 +9,29 @@
             {{ activeSessions.length }} active {{ activeSessions.length === 1 ? 'session' : 'sessions' }}. Pick up where you left off.
           </template>
           <template v-else>
-            A study session is a single conversation about a topic. Begin one.
+            A study session is one conversation about one topic. Begin one.
           </template>
         </p>
       </div>
       <div class="head-cta">
         <router-link
           to="/profile"
-          class="profile-link"
+          class="ghost-link"
           data-testid="home-profile-link"
           aria-label="View combined learning profile"
         >
           <i class="pi pi-user" aria-hidden="true" />
           <span>Combined profile</span>
         </router-link>
-        <Button
-          label="New session"
-          icon="pi pi-plus"
-          icon-pos="right"
+        <button
+          type="button"
+          class="cta-primary"
           data-testid="home-new-session"
-          class="cta"
           @click="goNew"
-        />
+        >
+          <span>New session</span>
+          <i class="pi pi-plus" aria-hidden="true" />
+        </button>
       </div>
     </header>
 
@@ -68,119 +69,120 @@
         class="dupe-banner"
         data-testid="home-dupe-banner"
       >
-        <p class="dupe-line">
-          {{ duplicateCount }} duplicate active {{ duplicateCount === 1 ? 'session' : 'sessions' }} detected.
-          Keep the newest per topic, end the rest?
-        </p>
-        <Button
-          label="Clean up"
-          icon="pi pi-broom"
-          icon-pos="right"
-          :loading="cleaning"
-          data-testid="home-dupe-cleanup"
+        <div class="dupe-text">
+          <i class="pi pi-exclamation-triangle dupe-icon" aria-hidden="true" />
+          <p class="dupe-line">
+            {{ duplicateCount }} duplicate active {{ duplicateCount === 1 ? 'session' : 'sessions' }} detected.
+            Keep the newest per topic, end the rest?
+          </p>
+        </div>
+        <button
+          type="button"
           class="dupe-btn"
+          :disabled="cleaning"
+          data-testid="home-dupe-cleanup"
           @click="cleanupDuplicates"
-        />
+        >
+          <span>{{ cleaning ? 'Cleaning…' : 'Clean up' }}</span>
+          <i class="pi pi-broom" aria-hidden="true" />
+        </button>
       </div>
 
-      <div v-if="!activeSessions.length" class="empty" data-testid="home-empty-active">
-        <p class="empty-eyebrow">page 01</p>
-        <p class="empty-line">No active sessions.</p>
-        <p class="empty-sub">
+      <EmptyState
+        v-if="!activeSessions.length"
+        data-testid="home-empty-active"
+        tone="celebrate"
+        eyebrow="page 01"
+        headline="No active sessions"
+      >
+        <template #subtext>
           <template v-if="endedSessions.length">
             You have {{ endedSessions.length }} ended {{ endedSessions.length === 1 ? 'session' : 'sessions' }} in the
             <button type="button" class="inline-link" @click="tab = 'ended'">Ended</button> tab.
           </template>
           <template v-else>
-            Start your first one — the tutor will adapt as you go.
+            Start your first one — the tutor adapts as you go.
           </template>
-        </p>
-      </div>
+        </template>
+        <template #cta>
+          <button type="button" class="cta-primary" @click="goNew">
+            <span>Start your first session</span>
+            <i class="pi pi-arrow-right" aria-hidden="true" />
+          </button>
+        </template>
+      </EmptyState>
 
-      <DataTable
-        v-else
-        :value="activeSessions"
-        data-testid="home-sessions"
-        class="table"
-        :row-class="() => 'session-row'"
-        @row-click="onRowClick"
-      >
-        <Column field="topic" header="Topic">
-          <template #body="{ data }">
-            <router-link
-              :to="{ name: 'session', params: { id: data.id } }"
-              class="topic-block row-link"
-              :aria-label="rowLabel(data, 'active')"
-              :data-testid="`home-row-active-${data.id}`"
-            >
-              <span class="topic-cell">{{ data.topic }}</span>
-              <span class="row-id">#{{ shortId(data.id) }}</span>
-            </router-link>
-          </template>
-        </Column>
-        <Column header="Started">
-          <template #body="{ data }">
-            <div class="date-block">
-              <span class="date-cell">{{ formatDate(data.created_at) }}</span>
-              <span class="date-rel">{{ formatRelative(data.created_at) }}</span>
-            </div>
-          </template>
-        </Column>
-      </DataTable>
+      <div v-else class="tile-grid">
+        <router-link
+          v-for="s in activeSessions"
+          :key="s.id"
+          :to="{ name: 'session', params: { id: s.id } }"
+          class="tile"
+          :data-testid="`home-row-active-${s.id}`"
+          :aria-label="rowLabel(s, 'active')"
+        >
+          <div class="tile-glyph" :style="{ background: tileTint(s.topic) }">
+            <i :class="['pi', tileIcon(s.topic)]" aria-hidden="true" />
+          </div>
+          <div class="tile-body">
+            <h3 class="tile-topic">{{ s.topic || 'Untitled' }}</h3>
+            <p class="tile-meta">
+              <span class="tile-id">#{{ shortId(s.id) }}</span>
+              <span class="tile-dot">·</span>
+              <span class="tile-when">started {{ formatRelative(s.created_at) }}</span>
+            </p>
+          </div>
+          <i class="pi pi-arrow-right tile-arrow" aria-hidden="true" />
+        </router-link>
+      </div>
     </template>
 
     <template v-else>
-      <div v-if="!endedSessions.length" class="empty" data-testid="home-empty-ended">
-        <p class="empty-eyebrow">page 01</p>
-        <p class="empty-line">Nothing archived yet.</p>
-        <p class="empty-sub">When you end a session, it lands here.</p>
-      </div>
+      <EmptyState
+        v-if="!endedSessions.length"
+        data-testid="home-empty-ended"
+        tone="pause"
+        eyebrow="archive"
+        headline="Nothing archived yet"
+        subtext="When you end a session, it lands here."
+      />
 
-      <DataTable
-        v-else
-        :value="endedSessions"
-        data-testid="home-sessions-ended"
-        class="table table-ended"
-        :row-class="() => 'session-row'"
-        @row-click="onRowClick"
-      >
-        <Column field="topic" header="Topic">
-          <template #body="{ data }">
-            <router-link
-              :to="{ name: 'session', params: { id: data.id } }"
-              class="topic-block row-link"
-              :aria-label="rowLabel(data, 'ended')"
-              :data-testid="`home-row-ended-${data.id}`"
-            >
-              <span class="topic-cell">{{ data.topic }}</span>
-              <span class="row-id">#{{ shortId(data.id) }}</span>
-            </router-link>
-          </template>
-        </Column>
-        <Column header="Ended">
-          <template #body="{ data }">
-            <div class="date-block">
-              <span class="date-cell">{{ formatDate(data.ended_at) }}</span>
-              <span class="date-rel">{{ formatRelative(data.ended_at) }}</span>
+      <div v-else class="tile-grid tile-grid-ended">
+        <div
+          v-for="s in endedSessions"
+          :key="s.id"
+          class="tile tile-ended"
+          :data-testid="`home-row-ended-${s.id}`"
+        >
+          <router-link
+            :to="{ name: 'session', params: { id: s.id } }"
+            class="tile-link"
+            :aria-label="rowLabel(s, 'ended')"
+          >
+            <div class="tile-glyph tile-glyph-muted">
+              <i :class="['pi', tileIcon(s.topic)]" aria-hidden="true" />
             </div>
-          </template>
-        </Column>
-        <Column header="">
-          <template #body="{ data }">
-            <Button
-              label="Resume"
-              icon="pi pi-refresh"
-              icon-pos="right"
-              severity="secondary"
-              :data-testid="`home-resume-${data.id}`"
-              :loading="resumingId === data.id"
-              :disabled="!!resumingId"
-              class="resume-btn"
-              @click="resume(data)"
-            />
-          </template>
-        </Column>
-      </DataTable>
+            <div class="tile-body">
+              <h3 class="tile-topic">{{ s.topic || 'Untitled' }}</h3>
+              <p class="tile-meta">
+                <span class="tile-id">#{{ shortId(s.id) }}</span>
+                <span class="tile-dot">·</span>
+                <span class="tile-when">ended {{ formatRelative(s.ended_at) }}</span>
+              </p>
+            </div>
+          </router-link>
+          <button
+            type="button"
+            class="tile-resume"
+            :data-testid="`home-resume-${s.id}`"
+            :disabled="!!resumingId"
+            @click.stop="resume(s)"
+          >
+            <span>{{ resumingId === s.id ? 'Resuming…' : 'Resume' }}</span>
+            <i class="pi pi-refresh" aria-hidden="true" />
+          </button>
+        </div>
+      </div>
     </template>
   </section>
 </template>
@@ -189,15 +191,12 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
-import Button from 'primevue/button'
-import Column from 'primevue/column'
-import DataTable from 'primevue/datatable'
+import EmptyState from '../components/EmptyState.vue'
 
 import * as sessionsApi from '../services/sessionsApi.js'
 import { useSessionStore } from '../stores/session.js'
 import { useUserStore } from '../stores/user.js'
 import {
-  formatDate,
   formatRelative,
   normalizeTopicKey,
   shortId,
@@ -223,7 +222,6 @@ const endedSessions = computed(() =>
   store.sessions.filter((s) => Boolean(s.ended_at)),
 )
 
-// Active rows that share a topic with a newer active row — cleanup ends these.
 const duplicateActiveIds = computed(() => {
   const byTopic = new Map()
   for (const s of activeSessions.value) {
@@ -252,11 +250,30 @@ function rowLabel(data, status) {
   return `Open ${status} session: ${data.topic || 'untitled'}, ${formatRelative(when)}`
 }
 
-function onRowClick({ data, originalEvent }) {
-  // Skip when click landed on the inner topic-link (it already navigates) or a button.
-  const target = originalEvent?.target
-  if (target?.closest?.('.row-link, button, a')) return
-  router.push({ name: 'session', params: { id: data.id } })
+// Map first character of topic to one of a small set of icon + tint pairs so
+// every tile feels distinct without needing real subject classification.
+const ICONS = ['pi-book', 'pi-bolt', 'pi-globe', 'pi-code', 'pi-palette', 'pi-compass', 'pi-microchip', 'pi-chart-line']
+const TINTS = [
+  'linear-gradient(135deg, #FFD9D2 0%, #FFB5A8 100%)',
+  'linear-gradient(135deg, #DDE2EE 0%, #B7BFD2 100%)',
+  'linear-gradient(135deg, #FFE4C4 0%, #FFD8A0 100%)',
+  'linear-gradient(135deg, #D6F5E0 0%, #A3E2B8 100%)',
+  'linear-gradient(135deg, #E0DDFF 0%, #C4BFFF 100%)',
+  'linear-gradient(135deg, #FFE7F1 0%, #FFCCE4 100%)',
+  'linear-gradient(135deg, #D4ECFF 0%, #A8D9FF 100%)',
+  'linear-gradient(135deg, #FFF3C4 0%, #FFE49C 100%)',
+]
+function hashTopic(topic) {
+  const t = String(topic || '').toLowerCase()
+  let h = 0
+  for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) | 0
+  return Math.abs(h)
+}
+function tileIcon(topic) {
+  return ICONS[hashTopic(topic) % ICONS.length]
+}
+function tileTint(topic) {
+  return TINTS[hashTopic(topic) % TINTS.length]
 }
 
 async function resume(row) {
@@ -288,7 +305,7 @@ async function cleanupDuplicates() {
 
 <style scoped>
 .home {
-  max-width: 56rem;
+  max-width: 64rem;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
@@ -306,24 +323,24 @@ async function cleanupDuplicates() {
 .head-text {
   display: flex;
   flex-direction: column;
-  gap: 0.375rem;
+  gap: 0.5rem;
 }
 
 .folio {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--fs-label);
   text-transform: uppercase;
   letter-spacing: var(--tracking-label);
-  color: var(--color-text-faint);
+  font-weight: 600;
+  color: var(--color-accent);
 }
 
 .title {
-  font-family: var(--font-serif);
-  font-size: 2.25rem;
-  font-weight: 400;
-  font-variation-settings: 'opsz' 144;
+  font-family: var(--font-display);
+  font-size: clamp(2.25rem, 4vw, 2.75rem);
+  font-weight: 700;
   letter-spacing: var(--tracking-display);
-  line-height: 1.1;
+  line-height: 1.05;
   color: var(--color-heading);
   margin: 0;
 }
@@ -332,122 +349,309 @@ async function cleanupDuplicates() {
   margin: 0;
   color: var(--color-text-muted);
   max-width: 32rem;
+  font-size: 1.0625rem;
 }
 
+.head-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+  flex-wrap: wrap;
+}
+
+.ghost-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-weight: 500;
+  font-size: 0.9375rem;
+  text-decoration: none;
+  transition: background var(--motion-fast) ease, color var(--motion-fast) ease, border-color var(--motion-fast) ease, transform var(--motion-fast) ease;
+}
+
+.ghost-link:hover {
+  color: var(--color-accent);
+  border-color: var(--color-accent-soft);
+  background: var(--color-accent-soft);
+  transform: translateY(-1px);
+}
+
+.cta-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.375rem;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
+  color: #FFFFFF;
+  border: 0;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.9375rem;
+  cursor: pointer;
+  box-shadow: var(--shadow-pop);
+  transition: transform var(--motion-fast) var(--motion-bounce), box-shadow var(--motion-fast) ease;
+}
+
+.cta-primary:hover {
+  transform: translateY(-2px);
+}
+
+.cta-primary:active {
+  transform: translateY(4px);
+  box-shadow: var(--shadow-pop-pressed);
+}
+
+.cta-primary:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 3px;
+}
+
+/* Pill segmented tabs */
 .tabs {
-  display: flex;
+  display: inline-flex;
   gap: 0.25rem;
-  border-bottom: 1px solid var(--color-border-strong);
+  padding: 0.25rem;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  width: max-content;
 }
 
 .tab {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-pill);
   background: transparent;
   border: 0;
-  padding: 0.625rem 0.875rem;
-  margin-bottom: -1px;
   cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: var(--fs-label);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
   color: var(--color-text-muted);
-  border-bottom: 2px solid transparent;
-  transition: color 180ms ease, border-color 180ms ease;
+  transition: background var(--motion-fast) ease, color var(--motion-fast) ease;
 }
 
-.tab:hover,
-.tab:focus-visible {
+.tab:hover {
   color: var(--color-heading);
-  outline: none;
 }
 
 .tab-active {
-  color: var(--color-heading);
-  border-bottom-color: var(--color-heading);
+  background: var(--color-accent);
+  color: #FFFFFF;
+  box-shadow: 0 2px 8px rgba(255, 107, 92, 0.3);
 }
 
-.table :deep(tr.session-row) {
-  cursor: pointer;
-}
-
-.row-link {
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
-  color: inherit;
-  text-decoration: none;
-  border-radius: var(--radius-sm, 4px);
-}
-
-.row-link:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
-
-.row-link:hover .topic-cell {
-  color: var(--color-accent);
+.tab-active:hover {
+  color: #FFFFFF;
 }
 
 .tab-count {
-  display: inline-block;
-  min-width: 1.5rem;
-  text-align: center;
-  font-family: var(--font-mono);
-  font-size: var(--fs-caption);
-  color: var(--color-text-faint);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.375rem;
+  height: 1.375rem;
   padding: 0 0.4rem;
-  line-height: 1.4;
+  border-radius: var(--radius-pill);
+  font-size: 0.75rem;
+  font-weight: 700;
+  background: rgba(0, 0, 0, 0.08);
+  color: inherit;
 }
 
 .tab-active .tab-count {
-  color: var(--color-accent);
-  border-color: var(--color-accent);
+  background: rgba(255, 255, 255, 0.22);
 }
 
-.empty {
-  text-align: left;
-  padding: 3rem 0;
+/* Tile grid */
+.tile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
+  gap: 1rem;
+}
+
+.tile {
   display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.125rem 1.25rem;
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-lift);
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: transform var(--motion-base) var(--motion-bounce), box-shadow var(--motion-base) ease, border-color var(--motion-fast) ease;
+}
+
+.tile:hover {
+  transform: translateY(-2px);
+  border-color: var(--color-accent-soft);
+}
+
+.tile:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 3px;
+}
+
+.tile-ended {
+  align-items: stretch;
   flex-direction: column;
-  gap: 0.5rem;
+  padding: 0;
+  cursor: default;
 }
 
-.empty-eyebrow {
-  font-family: var(--font-mono);
-  font-size: var(--fs-label);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  color: var(--color-text-faint);
-  margin: 0;
+.tile-ended:hover {
+  transform: none;
 }
 
-.empty-line {
-  font-family: var(--font-serif);
-  font-size: 1.5rem;
-  font-style: italic;
+.tile-ended .tile-link {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.125rem 1.25rem 0.75rem;
+  text-decoration: none;
+  color: inherit;
+  transition: transform var(--motion-fast) var(--motion-bounce);
+}
+
+.tile-ended .tile-link:hover {
+  transform: translateY(-1px);
+}
+
+.tile-ended .tile-link:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 3px;
+  border-radius: var(--radius-md);
+}
+
+.tile-glyph {
+  flex-shrink: 0;
+  width: 3rem;
+  height: 3rem;
+  border-radius: var(--radius-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-700);
+  font-size: 1.375rem;
+  box-shadow: inset 0 0 0 1px rgba(20, 24, 38, 0.06);
+}
+
+.tile-glyph-muted {
+  background: var(--color-surface-soft) !important;
+  color: var(--color-text-muted);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+}
+
+.tile-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.tile-topic {
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: var(--tracking-tight);
   color: var(--color-heading);
   margin: 0;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.empty-sub {
-  margin: 0;
+.tile-meta {
+  margin: 0.25rem 0 0;
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
   color: var(--color-text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.tile-id {
+  font-family: var(--font-mono);
+  color: var(--color-text-faint);
+}
+
+.tile-dot {
+  color: var(--color-text-faint);
+}
+
+.tile-arrow {
+  color: var(--color-text-faint);
+  font-size: 1rem;
+  transition: transform var(--motion-fast) var(--motion-bounce), color var(--motion-fast) ease;
+}
+
+.tile:hover .tile-arrow {
+  color: var(--color-accent);
+  transform: translateX(4px);
+}
+
+.tile-resume {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  align-self: flex-end;
+  margin: 0 1.25rem 1.125rem;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-accent);
+  border: 1px solid var(--color-accent-soft);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: background var(--motion-fast) ease, color var(--motion-fast) ease, transform var(--motion-fast) var(--motion-bounce);
+}
+
+.tile-resume:hover:not(:disabled) {
+  background: var(--color-accent);
+  color: #FFFFFF;
+  transform: translateY(-1px);
+}
+
+.tile-resume:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.tile-resume:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 
 .inline-link {
   background: transparent;
   border: 0;
   padding: 0;
-  color: var(--color-heading);
+  color: var(--color-accent);
   font: inherit;
+  font-weight: 600;
   text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
   cursor: pointer;
+}
+
+.inline-link:hover {
+  color: var(--color-accent-hover);
 }
 
 .muted {
@@ -458,162 +662,62 @@ async function cleanupDuplicates() {
   color: var(--signal-error);
 }
 
-.table :deep(.p-datatable),
-.table :deep(.p-datatable-table-container),
-.table :deep(.p-datatable-table) {
-  background: transparent;
-}
-
-.table :deep(thead th) {
-  background: transparent;
-  border-bottom: 1px solid var(--color-border-strong);
-  font-family: var(--font-sans);
-  font-size: var(--fs-label);
-  font-weight: 500;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-  color: var(--color-text-muted);
-  padding: 0.75rem 0.5rem;
-}
-
-.table :deep(tbody td) {
-  border-bottom: 1px solid var(--color-border);
-  padding: 1rem 0.5rem;
-  background: transparent;
-  cursor: pointer;
-  transition: background 180ms ease;
-}
-
-.table :deep(tbody tr:hover td) {
-  background: var(--color-surface);
-}
-
-/* Ended-tab rows are not clickable as a whole — only the Resume button. */
-.table-ended :deep(tbody td) {
-  cursor: default;
-}
-
-.table-ended :deep(tbody tr:hover td) {
-  background: transparent;
-}
-
-.topic-block {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-}
-
-.topic-cell {
-  font-family: var(--font-serif);
-  font-size: 1.0625rem;
-  color: var(--color-heading);
-}
-
-.row-id {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.04em;
-  color: var(--color-text-faint);
-}
-
-.date-block {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-}
-
-.date-cell {
-  font-family: var(--font-mono);
-  font-size: var(--fs-caption);
-  color: var(--color-text-muted);
-}
-
-.date-rel {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  letter-spacing: 0.04em;
-  color: var(--color-text-faint);
-}
-
-.head-cta {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-
-.cta :deep(.p-button),
-.cta.p-button {
-  background: var(--color-heading);
-  color: var(--color-background);
-  border: 1px solid var(--color-heading);
-  font-family: var(--font-sans);
-  font-weight: 500;
-  padding: 0.625rem 1.25rem;
-  border-radius: var(--radius-sm);
-  transition: background 180ms ease, transform 180ms ease;
-}
-
-.cta :deep(.p-button):hover,
-.cta.p-button:hover {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  transform: translateY(-1px);
-}
-
-.resume-btn :deep(.p-button),
-.resume-btn.p-button {
-  background: transparent;
-  color: var(--color-heading);
-  border: 1px solid var(--color-border-strong);
-  font-family: var(--font-sans);
-  font-weight: 500;
-  padding: 0.375rem 0.875rem;
-  border-radius: var(--radius-sm);
-  transition: all 180ms ease;
-}
-
-.resume-btn :deep(.p-button):not(:disabled):hover,
-.resume-btn.p-button:not(:disabled):hover {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: var(--color-background);
-}
-
+/* Duplicate banner */
 .dupe-banner {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0.875rem 1rem;
-  border: 1px solid var(--color-border-strong);
-  border-left: 3px solid var(--signal-error);
-  background: var(--color-surface);
-  border-radius: var(--radius-md);
+  padding: 0.875rem 1rem 0.875rem 1.125rem;
+  background: rgba(255, 176, 32, 0.12);
+  border: 1px solid rgba(255, 176, 32, 0.35);
+  border-radius: var(--radius-lg);
   flex-wrap: wrap;
+}
+
+.dupe-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+  flex: 1;
+  min-width: 14rem;
+}
+
+.dupe-icon {
+  color: var(--signal-warning);
+  font-size: 1.125rem;
 }
 
 .dupe-line {
   margin: 0;
   color: var(--color-text);
   font-size: 0.9375rem;
+  line-height: 1.4;
 }
 
-.dupe-btn :deep(.p-button),
-.dupe-btn.p-button {
-  background: transparent;
-  color: var(--color-heading);
-  border: 1px solid var(--color-border-strong);
-  font-family: var(--font-sans);
-  font-weight: 500;
+.dupe-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   padding: 0.5rem 1rem;
-  border-radius: var(--radius-sm);
-  transition: all 180ms ease;
+  border-radius: var(--radius-pill);
+  background: var(--signal-warning);
+  color: #2A1F00;
+  border: 0;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: transform var(--motion-fast) var(--motion-bounce), filter var(--motion-fast) ease;
 }
 
-.dupe-btn :deep(.p-button):not(:disabled):hover,
-.dupe-btn.p-button:not(:disabled):hover {
-  background: var(--color-heading);
-  color: var(--color-background);
+.dupe-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+}
+
+.dupe-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 </style>
