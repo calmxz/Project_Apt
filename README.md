@@ -697,4 +697,4 @@ AdaptLearn stands on the shoulders of a lot of excellent open-source work:
 
 Architecture inspiration: structured-state LLM tutors as discussed in recent EdTech-LLM research papers, and the broader "tool-augmented agent with verifiable state" pattern that's emerged through 2025.
 
-Built as a 7-week capstone-style project. Phase plan and design rationale live in [`docs/superpowers/`](docs/superpowers/).
+Built as a 7-week project. Phase plan and design rationale live in [`docs/superpowers/`](docs/superpowers/).
