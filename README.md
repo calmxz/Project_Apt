@@ -4,13 +4,14 @@
 
 **An adaptive AI study companion that learns how _you_ learn.**
 
-Pick a topic, drop in your course PDFs, and chat with a tutor that builds a live model of what you know — strengths, gaps, and the one concept worth working on next. Grounded in your own material via RAG, so it cites the page instead of making things up.
+Pick a topic, drop in your course PDFs, and chat with a tutor that builds a live model of what you know — strengths, gaps, and the one concept worth working on next. Answers are grounded in your own material via RAG, so the tutor cites the page instead of making things up.
 
 [![CI](https://github.com/calmxz/Project_Apt/actions/workflows/ci.yml/badge.svg)](https://github.com/calmxz/Project_Apt/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
 [![Vue 3](https://img.shields.io/badge/vue-3-42b883.svg)](https://vuejs.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
+[![ChromaDB](https://img.shields.io/badge/ChromaDB-1.5.x-FF6B6B.svg)](https://www.trychroma.com/)
 
 [**Screencast walkthrough**](docs/screencast/adaptlearn-walkthrough.mp4) · [**Design doc**](docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md) · [**API spec**](docs/api/openapi.yaml)
 
@@ -20,21 +21,66 @@ Pick a topic, drop in your course PDFs, and chat with a tutor that builds a live
 
 ---
 
-## Why this exists
+## Table of Contents
 
-Most "AI tutors" are a chat box bolted onto a generic LLM — they ask the same opening question on turn 1 and turn 100, and they have no idea what you've already mastered. AdaptLearn keeps a structured profile per topic (knowledge level, confirmed gaps, mastered concepts, current focus) and updates it through tool calls every turn. The next question is always conditioned on what the model actually knows about you.
+1. [About](#about)
+2. [Features](#features)
+3. [Tech Stack](#tech-stack)
+4. [Architecture](#architecture)
+5. [Prerequisites](#prerequisites)
+6. [Installation](#installation)
+7. [Configuration](#configuration)
+8. [Usage — Your first study session](#usage--your-first-study-session)
+9. [API Documentation](#api-documentation)
+10. [Folder Structure](#folder-structure)
+11. [Common Commands](#common-commands)
+12. [Troubleshooting](#troubleshooting)
+13. [Roadmap](#roadmap)
+14. [Contributing](#contributing)
+15. [License](#license)
+16. [Acknowledgements](#acknowledgements)
 
-It also refuses to hallucinate citations. PDF chunks live in ChromaDB; retrieval is arbitrated server-side by a keyword index before the agent is even told it _may_ retrieve.
+---
+
+## About
+
+Most "AI tutors" today are a chat box bolted onto a generic LLM. They ask the same opening question on turn 1 and turn 100, and they have no idea what you've already mastered. AdaptLearn is different.
+
+**What it does.** You pick a topic ("Discrete Math", "Photosynthesis", "Vector Calculus") and have an ongoing conversation with a tutor agent. Every turn, the agent updates a structured profile of your knowledge — your current level, the gaps you've confirmed, the concepts you've demonstrated mastery of, and the one gap it's currently focused on. The next question is conditioned on that profile, not a blank slate.
+
+**Who it's for.**
+- **Students** preparing for an exam who want a tutor that remembers what they already know.
+- **Self-learners** working through a textbook who want to be quizzed adaptively, not linearly.
+- **Educators / EdTech researchers** interested in tool-augmented LLM tutors with verifiable state.
+
+**Why it exists.** As a 7-week capstone-style project, AdaptLearn is a demonstration of how structured tool calls and server-side guard rails can keep an LLM honest — no hallucinated mastery, no silent context loss, no fabricated citations.
 
 ## Features
 
-- **Live learner profile** — knowledge level + gaps + mastered concepts + a single in-focus gap, updated via Pydantic-validated tool calls per turn.
-- **Profile demotion on retest failure** — get a previously mastered concept wrong, and the server removes it. No silent inflation.
-- **Focus-clearing guard rail** — the agent cannot clear the current focus without server-verifiable evidence (a logged correct `LearningEvent` that turn).
-- **PDF → RAG ingestion** — upload course materials; chunked, embedded, and stored in ChromaDB. Answers cite the source chunk.
-- **Server-side retrieval arbitration** — keyword check decides whether retrieval is _required_; the agent then decides whether to call the tool.
-- **Multi-session, resumable** — every topic is its own session with summary on close and resume on open.
-- **Read-only profile view** — see exactly what the model believes about you per topic.
+- **Live learner profile per topic.** Knowledge level, confirmed gaps, mastered concepts, and one current focus gap. Updated via Pydantic-validated tool calls every turn.
+- **Profile demotion on retest failure.** Get a previously mastered concept wrong, and the server removes it from your mastered list. No silent inflation.
+- **Focus-clearing guard rail.** The agent cannot clear the current focus without server-verifiable evidence — a `LearningEvent` logged that turn with `correct=true`.
+- **PDF → RAG ingestion.** Upload course materials. They're chunked, embedded with `gemini-embedding-2`, and stored in ChromaDB. Chat answers cite the source chunk.
+- **Server-side retrieval arbitration.** A keyword check decides whether retrieval is _required_; the agent decides whether to call the tool. Two-stage gate keeps it from RAG-ing chitchat.
+- **Multi-session, resumable.** Every topic is its own session. Close one with a summary; resume later with prior context restored.
+- **Read-only profile views.** Per-session profile (`/profile/:sessionId`) plus a cross-session aggregate dashboard (`/profile`) — see exactly what the model believes about you.
+- **Daily rate limit.** Built-in per-user cap (`DAILY_CAP`) so you can't accidentally burn your API quota.
+- **Dockerized.** One command brings up frontend, backend, and vector store.
+
+## Tech Stack
+
+| Layer | Tech | Why |
+|---|---|---|
+| Frontend | Vue 3, Vite, Pinia, PrimeVue | Reactive SPA, fast dev loop, accessible components out of the box |
+| Backend | FastAPI, Uvicorn, Python 3.12 | Typed routes, automatic OpenAPI, async-friendly |
+| ORM / DB | SQLAlchemy + SQLite | File-backed, zero ops; fine for single-user local + small-scale deploys |
+| Vector store | ChromaDB 1.5.x | Self-hosted, persistent, embedded or server mode |
+| LLM gateway | LiteLLM direct | One client, swap providers via env var (Gemini default, Anthropic fallback) |
+| LLM | `gemini/gemini-3.1-flash-lite` (chat), `gemini-embedding-2` (embeddings) | Cheap, fast, large context |
+| Tests | pytest, vitest, Playwright | Backend unit/integration, frontend unit, e2e |
+| Deploy | Docker Compose; ngrok for public demo | Reproducible local stack; tunneled public preview |
+
+No Firebase. No ADK. No managed cloud lock-in.
 
 ## Architecture
 
@@ -43,7 +89,7 @@ flowchart LR
     User[User browser]
     FE[Vue 3 + Vite<br/>:5173]
     BE[FastAPI + Uvicorn<br/>:8000]
-    DB[(SQLite<br/>sessions · profile<br/>learning events)]
+    DB[(SQLite<br/>sessions · profile<br/>learning events · messages)]
     Chroma[(ChromaDB<br/>:8001)]
     LLM{{LiteLLM<br/>Gemini}}
 
@@ -53,99 +99,434 @@ flowchart LR
     BE <-->|vector search| Chroma
     BE <-->|chat + tool calls| LLM
 
-    subgraph Tools
+    subgraph Tools["Agent tools (LiteLLM tool-call)"]
       T1[retrieve_chunks]
       T2[update_topic_profile]
       T3[record_learning_event]
     end
-    LLM -.-> Tools
-    Tools -.-> BE
+    LLM -.->|tool calls| Tools
+    Tools -.->|execute| BE
 ```
 
-One **TutorAgent** running through LiteLLM direct. Three tools:
+### How a turn flows
+
+1. Frontend posts `{user_id, session_id, message}` to `POST /api/chat`.
+2. Backend rebuilds the dynamic part of the system prompt from DB state (current `TopicProfile`, recent messages, ingestion status, server-computed `retrieval_required` flag from a keyword index).
+3. LiteLLM forwards the full prompt to Gemini. Gemini may emit tool calls.
+4. Backend executes each tool call:
+   - `retrieve_chunks` → ChromaDB query, returns top-_k_ chunks with citations.
+   - `update_topic_profile` → Pydantic-validated patch over the profile row.
+   - `record_learning_event` → insert a LearningEvent row; trigger mastery demotion if applicable.
+5. Tool results go back to Gemini, which produces the final assistant message.
+6. Backend persists the user + assistant messages and returns `{assistant_message, message_id, tool_calls, citations}` to the frontend.
+
+The agent has three tools, no more:
 
 | Tool | Purpose |
 |---|---|
 | `retrieve_chunks(session_id, query, k=5)` | ChromaDB vector search over the user's uploaded PDFs |
-| `update_topic_profile(...)` | Pydantic-validated patch over the learner's topic profile |
+| `update_topic_profile(...)` | Patch the learner's topic profile; clearing `focus_target_gap` requires `focus_clear_reason` |
 | `record_learning_event(session_id, gap_tested, question, correct)` | Logs check-question outcomes; incorrect retest on a mastered concept demotes it server-side |
 
-The system prompt is split: immutable rules (`backend/agent/prompts.py`) plus dynamic context rebuilt per turn. Splitting keeps the immutable half cache-friendly. Full detail in [the design doc §3.3](docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md).
+The system prompt is split: an immutable rules block (`backend/agent/prompts.py`) plus dynamic context rebuilt per turn. Splitting keeps the immutable half cache-friendly. Full detail in [the design doc §3.3](docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md).
 
-## Stack
+## Prerequisites
 
-| Layer | Tech |
-|---|---|
-| Frontend | Vue 3, Vite, Pinia, PrimeVue |
-| Backend | FastAPI, Uvicorn, Python 3.12, SQLAlchemy |
-| Vector store | ChromaDB 1.5.x |
-| LLM | Gemini via LiteLLM direct — `gemini/gemini-3.1-flash-lite` for chat, `gemini-embedding-2` for embeddings |
-| Tests | pytest, vitest, Playwright (e2e) |
-| Deploy | Docker Compose; ngrok for public demo |
+You need exactly **one** of these two setups:
 
-No Firebase. No ADK. No cloud lock-in.
+### Option A: Docker (easiest)
 
-## Quick Start
+- [Docker Desktop](https://www.docker.com/products/docker-desktop) 4.x+ (Windows / macOS) or Docker Engine 24.x+ (Linux)
+- ~2 GB free disk for images + data
 
-### Docker (recommended)
+### Option B: Local toolchain (more setup, no Docker)
+
+- Python 3.12 (`python --version`)
+- Node.js 20.x or newer + npm 10.x (`node --version`, `npm --version`)
+- A running ChromaDB instance — either `pip install chromadb` and run `chroma run --path ./data/chroma --port 8001`, or just use the Docker chromadb container alone
+
+### In both cases
+
+- A **Gemini API key**. Free tier is fine for personal use. Get one here:
+  1. Open [Google AI Studio](https://aistudio.google.com/apikey).
+  2. Sign in with a Google account.
+  3. Click **Create API key**. Copy the value (starts with `AIza...`).
+  4. Keep it private. You'll paste it into `.env` in the next section.
+
+## Installation
+
+### 1. Clone the repo
 
 ```bash
-cp .env.example .env          # then fill in GEMINI_API_KEY
-docker compose up             # add --build after Dockerfile or deps changes
+git clone https://github.com/calmxz/Project_Apt.git
+cd Project_Apt
 ```
 
-Then visit:
-
-- Frontend → http://localhost:5173
-- Backend API → http://localhost:8000 (health: `/health`, chat: `POST /api/chat`)
-- ChromaDB → http://localhost:8001
-
-Common variants:
+### 2. Create your `.env`
 
 ```bash
-docker compose up -d                       # detached
+cp .env.example .env
+```
+
+Open `.env` in your editor and set at minimum:
+
+```ini
+GEMINI_API_KEY=AIza...your-key-here...
+```
+
+See the [Configuration](#configuration) section for the full variable reference.
+
+### 3a. Bring up the stack with Docker (recommended)
+
+From the repo root:
+
+```bash
+docker compose up
+```
+
+First boot pulls images and builds the backend — give it a few minutes. When you see `Uvicorn running on http://0.0.0.0:8000` in the logs, the stack is ready.
+
+Open http://localhost:5173 in your browser. You should see the AdaptLearn landing page.
+
+Useful variants:
+
+```bash
+docker compose up -d                       # detached (background)
 docker compose up backend                  # backend + chromadb only
-docker compose logs -f backend             # tail backend
-docker compose exec backend pytest -v      # run tests inside container
-docker compose down                        # stop; ./data persists
+docker compose logs -f backend             # tail backend logs
+docker compose exec backend pytest -v      # run backend tests inside container
+docker compose down                        # stop everything; ./data persists
 docker compose down -v                     # also drop named volumes
+docker compose build backend               # rebuild after Dockerfile / deps changes
 ```
 
-Bind mount `./data` ↔ `/data`: SQLite, uploads, and Chroma persistence all live there and survive restarts. Detailed reference: [`backend/README.md`](backend/README.md#docker).
+The bind mount `./data` ↔ `/data` is where your SQLite DB, uploaded PDFs, and Chroma data live. Everything survives container restarts. Full Docker reference: [`backend/README.md`](backend/README.md#docker).
 
-### Local development (no Docker)
+### 3b. Run locally without Docker
 
 **Backend** — from `backend/`:
 
 ```bash
 python -m venv .venv
-.venv\Scripts\activate           # Windows; source .venv/bin/activate elsewhere
+
+# Windows PowerShell:
+.venv\Scripts\Activate.ps1
+# macOS / Linux:
+source .venv/bin/activate
+
 pip install -e .[dev]
 uvicorn main:app --reload
 ```
 
-Or from repo root: `uvicorn main:app --reload --app-dir backend`. `config.py` anchors `.env` and `data/` to the repo root, so cwd doesn't matter. `data/app.db`, `data/chroma/`, `data/uploads/` auto-create on first boot.
+Or from the repo root: `uvicorn main:app --reload --app-dir backend`. `config.py` anchors `.env` and `data/` to the repo root, so cwd doesn't matter. `data/app.db`, `data/chroma/`, and `data/uploads/` auto-create on first boot.
+
+You also need ChromaDB running on port 8001:
+
+```bash
+pip install chromadb
+chroma run --path ./data/chroma --port 8001
+```
 
 **Frontend** — from `frontend/`:
 
 ```bash
 npm install
-cp .env.example .env.local       # adjust VITE_API_BASE_URL if backend not on :8000
+cp .env.example .env.local       # adjust VITE_API_BASE_URL if backend isn't on :8000
 npm run dev
 ```
 
+Visit http://localhost:5173.
+
+### 4. Verify everything is healthy
+
+```bash
+curl http://localhost:8000/health
+# → {"status":"ok"}
+```
+
+If you get `connection refused`, the backend didn't come up. Check the logs.
+
 ## Configuration
 
-Backend reads `.env` at the repo root (mounted into the container via `env_file`):
+The backend reads `.env` at the repo root. With Docker, it's mounted into the container via `env_file`.
 
-| Var | Purpose |
+### Required
+
+| Variable | Purpose | Example |
+|---|---|---|
+| `GEMINI_API_KEY` | LiteLLM credential for Gemini. Get one at [Google AI Studio](https://aistudio.google.com/apikey). | `AIza...` |
+
+### Optional (have sensible defaults)
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `MODEL` | LiteLLM-prefixed chat model id. Swap to `anthropic/claude-sonnet-4-6` if reliability checkpoints fail. | `gemini/gemini-3.1-flash-lite` |
+| `EMBEDDING_MODEL` | Embedding model used by ChromaDB ingestion + retrieval. | `gemini-embedding-2` |
+| `DAILY_CAP` | Per-user daily request cap. | `100` |
+| `DATABASE_URL` | SQLAlchemy connection string. | `sqlite:///./data/app.db` (Docker overrides to `/data/app.db`) |
+| `CHROMA_HOST` | ChromaDB host. | `localhost` (Docker overrides to `chromadb`) |
+| `CHROMA_PORT` | ChromaDB port. | `8001` |
+
+### Frontend `.env.local`
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `VITE_API_BASE_URL` | Backend base URL the SPA calls. | `http://localhost:8000` |
+
+> **Security.** `.env` and `.env.local` are gitignored. **Never commit your `GEMINI_API_KEY`** — if you do, rotate it immediately at [Google AI Studio](https://aistudio.google.com/apikey).
+
+## Usage — Your first study session
+
+With the stack running on http://localhost:5173, here's the end-to-end happy path. Screenshots are placeholders — replace with your own captures.
+
+### 1. Onboarding
+
+![Onboarding view](docs/assets/screens/01-onboarding.png)
+
+On first visit you'll see a short onboarding flow. Enter a display name (it doubles as your `user_id` for local single-user use). Click **Continue**.
+
+### 2. The home dashboard
+
+![Home view](docs/assets/screens/02-home.png)
+
+The home view (`HomeView`) shows:
+- Your existing sessions, grouped active vs ended.
+- A **New session** button.
+- A **Profile** link to the cross-session aggregate dashboard.
+
+### 3. Start a new session
+
+![New session view](docs/assets/screens/03-new-session.png)
+
+Click **New session**. Enter:
+- **Topic** — what you want to study (e.g. `"Linear Algebra: Eigenvalues"`).
+- **Seed mode** — `fresh` (no prior context) or `resume` (carry over a prior session's profile).
+
+Click **Start**. You're dropped into the chat view with an empty profile.
+
+### 4. Optionally attach a PDF
+
+![Upload PDF](docs/assets/screens/04-upload.png)
+
+Inside a session, click the **paperclip** icon to upload a PDF. The backend:
+1. Returns `202 Accepted` immediately with a `document_id`.
+2. Runs chunking + embedding in the background.
+3. The UI polls `GET /api/upload/{document_id}` until status flips from `pending` → `ready` (or `failed`).
+
+Once `ready`, the agent can call `retrieve_chunks` on this material. Subsequent answers will include **citations** rendered as a list under the message.
+
+### 5. Chat
+
+![Session chat](docs/assets/screens/05-session.png)
+
+Type a message. The tutor will:
+
+- Ask a calibrating question if the profile is empty.
+- Acknowledge what you say, update its model of you, and ask a follow-up.
+- Quiz you on a gap when it has enough signal.
+- Cite a PDF chunk when the answer is grounded in uploaded material.
+
+Behind the scenes (visible in the dev console as `tool_calls`), it might call e.g.:
+
+```jsonc
+{ "name": "update_topic_profile",
+  "args": { "session_id": "s_42", "knowledge_level": "intermediate",
+            "add_confirmed_gap": "computing eigenvectors by hand",
+            "evidence_type": "declared" } }
+```
+
+### 6. Check your profile
+
+![Per-session profile view](docs/assets/screens/06-profile.png)
+
+Click the **profile icon** in the session header to open `ProfileView` (`/profile/:sessionId`). You'll see:
+
+- Current `knowledge_level`.
+- All `confirmed_gaps` (chips).
+- All `mastered_concepts` (chips).
+- The `focus_target_gap` highlighted.
+- The last 20 `LearningEvent` rows (question, gap tested, correct/incorrect).
+
+### 7. End the session
+
+![Session ended banner](docs/assets/screens/07-session-end.png)
+
+Click **End session**. The backend calls `POST /api/sessions/:id/end`, which generates a one-paragraph summary via the LLM. The session is now read-only.
+
+You can reopen it later via `POST /api/sessions/:id/reopen` (UI button on the ended-session banner).
+
+### 8. Cross-session dashboard
+
+![Aggregate profile](docs/assets/screens/08-aggregate.png)
+
+Back on the home dashboard, click **Profile** to see `AggregateProfileView`. This is a pure SQL/Python aggregate — no LLM calls — showing:
+
+- Total / active / ended session counts.
+- Combined mastered concepts and gaps across every session (sorted by frequency).
+- Knowledge level distribution across topics.
+- Recent topics.
+
+This is the dashboard for "what am I learning, overall?"
+
+### 9. Example: a complete chat turn
+
+```jsonc
+// POST /api/chat
+{
+  "user_id": "alex",
+  "session_id": "s_42",
+  "message": "I get how dot products work, but cross products confuse me."
+}
+
+// Response
+{
+  "assistant_message": "Good — let's pin that down. Cross products only live in 3D. Can you tell me what the *direction* of u × v is relative to u and v?",
+  "message_id": 87,
+  "tool_calls": [
+    {
+      "name": "update_topic_profile",
+      "args": {
+        "session_id": "s_42",
+        "add_confirmed_gap": "cross product geometric meaning",
+        "focus_target_gap": "cross product geometric meaning",
+        "evidence_type": "declared"
+      },
+      "status": "ok"
+    }
+  ],
+  "citations": []
+}
+```
+
+## API Documentation
+
+The HTTP contract lives in [`docs/api/openapi.yaml`](docs/api/openapi.yaml). Pydantic models under `backend/contracts/` are **generated** from that file — never hand-edit them. Regenerate with:
+
+```bash
+python backend/scripts/gen_contracts.py
+```
+
+CI enforces zero drift between the YAML and the generated package.
+
+### Endpoint summary
+
+#### Health
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/health` | Liveness probe. Returns `{"status":"ok"}`. |
+
+#### Chat
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/api/chat` | Send a user message; receive tutor response with tool calls + citations. |
+
+#### Sessions
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/api/sessions` | Create a fresh or resumed session. |
+| GET | `/api/sessions?user_id=...` | List sessions for a user. |
+| GET | `/api/sessions/{session_id}` | Get session detail + full message transcript. |
+| POST | `/api/sessions/{session_id}/end` | End the session; generate summary. |
+| POST | `/api/sessions/{session_id}/reopen` | Reopen an ended session. |
+
+#### Upload (PDF / RAG)
+
+| Method | Path | Description |
+|---|---|---|
+| POST | `/api/upload` | Upload a PDF (multipart, fields: `session_id`, `file`). Returns `202` immediately; ingestion runs in background. |
+| GET | `/api/upload/{document_id}` | Poll ingestion status (`pending` / `ready` / `failed`). |
+
+#### Profile
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/api/profile/{session_id}` | Get a session's TopicProfile + recent LearningEvents. |
+| GET | `/api/profile/aggregate?user_id=...` | Cross-session aggregate dashboard. Pure SQL/Python, no LLM calls. |
+
+### Common error responses
+
+| Status | Meaning |
 |---|---|
-| `GEMINI_API_KEY` | LiteLLM credential for Gemini |
-| `MODEL` | Chat model id (default `gemini/gemini-3.1-flash-lite`) |
-| `EMBEDDING_MODEL` | Embedding model id (default `gemini-embedding-2`) |
-| `DAILY_CAP` | Per-user daily request cap (rate limiter) |
+| 400 | Malformed request (validation failure). |
+| 404 | Resource not found. |
+| 429 | Daily rate limit (`DAILY_CAP`) reached. |
+| 503 | LLM provider unavailable / timeout. |
 
-Container-only overrides set in `docker-compose.yml`: `DATABASE_URL`, `CHROMA_HOST`, `CHROMA_PORT`.
+All errors return `{"detail": "<message>"}`.
+
+### Example: curl a chat turn
+
+```bash
+# Create a session
+curl -X POST http://localhost:8000/api/sessions \
+  -H "Content-Type: application/json" \
+  -d '{"user_id":"alex","topic":"Eigenvalues","seed_mode":"fresh"}'
+
+# → {"id":"s_42", "user_id":"alex", "topic":"Eigenvalues", "topic_profile":{...}, ...}
+
+# Send a message
+curl -X POST http://localhost:8000/api/chat \
+  -H "Content-Type: application/json" \
+  -d '{"user_id":"alex","session_id":"s_42","message":"What is an eigenvalue?"}'
+```
+
+### Interactive docs
+
+With the backend running, FastAPI's interactive docs are available at:
+
+- Swagger UI → http://localhost:8000/docs
+- ReDoc → http://localhost:8000/redoc
+
+## Folder Structure
+
+```
+Project_Apt/
+├── docs/
+│   ├── superpowers/specs/      Design doc (source of truth)
+│   ├── superpowers/plans/      Phase implementation plans
+│   ├── api/openapi.yaml        API contract (codegen source)
+│   ├── deploy/ngrok.md         Public demo deploy guide
+│   ├── screencast/             Walkthrough script + recorded video
+│   ├── AdaptLearn_Spec.md      Original spec (v2 reference)
+│   └── AdaptLearn_DevPlan.md   Original dev plan (v2 reference)
+├── spike/                      Phase 0 validation spike (preserved)
+├── frontend/
+│   ├── src/
+│   │   ├── views/              HomeView, NewSessionView, SessionView,
+│   │   │                       ProfileView, AggregateProfileView,
+│   │   │                       OnboardingView, SettingsView
+│   │   ├── components/         BackButton, EmptyState, Logo,
+│   │   │                       SessionEndedBanner
+│   │   ├── stores/             Pinia stores
+│   │   ├── api/                Backend client (axios)
+│   │   └── router/             Vue Router config
+│   ├── tests/                  vitest + Playwright
+│   └── package.json
+├── backend/
+│   ├── main.py                 FastAPI app entrypoint
+│   ├── config.py               Settings (.env loader, paths)
+│   ├── agent/
+│   │   ├── tutor.py            TutorAgent — LiteLLM tool-call loop
+│   │   ├── prompts.py          Immutable system prompt
+│   │   └── tools.py            Tool schemas + dispatch
+│   ├── routes/                 health, chat, sessions, upload, profile
+│   ├── services/               profile, retrieval, ingestion, summary, rate_limit
+│   ├── db/                     models.py (SQLAlchemy), database.py
+│   ├── contracts/              GENERATED Pydantic DTOs (do not edit)
+│   ├── scripts/gen_contracts.py  Codegen wrapper
+│   ├── lib/                    keyword_index, chunking
+│   └── tests/                  pytest
+├── data/                       Persisted volumes (sqlite, uploads, chroma)
+├── docker-compose.yml          Dev stack
+├── docker-compose.prod.yml     Prod / public demo stack
+├── .github/workflows/ci.yml    pytest + vitest + playwright
+├── .env.example
+├── LICENSE
+└── README.md                   ← you are here
+```
 
 ## Common Commands
 
@@ -162,73 +543,158 @@ Container-only overrides set in `docker-compose.yml`: `DATABASE_URL`, `CHROMA_HO
 | Regenerate API contracts | from repo root: `python backend/scripts/gen_contracts.py` |
 | Frontend dev server | from `frontend/`: `npm run dev` |
 | Frontend unit tests | from `frontend/`: `npm run test:unit -- --run` |
-| Lint / format | from `frontend/`: `npm run lint` / `npm run format` |
+| Frontend e2e (Playwright) | from `frontend/`: `npx playwright test` |
+| Lint / format frontend | from `frontend/`: `npm run lint` / `npm run format` |
 
-## Repository Layout
+## Troubleshooting
 
-```
-Project_Apt/
-├── docs/
-│   ├── superpowers/specs/      Design doc (source of truth)
-│   ├── superpowers/plans/      Phase implementation plans
-│   ├── api/openapi.yaml        API contract (Pydantic codegen source)
-│   ├── deploy/ngrok.md         Public demo deploy guide
-│   ├── screencast/             Walkthrough script + recorded video
-│   ├── AdaptLearn_Spec.md      Original spec (v2 reference)
-│   └── AdaptLearn_DevPlan.md   Original dev plan (v2 reference)
-├── spike/                      Phase 0 validation spike (preserved)
-├── frontend/                   Vue 3 + Vite + PrimeVue + Pinia
-├── backend/                    FastAPI + SQLite + ChromaDB
-│   ├── main.py
-│   ├── agent/                  tutor.py, prompts.py, tools.py
-│   ├── routes/                 chat.py, sessions.py, upload.py, profile.py
-│   ├── services/               profile, retrieval, ingestion, summary, rate_limit
-│   ├── db/                     models.py, database.py (SQLAlchemy ORM)
-│   ├── contracts/              GENERATED Pydantic DTOs (do not edit — see docs/api/openapi.yaml)
-│   ├── scripts/gen_contracts.py  Codegen wrapper for contracts/
-│   ├── lib/                    keyword_index.py, chunking.py
-│   └── tests/
-├── data/                       Persisted volumes (sqlite, uploads, chroma)
-├── docker-compose.yml
-├── docker-compose.prod.yml
-└── .github/workflows/ci.yml    pytest + vitest + playwright
+<details>
+<summary><b><code>connection refused</code> on localhost:8000</b></summary>
+
+Backend isn't up. With Docker: `docker compose logs backend` and look for the error. Common causes: missing `GEMINI_API_KEY` in `.env`, port 8000 already in use.
+</details>
+
+<details>
+<summary><b>ChromaDB errors like <code>could not read sqlite file</code></b></summary>
+
+You have stale ChromaDB data from an older Chroma version. Stop the stack and clear it:
+
+```bash
+docker compose down
+rm -rf data/chroma/*
+docker compose up
 ```
 
-## How it was built
+ChromaDB 1.5.x cannot read 0.5.x SQLite files.
+</details>
 
-AdaptLearn was built in six tightly scoped phases. Each phase had a written plan, a verification step, and didn't start until the previous one passed:
+<details>
+<summary><b>429 Too Many Requests from the chat endpoint</b></summary>
 
-| Phase | Scope |
+You've hit `DAILY_CAP`. Either bump the value in `.env` and restart the backend, or wait until the daily counter resets.
+</details>
+
+<details>
+<summary><b>503 Upstream Unavailable</b></summary>
+
+Gemini is timing out or your `GEMINI_API_KEY` is invalid. Check your key at [Google AI Studio](https://aistudio.google.com/apikey). If the key is fine, Gemini may be experiencing an outage — retry shortly.
+</details>
+
+<details>
+<summary><b>PDF stuck in <code>pending</code> forever</b></summary>
+
+Ingestion runs in a background task. Check `docker compose logs -f backend` for embedding errors. Common causes: scanned-image PDF (no extractable text), bad `EMBEDDING_MODEL` value, Gemini quota exhausted.
+</details>
+
+<details>
+<summary><b>Frontend shows <code>Network Error</code></b></summary>
+
+`VITE_API_BASE_URL` in `frontend/.env.local` doesn't match where the backend is listening. Default is `http://localhost:8000` — fix accordingly if you changed the backend port.
+</details>
+
+<details>
+<summary><b>Contracts drift CI failure</b></summary>
+
+You edited `backend/contracts/` by hand or forgot to regenerate after editing `docs/api/openapi.yaml`. Run:
+
+```bash
+python backend/scripts/gen_contracts.py
+git add backend/contracts/
+git commit
+```
+</details>
+
+## Roadmap
+
+AdaptLearn v1 is feature-complete for its 7-week scope. Possible v2 directions:
+
+- **Multi-user auth.** Real accounts (OAuth, magic-link) instead of single-user local mode.
+- **Mobile-friendly redesign.** The current SPA is desktop-first; an adaptive layout for phones is on the wishlist.
+- **Streaming chat.** Token-by-token responses via Server-Sent Events for snappier UX.
+- **Voice mode.** STT in, TTS out — quiz yourself while walking.
+- **Spaced repetition.** Surface previously confirmed gaps for review at SR intervals.
+- **Image / diagram support.** Let the tutor render or accept diagrams (graph theory, geometry, circuits).
+- **Cloud deploy template.** Terraform module for AWS / GCP / Fly.io.
+- **Provider matrix.** First-class support for Anthropic, OpenAI, and local models (Ollama) via LiteLLM.
+
+If you want to tackle one of these, see [Contributing](#contributing).
+
+## Contributing
+
+Contributions welcome — bug reports, fixes, docs improvements, and feature work.
+
+### Bug reports
+
+Open an issue with:
+
+- A short title.
+- Steps to reproduce (smallest possible repro).
+- Expected vs actual behaviour.
+- Stack / version info (OS, Docker version, browser).
+- Relevant log excerpts.
+
+### Pull request flow
+
+1. Fork the repo and create a feature branch:
+   ```bash
+   git checkout -b feat/your-feature-name
+   ```
+2. Make your change. Follow the existing code style:
+   - Backend: ruff-compatible Python, type hints where they help.
+   - Frontend: ESLint clean (`npm run lint`), Prettier formatted (`npm run format`).
+   - No emojis in code or comments.
+3. Add or update tests:
+   - Backend → `backend/tests/`
+   - Frontend → `frontend/src/**/__tests__/` or `frontend/tests/`
+4. Run the full test suite locally:
+   ```bash
+   # Backend
+   cd backend && pytest
+   # Frontend
+   cd frontend && npm run test:unit -- --run
+   ```
+5. **If you touched the API contract:** edit `docs/api/openapi.yaml` first, then run `python backend/scripts/gen_contracts.py`. Commit the regenerated `backend/contracts/` package together with your YAML change.
+6. Commit with [Conventional Commits](https://www.conventionalcommits.org/) style:
+   - `feat(backend): add streaming chat endpoint`
+   - `fix(frontend): handle 429 in session view`
+   - `docs: clarify chromadb reset step`
+7. Push and open a PR. Describe **what** changed, **why**, and any caveats.
+
+### Branch naming
+
+| Prefix | Purpose |
 |---|---|
-| 0 | Validation spike — profile differentiation confirmed on a thin slice before committing to the full design |
-| 1 | Scaffold + docker + chat loop + CI baseline |
-| 2 | Three tools + mid-profile + tool-call reliability checkpoint (`update_topic_profile` ≥85%) |
-| 3 | Sessions CRUD + summary service + resume + Playwright intro |
-| 4 | PDF upload + ChromaDB ingestion + RAG + citations |
-| 5 | ProfileView + visual redesign + deploy + screencast |
+| `feat/<slug>` | New feature |
+| `fix/<slug>` | Bug fix |
+| `docs/<slug>` | Docs-only |
+| `refactor/<slug>` | Internal change, no behaviour difference |
+| `chore/<slug>` | Tooling / dependency bumps |
 
-Reliability gates were real: if a tool-call success rate fell below 85% on the checkpoint, the rule was up to three prompt iterations, then a model swap to `anthropic/claude-sonnet-4-6`. The bar applied to both `update_topic_profile` (Phase 2) and `focus_target_gap` clearing (Phase 3).
-
-## Documentation
-
-Read in this order before non-trivial changes:
-
-1. [`docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md`](docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md) — **primary source of truth.** Supersedes everything below.
-2. [`docs/api/openapi.yaml`](docs/api/openapi.yaml) — **API contract source of truth.** Pydantic models under `backend/contracts/` are generated from this; never hand-edit the generated package. Regenerate with `python backend/scripts/gen_contracts.py`.
-3. [`docs/superpowers/plans/2026-05-03-phase-0-validation-spike.md`](docs/superpowers/plans/2026-05-03-phase-0-validation-spike.md) — Phase 0 validation plan.
-4. [`docs/AdaptLearn_Spec.md`](docs/AdaptLearn_Spec.md) — original spec (v2 reference only).
-5. [`docs/AdaptLearn_DevPlan.md`](docs/AdaptLearn_DevPlan.md) — original dev plan (v2 reference only).
-6. [`CLAUDE.md`](CLAUDE.md) — agent guardrails and repo conventions.
-
-If docs conflict, the design doc wins. Surface the conflict — don't silently pick.
-
-## Ground Rules
+### Ground rules
 
 - No emojis in code or comments.
 - Secrets in `.env` / `.env.local` (gitignored). Never commit keys.
-- Stop and report on any failed verification step.
-- Design doc (`docs/superpowers/specs/`) is source of truth.
+- Stop and report on any failed verification step — don't hide a red test.
+- The design doc (`docs/superpowers/specs/`) is the source of truth. If docs disagree, flag the conflict in your PR.
 
 ## License
 
-[MIT](LICENSE) — © 2026 calmxz
+Distributed under the **MIT License**. See [LICENSE](LICENSE) for the full text.
+
+© 2026 calmxz
+
+## Acknowledgements
+
+AdaptLearn stands on the shoulders of a lot of excellent open-source work:
+
+- [**FastAPI**](https://fastapi.tiangolo.com/) — backend framework.
+- [**Vue 3**](https://vuejs.org/) + [**Vite**](https://vitejs.dev/) + [**Pinia**](https://pinia.vuejs.org/) + [**PrimeVue**](https://primevue.org/) — frontend stack.
+- [**LiteLLM**](https://github.com/BerriAI/litellm) — provider-agnostic LLM client.
+- [**ChromaDB**](https://www.trychroma.com/) — embedded vector database.
+- [**SQLAlchemy**](https://www.sqlalchemy.org/) — ORM.
+- [**pytest**](https://docs.pytest.org/) + [**vitest**](https://vitest.dev/) + [**Playwright**](https://playwright.dev/) — test runners.
+- **Google Gemini** — chat + embedding model.
+
+Architecture inspiration: structured-state LLM tutors as discussed in recent EdTech-LLM research papers, and the broader "tool-augmented agent with verifiable state" pattern that's emerged through 2025.
+
+Built as a 7-week capstone-style project. Phase plan and design rationale live in [`docs/superpowers/`](docs/superpowers/).
