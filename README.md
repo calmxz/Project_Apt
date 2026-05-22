@@ -1,81 +1,117 @@
+<div align="center">
+
 # AdaptLearn
 
-Adaptive AI study companion. A web app that teaches a chosen topic and updates its model of the learner continuously, grounded in the user's own course material via RAG.
+**An adaptive AI study companion that learns how _you_ learn.**
 
-**Status:** Phase 5 closeout — code/CI work complete on `phase/5-finish-closeout`. Remaining: record screencast and push to public remote. Phases 0-4 complete (Phase 0 validation spike, Phase 1 scaffold + chat loop, Phase 2 tools + mid-profile, Phase 3 sessions + summary, Phase 4 PDF upload + ChromaDB ingestion + RAG + citations).
+Pick a topic, drop in your course PDFs, and chat with a tutor that builds a live model of what you know — strengths, gaps, and the one concept worth working on next. Grounded in your own material via RAG, so it cites the page instead of making things up.
+
+[![CI](https://github.com/calmxz/Project_Apt/actions/workflows/ci.yml/badge.svg)](https://github.com/calmxz/Project_Apt/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
+[![Vue 3](https://img.shields.io/badge/vue-3-42b883.svg)](https://vuejs.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
+
+[**Screencast walkthrough**](docs/screencast/adaptlearn-walkthrough.mp4) · [**Design doc**](docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md) · [**API spec**](docs/api/openapi.yaml)
+
+![AdaptLearn hero](docs/assets/hero.png)
+
+</div>
+
+---
+
+## Why this exists
+
+Most "AI tutors" are a chat box bolted onto a generic LLM — they ask the same opening question on turn 1 and turn 100, and they have no idea what you've already mastered. AdaptLearn keeps a structured profile per topic (knowledge level, confirmed gaps, mastered concepts, current focus) and updates it through tool calls every turn. The next question is always conditioned on what the model actually knows about you.
+
+It also refuses to hallucinate citations. PDF chunks live in ChromaDB; retrieval is arbitrated server-side by a keyword index before the agent is even told it _may_ retrieve.
+
+## Features
+
+- **Live learner profile** — knowledge level + gaps + mastered concepts + a single in-focus gap, updated via Pydantic-validated tool calls per turn.
+- **Profile demotion on retest failure** — get a previously mastered concept wrong, and the server removes it. No silent inflation.
+- **Focus-clearing guard rail** — the agent cannot clear the current focus without server-verifiable evidence (a logged correct `LearningEvent` that turn).
+- **PDF → RAG ingestion** — upload course materials; chunked, embedded, and stored in ChromaDB. Answers cite the source chunk.
+- **Server-side retrieval arbitration** — keyword check decides whether retrieval is _required_; the agent then decides whether to call the tool.
+- **Multi-session, resumable** — every topic is its own session with summary on close and resume on open.
+- **Read-only profile view** — see exactly what the model believes about you per topic.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    User[User browser]
+    FE[Vue 3 + Vite<br/>:5173]
+    BE[FastAPI + Uvicorn<br/>:8000]
+    DB[(SQLite<br/>sessions · profile<br/>learning events)]
+    Chroma[(ChromaDB<br/>:8001)]
+    LLM{{LiteLLM<br/>Gemini}}
+
+    User <--> FE
+    FE <-->|REST + JSON| BE
+    BE <--> DB
+    BE <-->|vector search| Chroma
+    BE <-->|chat + tool calls| LLM
+
+    subgraph Tools
+      T1[retrieve_chunks]
+      T2[update_topic_profile]
+      T3[record_learning_event]
+    end
+    LLM -.-> Tools
+    Tools -.-> BE
+```
+
+One **TutorAgent** running through LiteLLM direct. Three tools:
+
+| Tool | Purpose |
+|---|---|
+| `retrieve_chunks(session_id, query, k=5)` | ChromaDB vector search over the user's uploaded PDFs |
+| `update_topic_profile(...)` | Pydantic-validated patch over the learner's topic profile |
+| `record_learning_event(session_id, gap_tested, question, correct)` | Logs check-question outcomes; incorrect retest on a mastered concept demotes it server-side |
+
+The system prompt is split: immutable rules (`backend/agent/prompts.py`) plus dynamic context rebuilt per turn. Splitting keeps the immutable half cache-friendly. Full detail in [the design doc §3.3](docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md).
 
 ## Stack
 
-- **Frontend:** Vue 3 + Vite + Pinia + PrimeVue (port 5173)
-- **Backend:** FastAPI + Uvicorn, Python 3.12 (port 8000)
-- **Database:** SQLite (sessions, profiles, learning events)
-- **Vector store:** ChromaDB 0.5.20 (port 8001 on host)
-- **LLM:** Gemini 2.5 Pro via LiteLLM direct (no ADK, no Firebase)
+| Layer | Tech |
+|---|---|
+| Frontend | Vue 3, Vite, Pinia, PrimeVue |
+| Backend | FastAPI, Uvicorn, Python 3.12, SQLAlchemy |
+| Vector store | ChromaDB 1.5.x |
+| LLM | Gemini via LiteLLM direct — `gemini/gemini-3.1-flash-lite` for chat, `gemini-embedding-2` for embeddings |
+| Tests | pytest, vitest, Playwright (e2e) |
+| Deploy | Docker Compose; ngrok for public demo |
 
-## Documentation
-
-Read in this order before non-trivial changes:
-
-1. [`docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md`](docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md) — **primary source of truth.** Supersedes everything below.
-2. [`docs/api/openapi.yaml`](docs/api/openapi.yaml) — **API contract source of truth.** Pydantic models under `backend/contracts/` are generated from this; never hand-edit the generated package. Regenerate with `python backend/scripts/gen_contracts.py`.
-3. [`docs/superpowers/plans/2026-05-03-phase-0-validation-spike.md`](docs/superpowers/plans/2026-05-03-phase-0-validation-spike.md) — Phase 0 plan (complete).
-4. [`docs/AdaptLearn_Spec.md`](docs/AdaptLearn_Spec.md) — original spec, v2 reference only.
-5. [`docs/AdaptLearn_DevPlan.md`](docs/AdaptLearn_DevPlan.md) — original dev plan, v2 reference only.
-6. [`CLAUDE.md`](CLAUDE.md) — agent guardrails and repo conventions.
-
-If docs conflict, the design doc wins. Surface the conflict — don't silently pick.
-
-## Repo Layout
-
-```
-Project_Apt/
-├── docs/
-│   ├── superpowers/specs/      Design doc (source of truth)
-│   ├── superpowers/plans/      Phase implementation plans
-│   ├── AdaptLearn_Spec.md      Original spec (v2 reference)
-│   └── AdaptLearn_DevPlan.md   Original dev plan (v2 reference)
-├── spike/                      Phase 0 validation spike (preserved)
-├── frontend/                   Vue 3 + Vite + PrimeVue + Pinia
-├── backend/                    FastAPI + SQLite + ChromaDB
-│   ├── main.py
-│   ├── agent/                  tutor.py, prompts.py, tools.py
-│   ├── routes/                 chat.py, sessions.py, upload.py, profile.py
-│   ├── services/               profile, retrieval, ingestion, summary, rate_limit
-│   ├── db/                     models.py, database.py (SQLAlchemy ORM)
-│   ├── contracts/              GENERATED Pydantic DTOs (do not edit; see docs/api/openapi.yaml)
-│   ├── scripts/gen_contracts.py  Codegen wrapper for contracts/
-│   ├── lib/                    keyword_index.py, chunking.py
-│   └── tests/
-├── data/                       Persisted volumes (sqlite, uploads, chroma)
-├── docker-compose.yml
-└── .github/workflows/ci.yml    pytest + vitest (+ playwright from Phase 3)
-```
+No Firebase. No ADK. No cloud lock-in.
 
 ## Quick Start
 
-### Full stack (Docker, recommended)
+### Docker (recommended)
 
 ```bash
 cp .env.example .env          # then fill in GEMINI_API_KEY
 docker compose up             # add --build after Dockerfile or deps changes
 ```
 
-- Frontend: http://localhost:5173
-- Backend API: http://localhost:8000 (health: `/health`, chat: `POST /api/chat`)
-- ChromaDB: http://localhost:8001
+Then visit:
+
+- Frontend → http://localhost:5173
+- Backend API → http://localhost:8000 (health: `/health`, chat: `POST /api/chat`)
+- ChromaDB → http://localhost:8001
 
 Common variants:
 
 ```bash
-docker compose up -d             # detached
-docker compose up backend        # backend + chromadb only
-docker compose logs -f backend
-docker compose exec backend pytest -v
-docker compose down              # stop; data/ persists
-docker compose down -v           # also drop named volumes
+docker compose up -d                       # detached
+docker compose up backend                  # backend + chromadb only
+docker compose logs -f backend             # tail backend
+docker compose exec backend pytest -v      # run tests inside container
+docker compose down                        # stop; ./data persists
+docker compose down -v                     # also drop named volumes
 ```
 
-Bind mount: `./data` ↔ `/data` in the backend container. SQLite DB, uploads, and Chroma persistence all live there and survive restarts. Detailed docker reference: [`backend/README.md`](backend/README.md#docker).
+Bind mount `./data` ↔ `/data`: SQLite, uploads, and Chroma persistence all live there and survive restarts. Detailed reference: [`backend/README.md`](backend/README.md#docker).
 
 ### Local development (no Docker)
 
@@ -88,7 +124,7 @@ pip install -e .[dev]
 uvicorn main:app --reload
 ```
 
-Or from repo root: `uvicorn main:app --reload --app-dir backend`. `config.py` anchors `.env` and `data/` paths to the repo root, so cwd no longer matters. `data/app.db`, `data/chroma/`, `data/uploads/` auto-create on first boot.
+Or from repo root: `uvicorn main:app --reload --app-dir backend`. `config.py` anchors `.env` and `data/` to the repo root, so cwd doesn't matter. `data/app.db`, `data/chroma/`, `data/uploads/` auto-create on first boot.
 
 **Frontend** — from `frontend/`:
 
@@ -97,6 +133,19 @@ npm install
 cp .env.example .env.local       # adjust VITE_API_BASE_URL if backend not on :8000
 npm run dev
 ```
+
+## Configuration
+
+Backend reads `.env` at the repo root (mounted into the container via `env_file`):
+
+| Var | Purpose |
+|---|---|
+| `GEMINI_API_KEY` | LiteLLM credential for Gemini |
+| `MODEL` | Chat model id (default `gemini/gemini-3.1-flash-lite`) |
+| `EMBEDDING_MODEL` | Embedding model id (default `gemini-embedding-2`) |
+| `DAILY_CAP` | Per-user daily request cap (rate limiter) |
+
+Container-only overrides set in `docker-compose.yml`: `DATABASE_URL`, `CHROMA_HOST`, `CHROMA_PORT`.
 
 ## Common Commands
 
@@ -115,70 +164,63 @@ npm run dev
 | Frontend unit tests | from `frontend/`: `npm run test:unit -- --run` |
 | Lint / format | from `frontend/`: `npm run lint` / `npm run format` |
 
-## Environment
+## Repository Layout
 
-Backend reads `.env` at the repo root (mounted into the container via `env_file`):
+```
+Project_Apt/
+├── docs/
+│   ├── superpowers/specs/      Design doc (source of truth)
+│   ├── superpowers/plans/      Phase implementation plans
+│   ├── api/openapi.yaml        API contract (Pydantic codegen source)
+│   ├── deploy/ngrok.md         Public demo deploy guide
+│   ├── screencast/             Walkthrough script + recorded video
+│   ├── AdaptLearn_Spec.md      Original spec (v2 reference)
+│   └── AdaptLearn_DevPlan.md   Original dev plan (v2 reference)
+├── spike/                      Phase 0 validation spike (preserved)
+├── frontend/                   Vue 3 + Vite + PrimeVue + Pinia
+├── backend/                    FastAPI + SQLite + ChromaDB
+│   ├── main.py
+│   ├── agent/                  tutor.py, prompts.py, tools.py
+│   ├── routes/                 chat.py, sessions.py, upload.py, profile.py
+│   ├── services/               profile, retrieval, ingestion, summary, rate_limit
+│   ├── db/                     models.py, database.py (SQLAlchemy ORM)
+│   ├── contracts/              GENERATED Pydantic DTOs (do not edit — see docs/api/openapi.yaml)
+│   ├── scripts/gen_contracts.py  Codegen wrapper for contracts/
+│   ├── lib/                    keyword_index.py, chunking.py
+│   └── tests/
+├── data/                       Persisted volumes (sqlite, uploads, chroma)
+├── docker-compose.yml
+├── docker-compose.prod.yml
+└── .github/workflows/ci.yml    pytest + vitest + playwright
+```
 
-| Var | Purpose |
+## How it was built
+
+AdaptLearn was built in six tightly scoped phases. Each phase had a written plan, a verification step, and didn't start until the previous one passed:
+
+| Phase | Scope |
 |---|---|
-| `GEMINI_API_KEY` | LiteLLM credential for Gemini 2.5 Pro |
-| `MODEL` | LLM model id (default `gemini/gemini-2.5-pro`) |
-| `DAILY_CAP` | Per-user daily request cap (rate limiter) |
+| 0 | Validation spike — profile differentiation confirmed on a thin slice before committing to the full design |
+| 1 | Scaffold + docker + chat loop + CI baseline |
+| 2 | Three tools + mid-profile + tool-call reliability checkpoint (`update_topic_profile` ≥85%) |
+| 3 | Sessions CRUD + summary service + resume + Playwright intro |
+| 4 | PDF upload + ChromaDB ingestion + RAG + citations |
+| 5 | ProfileView + visual redesign + deploy + screencast |
 
-Container-only overrides (set in `docker-compose.yml`): `DATABASE_URL`, `CHROMA_HOST`, `CHROMA_PORT`.
+Reliability gates were real: if a tool-call success rate fell below 85% on the checkpoint, the rule was up to three prompt iterations, then a model swap to `anthropic/claude-sonnet-4-6`. The bar applied to both `update_topic_profile` (Phase 2) and `focus_target_gap` clearing (Phase 3).
 
-## Architecture (highlights)
+## Documentation
 
-One **TutorAgent** via LiteLLM direct. Three tools:
+Read in this order before non-trivial changes:
 
-- `retrieve_chunks(session_id, query, k=5)` — ChromaDB vector search.
-- `update_topic_profile(...)` — Pydantic-validated patch over the learner's topic profile.
-- `record_learning_event(session_id, gap_tested, question, correct)` — logs check-questions; incorrect retest on a mastered concept demotes it server-side.
+1. [`docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md`](docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md) — **primary source of truth.** Supersedes everything below.
+2. [`docs/api/openapi.yaml`](docs/api/openapi.yaml) — **API contract source of truth.** Pydantic models under `backend/contracts/` are generated from this; never hand-edit the generated package. Regenerate with `python backend/scripts/gen_contracts.py`.
+3. [`docs/superpowers/plans/2026-05-03-phase-0-validation-spike.md`](docs/superpowers/plans/2026-05-03-phase-0-validation-spike.md) — Phase 0 validation plan.
+4. [`docs/AdaptLearn_Spec.md`](docs/AdaptLearn_Spec.md) — original spec (v2 reference only).
+5. [`docs/AdaptLearn_DevPlan.md`](docs/AdaptLearn_DevPlan.md) — original dev plan (v2 reference only).
+6. [`CLAUDE.md`](CLAUDE.md) — agent guardrails and repo conventions.
 
-**Focus-clear guard rail:** when the agent clears `focus_target_gap` with `focus_clear_reason="tested_correct"`, the server verifies a correct `LearningEvent` was logged that turn. Cannot silently clear focus.
-
-**Retrieval arbitration:** server-side keyword check injects `retrieval_required` into the prompt; the agent decides whether to call `retrieve_chunks`.
-
-System prompt = immutable rules (`agent/prompts.py`) + dynamic context rebuilt per turn. Kept separate for prompt-cache reuse. See design doc §3.3 for full detail.
-
-## Phase Plan
-
-| Phase | Scope | Status |
-|---|---|---|
-| 0 | Validation spike — profile differentiation confirmed | Complete |
-| 1 | Scaffold + docker + chat loop + CI baseline | Complete |
-| 2 | 3 tools + mid-profile + tool-call reliability checkpoint | Complete |
-| 3 | Sessions CRUD + summary service + resume | Complete |
-| 4 | PDF upload + ChromaDB ingestion + RAG + citations | Complete |
-| 5 | ProfileView (read-only) + polish + deploy + screencast | Closeout (`phase/5-finish-closeout`) |
-
-LLM reliability checkpoints — Phase 2: `update_topic_profile` ≥85%. Phase 3: `focus_target_gap` clearing ≥85%. Below threshold → 2-3 prompt iterations, then swap to `anthropic/claude-sonnet-4-6`.
-
-**One phase at a time. No combining or jumping ahead.**
-
-## Public Release Checklist
-
-Final manual steps once Phase 5 CI is green:
-
-1. **Clear stale ChromaDB data** before bringing up the prod stack — chromadb 1.5.9 cannot read 0.5.x SQLite files:
-   ```bash
-   rm -rf data/chroma/*
-   ```
-2. **Boot the prod stack** per [`docs/deploy/ngrok.md`](docs/deploy/ngrok.md):
-   ```bash
-   docker compose -f docker-compose.prod.yml up
-   ```
-3. **Record screencast** following [`docs/screencast/script.md`](docs/screencast/script.md) (9 scenes, 2-3 min). Save as `docs/screencast/adaptlearn-walkthrough.mp4`.
-4. **Run focus-clearing reliability checkpoint (§6.3)**:
-   ```bash
-   GEMINI_API_KEY=... python backend/scripts/reliability_focus_clear.py --runs 10
-   ```
-   Must be ≥85% per pattern. If any fail: iterate `agent/prompts.py` up to 3 times, then swap to `anthropic/claude-sonnet-4-6` per spec.
-5. **Push to public remote**:
-   ```bash
-   git remote add public <public-url>
-   git push public main
-   ```
+If docs conflict, the design doc wins. Surface the conflict — don't silently pick.
 
 ## Ground Rules
 
@@ -186,3 +228,7 @@ Final manual steps once Phase 5 CI is green:
 - Secrets in `.env` / `.env.local` (gitignored). Never commit keys.
 - Stop and report on any failed verification step.
 - Design doc (`docs/superpowers/specs/`) is source of truth.
+
+## License
+
+[MIT](LICENSE) — © 2026 calmxz
