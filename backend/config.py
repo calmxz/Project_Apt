@@ -17,8 +17,8 @@ class Settings(BaseSettings):
     )
 
     gemini_api_key: str = ""
-    model: str = "gemini/gemini-2.5-pro"
-    embedding_model: str = "gemini/text-embedding-004"
+    model: str = "gemini/gemini-3.1-flash-lite"
+    embedding_model: str = "gemini/gemini-embedding-2"
     daily_cap: int = 50
     database_url: str = f"sqlite:///{(_DATA_DIR / 'app.db').as_posix()}"
     chroma_host: str = "localhost"
