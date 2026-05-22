@@ -25,12 +25,6 @@
   --accent-coral-900: #4D1611;
   --accent-coral-950: #2B0A07;
 
-  /* Backwards-compat aliases (drop in Step 8) */
-  --accent-amber:      var(--accent-coral-500);
-  --accent-amber-soft: var(--accent-coral-300);
-  --accent-amber-tint: var(--accent-coral-100);
-  --accent-ink:        var(--accent-coral-700);
-
   /* Signal triad (independent from accent) */
   --signal-success: #22C55E;
   --signal-error:   #EF4444;
@@ -41,7 +35,6 @@
   --font-display: 'Bricolage Grotesque', system-ui, -apple-system, sans-serif;
   --font-sans:    'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono:    'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace;
-  --font-serif:   var(--font-display);
 
   --fs-display: clamp(2.5rem, 5.5vw, 3.75rem);
   --fs-h1: 1.875rem;

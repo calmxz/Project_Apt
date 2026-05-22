@@ -1,4 +1,6 @@
 <script setup>
+defineOptions({ name: 'AppLogo' })
+
 defineProps({
   size: {
     type: String,
