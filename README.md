@@ -53,7 +53,7 @@ Most "AI tutors" today are a chat box bolted onto a generic LLM. They ask the sa
 - **Self-learners** working through a textbook who want to be quizzed adaptively, not linearly.
 - **Educators / EdTech researchers** interested in tool-augmented LLM tutors with verifiable state.
 
-**Why it exists.** As a 7-week capstone-style project, AdaptLearn is a demonstration of how structured tool calls and server-side guard rails can keep an LLM honest — no hallucinated mastery, no silent context loss, no fabricated citations.
+**Why it exists.** As a 7-week project, AdaptLearn is a demonstration of how structured tool calls and server-side guard rails can keep an LLM honest — no hallucinated mastery, no silent context loss, no fabricated citations.
 
 ## Features
 
