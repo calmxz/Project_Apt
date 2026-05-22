@@ -1,25 +1,26 @@
 <template>
   <aside class="ended-banner" data-testid="session-ended-banner">
+    <span class="banner-icon" aria-hidden="true">
+      <i class="pi pi-clock" />
+    </span>
     <div class="banner-text">
-      <span class="folio">archived</span>
       <p class="line">This session ended {{ formatDate(endedAt) }}.</p>
       <p class="sub">Read-only. Continue the topic in a new session to keep the profile.</p>
     </div>
-    <Button
-      label="Resume topic"
-      icon="pi pi-refresh"
-      icon-pos="right"
-      data-testid="session-resume"
-      :loading="loading"
+    <button
+      type="button"
       class="resume-btn"
+      data-testid="session-resume"
+      :disabled="loading"
       @click="$emit('resume')"
-    />
+    >
+      <span>{{ loading ? 'Resuming…' : 'Resume topic' }}</span>
+      <i class="pi pi-refresh" aria-hidden="true" />
+    </button>
   </aside>
 </template>
 
 <script setup>
-import Button from 'primevue/button'
-
 import { formatDate } from '../utils/formatDate.js'
 
 defineProps({
@@ -34,61 +35,73 @@ defineEmits(['resume'])
 .ended-banner {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1.5rem;
-  padding: 1rem 1.25rem;
-  border: 1px solid var(--color-border-strong);
-  border-left: 3px solid var(--color-accent);
-  background: var(--color-surface);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-paper);
+  gap: 0.875rem;
+  padding: 0.875rem 1.125rem;
+  background: rgba(255, 176, 32, 0.12);
+  border: 1px solid rgba(255, 176, 32, 0.35);
+  border-radius: var(--radius-lg);
   flex-wrap: wrap;
+}
+
+.banner-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--radius-pill);
+  background: var(--signal-warning);
+  color: #2A1F00;
+  font-size: 1rem;
+  flex-shrink: 0;
 }
 
 .banner-text {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.125rem;
   min-width: 0;
-}
-
-.folio {
-  font-family: var(--font-mono);
-  font-size: var(--fs-label);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  color: var(--color-text-faint);
+  flex: 1;
 }
 
 .line {
   margin: 0;
-  font-family: var(--font-serif);
-  font-size: 1.0625rem;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1rem;
   color: var(--color-heading);
+  letter-spacing: var(--tracking-tight);
 }
 
 .sub {
   margin: 0;
   color: var(--color-text-muted);
-  font-size: var(--fs-caption);
+  font-size: 0.8125rem;
 }
 
-.resume-btn :deep(.p-button),
-.resume-btn.p-button {
-  background: var(--color-heading);
-  color: var(--color-background);
-  border: 1px solid var(--color-heading);
-  font-family: var(--font-sans);
-  font-weight: 500;
+.resume-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   padding: 0.5rem 1rem;
-  border-radius: var(--radius-sm);
-  transition: background 180ms ease;
+  border-radius: var(--radius-pill);
+  background: var(--signal-warning);
+  color: #2A1F00;
+  border: 0;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: transform var(--motion-fast) var(--motion-bounce), filter var(--motion-fast) ease;
 }
 
-.resume-btn :deep(.p-button):not(:disabled):hover,
-.resume-btn.p-button:not(:disabled):hover {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: var(--color-background);
+.resume-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+}
+
+.resume-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 </style>
