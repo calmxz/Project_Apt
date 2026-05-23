@@ -192,6 +192,23 @@ def test_get_single_ingestion_status_null_when_no_documents(
     assert r.json()["ingestion_status"] is None
 
 
+def test_post_end_404_for_wrong_user(client, db_session, seeded_user):
+    """H-4 regression: POST /sessions/{id}/end must 404 when ?user_id does
+    not match the session owner (no silent cross-user session termination)."""
+    db_session.add(User(id="other"))
+    db_session.add(
+        SessionModel(
+            id="s_end_other",
+            user_id=USER_ID,
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.commit()
+    r = client.post("/api/sessions/s_end_other/end?user_id=other")
+    assert r.status_code == 404
+
+
 def test_post_end_idempotent_when_already_ended(client, db_session, seeded_user):
     ended_at = datetime.now(timezone.utc) - timedelta(hours=1)
     db_session.add(

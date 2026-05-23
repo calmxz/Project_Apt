@@ -120,3 +120,29 @@ def test_chroma_exception_returns_failed(session, ctx, chroma, mock_embed, db_se
     assert result.ok is False
     assert result.status == "failed"
     assert result.error == "retrieval_failed"
+
+
+def test_chroma_exception_does_not_leak_internal_message(
+    session, ctx, chroma, mock_embed, db_session, monkeypatch
+):
+    """H-5 regression: a future change that reintroduces str(e) into the
+    error field would leak server internals (file paths, traceback fragments,
+    or attacker-controlled input echoes) into chat tool-call traces. Lock
+    the generic literal and assert the sentinel exception text is absent."""
+    _seed_ready_doc(db_session, chroma)
+
+    sentinel = "SENSITIVE_INTERNAL_PATH_/srv/secret/keys.db"
+
+    def boom(*a, **k):
+        raise RuntimeError(sentinel)
+
+    monkeypatch.setattr(
+        "services.retrieval_service.chroma_client.get_chroma",
+        lambda: SimpleNamespace(get_or_create_collection=boom),
+    )
+    result = retrieval_service.retrieve(
+        db_session, ctx, RetrieveChunksArgs(session_id=SESSION_ID, query="q", k=5)
+    )
+    assert result.error == "retrieval_failed"
+    serialized = result.model_dump_json()
+    assert sentinel not in serialized, "raw exception message leaked into ToolResult"

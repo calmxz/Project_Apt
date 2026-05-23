@@ -7,6 +7,15 @@
 
 > **Important context:** the v1 design (`docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md:23`) explicitly locks `Auth | None (localStorage userId) | v1 scope`. Findings therefore down-rank or omit "Firebase ID-token verification missing" as such; the audit instead targets cost-abuse, input bounds, soft cross-user data hygiene, CORS, path traversal, and error leakage. See `Notes on scope calibration` at the end.
 
+> **Scope recalibration (2026-05-23, Phase 6):** v1 release-target shifted from
+> trusted-friends to public deploy after the audit landed. Phase 6 hardens CI;
+> Phase 7 will add auth + LLM cost circuit-breaker; Phase 8 deploys to Fly.io.
+> Findings below stand at their original severities — the public-deploy threat
+> model raises several from "low at this scale" to material, but the
+> resolutions remain valid and are now regression-locked by Phase 6 tests +
+> CI security jobs (pip-audit, npm audit, gitleaks, trivy, hadolint, bandit,
+> semgrep, CodeQL). See `docs/security/CI_INVENTORY.md` for the tool map.
+
 Findings use IDs (`H-1`, `M-2`, …) referenced by `docs/security/SECURITY_FIXPLAN.md`.
 
 ---
@@ -35,6 +44,12 @@ Phase summary:
 - **Phase 2** (`212b105`) — maxLength caps, upload size limit, filename traversal hardening, ownership enforcement.
 - **Phase 3** (`9c96047`) — prompt-injection wrap, non-root container, LiteLLM bump to 1.85.1.
 - **Phase 4** (`f819a41`) — structured error logs (env-gated `exc_info`), speculative `.gitignore` patterns.
+
+> Regression-locked in **Phase 6** (`phase/6-ci-security-tests`) — H-3 cap
+> matrix, H-4 ownership-404 (sessions + profile), H-5 generic-error sanitization,
+> and M-3 chunk wrapper now fail CI if a future refactor reintroduces the
+> finding. CI security jobs (pip-audit, npm audit, gitleaks, trivy, hadolint,
+> bandit, semgrep, CodeQL) catch new regressions across deps, secrets, and SAST.
 
 ---
 
