@@ -21,8 +21,7 @@ class Settings(BaseSettings):
     embedding_model: str = "gemini-embedding-2"
     daily_cap: int = 50
     database_url: str = f"sqlite:///{(_DATA_DIR / 'app.db').as_posix()}"
-    chroma_host: str = "localhost"
-    chroma_port: int = 8001
+    embedding_dim: int = 768
     uploads_path: str = (_DATA_DIR / "uploads").as_posix()
     llm_stub: bool = False
     cors_origins: str = "http://localhost:5173"
@@ -47,7 +46,6 @@ class Settings(BaseSettings):
 settings = Settings()
 
 # Ensure runtime directories exist (data/uploads/ and parent of the sqlite file).
-# Chroma persistence lives in the chromadb container's bind mount, not on the backend host.
 for _p in (
     Path(settings.uploads_path),
     Path(settings.database_url.replace("sqlite:///", "", 1)).parent

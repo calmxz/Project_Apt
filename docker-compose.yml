@@ -1,9 +1,9 @@
-services:
-  # Only ChromaDB runs in Docker. Frontend (npm run dev) and backend (uvicorn) run natively.
-  # Backend connects via chromadb.HttpClient(host=localhost, port=8001).
-  chromadb:
-    image: chromadb/chroma:1.5.9
-    ports:
-      - "8001:8000"
-    volumes:
-      - ./data/chroma:/chroma/chroma
+# Phase 7+: backend uses Supabase-managed Postgres (with pgvector) directly.
+# No infra is run in Docker for local dev; frontend (`npm run dev`) and
+# backend (`uvicorn`) run natively. This file is kept as a no-op anchor so
+# the existing `docker compose up` muscle-memory doesn't bit-rot — see
+# `docker-compose.prod.yml` for the actual deploy stack.
+#
+# Pre-Phase-7 this file ran a ChromaDB container. ChromaDB has been removed.
+
+services: {}

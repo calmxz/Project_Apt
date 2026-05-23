@@ -70,7 +70,7 @@ User-side prereqs before code lands:
 - `openapi.yaml`: add `securitySchemes.BearerAuth` + apply to all auth-required paths. Drop `user_id` request params. Regen contracts.
 - Update every test that passes `user_id` to instead inject a mocked dependency (override `current_user_id` in test client fixture).
 
-### 4. Backend — pgvector replaces Chroma
+### 4. Backend — pgvector replaces Chroma — SHIPPED 2026-05-23
 
 - `backend/services/retrieval_service.py`: replace Chroma client with raw SQLAlchemy + pgvector query. Schema:
   ```sql

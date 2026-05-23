@@ -9,12 +9,21 @@ class Base(DeclarativeBase):
     pass
 
 
-_is_sqlite = settings.database_url.startswith("sqlite:")
+def _normalized_url(url: str) -> str:
+    """Force psycopg3 driver for bare postgresql:// URLs. SQLAlchemy defaults
+    to psycopg2 otherwise, which we don't ship. Idempotent for explicit drivers."""
+    if url.startswith("postgresql://"):
+        return "postgresql+psycopg://" + url[len("postgresql://"):]
+    return url
+
+
+_db_url = _normalized_url(settings.database_url)
+_is_sqlite = _db_url.startswith("sqlite:")
 _engine_kwargs: dict = {}
 if _is_sqlite:
     _engine_kwargs["connect_args"] = {"check_same_thread": False}
 
-engine = create_engine(settings.database_url, **_engine_kwargs)
+engine = create_engine(_db_url, **_engine_kwargs)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

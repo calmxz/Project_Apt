@@ -9,7 +9,7 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 from config import settings
-from db.database import Base
+from db.database import Base, _normalized_url
 import db.models  # noqa: F401  (registers all models on Base.metadata)
 
 config = context.config
@@ -17,7 +17,7 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-config.set_main_option("sqlalchemy.url", settings.database_url)
+config.set_main_option("sqlalchemy.url", _normalized_url(settings.database_url))
 
 target_metadata = Base.metadata
 
