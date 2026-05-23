@@ -7,7 +7,13 @@ on:
       - 'backend/**'
       - 'docker-compose.yml'
       - '.github/workflows/e2e.yml'
+  push:
+    branches: [main]
   workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   playwright:

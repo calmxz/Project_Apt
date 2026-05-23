@@ -14,7 +14,7 @@ export default mergeConfig(
         reporter: ['text', 'html'],
         include: ['src/**/*.{js,vue}'],
         exclude: ['src/**/*.spec.js', 'src/**/__tests__/**', 'e2e/**', 'src/main.js'],
-        thresholds: { lines: 50, statements: 50, functions: 50, branches: 40 },
+        thresholds: { lines: 80, statements: 80, functions: 70, branches: 65 },
       },
     },
   }),
