@@ -329,7 +329,7 @@ watch(
 
 onMounted(async () => {
   try {
-    await store.loadSession(props.id)
+    await store.loadSession(props.id, user.userId)
   } catch (e) {
     if (e?.status === 404) {
       notFound.value = true
@@ -398,7 +398,7 @@ async function retryLastMessage() {
 
 async function end() {
   try {
-    const resp = await store.endSession()
+    const resp = await store.endSession(user.userId)
     const summary = resp?.summary
     summaryKind.value = summary?.kind || 'summary'
     summaryText.value =
@@ -422,7 +422,7 @@ async function onUploadFile(ev) {
   uploading.value = true
   uploadStatus.value = { kind: 'pending', text: `Uploading ${file.name}…` }
   try {
-    const resp = await uploadPdf({ sessionId: props.id, file })
+    const resp = await uploadPdf({ userId: user.userId, sessionId: props.id, file })
     await pollUploadStatus(resp.document_id, file.name)
   } catch (e) {
     uploadStatus.value = {
@@ -438,7 +438,7 @@ async function pollUploadStatus(documentId, filename) {
   for (let i = 0; i < 30; i += 1) {
     let s
     try {
-      s = await getUploadStatus(documentId)
+      s = await getUploadStatus(documentId, user.userId)
     } catch (e) {
       uploadStatus.value = { kind: 'failed', text: `Upload status unavailable: ${friendlyError(e)}` }
       return
@@ -466,7 +466,7 @@ async function resume() {
   if (!store.currentSession) return
   resuming.value = true
   try {
-    await store.reopenSession(store.currentSession.id)
+    await store.reopenSession(store.currentSession.id, user.userId)
   } catch {
     // store.error already populated
   } finally {

@@ -93,17 +93,35 @@ async def run(
             )
 
             if tc.function.name == "retrieve_chunks" and result.ok:
-                for ch in (result.data or {}).get("chunks", []):
+                raw_chunks = (result.data or {}).get("chunks", [])
+                for ch in raw_chunks:
                     citations.append(
                         Citation(doc_id=str(ch.get("doc_id", "")), text=ch.get("text", ""))
                     )
+                wrapped_chunks = [
+                    {
+                        **ch,
+                        "text": (
+                            f"<document_excerpt id={str(ch.get('doc_id', ''))!r}>"
+                            f"{ch.get('text', '')}"
+                            f"</document_excerpt>"
+                        ),
+                    }
+                    for ch in raw_chunks
+                ]
+                tool_payload = result.model_copy(
+                    update={"data": {**(result.data or {}), "chunks": wrapped_chunks}}
+                )
+                tool_content = json.dumps(tool_payload.model_dump())
+            else:
+                tool_content = json.dumps(result.model_dump())
 
             full.append(
                 {
                     "role": "tool",
                     "tool_call_id": tc.id,
                     "name": tc.function.name,
-                    "content": json.dumps(result.model_dump()),
+                    "content": tool_content,
                 }
             )
 

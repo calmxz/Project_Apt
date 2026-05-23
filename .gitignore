@@ -7,6 +7,12 @@ frontend/.env.local
 frontend/.env.*.local
 # .env.example files DO get committed (they're templates with no secrets).
 !**/.env.example
+# Speculative — block common credential/cert file types (F4.2, SECURITY_REVIEW L-2).
+*.key
+*.pem
+*.crt
+service-account*.json
+firebase-*.json
 .claude/
 
 reports/

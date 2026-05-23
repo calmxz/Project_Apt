@@ -156,7 +156,22 @@ def test_list_returns_tz_aware_timestamps(client, db_session, seeded_user):
 
 
 def test_get_single_404_missing(client):
-    r = client.get("/api/sessions/does_not_exist")
+    r = client.get(f"/api/sessions/does_not_exist?user_id={USER_ID}")
+    assert r.status_code == 404
+
+
+def test_get_single_404_for_wrong_user(client, db_session, seeded_user):
+    db_session.add(User(id="other"))
+    db_session.add(
+        SessionModel(
+            id="s_owned",
+            user_id=USER_ID,
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.commit()
+    r = client.get("/api/sessions/s_owned?user_id=other")
     assert r.status_code == 404
 
 
@@ -172,7 +187,7 @@ def test_get_single_ingestion_status_null_when_no_documents(
         )
     )
     db_session.commit()
-    r = client.get("/api/sessions/s1")
+    r = client.get(f"/api/sessions/s1?user_id={USER_ID}")
     assert r.status_code == 200
     assert r.json()["ingestion_status"] is None
 
@@ -192,7 +207,7 @@ def test_post_end_idempotent_when_already_ended(client, db_session, seeded_user)
     )
     db_session.commit()
 
-    r = client.post("/api/sessions/s1/end")
+    r = client.post(f"/api/sessions/s1/end?user_id={USER_ID}")
     assert r.status_code == 200
     body = r.json()
     assert body["summary"] == {"kind": "summary", "text": "existing summary"}
@@ -216,7 +231,7 @@ def test_post_end_returns_no_exchanges_kind_for_empty_session(
     )
     db_session.commit()
 
-    r = client.post("/api/sessions/s_empty/end")
+    r = client.post(f"/api/sessions/s_empty/end?user_id={USER_ID}")
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["summary"]["kind"] == "no_exchanges"
@@ -238,7 +253,7 @@ def test_get_session_returns_messages_array(client, db_session, seeded_user):
     db_session.add(ChatMessage(session_id="s_msgs", role="assistant", content="hello back"))
     db_session.commit()
 
-    r = client.get("/api/sessions/s_msgs")
+    r = client.get(f"/api/sessions/s_msgs?user_id={USER_ID}")
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["id"] == "s_msgs"
@@ -260,17 +275,33 @@ def test_reopen_flips_ended_at_to_null(client, db_session, seeded_user):
     )
     db_session.commit()
 
-    r = client.post("/api/sessions/s_re/reopen")
+    r = client.post(f"/api/sessions/s_re/reopen?user_id={USER_ID}")
     assert r.status_code == 200, r.text
     assert r.json()["ended_at"] is None
     # idempotent: reopening an already-active session is a no-op
-    r2 = client.post("/api/sessions/s_re/reopen")
+    r2 = client.post(f"/api/sessions/s_re/reopen?user_id={USER_ID}")
     assert r2.status_code == 200
     assert r2.json()["ended_at"] is None
 
 
 def test_reopen_404_when_missing(client):
-    r = client.post("/api/sessions/no_such/reopen")
+    r = client.post(f"/api/sessions/no_such/reopen?user_id={USER_ID}")
+    assert r.status_code == 404
+
+
+def test_reopen_404_for_wrong_user(client, db_session, seeded_user):
+    db_session.add(User(id="other"))
+    db_session.add(
+        SessionModel(
+            id="s_re_other",
+            user_id=USER_ID,
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+            ended_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.commit()
+    r = client.post("/api/sessions/s_re_other/reopen?user_id=other")
     assert r.status_code == 404
 
 
@@ -292,7 +323,7 @@ def test_post_end_generates_summary(
     )
     db_session.commit()
 
-    r = client.post("/api/sessions/s1/end")
+    r = client.post(f"/api/sessions/s1/end?user_id={USER_ID}")
     assert r.status_code == 200
     body = r.json()
     assert body["summary"] == {"kind": "summary", "text": "learner covered joins"}

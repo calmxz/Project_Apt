@@ -2,7 +2,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -153,9 +153,13 @@ def _build_end_summary(db: Session, session_id: str, text: str) -> SessionEndSum
 
 
 @router.get("/sessions/{session_id}", response_model=SessionDetail)
-def get_session(session_id: str, db: Session = Depends(get_db)):
+def get_session(
+    session_id: str,
+    user_id: str = Query(...),
+    db: Session = Depends(get_db),
+):
     row = db.get(SessionModel, session_id)
-    if row is None:
+    if row is None or row.user_id != user_id:
         raise HTTPException(status_code=404, detail="session not found")
     return SessionDetail(
         id=row.id,
@@ -170,9 +174,13 @@ def get_session(session_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/sessions/{session_id}/end", response_model=SessionEndResponse)
-async def end_session(session_id: str, db: Session = Depends(get_db)):
+async def end_session(
+    session_id: str,
+    user_id: str = Query(...),
+    db: Session = Depends(get_db),
+):
     row = db.get(SessionModel, session_id)
-    if row is None:
+    if row is None or row.user_id != user_id:
         raise HTTPException(status_code=404, detail="session not found")
 
     if row.ended_at is not None:
@@ -193,9 +201,13 @@ async def end_session(session_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/sessions/{session_id}/reopen", response_model=SessionResponse)
-def reopen_session(session_id: str, db: Session = Depends(get_db)):
+def reopen_session(
+    session_id: str,
+    user_id: str = Query(...),
+    db: Session = Depends(get_db),
+):
     row = db.get(SessionModel, session_id)
-    if row is None:
+    if row is None or row.user_id != user_id:
         raise HTTPException(status_code=404, detail="session not found")
     if row.ended_at is not None:
         row.ended_at = None

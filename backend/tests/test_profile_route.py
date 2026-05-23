@@ -30,7 +30,14 @@ def seed_session(db_session):
 
 
 def test_profile_route_404_when_missing(client):
-    r = client.get("/api/profile/does_not_exist")
+    r = client.get(f"/api/profile/does_not_exist?user_id={USER_ID}")
+    assert r.status_code == 404
+
+
+def test_profile_route_404_for_wrong_user(client, db_session, seed_session):
+    db_session.add(User(id="other"))
+    db_session.commit()
+    r = client.get(f"/api/profile/{SESSION_ID}?user_id=other")
     assert r.status_code == 404
 
 
@@ -39,7 +46,7 @@ def test_profile_route_empty_defaults(client, db_session):
     db_session.flush()
     db_session.add(SessionModel(id=SESSION_ID, user_id=USER_ID, topic="sql"))
     db_session.commit()
-    r = client.get(f"/api/profile/{SESSION_ID}")
+    r = client.get(f"/api/profile/{SESSION_ID}?user_id={USER_ID}")
     assert r.status_code == 200
     body = r.json()
     assert body["profile"]["knowledge_level"] is None
@@ -58,7 +65,7 @@ def test_profile_route_with_events_desc(client, db_session, seed_session):
             )
         )
     db_session.commit()
-    r = client.get(f"/api/profile/{SESSION_ID}")
+    r = client.get(f"/api/profile/{SESSION_ID}?user_id={USER_ID}")
     assert r.status_code == 200
     body = r.json()
     assert body["profile"]["knowledge_level"] == "beginner"

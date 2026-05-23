@@ -38,7 +38,10 @@ def _resolve_path(doc: Document) -> str:
     candidate = os.path.join(settings.uploads_path, f"{doc.id}_{doc.filename}")
     if os.path.exists(candidate):
         return candidate
-    return os.path.join(settings.uploads_path, doc.filename)
+    fallback = doc.filename
+    if "/" in fallback or "\\" in fallback or ".." in fallback:
+        raise ValueError(f"refusing unsafe filename in fallback: {fallback!r}")
+    return os.path.join(settings.uploads_path, fallback)
 
 
 def _extract_pages(path: str) -> list[tuple[int, str]]:
@@ -108,7 +111,11 @@ def run(document_id: int) -> None:
             doc.error = None
             db.commit()
         except Exception as e:
-            log.exception("ingestion failed for document %s", document_id)
+            log.error(
+                "ingestion failed",
+                extra={"err_type": type(e).__name__, "doc_id": document_id},
+                exc_info=settings.env != "prod",
+            )
             doc.status = "failed"
             doc.error = str(e)[:1000]
             db.commit()

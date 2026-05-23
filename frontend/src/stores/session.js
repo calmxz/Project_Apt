@@ -58,11 +58,11 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  async function loadSession(id) {
+  async function loadSession(id, userId) {
     loading.value = true
     error.value = null
     try {
-      const s = await sessionsApi.getSession(id)
+      const s = await sessionsApi.getSession(id, userId)
       currentSession.value = s
       currentSessionId.value = s.id
       messages.value = (s.messages || []).map((m) => ({
@@ -120,12 +120,12 @@ export const useSessionStore = defineStore('session', () => {
     dailyCapInfo.value = null
   }
 
-  async function endSession() {
+  async function endSession(userId) {
     if (!currentSessionId.value) throw new Error('no active session')
     loading.value = true
     error.value = null
     try {
-      const resp = await sessionsApi.endSession(currentSessionId.value)
+      const resp = await sessionsApi.endSession(currentSessionId.value, userId)
       const summaryText = resp?.summary?.text ?? ''
       if (currentSession.value) {
         currentSession.value.ended_at = resp.ended_at
@@ -144,11 +144,11 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  async function reopenSession(sessionId) {
+  async function reopenSession(sessionId, userId) {
     loading.value = true
     error.value = null
     try {
-      const resp = await sessionsApi.reopenSession(sessionId)
+      const resp = await sessionsApi.reopenSession(sessionId, userId)
       if (currentSession.value && currentSession.value.id === sessionId) {
         currentSession.value.ended_at = null
       }
