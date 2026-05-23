@@ -152,13 +152,17 @@ User-side prereqs before code lands:
 - `src/__tests__/authGuard.test.js`: no session → router pushes to `/login`.
 - `e2e/auth.spec.js` (Playwright): magic-link mocked via `page.route`. Login → app loads.
 
-### 10. Docs
+### 10. Docs — PARTIAL 2026-05-23 (post-T4 items deferred)
 
-- `CLAUDE.md` architecture diagram: drop `chromadb` service, add `postgres` (Supabase-managed, not in compose), update volume list.
-- `docs/auth/supabase-setup.md` (new): step-by-step Supabase project creation, env var population, JWKS URL, RLS not used (server validates).
-- `docs/db/postgres-pgvector-setup.md` (new): pgvector enable, `chunk_embeddings` schema, ivfflat tuning notes.
-- `docs/security/SECURITY_REVIEW.md`: H-4 (ownership 404) moved to "Resolved by Phase 7 auth — token-derived `user_id` makes spoofing impossible." Add Phase 7 closeout footer.
-- `docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md`: spec edit to flip `Auth | None (localStorage userId)` → `Auth | Supabase (JWT)`. Note Phase 7 as the change point.
+Shipped:
+- `docs/auth/supabase-setup.md` (new) — magic-link only, env var matrix, JWKS verification model, RLS-not-used rationale.
+- `docs/db/postgres-pgvector-setup.md` (new) — pgvector enable, `chunk_embeddings` schema, ivfflat tuning, `daily_cost_ledger` schema, local-test Postgres recipe.
+- `docs/security/SECURITY_REVIEW.md` — H-4 row annotated with Phase 7 hard-close; new Phase 7 close-out block added below the Phase 6 regression-lock note. Cost-cap call-out included.
+- `docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md` — Auth row flipped to `Supabase magic-link (JWT)` with Phase 7 change-point note; v2 backlog entry struck through with reference to new auth doc.
+- `CLAUDE.md` — Phase 7 row marked PARTIAL (auth + cost cap shipped, T4 pgvector pending) with link to new docs. NOTE: `CLAUDE.md` is gitignored in this repo (per `.gitignore:72`), so this edit is local-only — it benefits any further Claude Code runs in this working tree but won't propagate via `git pull`.
+
+Deferred until T4 lands (pgvector replaces ChromaDB):
+- `CLAUDE.md` architecture diagram + repo-layout chromadb references — keep ChromaDB references accurate until the migration lands; update in one pass post-T4 so the doc never describes a state the code doesn't match.
 
 ### 11. Verification
 

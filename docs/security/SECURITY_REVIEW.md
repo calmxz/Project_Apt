@@ -29,7 +29,7 @@ All 12 findings resolved on `security/audit-2026-05-23` across 4 phased commits.
 | H-1 | Unbounded paid embedding calls via `/api/upload`        | High     | Resolved | `b7ffa1e` |
 | H-2 | No upload file size limit                               | High     | Resolved | `212b105` |
 | H-3 | Unbounded string inputs across Pydantic request models  | High     | Resolved | `212b105` |
-| H-4 | No ownership check on session/document endpoints        | High     | Resolved | `212b105` |
+| H-4 | No ownership check on session/document endpoints        | High     | Resolved | `212b105` (soft, 404 on `user_id` mismatch) + Phase 7 hard-close (token-derived `user_id`, spoofing impossible) |
 | H-5 | Raw exception strings returned to clients               | High     | Resolved | `b7ffa1e` |
 | M-1 | CORS overly permissive                                  | Medium   | Resolved | `b7ffa1e` |
 | M-2 | Path-traversal escape hatch in upload + ingestion       | Medium   | Resolved | `212b105` |
@@ -50,6 +50,21 @@ Phase summary:
 > and M-3 chunk wrapper now fail CI if a future refactor reintroduces the
 > finding. CI security jobs (pip-audit, npm audit, gitleaks, trivy, hadolint,
 > bandit, semgrep, CodeQL) catch new regressions across deps, secrets, and SAST.
+
+> **Phase 7 close-out (`phase/7-auth-postgres-pgvector-costcap`):**
+> - H-4 graduates from soft-resolution (`user_id` body-param + 404 on mismatch)
+>   to hard-resolution. `backend/services/auth.py` now derives `user_id` from
+>   the Supabase JWT `sub` claim via JWKS validation; no client-controlled
+>   `user_id` reaches any route. Spoofing is no longer a code path that exists.
+> - New control class introduced: **LLM cost cap** (daily soft/hard ceiling per
+>   user, UTC reset). Routes return 429 `daily_cost_cap_reached` envelope past
+>   hard cap; `X-Cost-Warning` header past soft cap. Mid-turn tutor loop
+>   short-circuits if a single LLM call breaches hard cap. Closes the residual
+>   H-1/H-3 cost-abuse exposure that rate-limit alone could not bound (a single
+>   in-budget request can still chain MAX_ITERS=8 paid acompletions).
+> - Setup: `docs/auth/supabase-setup.md`, `docs/db/postgres-pgvector-setup.md`.
+> - Pending Phase 7: pgvector retrieval migration (T4) — ChromaDB notes below
+>   remain accurate until that lands.
 
 ---
 

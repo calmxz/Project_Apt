@@ -20,7 +20,7 @@ This document supersedes `AdaptLearn_Spec.md` and `AdaptLearn_DevPlan.md` for v1
 | Embeddings | Gemini text-embedding-004 (free, 768-dim) | Same |
 | Backend | FastAPI + SQLite + ChromaDB, dockerized | User said no Firebase; local-first reproducible |
 | Frontend | Vue 3 + Vite + PrimeVue + Pinia | Portfolio recognizability |
-| Auth | None (localStorage userId) | v1 scope |
+| Auth | Supabase magic-link (JWT) — was `None (localStorage userId)` pre-Phase 7 | Public-deploy retarget (Phase 7, 2026-05-23) |
 | Streaming | None | v1 scope |
 | CI | Full pyramid: pytest + Vitest + Playwright + GitHub Actions | Portfolio bullet + regression safety |
 
@@ -427,7 +427,7 @@ Also during Week 1: docker-compose smoke test, ChromaDB integration smoke test, 
 
 ## 11. Out of scope (v2 backlog)
 
-- User auth (currently localStorage userId)
+- ~~User auth (currently localStorage userId)~~ — landed in Phase 7 (Supabase magic-link JWT). See `docs/auth/supabase-setup.md`.
 - Streaming responses
 - Asymmetric profile promotion
 - Canonicalization with embeddings
