@@ -136,7 +136,7 @@ describe('HomeView', () => {
     await wrapper.get('[data-testid="home-tab-ended"]').trigger('click')
     await wrapper.get('[data-testid="home-resume-e1"]').trigger('click')
     await flushPromises()
-    expect(reopenSpy).toHaveBeenCalledWith('e1')
+    expect(reopenSpy).toHaveBeenCalledWith('e1', 'u1')
     expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'e1' } })
   })
 
@@ -181,8 +181,8 @@ describe('HomeView', () => {
     listSpy.mockClear()
     await wrapper.get('[data-testid="home-dupe-cleanup"]').trigger('click')
     await flushPromises()
-    expect(apiEndSession).toHaveBeenCalledWith('older')
-    expect(apiEndSession).not.toHaveBeenCalledWith('newer')
+    expect(apiEndSession).toHaveBeenCalledWith('older', 'u1')
+    expect(apiEndSession).not.toHaveBeenCalledWith('newer', 'u1')
     expect(listSpy).toHaveBeenCalledWith('u1')
   })
 

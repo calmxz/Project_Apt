@@ -279,7 +279,7 @@ function tileTint(topic) {
 async function resume(row) {
   resumingId.value = row.id
   try {
-    await store.reopenSession(row.id)
+    await store.reopenSession(row.id, user.userId)
     router.push({ name: 'session', params: { id: row.id } })
   } catch {
     // store.error already populated
@@ -293,7 +293,7 @@ async function cleanupDuplicates() {
   if (!ids.length) return
   cleaning.value = true
   try {
-    await Promise.all(ids.map((id) => sessionsApi.endSession(id)))
+    await Promise.all(ids.map((id) => sessionsApi.endSession(id, user.userId)))
     if (user.userId) await store.listSessions(user.userId)
   } catch (e) {
     store.setError(e?.message || 'Cleanup failed.')

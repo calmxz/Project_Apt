@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, RootModel, conint
+from pydantic import BaseModel, ConfigDict, RootModel, conint, constr
 
 
 class TopicProfile(BaseModel):
@@ -61,11 +61,11 @@ class UpdateTopicProfileArgs(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    session_id: str
+    session_id: constr(max_length=64)
     knowledge_level: Literal["beginner", "intermediate", "advanced"] | None = None
-    add_confirmed_gap: str | None = None
-    add_mastered_concept: str | None = None
-    focus_target_gap: str | None = None
+    add_confirmed_gap: constr(max_length=200) | None = None
+    add_mastered_concept: constr(max_length=200) | None = None
+    focus_target_gap: constr(max_length=200) | None = None
     focus_clear_reason: (
         Literal["demonstrated", "tested_correct", "user_redirected"] | None
     ) = None
@@ -76,8 +76,8 @@ class RetrieveChunksArgs(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    session_id: str
-    query: str
+    session_id: constr(max_length=64)
+    query: constr(max_length=500)
     k: conint(ge=1, le=20) | None = 5
 
 
@@ -85,9 +85,9 @@ class RecordLearningEventArgs(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    session_id: str
-    gap_tested: str
-    question: str
+    session_id: constr(max_length=64)
+    gap_tested: constr(max_length=200)
+    question: constr(max_length=1000)
     correct: bool
 
 
@@ -112,9 +112,9 @@ class ChatRequest(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    user_id: str
-    session_id: str
-    message: str
+    user_id: constr(max_length=64)
+    session_id: constr(max_length=64)
+    message: constr(max_length=4000)
 
 
 class ChatResponse(BaseModel):
@@ -131,10 +131,10 @@ class SessionCreateRequest(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    user_id: str
-    topic: str
+    user_id: constr(max_length=64)
+    topic: constr(max_length=200)
     seed_mode: Literal["fresh", "resume"]
-    prior_session_id: str | None = None
+    prior_session_id: constr(max_length=64) | None = None
 
 
 class SessionResponse(BaseModel):

@@ -24,8 +24,13 @@ def get_aggregate_profile(
 
 
 @router.get("/profile/{session_id}", response_model=ProfileResponse)
-def get_profile(session_id: str, db: Session = Depends(get_db)):
-    if db.get(SessionModel, session_id) is None:
+def get_profile(
+    session_id: str,
+    user_id: str = Query(...),
+    db: Session = Depends(get_db),
+):
+    row = db.get(SessionModel, session_id)
+    if row is None or row.user_id != user_id:
         raise HTTPException(status_code=404, detail="session not found")
 
     profile = profile_service.load_profile(db, session_id)

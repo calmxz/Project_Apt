@@ -27,4 +27,5 @@ export async function uploadPdf({ userId, sessionId, file }) {
   return parsed
 }
 
-export const getUploadStatus = (documentId) => apiGet(`/upload/${documentId}`)
+export const getUploadStatus = (documentId, userId) =>
+  apiGet(`/upload/${documentId}`, { user_id: userId })

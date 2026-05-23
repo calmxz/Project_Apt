@@ -1,4 +1,6 @@
 import os
+import re
+from pathlib import Path
 
 from fastapi import (
     APIRouter,
@@ -7,6 +9,8 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Query,
+    Request,
     UploadFile,
     status,
 )
@@ -22,6 +26,8 @@ from services import ingestion_service, rate_limit
 
 router = APIRouter(prefix="/api")
 
+MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB
+
 
 @router.post(
     "/upload",
@@ -29,6 +35,7 @@ router = APIRouter(prefix="/api")
     status_code=status.HTTP_202_ACCEPTED,
 )
 def upload_pdf(
+    request: Request,
     background_tasks: BackgroundTasks,
     user_id: str = Form(...),
     session_id: str = Form(...),
@@ -47,21 +54,46 @@ def upload_pdf(
             },
         )
 
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        try:
+            if int(content_length) > MAX_UPLOAD_BYTES:
+                raise HTTPException(
+                    status_code=413,
+                    detail={"code": "FILE_TOO_LARGE", "max_bytes": MAX_UPLOAD_BYTES},
+                )
+        except ValueError:
+            pass
+
     if (file.content_type or "").split(";")[0].strip() != "application/pdf":
         raise HTTPException(status_code=400, detail="file must be application/pdf")
 
     if db.get(SessionModel, session_id) is None:
         raise HTTPException(status_code=400, detail="session not found")
 
-    doc = Document(session_id=session_id, filename=file.filename or "upload.pdf", status="pending")
+    raw_name = Path(file.filename or "upload.pdf").name
+    safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", raw_name)
+    if not safe_name or safe_name in {".", ".."}:
+        raise HTTPException(status_code=400, detail={"code": "INVALID_FILENAME"})
+
+    doc = Document(session_id=session_id, filename=safe_name, status="pending")
     db.add(doc)
     db.commit()
     db.refresh(doc)
 
+    data = file.file.read()
+    if len(data) > MAX_UPLOAD_BYTES:
+        db.delete(doc)
+        db.commit()
+        raise HTTPException(
+            status_code=413,
+            detail={"code": "FILE_TOO_LARGE", "max_bytes": MAX_UPLOAD_BYTES},
+        )
+
     os.makedirs(settings.uploads_path, exist_ok=True)
     dest = os.path.join(settings.uploads_path, f"{doc.id}_{doc.filename}")
     with open(dest, "wb") as fh:
-        fh.write(file.file.read())
+        fh.write(data)
 
     background_tasks.add_task(ingestion_service.run, doc.id)
 
@@ -74,8 +106,15 @@ def upload_pdf(
 
 
 @router.get("/upload/{document_id}", response_model=UploadStatus)
-def get_upload_status(document_id: int, db: Session = Depends(get_db)):
+def get_upload_status(
+    document_id: int,
+    user_id: str = Query(...),
+    db: Session = Depends(get_db),
+):
     doc = db.get(Document, document_id)
     if doc is None:
+        raise HTTPException(status_code=404, detail="document not found")
+    sess = db.get(SessionModel, doc.session_id)
+    if sess is None or sess.user_id != user_id:
         raise HTTPException(status_code=404, detail="document not found")
     return UploadStatus(id=doc.id, status=doc.status, error=doc.error)

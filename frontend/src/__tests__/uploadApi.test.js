@@ -66,10 +66,11 @@ describe('uploadApi', () => {
     expect(err.body).toBe('plain text')
   })
 
-  it('getUploadStatus hits /upload/:id', async () => {
+  it('getUploadStatus hits /upload/:id with user_id query', async () => {
     fetchMock.mockReturnValueOnce(ok({ status: 'ready' }))
-    const out = await getUploadStatus('d1')
+    const out = await getUploadStatus('d1', 'u1')
     expect(out.status).toBe('ready')
     expect(fetchMock.mock.calls[0][0]).toContain('/upload/d1')
+    expect(fetchMock.mock.calls[0][0]).toContain('user_id=u1')
   })
 })

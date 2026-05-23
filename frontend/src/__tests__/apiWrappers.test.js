@@ -44,23 +44,26 @@ describe('api wrappers', () => {
     expect(fetchMock.mock.calls[0][0]).toContain('user_id=u1')
   })
 
-  it('getSession hits /sessions/:id', async () => {
+  it('getSession hits /sessions/:id with user_id query', async () => {
     fetchMock.mockReturnValueOnce(ok({ id: 's1' }))
-    await sessionsApi.getSession('s1')
+    await sessionsApi.getSession('s1', 'u1')
     expect(fetchMock.mock.calls[0][0]).toContain('/sessions/s1')
+    expect(fetchMock.mock.calls[0][0]).toContain('user_id=u1')
   })
 
-  it('endSession POSTs to /end', async () => {
+  it('endSession POSTs to /end with user_id query', async () => {
     fetchMock.mockReturnValueOnce(ok({ ended_at: 'x' }))
-    await sessionsApi.endSession('s1')
+    await sessionsApi.endSession('s1', 'u1')
     expect(fetchMock.mock.calls[0][0]).toContain('/sessions/s1/end')
+    expect(fetchMock.mock.calls[0][0]).toContain('user_id=u1')
     expect(fetchMock.mock.calls[0][1].method).toBe('POST')
   })
 
-  it('reopenSession POSTs to /reopen', async () => {
+  it('reopenSession POSTs to /reopen with user_id query', async () => {
     fetchMock.mockReturnValueOnce(ok({ ok: true }))
-    await sessionsApi.reopenSession('s1')
+    await sessionsApi.reopenSession('s1', 'u1')
     expect(fetchMock.mock.calls[0][0]).toContain('/sessions/s1/reopen')
+    expect(fetchMock.mock.calls[0][0]).toContain('user_id=u1')
   })
 
   it('postChat sends session_id, user_id, message', async () => {
@@ -70,10 +73,11 @@ describe('api wrappers', () => {
     expect(body).toEqual({ session_id: 's', user_id: 'u', message: 'm' })
   })
 
-  it('getSessionProfile hits /profile/:id', async () => {
+  it('getSessionProfile hits /profile/:id with user_id query', async () => {
     fetchMock.mockReturnValueOnce(ok({}))
-    await getSessionProfile('s1')
+    await getSessionProfile('s1', 'u1')
     expect(fetchMock.mock.calls[0][0]).toContain('/profile/s1')
+    expect(fetchMock.mock.calls[0][0]).toContain('user_id=u1')
   })
 
   it('getAggregateProfile passes user_id query', async () => {

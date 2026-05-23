@@ -249,7 +249,7 @@ describe('SessionView', () => {
     await flushPromises()
     await wrapper.get('[data-testid="resume-btn"]').trigger('click')
     await flushPromises()
-    expect(reopenSpy).toHaveBeenCalledWith('s1')
+    expect(reopenSpy).toHaveBeenCalledWith('s1', 'u1')
   })
 
   it('daily cap banner shown when cap reached', async () => {
@@ -280,7 +280,7 @@ describe('SessionView', () => {
     await input.trigger('change')
     await flushPromises()
     expect(uploadPdf).toHaveBeenCalledWith({ userId: 'u1', sessionId: 's1', file })
-    expect(getUploadStatus).toHaveBeenCalledWith('doc-1')
+    expect(getUploadStatus).toHaveBeenCalledWith('doc-1', 'u1')
     expect(wrapper.find('[data-testid="upload-status-ready"]').exists()).toBe(true)
   })
 })

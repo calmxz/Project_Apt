@@ -94,7 +94,7 @@ paths:
         - in: query
           name: user_id
           required: true
-          schema: { type: string }
+          schema: { type: string, maxLength: 64 }
       responses:
         "200":
           description: Sessions grouped/sorted by recency.
@@ -112,6 +112,7 @@ paths:
       operationId: getSession
       parameters:
         - $ref: "#/components/parameters/SessionId"
+        - $ref: "#/components/parameters/UserIdQuery"
       responses:
         "200":
           description: Session detail with messages.
@@ -129,6 +130,7 @@ paths:
       operationId: endSession
       parameters:
         - $ref: "#/components/parameters/SessionId"
+        - $ref: "#/components/parameters/UserIdQuery"
       responses:
         "200":
           description: Session ended.
@@ -146,6 +148,7 @@ paths:
       operationId: reopenSession
       parameters:
         - $ref: "#/components/parameters/SessionId"
+        - $ref: "#/components/parameters/UserIdQuery"
       responses:
         "200":
           description: Session reopened.
@@ -168,10 +171,14 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [session_id, file]
+              required: [user_id, session_id, file]
               properties:
+                user_id:
+                  type: string
+                  maxLength: 64
                 session_id:
                   type: string
+                  maxLength: 64
                 file:
                   type: string
                   format: binary
@@ -184,6 +191,10 @@ paths:
                 $ref: "#/components/schemas/UploadResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "429":
+          $ref: "#/components/responses/RateLimited"
 
   /api/upload/{document_id}:
     get:
@@ -195,6 +206,7 @@ paths:
           name: document_id
           required: true
           schema: { type: integer }
+        - $ref: "#/components/parameters/UserIdQuery"
       responses:
         "200":
           description: Current ingestion status.
@@ -217,7 +229,7 @@ paths:
         - in: query
           name: user_id
           required: true
-          schema: { type: string }
+          schema: { type: string, maxLength: 64 }
       responses:
         "200":
           description: Aggregate snapshot across all sessions for the user.
@@ -233,6 +245,7 @@ paths:
       operationId: getProfile
       parameters:
         - $ref: "#/components/parameters/SessionId"
+        - $ref: "#/components/parameters/UserIdQuery"
       responses:
         "200":
           description: Profile snapshot.
@@ -249,7 +262,15 @@ components:
       in: path
       name: session_id
       required: true
-      schema: { type: string }
+      schema: { type: string, maxLength: 64 }
+    UserIdQuery:
+      in: query
+      name: user_id
+      required: true
+      description: |
+        Caller's user_id. Server compares against the row's owning user_id;
+        a mismatch returns 404 (not 403) to avoid an existence oracle.
+      schema: { type: string, maxLength: 64 }
 
   responses:
     BadRequest:
@@ -264,6 +285,11 @@ components:
           schema: { $ref: "#/components/schemas/ErrorResponse" }
     RateLimited:
       description: Daily usage cap reached.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    PayloadTooLarge:
+      description: Uploaded file exceeds the per-request size cap.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -366,15 +392,15 @@ components:
         `focus_target_gap: null` explicitly clears focus and requires
         `focus_clear_reason` (server-side guard rail).
       properties:
-        session_id:           { type: string }
+        session_id:           { type: string, maxLength: 64 }
         knowledge_level:
           oneOf:
             - $ref: "#/components/schemas/KnowledgeLevel"
             - type: "null"
           default: null
-        add_confirmed_gap:    { type: [string, "null"], default: null }
-        add_mastered_concept: { type: [string, "null"], default: null }
-        focus_target_gap:     { type: [string, "null"], default: null }
+        add_confirmed_gap:    { type: [string, "null"], default: null, maxLength: 200 }
+        add_mastered_concept: { type: [string, "null"], default: null, maxLength: 200 }
+        focus_target_gap:     { type: [string, "null"], default: null, maxLength: 200 }
         focus_clear_reason:
           oneOf:
             - $ref: "#/components/schemas/FocusClearReason"
@@ -387,8 +413,8 @@ components:
       additionalProperties: false
       required: [session_id, query]
       properties:
-        session_id: { type: string }
-        query:      { type: string }
+        session_id: { type: string, maxLength: 64 }
+        query:      { type: string, maxLength: 500 }
         k:          { type: integer, default: 5, minimum: 1, maximum: 20 }
 
     RecordLearningEventArgs:
@@ -396,9 +422,9 @@ components:
       additionalProperties: false
       required: [session_id, gap_tested, question, correct]
       properties:
-        session_id: { type: string }
-        gap_tested: { type: string }
-        question:   { type: string }
+        session_id: { type: string, maxLength: 64 }
+        gap_tested: { type: string, maxLength: 200 }
+        question:   { type: string, maxLength: 1000 }
         correct:    { type: boolean }
 
     ToolResult:
@@ -427,9 +453,9 @@ components:
       additionalProperties: false
       required: [user_id, session_id, message]
       properties:
-        user_id:    { type: string }
-        session_id: { type: string }
-        message:    { type: string }
+        user_id:    { type: string, maxLength: 64 }
+        session_id: { type: string, maxLength: 64 }
+        message:    { type: string, maxLength: 4000 }
 
     ChatResponse:
       type: object
@@ -452,10 +478,10 @@ components:
       additionalProperties: false
       required: [user_id, topic, seed_mode]
       properties:
-        user_id:           { type: string }
-        topic:             { type: string }
+        user_id:           { type: string, maxLength: 64 }
+        topic:             { type: string, maxLength: 200 }
         seed_mode:         { $ref: "#/components/schemas/SeedMode" }
-        prior_session_id:  { type: [string, "null"], default: null }
+        prior_session_id:  { type: [string, "null"], default: null, maxLength: 64 }
 
     SessionResponse:
       type: object

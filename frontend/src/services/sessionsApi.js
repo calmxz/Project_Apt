@@ -11,8 +11,11 @@ export const createSession = ({ userId, topic, seedMode, priorSessionId }) =>
 
 export const listSessions = (userId) => apiGet('/sessions', { user_id: userId })
 
-export const getSession = (sessionId) => apiGet(`/sessions/${sessionId}`)
+export const getSession = (sessionId, userId) =>
+  apiGet(`/sessions/${sessionId}`, { user_id: userId })
 
-export const endSession = (sessionId) => apiPost(`/sessions/${sessionId}/end`, {})
+export const endSession = (sessionId, userId) =>
+  apiPost(`/sessions/${sessionId}/end`, {}, { params: { user_id: userId } })
 
-export const reopenSession = (sessionId) => apiPost(`/sessions/${sessionId}/reopen`, {})
+export const reopenSession = (sessionId, userId) =>
+  apiPost(`/sessions/${sessionId}/reopen`, {}, { params: { user_id: userId } })

@@ -103,7 +103,7 @@ def test_get_upload_status_returns_current_doc_state(client, seeded, db_session)
     r = client.post("/api/upload", data={"user_id": USER_ID, "session_id": SESSION_ID}, files=files)
     doc_id = r.json()["document_id"]
 
-    r2 = client.get(f"/api/upload/{doc_id}")
+    r2 = client.get(f"/api/upload/{doc_id}?user_id={USER_ID}")
     assert r2.status_code == 200, r2.text
     body = r2.json()
     assert body["id"] == doc_id
@@ -115,7 +115,7 @@ def test_get_upload_status_returns_current_doc_state(client, seeded, db_session)
     doc.error = "embedding service unreachable"
     db_session.commit()
 
-    r3 = client.get(f"/api/upload/{doc_id}")
+    r3 = client.get(f"/api/upload/{doc_id}?user_id={USER_ID}")
     assert r3.status_code == 200
     body3 = r3.json()
     assert body3["status"] == "failed"
@@ -123,8 +123,49 @@ def test_get_upload_status_returns_current_doc_state(client, seeded, db_session)
 
 
 def test_get_upload_status_404_for_missing(client):
-    r = client.get("/api/upload/99999")
+    r = client.get(f"/api/upload/99999?user_id={USER_ID}")
     assert r.status_code == 404
+
+
+def test_get_upload_status_404_for_wrong_user(client, seeded, db_session):
+    db_session.add(User(id="other"))
+    db_session.commit()
+    files = {"file": ("notes.pdf", io.BytesIO(b"%PDF-fake"), "application/pdf")}
+    r = client.post(
+        "/api/upload",
+        data={"user_id": USER_ID, "session_id": SESSION_ID},
+        files=files,
+    )
+    doc_id = r.json()["document_id"]
+    r2 = client.get(f"/api/upload/{doc_id}?user_id=other")
+    assert r2.status_code == 404
+
+
+def test_upload_rejects_oversize_via_content_length(client, seeded):
+    big = b"%PDF-" + b"x" * (26 * 1024 * 1024)
+    files = {"file": ("big.pdf", io.BytesIO(big), "application/pdf")}
+    r = client.post(
+        "/api/upload",
+        data={"user_id": USER_ID, "session_id": SESSION_ID},
+        files=files,
+    )
+    assert r.status_code == 413
+    assert r.json()["detail"]["code"] == "FILE_TOO_LARGE"
+
+
+def test_upload_sanitizes_traversal_filename(client, seeded, db_session):
+    files = {"file": ("../../etc/passwd.pdf", io.BytesIO(b"%PDF-fake"), "application/pdf")}
+    r = client.post(
+        "/api/upload",
+        data={"user_id": USER_ID, "session_id": SESSION_ID},
+        files=files,
+    )
+    assert r.status_code == 202, r.text
+    body = r.json()
+    assert "/" not in body["filename"]
+    assert "\\" not in body["filename"]
+    assert ".." not in body["filename"]
+    assert body["filename"].endswith("passwd.pdf")
 
 
 def test_background_task_scheduled(client, seeded, monkeypatch):

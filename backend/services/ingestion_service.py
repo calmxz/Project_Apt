@@ -38,7 +38,10 @@ def _resolve_path(doc: Document) -> str:
     candidate = os.path.join(settings.uploads_path, f"{doc.id}_{doc.filename}")
     if os.path.exists(candidate):
         return candidate
-    return os.path.join(settings.uploads_path, doc.filename)
+    fallback = doc.filename
+    if "/" in fallback or "\\" in fallback or ".." in fallback:
+        raise ValueError(f"refusing unsafe filename in fallback: {fallback!r}")
+    return os.path.join(settings.uploads_path, fallback)
 
 
 def _extract_pages(path: str) -> list[tuple[int, str]]:
