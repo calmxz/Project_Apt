@@ -257,7 +257,6 @@ import BackButton from '../components/BackButton.vue'
 import SessionEndedBanner from '../components/SessionEndedBanner.vue'
 import { friendlyError } from '../lib/errors.js'
 import { useSessionStore } from '../stores/session.js'
-import { useUserStore } from '../stores/user.js'
 import { useToast } from '../composables/useToast.js'
 import { getUploadStatus, uploadPdf } from '../services/uploadApi.js'
 import { formatShortDateTime } from '../utils/formatDate.js'
@@ -266,7 +265,6 @@ const props = defineProps({ id: { type: String, required: true } })
 
 const router = useRouter()
 const store = useSessionStore()
-const user = useUserStore()
 
 const draft = ref('')
 const lastSentText = ref('')
@@ -329,7 +327,7 @@ watch(
 
 onMounted(async () => {
   try {
-    await store.loadSession(props.id, user.userId)
+    await store.loadSession(props.id)
   } catch (e) {
     if (e?.status === 404) {
       notFound.value = true
@@ -380,7 +378,7 @@ async function send() {
   lastError.value = null
   sending.value = true
   try {
-    await store.sendMessage({ userId: user.userId, text })
+    await store.sendMessage({ text })
     lastSentText.value = ''
   } catch (e) {
     draft.value = text
@@ -398,7 +396,7 @@ async function retryLastMessage() {
 
 async function end() {
   try {
-    const resp = await store.endSession(user.userId)
+    const resp = await store.endSession()
     const summary = resp?.summary
     summaryKind.value = summary?.kind || 'summary'
     summaryText.value =
@@ -422,7 +420,7 @@ async function onUploadFile(ev) {
   uploading.value = true
   uploadStatus.value = { kind: 'pending', text: `Uploading ${file.name}…` }
   try {
-    const resp = await uploadPdf({ userId: user.userId, sessionId: props.id, file })
+    const resp = await uploadPdf({ sessionId: props.id, file })
     await pollUploadStatus(resp.document_id, file.name)
   } catch (e) {
     uploadStatus.value = {
@@ -438,7 +436,7 @@ async function pollUploadStatus(documentId, filename) {
   for (let i = 0; i < 30; i += 1) {
     let s
     try {
-      s = await getUploadStatus(documentId, user.userId)
+      s = await getUploadStatus(documentId)
     } catch (e) {
       uploadStatus.value = { kind: 'failed', text: `Upload status unavailable: ${friendlyError(e)}` }
       return
@@ -466,7 +464,7 @@ async function resume() {
   if (!store.currentSession) return
   resuming.value = true
   try {
-    await store.reopenSession(store.currentSession.id, user.userId)
+    await store.reopenSession(store.currentSession.id)
   } catch {
     // store.error already populated
   } finally {

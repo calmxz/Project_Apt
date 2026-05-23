@@ -1,10 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
+
 import { uploadPdf, getUploadStatus } from '@/services/uploadApi.js'
 import { ApiError } from '@/services/apiClient.js'
 
 describe('uploadApi', () => {
   let fetchMock
   beforeEach(() => {
+    setActivePinia(createPinia())
     fetchMock = vi.fn()
     globalThis.fetch = fetchMock
   })
@@ -25,28 +28,29 @@ describe('uploadApi', () => {
     })
   }
 
-  it('uploadPdf posts FormData with user_id, session_id and file', async () => {
+  it('uploadPdf posts FormData with session_id and file (no user_id)', async () => {
     fetchMock.mockReturnValueOnce(ok({ document_id: 'd1' }))
     const file = new File(['x'], 'a.pdf', { type: 'application/pdf' })
-    const out = await uploadPdf({ userId: 'u1', sessionId: 's1', file })
+    const out = await uploadPdf({ sessionId: 's1', file })
     expect(out.document_id).toBe('d1')
     const init = fetchMock.mock.calls[0][1]
     expect(init.method).toBe('POST')
     expect(init.body).toBeInstanceOf(FormData)
-    expect(init.body.get('user_id')).toBe('u1')
+    // Phase 7: server resolves user_id from the Authorization header.
+    expect(init.body.get('user_id')).toBeNull()
     expect(init.body.get('session_id')).toBe('s1')
   })
 
   it('uploadPdf throws ApiError(0) on network failure', async () => {
     fetchMock.mockRejectedValueOnce(new Error('offline'))
-    const err = await uploadPdf({ userId: 'u', sessionId: 's', file: new File([''], 'a.pdf') }).catch((e) => e)
+    const err = await uploadPdf({ sessionId: 's', file: new File([''], 'a.pdf') }).catch((e) => e)
     expect(err).toBeInstanceOf(ApiError)
     expect(err.status).toBe(0)
   })
 
   it('uploadPdf throws ApiError with parsed body on non-ok', async () => {
     fetchMock.mockReturnValueOnce(fail(413, { detail: 'too big' }))
-    const err = await uploadPdf({ userId: 'u', sessionId: 's', file: new File([''], 'a.pdf') }).catch((e) => e)
+    const err = await uploadPdf({ sessionId: 's', file: new File([''], 'a.pdf') }).catch((e) => e)
     expect(err).toBeInstanceOf(ApiError)
     expect(err.status).toBe(413)
     expect(err.body.detail).toBe('too big')
@@ -56,21 +60,21 @@ describe('uploadApi', () => {
     fetchMock.mockReturnValueOnce(
       Promise.resolve({ ok: true, status: 204, text: () => Promise.resolve('') }),
     )
-    const out = await uploadPdf({ userId: 'u', sessionId: 's', file: new File([''], 'a.pdf') })
+    const out = await uploadPdf({ sessionId: 's', file: new File([''], 'a.pdf') })
     expect(out).toBeNull()
   })
 
   it('uploadPdf returns raw text in body when not JSON', async () => {
     fetchMock.mockReturnValueOnce(fail(500, 'plain text'))
-    const err = await uploadPdf({ userId: 'u', sessionId: 's', file: new File([''], 'a.pdf') }).catch((e) => e)
+    const err = await uploadPdf({ sessionId: 's', file: new File([''], 'a.pdf') }).catch((e) => e)
     expect(err.body).toBe('plain text')
   })
 
-  it('getUploadStatus hits /upload/:id with user_id query', async () => {
+  it('getUploadStatus hits /upload/:id with no user_id query', async () => {
     fetchMock.mockReturnValueOnce(ok({ status: 'ready' }))
-    const out = await getUploadStatus('d1', 'u1')
+    const out = await getUploadStatus('d1')
     expect(out.status).toBe('ready')
     expect(fetchMock.mock.calls[0][0]).toContain('/upload/d1')
-    expect(fetchMock.mock.calls[0][0]).toContain('user_id=u1')
+    expect(fetchMock.mock.calls[0][0]).not.toContain('user_id=')
   })
 })

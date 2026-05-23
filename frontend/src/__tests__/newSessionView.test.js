@@ -4,7 +4,6 @@ import { createPinia, setActivePinia } from 'pinia'
 
 import NewSessionView from '@/views/NewSessionView.vue'
 import { useSessionStore } from '@/stores/session.js'
-import { useUserStore } from '@/stores/user.js'
 
 const push = vi.fn()
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
@@ -37,6 +36,8 @@ describe('NewSessionView', () => {
   })
 
   it('typing a topic enables submit', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'listSessions').mockResolvedValue([])
     const wrapper = mountView()
     await wrapper.get('[data-testid="new-topic"]').setValue('Calculus')
     expect(
@@ -52,19 +53,19 @@ describe('NewSessionView', () => {
     )
   })
 
-  it('lists sessions on mount when userId present', async () => {
-    setActivePinia(createPinia())
-    const user = useUserStore()
-    user.userId = 'u1'
+  it('lists sessions on mount when none cached', async () => {
     const store = useSessionStore()
     const listSpy = vi.spyOn(store, 'listSessions').mockResolvedValue([])
     mountView()
     await flushPromises()
-    expect(listSpy).toHaveBeenCalledWith('u1')
+    expect(listSpy).toHaveBeenCalledWith()
   })
 
-  it('does not list sessions when no userId', async () => {
+  it('skips listSessions when store already has sessions', async () => {
     const store = useSessionStore()
+    store.sessions = [
+      { id: 'a1', topic: 'X', ended_at: null, created_at: new Date().toISOString() },
+    ]
     const listSpy = vi.spyOn(store, 'listSessions').mockResolvedValue([])
     mountView()
     await flushPromises()
@@ -96,8 +97,6 @@ describe('NewSessionView', () => {
   })
 
   it('submit creates session and routes to it', async () => {
-    const user = useUserStore()
-    user.userId = 'u1'
     const store = useSessionStore()
     vi.spyOn(store, 'listSessions').mockResolvedValue([])
     vi.spyOn(store, 'createSession').mockResolvedValue({ id: 'new-1' })
@@ -107,7 +106,6 @@ describe('NewSessionView', () => {
     await wrapper.get('[data-testid="new-submit"]').trigger('click')
     await flushPromises()
     expect(store.createSession).toHaveBeenCalledWith({
-      userId: 'u1',
       topic: 'Calculus',
       seedMode: 'fresh',
       priorSessionId: null,
@@ -117,6 +115,7 @@ describe('NewSessionView', () => {
 
   it('submit shows error on createSession rejection', async () => {
     const store = useSessionStore()
+    vi.spyOn(store, 'listSessions').mockResolvedValue([])
     vi.spyOn(store, 'createSession').mockRejectedValue(new Error('boom'))
     const wrapper = mountView()
     await wrapper.get('[data-testid="new-topic"]').setValue('Calculus')
@@ -126,8 +125,6 @@ describe('NewSessionView', () => {
   })
 
   it('enter key submits when valid', async () => {
-    const user = useUserStore()
-    user.userId = 'u1'
     const store = useSessionStore()
     vi.spyOn(store, 'listSessions').mockResolvedValue([])
     vi.spyOn(store, 'createSession').mockResolvedValue({ id: 'new-2' })

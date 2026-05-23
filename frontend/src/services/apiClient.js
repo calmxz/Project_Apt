@@ -1,3 +1,4 @@
+import { useAuthStore } from '../stores/auth.js'
 import { reportApiError } from './errorBus.js'
 
 // Set VITE_API_BASE_URL in frontend/.env or frontend/.env.local to override.
@@ -11,6 +12,19 @@ export class ApiError extends Error {
     this.status = status
     this.body = body
     this.path = path
+  }
+}
+
+// Try to read the current Supabase access token from the auth store. Wrapped
+// in a no-throw because some tests exercise apiClient without an active Pinia
+// instance — in those cases useStore() throws and we just send no
+// Authorization header.
+function _getAccessToken() {
+  try {
+    const store = useAuthStore()
+    return store.accessToken ?? null
+  } catch {
+    return null
   }
 }
 
@@ -28,6 +42,9 @@ async function request(method, path, { body, params, silent = false } = {}) {
     init.headers['content-type'] = 'application/json'
     init.body = JSON.stringify(body)
   }
+
+  const token = _getAccessToken()
+  if (token) init.headers['authorization'] = `Bearer ${token}`
 
   let resp
   try {

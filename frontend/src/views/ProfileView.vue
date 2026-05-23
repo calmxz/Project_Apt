@@ -112,13 +112,11 @@ import BackButton from '../components/BackButton.vue'
 import { friendlyError } from '../lib/errors.js'
 import { getSessionProfile } from '../services/profileApi.js'
 import { useSessionStore } from '../stores/session.js'
-import { useUserStore } from '../stores/user.js'
 import { formatRelative } from '../utils/formatDate.js'
 
 const props = defineProps({ id: { type: String, required: true } })
 
 const store = useSessionStore()
-const user = useUserStore()
 const data = ref(null)
 const loading = ref(false)
 const error = ref('')
@@ -132,7 +130,7 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    data.value = await getSessionProfile(props.id, user.userId)
+    data.value = await getSessionProfile(props.id)
   } catch (e) {
     error.value = friendlyError(e)
   } finally {

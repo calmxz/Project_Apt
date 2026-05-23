@@ -195,7 +195,6 @@ import EmptyState from '../components/EmptyState.vue'
 
 import * as sessionsApi from '../services/sessionsApi.js'
 import { useSessionStore } from '../stores/session.js'
-import { useUserStore } from '../stores/user.js'
 import {
   formatRelative,
   normalizeTopicKey,
@@ -204,14 +203,13 @@ import {
 
 const router = useRouter()
 const store = useSessionStore()
-const user = useUserStore()
 
 const tab = ref('active')
 const resumingId = ref(null)
 const cleaning = ref(false)
 
 onMounted(async () => {
-  if (user.userId) await store.listSessions(user.userId).catch(() => {})
+  await store.listSessions().catch(() => {})
 })
 
 const activeSessions = computed(() =>
@@ -279,7 +277,7 @@ function tileTint(topic) {
 async function resume(row) {
   resumingId.value = row.id
   try {
-    await store.reopenSession(row.id, user.userId)
+    await store.reopenSession(row.id)
     router.push({ name: 'session', params: { id: row.id } })
   } catch {
     // store.error already populated
@@ -293,8 +291,8 @@ async function cleanupDuplicates() {
   if (!ids.length) return
   cleaning.value = true
   try {
-    await Promise.all(ids.map((id) => sessionsApi.endSession(id, user.userId)))
-    if (user.userId) await store.listSessions(user.userId)
+    await Promise.all(ids.map((id) => sessionsApi.endSession(id)))
+    await store.listSessions()
   } catch (e) {
     store.setError(e?.message || 'Cleanup failed.')
   } finally {

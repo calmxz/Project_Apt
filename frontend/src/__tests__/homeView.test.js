@@ -4,7 +4,6 @@ import { createPinia, setActivePinia } from 'pinia'
 
 import HomeView from '@/views/HomeView.vue'
 import { useSessionStore } from '@/stores/session.js'
-import { useUserStore } from '@/stores/user.js'
 
 const push = vi.fn()
 vi.mock('vue-router', () => ({
@@ -44,26 +43,14 @@ describe('HomeView', () => {
     setActivePinia(createPinia())
     push.mockClear()
     apiEndSession.mockReset()
-    const user = useUserStore()
-    user.userId = 'u1'
   })
 
-  it('calls listSessions on mount when userId present', async () => {
+  it('calls listSessions on mount', async () => {
     const store = useSessionStore()
     const spy = vi.spyOn(store, 'listSessions').mockResolvedValue([])
     mountView()
     await flushPromises()
-    expect(spy).toHaveBeenCalledWith('u1')
-  })
-
-  it('skips listSessions when no userId', async () => {
-    const user = useUserStore()
-    user.userId = null
-    const store = useSessionStore()
-    const spy = vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    mountView()
-    await flushPromises()
-    expect(spy).not.toHaveBeenCalled()
+    expect(spy).toHaveBeenCalledWith()
   })
 
   it('shows loading state', () => {
@@ -136,7 +123,7 @@ describe('HomeView', () => {
     await wrapper.get('[data-testid="home-tab-ended"]').trigger('click')
     await wrapper.get('[data-testid="home-resume-e1"]').trigger('click')
     await flushPromises()
-    expect(reopenSpy).toHaveBeenCalledWith('e1', 'u1')
+    expect(reopenSpy).toHaveBeenCalledWith('e1')
     expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'e1' } })
   })
 
@@ -181,9 +168,9 @@ describe('HomeView', () => {
     listSpy.mockClear()
     await wrapper.get('[data-testid="home-dupe-cleanup"]').trigger('click')
     await flushPromises()
-    expect(apiEndSession).toHaveBeenCalledWith('older', 'u1')
-    expect(apiEndSession).not.toHaveBeenCalledWith('newer', 'u1')
-    expect(listSpy).toHaveBeenCalledWith('u1')
+    expect(apiEndSession).toHaveBeenCalledWith('older')
+    expect(apiEndSession).not.toHaveBeenCalledWith('newer')
+    expect(listSpy).toHaveBeenCalledWith()
   })
 
   it('cleanupDuplicates sets store.error on failure', async () => {

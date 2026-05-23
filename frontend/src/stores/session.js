@@ -24,11 +24,11 @@ export const useSessionStore = defineStore('session', () => {
     error.value = msg
   }
 
-  async function listSessions(userId) {
+  async function listSessions() {
     loading.value = true
     error.value = null
     try {
-      sessions.value = await sessionsApi.listSessions(userId)
+      sessions.value = await sessionsApi.listSessions()
       return sessions.value
     } catch (e) {
       _setError(e)
@@ -37,12 +37,11 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  async function createSession({ userId, topic, seedMode, priorSessionId } = {}) {
+  async function createSession({ topic, seedMode, priorSessionId } = {}) {
     loading.value = true
     error.value = null
     try {
       const created = await sessionsApi.createSession({
-        userId,
         topic,
         seedMode,
         priorSessionId,
@@ -58,11 +57,11 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  async function loadSession(id, userId) {
+  async function loadSession(id) {
     loading.value = true
     error.value = null
     try {
-      const s = await sessionsApi.getSession(id, userId)
+      const s = await sessionsApi.getSession(id)
       currentSession.value = s
       currentSessionId.value = s.id
       messages.value = (s.messages || []).map((m) => ({
@@ -80,7 +79,7 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  async function sendMessage({ userId, text }) {
+  async function sendMessage({ text }) {
     if (!currentSessionId.value) throw new Error('no active session')
     const trimmed = (text || '').trim()
     if (!trimmed) return null
@@ -91,7 +90,6 @@ export const useSessionStore = defineStore('session', () => {
     try {
       const resp = await postChat({
         sessionId: currentSessionId.value,
-        userId,
         message: trimmed,
       })
       messages.value.push({
@@ -120,12 +118,12 @@ export const useSessionStore = defineStore('session', () => {
     dailyCapInfo.value = null
   }
 
-  async function endSession(userId) {
+  async function endSession() {
     if (!currentSessionId.value) throw new Error('no active session')
     loading.value = true
     error.value = null
     try {
-      const resp = await sessionsApi.endSession(currentSessionId.value, userId)
+      const resp = await sessionsApi.endSession(currentSessionId.value)
       const summaryText = resp?.summary?.text ?? ''
       if (currentSession.value) {
         currentSession.value.ended_at = resp.ended_at
@@ -144,11 +142,11 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  async function reopenSession(sessionId, userId) {
+  async function reopenSession(sessionId) {
     loading.value = true
     error.value = null
     try {
-      const resp = await sessionsApi.reopenSession(sessionId, userId)
+      const resp = await sessionsApi.reopenSession(sessionId)
       if (currentSession.value && currentSession.value.id === sessionId) {
         currentSession.value.ended_at = null
       }

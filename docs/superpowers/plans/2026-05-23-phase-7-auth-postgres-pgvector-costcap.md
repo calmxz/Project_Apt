@@ -106,16 +106,23 @@ User-side prereqs before code lands:
   - Tutor-loop: per-acompletion cost recording into ledger; short-circuit when first call pushes spend past hard cap.
 - Coverage: `services/cost_meter.py` 100%, full suite 150 passed / 88.24% overall.
 
-### 6. Frontend — Supabase Auth
+### 6. Frontend — Supabase Auth — SHIPPED 2026-05-23
 
-- Add `@supabase/supabase-js` to `frontend/package.json`.
-- `frontend/src/services/supabase.js` (new): exports a singleton client built from `import.meta.env.VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY`.
-- `frontend/src/views/LoginView.vue` (new): magic-link form. Submits email, shows "check your email" state.
-- `frontend/src/router/index.js`: add `/login` route. Add `beforeEach` guard — if no Supabase session, redirect to `/login`. Allow `/login` itself.
-- `frontend/src/stores/user.js`: replace `localStorage userId` reads with `supabase.auth.getSession()` → `session.user.id`. On `auth.onAuthStateChange('SIGNED_OUT')`, clear store + redirect.
-- Every `fetch`/axios call in `frontend/src/services/*Api.js`: replace any body `user_id` field with `Authorization: Bearer ${session.access_token}` header. Use a shared `authFetch` helper.
-- Drop `user_id` from frontend stores/views (`session.js`, `HomeView.vue`, `NewSessionView.vue`, `SessionView.vue`, `ProfileView.vue`, `AggregateProfileView.vue`, `SettingsView.vue`).
-- Add a "Sign out" button in `App.vue` topnav menu.
+- `@supabase/supabase-js@^2.45.0` added to `frontend/package.json`.
+- `frontend/src/services/supabase.js` — lazy singleton client (constructed on first `getSupabase()` call). Falls back to a placeholder URL/key if `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` are unset so the module is importable in dev before the user provisions Supabase (live calls will fail loudly, which is the intended dev signal).
+- `frontend/src/stores/auth.js` (new) — Pinia store: `session`, `ready`, `userId` / `accessToken` / `isAuthenticated` computeds, `init()` / `signInWithMagicLink()` / `signOut()` actions. `init()` is idempotent and subscribes to `onAuthStateChange` so token refresh + SIGNED_IN/SIGNED_OUT events propagate.
+- `frontend/src/main.js` — `await useAuthStore().init()` before `app.mount` so the router guard has a deterministic auth answer on first navigation (avoids the init/guard race the advisor flagged).
+- `frontend/src/router/index.js` — added `/login` route + global guard. Guard chain: `!auth.ready → await auth.init()`; `!isAuthenticated && to !== login → /login`; `isAuthenticated && to === login → /home`; `isAuthenticated && !onboarded && to !== onboarding → /onboarding`; `onboarded && to === onboarding && !retake → /home`.
+- `frontend/src/views/LoginView.vue` (new) — magic-link form. Email validity gates submit; "check your inbox" state on success; error banner on Supabase failure.
+- `frontend/src/services/apiClient.js` — injects `Authorization: Bearer <token>` from `useAuthStore` if Pinia is active; no-op otherwise (so apiClient tests without Pinia still work).
+- `frontend/src/services/uploadApi.js` — same Bearer header pattern, and `user_id` dropped from the FormData (server resolves from JWT).
+- `frontend/src/services/chatApi.js` / `sessionsApi.js` / `profileApi.js` — `userId` argument removed from every wrapper. `apiClient` no longer carries `user_id` in any body or query.
+- `frontend/src/stores/session.js` — `userId` argument removed from `listSessions`, `createSession`, `loadSession`, `sendMessage`, `endSession`, `reopenSession`. View callsites updated in: `HomeView.vue`, `SessionView.vue`, `NewSessionView.vue`, `ProfileView.vue`, `AggregateProfileView.vue`.
+- `frontend/src/stores/user.js` — `userId` field, generator, and persistence removed. Store now only owns `name` / `interactionPreferences` / `onboardingComplete` (local UX state). Identity comes from `useAuthStore.userId`.
+- `frontend/src/__tests__/setup.js` (new) — wired via `vitest.config.js` `setupFiles`. Globally mocks `@supabase/supabase-js` with a stub auth client exposed at `globalThis.__supabaseAuthStub` so individual tests can refine behavior via `mockResolvedValueOnce`.
+- New tests: `authStore.test.js` (9), `loginView.test.js` (3). Updated tests: `userStore.test.js` (drop `userId` assertions), `apiWrappers.test.js` (assert no `user_id` in payloads/queries), `uploadApi.test.js` (assert no `user_id` in FormData), `homeView.test.js`, `newSessionView.test.js`, `sessionView.test.js` (drop `userId` from store-call expectations), `router.test.js` (add /login guard tests, seed `authStore` for onboarding-flow tests).
+- Sign-out button in `App.vue` topnav: **deferred to T7/T10** (not strictly required for auth gating; UX nicety).
+- Test status: 22 files / 151 pass (was 140 pre-T6).
 
 ### 7. Frontend — Cost cap UX
 

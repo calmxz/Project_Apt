@@ -1,16 +1,30 @@
+import { useAuthStore } from '../stores/auth.js'
 import { ApiError, apiGet } from './apiClient.js'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
 
-export async function uploadPdf({ userId, sessionId, file }) {
+function _authHeaders() {
+  try {
+    const store = useAuthStore()
+    const token = store.accessToken
+    return token ? { authorization: `Bearer ${token}` } : {}
+  } catch {
+    return {}
+  }
+}
+
+export async function uploadPdf({ sessionId, file }) {
   const fd = new FormData()
-  fd.append('user_id', userId)
   fd.append('session_id', sessionId)
   fd.append('file', file)
 
   let resp
   try {
-    resp = await fetch(`${BASE_URL}/upload`, { method: 'POST', body: fd })
+    resp = await fetch(`${BASE_URL}/upload`, {
+      method: 'POST',
+      body: fd,
+      headers: _authHeaders(),
+    })
   } catch (e) {
     throw new ApiError(0, { detail: e.message }, '/upload')
   }
@@ -27,5 +41,4 @@ export async function uploadPdf({ userId, sessionId, file }) {
   return parsed
 }
 
-export const getUploadStatus = (documentId, userId) =>
-  apiGet(`/upload/${documentId}`, { user_id: userId })
+export const getUploadStatus = (documentId) => apiGet(`/upload/${documentId}`)
