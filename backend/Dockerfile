@@ -15,6 +15,12 @@ RUN pip install --no-cache-dir .
 
 COPY . ./
 
+RUN adduser --system --no-create-home --group --uid 1000 app \
+    && mkdir -p /app/data/uploads /app/data/chroma \
+    && chown -R app:app /app
+
+USER app
+
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
