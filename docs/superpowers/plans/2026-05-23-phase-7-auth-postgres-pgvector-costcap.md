@@ -124,10 +124,15 @@ User-side prereqs before code lands:
 - Sign-out button in `App.vue` topnav: **deferred to T7/T10** (not strictly required for auth gating; UX nicety).
 - Test status: 22 files / 151 pass (was 140 pre-T6).
 
-### 7. Frontend — Cost cap UX
+### 7. Frontend — Cost cap UX — SHIPPED 2026-05-23
 
-- 429 with `code: "cost_cap_reached"` shown as a disabled-input banner: "Daily cost cap reached. Resets <time>." Match existing daily-cap banner pattern in `stores/session.js`.
-- `X-Cost-Warning` header → soft toast "Approaching daily cap" once per session.
+- `lib/errorCodes.js`: added `ERR_DAILY_COST_CAP_REACHED` mirror of the backend constant.
+- `services/costBus.js` (new): EventTarget for `cost-warning` events. apiClient dispatches when a successful response carries `X-Cost-Warning`. Pattern mirrors `errorBus`.
+- `services/apiClient.js`: reads `resp.headers.get('x-cost-warning')` after every successful request; if present, calls `reportCostWarning({ header, path })`.
+- `stores/session.js`: parallel cost-cap state — `costCapInfo` ref + `costCapReached` computed + `clearCostCap()` action. `sendMessage`'s 429 catch routes `daily_cost_cap_reached` payloads into `costCapInfo` (existing `daily_cap_reached` path is untouched).
+- `views/SessionView.vue`: composer disabled when `costCapReached`; new `session-cost-cap-banner` mirrors the existing daily-cap banner; `watch(costCapReached)` fires a `showError` toast on first cap hit; `costBus.cost-warning` listener fires `showInfo` once per view-mount (soft-cap warning toast is intentionally throttled to once per session-entry).
+- New `__tests__/costCapUx.test.js` — 5 tests covering: apiClient bus dispatch when header set / absent; session store captures the cost-cap 429 envelope into `costCapInfo`; SessionView renders the banner + toast on hard cap; soft-warning toast fires exactly once even if the event fires multiple times.
+- Test status: 23 files / 156 pass (was 151 pre-T7).
 
 ### 8. Contract regen
 

@@ -57,6 +57,19 @@
         </span>
       </div>
 
+      <div
+        v-if="store.costCapReached"
+        class="cap-banner"
+        role="alert"
+        data-testid="session-cost-cap-banner"
+      >
+        <strong>Daily cost limit reached.</strong>
+        <span v-if="store.costCapInfo">
+          ${{ store.costCapInfo.used_usd }} of ${{ store.costCapInfo.hard_cap_usd }} spent today.
+          Resets at {{ formatShortDateTime(store.costCapInfo.resets_at) || 'midnight UTC' }}.
+        </span>
+      </div>
+
       <hr class="hairline" />
 
       <SessionEndedBanner
@@ -246,7 +259,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 import Button from 'primevue/button'
@@ -258,6 +271,7 @@ import SessionEndedBanner from '../components/SessionEndedBanner.vue'
 import { friendlyError } from '../lib/errors.js'
 import { useSessionStore } from '../stores/session.js'
 import { useToast } from '../composables/useToast.js'
+import { costBus } from '../services/costBus.js'
 import { getUploadStatus, uploadPdf } from '../services/uploadApi.js'
 import { formatShortDateTime } from '../utils/formatDate.js'
 
@@ -283,9 +297,11 @@ const lastError = ref(null)
 
 const isEnded = computed(() => Boolean(store.currentSession?.ended_at))
 const canEnd = computed(() => Boolean(store.currentSession && !store.currentSession.ended_at))
-const canSend = computed(() => canEnd.value && !store.dailyCapReached)
+const canSend = computed(
+  () => canEnd.value && !store.dailyCapReached && !store.costCapReached,
+)
 
-const { showError } = useToast()
+const { showError, showInfo } = useToast()
 watch(
   () => store.dailyCapReached,
   (now) => {
@@ -297,6 +313,30 @@ watch(
     )
   },
 )
+watch(
+  () => store.costCapReached,
+  (now) => {
+    if (!now || !store.costCapInfo) return
+    const when = formatShortDateTime(store.costCapInfo.resets_at) || 'midnight UTC'
+    showError(
+      `Daily cost limit reached ($${store.costCapInfo.used_usd} / $${store.costCapInfo.hard_cap_usd}). Resets at ${when}.`,
+      { summary: 'Cost cap reached', life: 8000 },
+    )
+  },
+)
+
+// One soft-cap warning per mount of this view (i.e. per session entry).
+const softCapShown = ref(false)
+function onCostWarning() {
+  if (softCapShown.value) return
+  softCapShown.value = true
+  showInfo(
+    'You’re approaching the daily cost limit for this session.',
+    { summary: 'Cost warning', life: 6000 },
+  )
+}
+onMounted(() => costBus.addEventListener('cost-warning', onCostWarning))
+onUnmounted(() => costBus.removeEventListener('cost-warning', onCostWarning))
 
 // Show the "typing" placeholder when we've appended the user message but the
 // tutor reply hasn't arrived yet. Driven by `sending` rather than `store.loading`

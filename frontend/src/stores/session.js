@@ -3,7 +3,10 @@ import { defineStore } from 'pinia'
 
 import * as sessionsApi from '../services/sessionsApi.js'
 import { postChat } from '../services/chatApi.js'
-import { ERR_DAILY_CAP_REACHED } from '../lib/errorCodes.js'
+import {
+  ERR_DAILY_CAP_REACHED,
+  ERR_DAILY_COST_CAP_REACHED,
+} from '../lib/errorCodes.js'
 
 export const useSessionStore = defineStore('session', () => {
   const currentSessionId = ref(null)
@@ -14,6 +17,8 @@ export const useSessionStore = defineStore('session', () => {
   const error = ref(null)
   const dailyCapInfo = ref(null) // { cap, used, resets_at }
   const dailyCapReached = computed(() => dailyCapInfo.value !== null)
+  const costCapInfo = ref(null) // { used_usd, soft_cap_usd, hard_cap_usd, resets_at }
+  const costCapReached = computed(() => costCapInfo.value !== null)
 
   function _setError(e) {
     error.value = e instanceof Error ? e.message : String(e)
@@ -107,6 +112,16 @@ export const useSessionStore = defineStore('session', () => {
           used: e.body.detail.used,
           resets_at: e.body.detail.resets_at,
         }
+      } else if (
+        e?.status === 429 &&
+        e?.body?.detail?.code === ERR_DAILY_COST_CAP_REACHED
+      ) {
+        costCapInfo.value = {
+          used_usd: e.body.detail.used_usd,
+          soft_cap_usd: e.body.detail.soft_cap_usd,
+          hard_cap_usd: e.body.detail.hard_cap_usd,
+          resets_at: e.body.detail.resets_at,
+        }
       }
       _setError(e)
     } finally {
@@ -116,6 +131,10 @@ export const useSessionStore = defineStore('session', () => {
 
   function clearDailyCap() {
     dailyCapInfo.value = null
+  }
+
+  function clearCostCap() {
+    costCapInfo.value = null
   }
 
   async function endSession() {
@@ -167,6 +186,7 @@ export const useSessionStore = defineStore('session', () => {
     messages.value = []
     error.value = null
     dailyCapInfo.value = null
+    costCapInfo.value = null
   }
 
   return {
@@ -178,6 +198,8 @@ export const useSessionStore = defineStore('session', () => {
     error,
     dailyCapReached,
     dailyCapInfo,
+    costCapReached,
+    costCapInfo,
     listSessions,
     createSession,
     loadSession,
@@ -186,6 +208,7 @@ export const useSessionStore = defineStore('session', () => {
     reopenSession,
     setError,
     clearDailyCap,
+    clearCostCap,
     reset,
   }
 })
