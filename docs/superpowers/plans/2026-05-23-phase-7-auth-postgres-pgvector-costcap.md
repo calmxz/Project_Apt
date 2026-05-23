@@ -89,15 +89,22 @@ User-side prereqs before code lands:
 - Add `pgvector==<latest>` to backend deps for the SQLAlchemy adapter.
 - Existing retrieval tests (mocked Chroma) rewritten against an in-memory pgvector or live test Postgres.
 
-### 5. Backend — LLM cost cap
+### 5. Backend — LLM cost cap — SHIPPED 2026-05-23
 
 - `backend/services/cost_meter.py` (new):
-  - `record_cost(db, user_id, cost_usd)` upserts into `daily_cost_ledger` for today's UTC date.
-  - `check_cap(db, user_id) -> tuple[bool, float, str]` returns `(allowed, current_usd, level)` where `level ∈ {"ok", "soft_warn", "hard_block"}`.
-  - Thresholds: `LLM_SOFT_CAP_USD=2.00`, `LLM_HARD_CAP_USD=3.00` (env vars, defaults).
-- Wire LiteLLM `success_callback` to call `record_cost` after every chat/embed completion (pass `user_id` via metadata).
-- In `routes/chat.py` and `routes/upload.py`: call `check_cap` before invoking model. If `hard_block`, return `429` with envelope `{code: "cost_cap_reached", cap_usd: 3.00, used_usd: <current>, resets_at: <midnight_utc_iso>}`. If `soft_warn`, allow but add header `X-Cost-Warning: approaching daily cap`.
-- New `backend/tests/test_cost_cap.py`: parametrize ok/soft/hard, verify ledger upsert idempotent, verify 429 envelope shape exact.
+  - `record_cost(db, user_id, cost_usd)` upserts into `daily_cost_ledger` for today's UTC date. Ignores zero/negative inputs.
+  - `check_cap(db, user_id) -> CapStatus` returns a frozen dataclass `(allowed, used, soft_breached, soft_cap, hard_cap)` — semantically equivalent to the planned `(allowed, current_usd, level)` tuple but with both thresholds exposed for the envelope.
+  - Thresholds: `llm_soft_cap_usd=2.00`, `llm_hard_cap_usd=3.00` from `config.Settings` (env-overridable).
+- Cost recording moved from a global LiteLLM `success_callback` into the `agent/tutor.py` loop — per-`acompletion` call we read `litellm.completion_cost(completion_response=resp)` and call `cost_meter.record_cost`. Reason: the agent loop fires up to MAX_ITERS=8 calls per chat turn for tool dispatch; a single post-turn record would undercount. Also keeps DB writes inside the same request's session.
+- `routes/chat.py` pre-call gate: `cost_meter.check_cap` → 429 with envelope `{code: "daily_cost_cap_reached", soft_cap_usd, hard_cap_usd, used_usd, resets_at}`. Post-call: re-check, set `X-Cost-Warning: soft_cap_breached;used_usd=...;soft_cap_usd=...;hard_cap_usd=...` header when above soft and below hard.
+- Mid-turn defense: `tutor.run` re-checks `check_cap` at the top of each iteration (i>0); if a single LLM call alone pushes spend past the hard cap, the loop short-circuits to `FALLBACK_TEXT` instead of issuing another acompletion.
+- `lib/error_codes.py`: added `DAILY_COST_CAP_REACHED = "daily_cost_cap_reached"`.
+- Upload route is **not** gated on cost (the original plan called for it). Rationale: upload's only LLM-touching path is the background ingestion task, which mints embeddings asynchronously and currently doesn't surface 429s back to the client; gating the upload synchronously would block a free action. Revisit in T7 if embeddings cost becomes material.
+- New `backend/tests/test_cost_cap.py` — 12 tests, all green:
+  - Unit: zero-spend default, row-create, accumulation, zero/negative ignore, allowed/soft-breached/hard-blocked check_cap.
+  - Integration: 429 envelope when pre-seeded ledger ≥ hard cap; `X-Cost-Warning` header when seeded between soft and hard; header absent when below soft.
+  - Tutor-loop: per-acompletion cost recording into ledger; short-circuit when first call pushes spend past hard cap.
+- Coverage: `services/cost_meter.py` 100%, full suite 150 passed / 88.24% overall.
 
 ### 6. Frontend — Supabase Auth
 

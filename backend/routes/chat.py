@@ -1,7 +1,7 @@
 import json
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -12,8 +12,8 @@ from contracts import ChatRequest, ChatResponse, ToolCallRecord, Citation
 from db.database import get_db
 from db.models import ChatMessage, Document, Session as SessionModel, User
 from lib import keyword_index
-from lib.error_codes import DAILY_CAP_REACHED
-from services import profile_service, rate_limit
+from lib.error_codes import DAILY_CAP_REACHED, DAILY_COST_CAP_REACHED
+from services import cost_meter, profile_service, rate_limit
 from services.auth import current_user_id
 
 
@@ -23,9 +23,23 @@ router = APIRouter(prefix="/api")
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     req: ChatRequest,
+    response: Response,
     user_id: str = Depends(current_user_id),
     db: Session = Depends(get_db),
 ):
+    cost_status = cost_meter.check_cap(db, user_id)
+    if not cost_status.allowed:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code": DAILY_COST_CAP_REACHED,
+                "soft_cap_usd": str(cost_status.soft_cap),
+                "hard_cap_usd": str(cost_status.hard_cap),
+                "used_usd": str(cost_status.used),
+                "resets_at": cost_meter.midnight_utc_iso(),
+            },
+        )
+
     allowed, used = rate_limit.check_and_increment(db, user_id)
     if not allowed:
         raise HTTPException(
@@ -102,6 +116,13 @@ async def chat(
     db.add(assistant_msg)
     db.commit()
     db.refresh(assistant_msg)
+
+    post = cost_meter.check_cap(db, user_id)
+    if post.soft_breached:
+        response.headers["X-Cost-Warning"] = (
+            f"soft_cap_breached;used_usd={post.used};soft_cap_usd={post.soft_cap};"
+            f"hard_cap_usd={post.hard_cap}"
+        )
 
     return ChatResponse(
         assistant_message=reply,

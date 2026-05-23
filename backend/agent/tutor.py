@@ -15,6 +15,7 @@ from agent._stub import stub_response
 from agent.types import ToolContext
 from config import settings
 from contracts import Citation, ToolCallRecord
+from services import cost_meter
 
 
 log = logging.getLogger(__name__)
@@ -54,13 +55,34 @@ async def run(
     tool_calls_record: list[ToolCallRecord] = []
     citations: list[Citation] = []
 
-    for _ in range(max_iters):
+    for i in range(max_iters):
+        if i > 0:
+            cap = cost_meter.check_cap(ctx.db, ctx.user_id)
+            if not cap.allowed:
+                log.warning(
+                    "hard cost cap reached mid-turn for user_id=%s used=%s",
+                    ctx.user_id, cap.used,
+                )
+                return (FALLBACK_TEXT, tool_calls_record, citations)
+
         resp = await litellm.acompletion(
             model=settings.model,
             messages=full,
             tools=tools.TOOLS,
             tool_choice="auto",
         )
+
+        try:
+            call_cost = litellm.completion_cost(completion_response=resp) or 0.0
+        except Exception as e:
+            log.warning("completion_cost failed: %s", e)
+            call_cost = 0.0
+        if call_cost > 0:
+            try:
+                cost_meter.record_cost(ctx.db, ctx.user_id, call_cost)
+            except Exception as e:
+                log.warning("cost_meter.record_cost failed: %s", e)
+
         msg = resp.choices[0].message
         msg_tool_calls = getattr(msg, "tool_calls", None)
 
