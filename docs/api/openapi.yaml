@@ -15,6 +15,9 @@ servers:
   - url: http://localhost:8000
     description: Local development backend
 
+security:
+  - BearerAuth: []
+
 tags:
   - name: health
     description: Liveness check.
@@ -88,13 +91,8 @@ paths:
           $ref: "#/components/responses/BadRequest"
     get:
       tags: [sessions]
-      summary: List sessions for a user.
+      summary: List sessions for the authenticated user.
       operationId: listSessions
-      parameters:
-        - in: query
-          name: user_id
-          required: true
-          schema: { type: string, maxLength: 64 }
       responses:
         "200":
           description: Sessions grouped/sorted by recency.
@@ -112,7 +110,6 @@ paths:
       operationId: getSession
       parameters:
         - $ref: "#/components/parameters/SessionId"
-        - $ref: "#/components/parameters/UserIdQuery"
       responses:
         "200":
           description: Session detail with messages.
@@ -130,7 +127,6 @@ paths:
       operationId: endSession
       parameters:
         - $ref: "#/components/parameters/SessionId"
-        - $ref: "#/components/parameters/UserIdQuery"
       responses:
         "200":
           description: Session ended.
@@ -148,7 +144,6 @@ paths:
       operationId: reopenSession
       parameters:
         - $ref: "#/components/parameters/SessionId"
-        - $ref: "#/components/parameters/UserIdQuery"
       responses:
         "200":
           description: Session reopened.
@@ -171,11 +166,8 @@ paths:
             schema:
               type: object
               additionalProperties: false
-              required: [user_id, session_id, file]
+              required: [session_id, file]
               properties:
-                user_id:
-                  type: string
-                  maxLength: 64
                 session_id:
                   type: string
                   maxLength: 64
@@ -206,7 +198,6 @@ paths:
           name: document_id
           required: true
           schema: { type: integer }
-        - $ref: "#/components/parameters/UserIdQuery"
       responses:
         "200":
           description: Current ingestion status.
@@ -225,11 +216,6 @@ paths:
         Aggregates TopicProfile fields and LearningEvent counts across every
         session for the given user. Pure SQL/Python — no LLM calls.
       operationId: getAggregateProfile
-      parameters:
-        - in: query
-          name: user_id
-          required: true
-          schema: { type: string, maxLength: 64 }
       responses:
         "200":
           description: Aggregate snapshot across all sessions for the user.
@@ -245,7 +231,6 @@ paths:
       operationId: getProfile
       parameters:
         - $ref: "#/components/parameters/SessionId"
-        - $ref: "#/components/parameters/UserIdQuery"
       responses:
         "200":
           description: Profile snapshot.
@@ -257,19 +242,21 @@ paths:
           $ref: "#/components/responses/NotFound"
 
 components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Supabase-issued JWT. Server validates against Supabase JWKS and
+        resolves the request's `user_id` from the `sub` claim. Replaces the
+        Phase 6-and-earlier convention of passing `user_id` via body/query.
+
   parameters:
     SessionId:
       in: path
       name: session_id
       required: true
-      schema: { type: string, maxLength: 64 }
-    UserIdQuery:
-      in: query
-      name: user_id
-      required: true
-      description: |
-        Caller's user_id. Server compares against the row's owning user_id;
-        a mismatch returns 404 (not 403) to avoid an existence oracle.
       schema: { type: string, maxLength: 64 }
 
   responses:
@@ -451,9 +438,8 @@ components:
     ChatRequest:
       type: object
       additionalProperties: false
-      required: [user_id, session_id, message]
+      required: [session_id, message]
       properties:
-        user_id:    { type: string, maxLength: 64 }
         session_id: { type: string, maxLength: 64 }
         message:    { type: string, maxLength: 4000 }
 
@@ -476,9 +462,8 @@ components:
     SessionCreateRequest:
       type: object
       additionalProperties: false
-      required: [user_id, topic, seed_mode]
+      required: [topic, seed_mode]
       properties:
-        user_id:           { type: string, maxLength: 64 }
         topic:             { type: string, maxLength: 200 }
         seed_mode:         { $ref: "#/components/schemas/SeedMode" }
         prior_session_id:  { type: [string, "null"], default: null, maxLength: 64 }

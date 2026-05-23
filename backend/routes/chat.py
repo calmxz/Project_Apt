@@ -14,14 +14,19 @@ from db.models import ChatMessage, Document, Session as SessionModel, User
 from lib import keyword_index
 from lib.error_codes import DAILY_CAP_REACHED
 from services import profile_service, rate_limit
+from services.auth import current_user_id
 
 
 router = APIRouter(prefix="/api")
 
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat(req: ChatRequest, db: Session = Depends(get_db)):
-    allowed, used = rate_limit.check_and_increment(db, req.user_id)
+async def chat(
+    req: ChatRequest,
+    user_id: str = Depends(current_user_id),
+    db: Session = Depends(get_db),
+):
+    allowed, used = rate_limit.check_and_increment(db, user_id)
     if not allowed:
         raise HTTPException(
             status_code=429,
@@ -33,8 +38,8 @@ async def chat(req: ChatRequest, db: Session = Depends(get_db)):
             },
         )
 
-    if not db.get(User, req.user_id):
-        db.add(User(id=req.user_id))
+    if not db.get(User, user_id):
+        db.add(User(id=user_id))
         db.flush()
 
     session = db.get(SessionModel, req.session_id)
@@ -82,7 +87,7 @@ async def chat(req: ChatRequest, db: Session = Depends(get_db)):
     ctx = ToolContext(
         db=db,
         session_id=req.session_id,
-        user_id=req.user_id,
+        user_id=user_id,
         turn_started_at=datetime.now(timezone.utc),
     )
     reply, tool_calls, citations = await tutor.run(messages, system_prompt, ctx)

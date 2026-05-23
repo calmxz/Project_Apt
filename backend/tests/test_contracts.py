@@ -120,14 +120,14 @@ def test_chat_response_with_tool_calls():
 
 def test_chat_request_required_fields():
     with pytest.raises(ValidationError):
-        ChatRequest(user_id="u", session_id="s")  # missing message
+        ChatRequest(session_id="s")  # missing message
 
 
 def test_session_create_request_seed_mode_enum():
-    SessionCreateRequest(user_id="u", topic="t", seed_mode="fresh")
-    SessionCreateRequest(user_id="u", topic="t", seed_mode="resume")
+    SessionCreateRequest(topic="t", seed_mode="fresh")
+    SessionCreateRequest(topic="t", seed_mode="resume")
     with pytest.raises(ValidationError):
-        SessionCreateRequest(user_id="u", topic="t", seed_mode="continue")
+        SessionCreateRequest(topic="t", seed_mode="continue")
 
 
 def test_profile_response_shape():

@@ -9,7 +9,6 @@ from fastapi import (
     File,
     Form,
     HTTPException,
-    Query,
     Request,
     UploadFile,
     status,
@@ -22,6 +21,7 @@ from db.database import get_db
 from db.models import Document, Session as SessionModel
 from lib.error_codes import DAILY_CAP_REACHED
 from services import ingestion_service, rate_limit
+from services.auth import current_user_id
 
 
 router = APIRouter(prefix="/api")
@@ -37,9 +37,9 @@ MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB
 def upload_pdf(
     request: Request,
     background_tasks: BackgroundTasks,
-    user_id: str = Form(...),
     session_id: str = Form(...),
     file: UploadFile = File(...),
+    user_id: str = Depends(current_user_id),
     db: Session = Depends(get_db),
 ):
     allowed, used = rate_limit.check_and_increment(db, user_id)
@@ -68,8 +68,9 @@ def upload_pdf(
     if (file.content_type or "").split(";")[0].strip() != "application/pdf":
         raise HTTPException(status_code=400, detail="file must be application/pdf")
 
-    if db.get(SessionModel, session_id) is None:
-        raise HTTPException(status_code=400, detail="session not found")
+    sess = db.get(SessionModel, session_id)
+    if sess is None or sess.user_id != user_id:
+        raise HTTPException(status_code=404, detail="session not found")
 
     raw_name = Path(file.filename or "upload.pdf").name
     safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", raw_name)
@@ -108,7 +109,7 @@ def upload_pdf(
 @router.get("/upload/{document_id}", response_model=UploadStatus)
 def get_upload_status(
     document_id: int,
-    user_id: str = Query(...),
+    user_id: str = Depends(current_user_id),
     db: Session = Depends(get_db),
 ):
     doc = db.get(Document, document_id)

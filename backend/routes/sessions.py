@@ -2,7 +2,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -20,6 +20,7 @@ from contracts import (
 from db.database import get_db
 from db.models import ChatMessage, Document, Session as SessionModel, User
 from services import profile_service, summary_service
+from services.auth import current_user_id
 
 NO_EXCHANGES_TEXT = (
     "This session ended without any exchanges. Start a new session to continue."
@@ -65,7 +66,11 @@ def _to_response(db: Session, row: SessionModel) -> SessionResponse:
     response_model=SessionResponse,
     status_code=status.HTTP_201_CREATED,
 )
-async def create_session(req: SessionCreateRequest, db: Session = Depends(get_db)):
+async def create_session(
+    req: SessionCreateRequest,
+    user_id: str = Depends(current_user_id),
+    db: Session = Depends(get_db),
+):
     if req.seed_mode == "resume" and req.prior_session_id is None:
         raise HTTPException(
             status_code=400, detail="prior_session_id required when seed_mode=resume"
@@ -75,8 +80,8 @@ async def create_session(req: SessionCreateRequest, db: Session = Depends(get_db
             status_code=400, detail="prior_session_id forbidden when seed_mode=fresh"
         )
 
-    if not db.get(User, req.user_id):
-        db.add(User(id=req.user_id))
+    if not db.get(User, user_id):
+        db.add(User(id=user_id))
         db.flush()
 
     new_id = uuid.uuid4().hex
@@ -84,7 +89,7 @@ async def create_session(req: SessionCreateRequest, db: Session = Depends(get_db
 
     if req.seed_mode == "resume":
         prior = db.get(SessionModel, req.prior_session_id)
-        if prior is None or prior.user_id != req.user_id:
+        if prior is None or prior.user_id != user_id:
             raise HTTPException(status_code=404, detail="prior session not found")
         if prior.ended_at is None:
             await summary_service.generate_and_persist(db, prior)
@@ -93,7 +98,7 @@ async def create_session(req: SessionCreateRequest, db: Session = Depends(get_db
 
     new_session = SessionModel(
         id=new_id,
-        user_id=req.user_id,
+        user_id=user_id,
         topic=req.topic,
         topic_profile_json=profile_json,
     )
@@ -104,7 +109,10 @@ async def create_session(req: SessionCreateRequest, db: Session = Depends(get_db
 
 
 @router.get("/sessions", response_model=list[SessionListItem])
-def list_sessions(user_id: str, db: Session = Depends(get_db)):
+def list_sessions(
+    user_id: str = Depends(current_user_id),
+    db: Session = Depends(get_db),
+):
     rows = db.execute(
         select(SessionModel)
         .where(SessionModel.user_id == user_id)
@@ -155,7 +163,7 @@ def _build_end_summary(db: Session, session_id: str, text: str) -> SessionEndSum
 @router.get("/sessions/{session_id}", response_model=SessionDetail)
 def get_session(
     session_id: str,
-    user_id: str = Query(...),
+    user_id: str = Depends(current_user_id),
     db: Session = Depends(get_db),
 ):
     row = db.get(SessionModel, session_id)
@@ -176,7 +184,7 @@ def get_session(
 @router.post("/sessions/{session_id}/end", response_model=SessionEndResponse)
 async def end_session(
     session_id: str,
-    user_id: str = Query(...),
+    user_id: str = Depends(current_user_id),
     db: Session = Depends(get_db),
 ):
     row = db.get(SessionModel, session_id)
@@ -203,7 +211,7 @@ async def end_session(
 @router.post("/sessions/{session_id}/reopen", response_model=SessionResponse)
 def reopen_session(
     session_id: str,
-    user_id: str = Query(...),
+    user_id: str = Depends(current_user_id),
     db: Session = Depends(get_db),
 ):
     row = db.get(SessionModel, session_id)
