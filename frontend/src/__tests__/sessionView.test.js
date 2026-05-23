@@ -279,7 +279,7 @@ describe('SessionView', () => {
     Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
     await input.trigger('change')
     await flushPromises()
-    expect(uploadPdf).toHaveBeenCalledWith({ sessionId: 's1', file })
+    expect(uploadPdf).toHaveBeenCalledWith({ userId: 'u1', sessionId: 's1', file })
     expect(getUploadStatus).toHaveBeenCalledWith('doc-1')
     expect(wrapper.find('[data-testid="upload-status-ready"]').exists()).toBe(true)
   })

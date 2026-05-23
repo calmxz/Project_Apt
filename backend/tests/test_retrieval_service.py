@@ -119,4 +119,4 @@ def test_chroma_exception_returns_failed(session, ctx, chroma, mock_embed, db_se
     )
     assert result.ok is False
     assert result.status == "failed"
-    assert "chroma" in (result.error or "").lower()
+    assert result.error == "retrieval_failed"

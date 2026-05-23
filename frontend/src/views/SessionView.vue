@@ -422,7 +422,7 @@ async function onUploadFile(ev) {
   uploading.value = true
   uploadStatus.value = { kind: 'pending', text: `Uploading ${file.name}…` }
   try {
-    const resp = await uploadPdf({ sessionId: props.id, file })
+    const resp = await uploadPdf({ userId: user.userId, sessionId: props.id, file })
     await pollUploadStatus(resp.document_id, file.name)
   } catch (e) {
     uploadStatus.value = {

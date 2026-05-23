@@ -2,8 +2,9 @@ import { ApiError, apiGet } from './apiClient.js'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
 
-export async function uploadPdf({ sessionId, file }) {
+export async function uploadPdf({ userId, sessionId, file }) {
   const fd = new FormData()
+  fd.append('user_id', userId)
   fd.append('session_id', sessionId)
   fd.append('file', file)
 

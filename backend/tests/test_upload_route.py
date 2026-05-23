@@ -40,7 +40,7 @@ def stub_filesystem(monkeypatch, tmp_path):
 
 def test_upload_returns_202_and_creates_pending_document(client, seeded, db_session):
     files = {"file": ("notes.pdf", io.BytesIO(b"%PDF-fake"), "application/pdf")}
-    r = client.post("/api/upload", data={"session_id": SESSION_ID}, files=files)
+    r = client.post("/api/upload", data={"user_id": USER_ID, "session_id": SESSION_ID}, files=files)
     assert r.status_code == 202, r.text
     body = r.json()
     assert body["status"] == "pending"
@@ -54,7 +54,7 @@ def test_upload_returns_202_and_creates_pending_document(client, seeded, db_sess
 
 def test_non_pdf_content_type_400(client, seeded):
     files = {"file": ("notes.txt", io.BytesIO(b"hello"), "text/plain")}
-    r = client.post("/api/upload", data={"session_id": SESSION_ID}, files=files)
+    r = client.post("/api/upload", data={"user_id": USER_ID, "session_id": SESSION_ID}, files=files)
     assert r.status_code == 400
 
 
@@ -66,13 +66,41 @@ def test_missing_session_id_field_400(client, seeded):
 
 def test_unknown_session_id_400(client, seeded):
     files = {"file": ("notes.pdf", io.BytesIO(b"%PDF-fake"), "application/pdf")}
-    r = client.post("/api/upload", data={"session_id": "does_not_exist"}, files=files)
+    r = client.post(
+        "/api/upload",
+        data={"user_id": USER_ID, "session_id": "does_not_exist"},
+        files=files,
+    )
     assert r.status_code == 400
+
+
+def test_missing_user_id_field_422(client, seeded):
+    files = {"file": ("notes.pdf", io.BytesIO(b"%PDF-fake"), "application/pdf")}
+    r = client.post("/api/upload", data={"session_id": SESSION_ID}, files=files)
+    assert r.status_code in (400, 422)
+
+
+def test_upload_returns_429_when_cap_reached(client, seeded, monkeypatch):
+    monkeypatch.setattr(
+        "routes.upload.rate_limit.check_and_increment",
+        lambda db, uid: (False, 9999),
+    )
+    files = {"file": ("notes.pdf", io.BytesIO(b"%PDF-fake"), "application/pdf")}
+    r = client.post(
+        "/api/upload",
+        data={"user_id": USER_ID, "session_id": SESSION_ID},
+        files=files,
+    )
+    assert r.status_code == 429
+    body = r.json()["detail"]
+    assert body["code"] == "daily_cap_reached"
+    assert body["used"] == 9999
+    assert "resets_at" in body
 
 
 def test_get_upload_status_returns_current_doc_state(client, seeded, db_session):
     files = {"file": ("notes.pdf", io.BytesIO(b"%PDF-fake"), "application/pdf")}
-    r = client.post("/api/upload", data={"session_id": SESSION_ID}, files=files)
+    r = client.post("/api/upload", data={"user_id": USER_ID, "session_id": SESSION_ID}, files=files)
     doc_id = r.json()["document_id"]
 
     r2 = client.get(f"/api/upload/{doc_id}")
@@ -107,7 +135,7 @@ def test_background_task_scheduled(client, seeded, monkeypatch):
 
     monkeypatch.setattr("services.ingestion_service.run", fake_run)
     files = {"file": ("notes.pdf", io.BytesIO(b"%PDF-fake"), "application/pdf")}
-    r = client.post("/api/upload", data={"session_id": SESSION_ID}, files=files)
+    r = client.post("/api/upload", data={"user_id": USER_ID, "session_id": SESSION_ID}, files=files)
     assert r.status_code == 202
     assert len(seen) == 1
     assert seen[0] == r.json()["document_id"]

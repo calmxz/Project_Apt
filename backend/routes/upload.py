@@ -16,7 +16,8 @@ from config import settings
 from contracts import UploadResponse, UploadStatus
 from db.database import get_db
 from db.models import Document, Session as SessionModel
-from services import ingestion_service
+from lib.error_codes import DAILY_CAP_REACHED
+from services import ingestion_service, rate_limit
 
 
 router = APIRouter(prefix="/api")
@@ -29,10 +30,23 @@ router = APIRouter(prefix="/api")
 )
 def upload_pdf(
     background_tasks: BackgroundTasks,
+    user_id: str = Form(...),
     session_id: str = Form(...),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
+    allowed, used = rate_limit.check_and_increment(db, user_id)
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code": DAILY_CAP_REACHED,
+                "cap": settings.daily_cap,
+                "used": used,
+                "resets_at": rate_limit.midnight_utc_iso(),
+            },
+        )
+
     if (file.content_type or "").split(";")[0].strip() != "application/pdf":
         raise HTTPException(status_code=400, detail="file must be application/pdf")
 
