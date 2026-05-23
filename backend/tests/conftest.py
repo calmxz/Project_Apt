@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from fastapi import HTTPException, Request, status
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -11,6 +12,24 @@ from sqlalchemy.pool import StaticPool
 import main as main_module
 from db.database import Base, get_db
 from main import app
+from services.auth import current_user_id
+
+
+def _fake_current_user_id(request: Request) -> str:
+    """Test convention: `Authorization: Bearer test-<userid>` resolves to <userid>.
+
+    If no header is present, returns "test-user" as a default so existing tests
+    that don't yet send a bearer token keep working until they're migrated.
+    """
+    auth = request.headers.get("authorization") or request.headers.get("Authorization") or ""
+    if not auth.lower().startswith("bearer "):
+        return "test-user"
+    token = auth.split(None, 1)[1].strip()
+    if token.startswith("test-"):
+        return token[len("test-"):]
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_token"
+    )
 
 
 @pytest.fixture
@@ -41,6 +60,7 @@ def client(db_session, monkeypatch):
         yield db_session
 
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[current_user_id] = _fake_current_user_id
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()

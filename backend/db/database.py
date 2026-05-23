@@ -9,17 +9,19 @@ class Base(DeclarativeBase):
     pass
 
 
-engine = create_engine(
-    settings.database_url,
-    connect_args={"check_same_thread": False},
-)
+_is_sqlite = settings.database_url.startswith("sqlite:")
+_engine_kwargs: dict = {}
+if _is_sqlite:
+    _engine_kwargs["connect_args"] = {"check_same_thread": False}
+
+engine = create_engine(settings.database_url, **_engine_kwargs)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
-# Idempotent dev-only column additions. Each phase appends to this tuple.
-# SQLAlchemy's create_all does not ALTER existing tables, so existing dev DBs
-# need column adds applied separately. Production would use Alembic.
+# Legacy idempotent column additions for pre-Alembic sqlite dev DBs.
+# Postgres goes through Alembic (see backend/db/alembic/). This block is a
+# no-op on Postgres because the columns are part of the baseline revision.
 _MIGRATIONS: tuple[str, ...] = (
     "ALTER TABLE chat_messages ADD COLUMN tool_calls_json TEXT NOT NULL DEFAULT '[]'",
     "ALTER TABLE chat_messages ADD COLUMN citations_json TEXT NOT NULL DEFAULT '[]'",
@@ -39,9 +41,10 @@ def get_db():
 
 def create_tables():
     Base.metadata.create_all(bind=engine)
-    with engine.begin() as conn:
-        for sql in _MIGRATIONS:
-            try:
-                conn.exec_driver_sql(sql)
-            except OperationalError:
-                pass
+    if _is_sqlite:
+        with engine.begin() as conn:
+            for sql in _MIGRATIONS:
+                try:
+                    conn.exec_driver_sql(sql)
+                except OperationalError:
+                    pass

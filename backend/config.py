@@ -28,6 +28,13 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173"
     env: str = "dev"
 
+    supabase_url: str = ""
+    supabase_anon_key: str = ""
+    supabase_jwks_url: str = ""
+    supabase_service_role_key: str = ""
+    llm_soft_cap_usd: float = 2.00
+    llm_hard_cap_usd: float = 3.00
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
