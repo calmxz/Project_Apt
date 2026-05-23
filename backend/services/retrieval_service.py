@@ -58,8 +58,12 @@ def retrieve(db: Session, ctx: ToolContext, args: RetrieveChunksArgs) -> ToolRes
             name=chroma_client.collection_name(ctx.session_id)
         )
         result = collection.query(query_embeddings=[query_vec], n_results=args.k or 5)
-    except Exception:
-        log.exception("retrieval failed")
+    except Exception as e:
+        log.error(
+            "retrieval failed",
+            extra={"err_type": type(e).__name__, "session_id": ctx.session_id},
+            exc_info=settings.env != "prod",
+        )
         return ToolResult(ok=False, status="failed", error="retrieval_failed")
 
     docs = (result.get("documents") or [[]])[0]

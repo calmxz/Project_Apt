@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     uploads_path: str = (_DATA_DIR / "uploads").as_posix()
     llm_stub: bool = False
     cors_origins: str = "http://localhost:5173"
+    env: str = "dev"
 
     @property
     def cors_origin_list(self) -> list[str]:

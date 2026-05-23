@@ -111,7 +111,11 @@ def run(document_id: int) -> None:
             doc.error = None
             db.commit()
         except Exception as e:
-            log.exception("ingestion failed for document %s", document_id)
+            log.error(
+                "ingestion failed",
+                extra={"err_type": type(e).__name__, "doc_id": document_id},
+                exc_info=settings.env != "prod",
+            )
             doc.status = "failed"
             doc.error = str(e)[:1000]
             db.commit()
