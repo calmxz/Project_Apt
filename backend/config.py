@@ -29,7 +29,7 @@ class Settings(BaseSettings):
 
     supabase_url: str = ""
     supabase_anon_key: str = ""
-    supabase_jwks_url: str = ""
+    supabase_jwks_url_override: str = ""
     supabase_service_role_key: str = ""
     llm_soft_cap_usd: float = 2.00
     llm_hard_cap_usd: float = 3.00
@@ -37,6 +37,14 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def supabase_jwks_url(self) -> str:
+        if self.supabase_jwks_url_override:
+            return self.supabase_jwks_url_override
+        if not self.supabase_url:
+            return ""
+        return self.supabase_url.rstrip("/") + "/auth/v1/.well-known/jwks.json"
 
     @property
     def llm_stub_enabled(self) -> bool:

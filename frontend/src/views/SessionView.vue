@@ -193,7 +193,7 @@
         {{ uploadStatus.text }}
       </p>
 
-      <div v-if="!isEnded" class="composer">
+      <div v-if="!isEnded" class="composer-wrap">
         <input
           ref="fileInputEl"
           type="file"
@@ -202,38 +202,58 @@
           hidden
           @change="onUploadFile"
         />
-        <button
-          type="button"
-          class="attach-btn"
-          data-testid="session-upload-btn"
-          :disabled="!canSend || uploading"
-          aria-label="Attach a PDF to this session"
-          @click="openFilePicker"
-        >
-          <span class="attach-icon" aria-hidden="true">+</span>
-          <span class="attach-label">{{ uploading ? 'Uploading…' : 'Attach PDF' }}</span>
-        </button>
-        <Textarea
-          ref="composerEl"
-          v-model="draft"
-          data-testid="session-input"
-          rows="2"
-          auto-resize
-          placeholder="Ask a question. Press Enter to send, Shift+Enter for a new line."
-          :disabled="!canSend"
-          class="composer-input"
-          @keydown="onKeydown"
-        />
-        <Button
-          label="Send"
-          icon="pi pi-send"
-          icon-pos="right"
-          data-testid="session-send"
-          :loading="sending"
-          :disabled="!draft.trim() || !canSend || sending"
-          class="send-btn"
-          @click="send"
-        />
+        <div class="composer" :class="{ 'is-disabled': !canSend }">
+          <button
+            type="button"
+            class="composer-attach"
+            data-testid="session-upload-btn"
+            :disabled="!canSend || uploading"
+            :aria-label="uploading ? 'Uploading PDF' : 'Attach a PDF'"
+            :title="uploading ? 'Uploading…' : 'Attach PDF'"
+            @click="openFilePicker"
+          >
+            <i v-if="!uploading" class="pi pi-paperclip" aria-hidden="true" />
+            <i v-else class="pi pi-spin pi-spinner" aria-hidden="true" />
+          </button>
+
+          <textarea
+            ref="composerEl"
+            v-model="draft"
+            data-testid="session-input"
+            class="composer-input"
+            rows="1"
+            placeholder="Ask anything. Press Enter to send · Shift + Enter for a new line."
+            :disabled="!canSend"
+            :maxlength="MAX_DRAFT_LEN"
+            @keydown="onKeydown"
+            @input="autoResize"
+          />
+
+          <button
+            type="button"
+            class="composer-send"
+            data-testid="session-send"
+            :disabled="!draft.trim() || !canSend || sending"
+            :aria-label="sending ? 'Sending message' : 'Send message'"
+            @click="send"
+          >
+            <i
+              :class="sending ? 'pi pi-spin pi-spinner' : 'pi pi-arrow-up'"
+              aria-hidden="true"
+            />
+          </button>
+        </div>
+
+        <div class="composer-hints" :class="{ 'is-near-limit': nearCharLimit }">
+          <span class="composer-hint">
+            <kbd>⏎</kbd> to send
+            <span class="composer-hint-sep">·</span>
+            <kbd>⇧</kbd>+<kbd>⏎</kbd> newline
+          </span>
+          <span v-if="draft.length" class="composer-count" aria-live="polite">
+            {{ draft.length.toLocaleString() }} / {{ MAX_DRAFT_LEN.toLocaleString() }}
+          </span>
+        </div>
       </div>
 
       <Dialog
@@ -264,7 +284,6 @@ import { useRouter } from 'vue-router'
 
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
-import Textarea from 'primevue/textarea'
 
 import BackButton from '../components/BackButton.vue'
 import SessionEndedBanner from '../components/SessionEndedBanner.vue'
@@ -353,6 +372,23 @@ const quickPrompts = [
   "Explain the core idea in two sentences.",
 ]
 
+const MAX_DRAFT_LEN = 2000
+const COMPOSER_MAX_HEIGHT_PX = 220
+const nearCharLimit = computed(() => draft.value.length >= MAX_DRAFT_LEN * 0.9)
+
+function autoResize() {
+  // Native textarea grows up to COMPOSER_MAX_HEIGHT_PX, then scrolls. Reset to
+  // auto first so shrinking on backspace works (otherwise scrollHeight stays
+  // high once the box has grown).
+  const inner = composerEl.value
+  if (!inner) return
+  inner.style.height = 'auto'
+  const next = Math.min(inner.scrollHeight, COMPOSER_MAX_HEIGHT_PX)
+  inner.style.height = `${next}px`
+}
+
+watch(draft, () => nextTick(autoResize))
+
 function scrollToBottom() {
   nextTick(() => {
     const el = messagesEl.value
@@ -379,8 +415,15 @@ onMounted(async () => {
 
 function focusComposer() {
   nextTick(() => {
-    const inner = composerEl.value?.$el?.querySelector?.('textarea')
-    inner?.focus()
+    // composerEl is now a native <textarea>, not a PrimeVue wrapper, so focus
+    // it directly. Defensive fallback covers the (legacy) PrimeVue case to
+    // avoid breaking if this template is reverted upstream.
+    const el = composerEl.value
+    const node =
+      el && typeof el.focus === 'function'
+        ? el
+        : el?.$el?.querySelector?.('textarea')
+    node?.focus()
   })
 }
 
@@ -573,13 +616,20 @@ function goHome() {
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  min-height: 14rem;
+  min-height: clamp(10rem, 32vh, 18rem);
   max-height: calc(100vh - 22rem);
   overflow-y: auto;
-  padding: 0.5rem 0.25rem 1rem 0;
+  padding: 0.75rem 0.25rem 1rem 0;
   scroll-behavior: smooth;
   scrollbar-width: thin;
   scrollbar-color: var(--color-border-strong) transparent;
+}
+
+.messages:has(.empty) {
+  /* When the conversation is empty, let the empty-state anchor naturally
+     near the top of the conversation area instead of being orphaned in a
+     vertically-centered void. */
+  justify-content: flex-start;
 }
 
 .messages::-webkit-scrollbar { width: 6px; }
@@ -607,15 +657,25 @@ function goHome() {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 0.5rem;
-  padding: 2.5rem 1rem;
+  gap: 0.625rem;
+  padding: 1.75rem 1rem 1.25rem;
   margin: 0;
 }
 
 .empty-spark {
   color: var(--color-accent);
-  margin-bottom: 0.25rem;
-  filter: drop-shadow(0 2px 8px rgba(255, 107, 92, 0.25));
+  margin-bottom: 0.125rem;
+  filter: drop-shadow(0 2px 12px rgba(255, 107, 92, 0.35));
+  animation: spark-breath 4.5s ease-in-out infinite;
+}
+
+@keyframes spark-breath {
+  0%, 100% { transform: rotate(0deg) scale(1); opacity: 0.9; }
+  50% { transform: rotate(18deg) scale(1.06); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .empty-spark { animation: none; }
 }
 
 .empty-eyebrow {
@@ -893,129 +953,219 @@ function goHome() {
   color: var(--signal-error);
 }
 
-/* Composer */
-.composer {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-  padding: 0.5rem 0.5rem 0.5rem 0.875rem;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  box-shadow: var(--shadow-lift);
+/* Composer — native textarea + icon buttons in a CSS grid. Replaced the
+   previous PrimeVue Textarea + Button because Aura's tokens were bleeding
+   through the wrapper and breaking the layout (white box overflowing the
+   dark pill). Owning the markup gives us deterministic styling. */
+.composer-wrap {
   position: sticky;
   bottom: 1rem;
-  transition: border-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  z-index: 2;
+}
+
+.composer {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: end;
+  gap: 0.5rem;
+  padding: 0.55rem 0.55rem 0.55rem 0.6rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lift);
+  transition:
+    border-color var(--motion-fast) ease,
+    box-shadow var(--motion-base) ease,
+    transform var(--motion-base) var(--motion-bounce);
 }
 
 .composer:focus-within {
   border-color: var(--color-accent);
-  box-shadow: var(--shadow-lift), 0 0 0 4px var(--color-accent-ring);
+  box-shadow:
+    var(--shadow-lift),
+    0 0 0 4px var(--color-accent-ring);
+  transform: translateY(-1px);
 }
 
-.composer-input :deep(textarea),
-.composer-input.p-inputtext {
-  flex: 1;
-  background: transparent;
-  border: 0;
-  font-family: var(--font-sans);
-  font-size: 1rem;
-  color: var(--color-text);
-  resize: none;
-  padding: 0.625rem 0.5rem;
+.composer.is-disabled {
+  opacity: 0.7;
+}
+
+.composer-input {
+  grid-column: 2;
+  align-self: stretch;
   width: 100%;
   min-height: 2.5rem;
-}
-
-.composer-input :deep(textarea):focus,
-.composer-input.p-inputtext:focus {
-  outline: none;
-  box-shadow: none;
-}
-
-.composer :deep(.p-inputtextarea) {
-  flex: 1;
-  border: 0;
+  max-height: 220px;
+  padding: 0.625rem 0.25rem;
+  margin: 0;
   background: transparent;
+  border: 0;
+  outline: 0;
+  resize: none;
+  overflow-y: auto;
+
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--color-text);
+  caret-color: var(--color-accent);
+
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
 }
 
-.attach-btn {
+.composer-input::placeholder {
+  color: var(--color-text-faint);
+  opacity: 1;
+}
+
+.composer-input:disabled {
+  cursor: not-allowed;
+}
+
+.composer-input::-webkit-scrollbar { width: 6px; }
+.composer-input::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: 3px;
+}
+
+/* Attach + send share the round-icon vocabulary. Sizes intentionally
+   identical so the composer reads as balanced book-ends around the input. */
+.composer-attach,
+.composer-send {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex-shrink: 0;
+  border-radius: var(--radius-pill);
+  font-size: 1rem;
+  cursor: pointer;
+  transition:
+    background var(--motion-fast) ease,
+    color var(--motion-fast) ease,
+    border-color var(--motion-fast) ease,
+    transform var(--motion-fast) var(--motion-bounce),
+    box-shadow var(--motion-fast) ease,
+    opacity var(--motion-fast) ease;
+}
+
+.composer-attach {
+  grid-column: 1;
+  align-self: end;
+  margin-bottom: 0.1rem;
   background: transparent;
   color: var(--color-text-muted);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  padding: 0.5rem 0.875rem;
-  font-family: var(--font-sans);
-  font-size: 0.8125rem;
-  font-weight: 500;
-  cursor: pointer;
-  flex: 0 0 auto;
-  transition: background var(--motion-fast) ease, color var(--motion-fast) ease, border-color var(--motion-fast) ease;
 }
 
-.attach-btn:hover:not(:disabled),
-.attach-btn:focus-visible {
-  border-color: var(--color-accent-soft);
+.composer-attach:hover:not(:disabled),
+.composer-attach:focus-visible {
   background: var(--color-accent-soft);
+  border-color: var(--color-accent-soft);
   color: var(--color-accent);
   outline: none;
 }
 
-.attach-btn:disabled {
-  opacity: 0.5;
+.composer-attach:disabled {
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
-.attach-icon {
-  font-weight: 700;
-  font-size: 1rem;
-  line-height: 1;
-}
-
-.attach-label { display: inline-block; }
-
-.send-btn :deep(.p-button),
-.send-btn.p-button {
-  width: 2.75rem;
-  height: 2.75rem;
-  min-width: 2.75rem;
-  padding: 0;
+.composer-send {
+  grid-column: 3;
+  align-self: end;
+  margin-bottom: 0.1rem;
   background: var(--color-accent);
   color: #FFFFFF;
   border: 0;
-  border-radius: var(--radius-pill);
-  font-family: var(--font-sans);
-  font-weight: 600;
   box-shadow: var(--shadow-pop);
-  transition: transform var(--motion-fast) var(--motion-bounce), box-shadow var(--motion-fast) ease, opacity var(--motion-fast) ease;
+  font-weight: 600;
 }
 
-.send-btn :deep(.p-button .p-button-label) {
-  display: none;
-}
-
-.send-btn :deep(.p-button .p-icon),
-.send-btn :deep(.p-button .pi) {
-  margin: 0;
-  font-size: 1rem;
-}
-
-.send-btn :deep(.p-button):not(:disabled):hover {
+.composer-send:not(:disabled):hover,
+.composer-send:not(:disabled):focus-visible {
   transform: translateY(-2px);
+  outline: none;
 }
 
-.send-btn :deep(.p-button):not(:disabled):active {
-  transform: translateY(4px);
+.composer-send:not(:disabled):active {
+  transform: translateY(3px);
   box-shadow: var(--shadow-pop-pressed);
 }
 
-.send-btn :deep(.p-button):disabled {
-  opacity: 0.45;
+.composer-send:disabled {
+  background: var(--color-surface-soft);
+  color: var(--color-text-faint);
   box-shadow: none;
   cursor: not-allowed;
+}
+
+/* Footer hint strip — keyboard cheatsheet left, character count right.
+   Mono caption styling keeps it editorial without competing with the input. */
+.composer-hints {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.04em;
+  color: var(--color-text-faint);
+  user-select: none;
+}
+
+.composer-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.composer-hint kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 0.3rem;
+  border: 1px solid var(--color-border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--color-surface-soft);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: var(--color-text-muted);
+  line-height: 1;
+}
+
+.composer-hint-sep {
+  color: var(--color-border-strong);
+}
+
+.composer-count {
+  font-variant-numeric: tabular-nums;
+  transition: color var(--motion-fast) ease;
+}
+
+.composer-hints.is-near-limit .composer-count {
+  color: var(--signal-warning);
+  font-weight: 600;
+}
+
+@media (max-width: 600px) {
+  .composer-hints { display: none; }
+  .composer-attach,
+  .composer-send {
+    width: 2.25rem;
+    height: 2.25rem;
+  }
 }
 
 /* Header action buttons */

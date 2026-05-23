@@ -22,6 +22,12 @@ _is_sqlite = _db_url.startswith("sqlite:")
 _engine_kwargs: dict = {}
 if _is_sqlite:
     _engine_kwargs["connect_args"] = {"check_same_thread": False}
+else:
+    # Supabase transaction-mode pooler (port 6543) multiplexes backends across
+    # clients. psycopg3 names prepared statements `_pg3_N` per connection and
+    # collides when the pooler hands the same backend to a new client. Disable
+    # statement prepare entirely. See psycopg docs §"Pgbouncer".
+    _engine_kwargs["connect_args"] = {"prepare_threshold": None}
 
 engine = create_engine(_db_url, **_engine_kwargs)
 
@@ -49,11 +55,15 @@ def get_db():
 
 
 def create_tables():
+    # Postgres schema is owned by Alembic (backend/db/alembic/). Skipping
+    # create_all here also avoids has_table() probes against the Supabase
+    # pooler at boot, which can hit prepared-statement collisions.
+    if not _is_sqlite:
+        return
     Base.metadata.create_all(bind=engine)
-    if _is_sqlite:
-        with engine.begin() as conn:
-            for sql in _MIGRATIONS:
-                try:
-                    conn.exec_driver_sql(sql)
-                except OperationalError:
-                    pass
+    with engine.begin() as conn:
+        for sql in _MIGRATIONS:
+            try:
+                conn.exec_driver_sql(sql)
+            except OperationalError:
+                pass
