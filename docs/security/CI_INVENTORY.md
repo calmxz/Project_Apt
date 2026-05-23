@@ -4,8 +4,8 @@
 **Companion to:** [`SECURITY_REVIEW.md`](SECURITY_REVIEW.md) and `.github/workflows/ci.yml`.
 **Phase introduced:** Phase 6 (`phase/6-ci-security-tests`, 2026-05-23).
 
-Every job below blocks PR merge once branch protection is enabled on `main`
-(see "Manual post-merge" at the end of this file).
+Every job below blocks PR merge once branch protection is enabled on `dev`
+(staging) and `main` (prod). See "Manual post-merge" at the end of this file.
 
 ---
 
@@ -63,15 +63,52 @@ refactor reintroducing the finding will fail CI deterministically.
 
 ---
 
-## Manual post-merge (user runs after PR lands)
+## Manual post-merge (user configures via GitHub web UI)
 
 Branch protection and signed commits are documented here but **not executed by
 the Phase 6 PR** — both require admin scope on the repo and (for signed
 commits) a configured signing key on the user's machine.
 
+Branch model:
+- `dev` = staging (PRs land here first)
+- `main` = production (only fast-forward from `dev` after staging verification)
+
+### Branch protection — apply to BOTH `dev` and `main`
+
+Settings → Branches → Add branch protection rule. Create one rule per branch
+(`dev` and `main`) with the same status checks. Staging must enforce the same
+gates as prod; otherwise broken commits sneak into `dev` and get promoted to
+`main` later under a false-pass assumption.
+
+Required status checks (must match exact job names from `ci.yml` and
+`codeql.yml`):
+- `Backend (pytest)`
+- `Frontend (Vitest + lint)`
+- `Security (SAST + deps + secrets + images)`
+- `Analyze (python)`
+- `Analyze (javascript-typescript)`
+
+Other settings (both branches):
+- Require branches to be up to date before merging: ON
+- Include administrators (enforce_admins): ON
+- Required approving reviews: 0 (solo-maintainer phase; revisit at v2)
+- Restrict who can push: OFF
+
+### Signed commits — `main` only
+
+Settings → Branches → `main` rule → Require signed commits: ON.
+
+Skip on `dev` — staging churns fast and per-commit signing adds friction with
+no security gain (staging is not the deploy artifact).
+
+Prereq on local machine: `git config --global commit.gpgsign true` and a GPG
+or SSH signing key registered with GitHub (Settings → SSH and GPG keys).
+
+### Equivalent gh CLI (if web UI unavailable)
+
 ```bash
-# Branch protection on main (require all CI jobs to pass before merge)
-gh api -X PUT repos/:owner/:repo/branches/main/protection \
+# Repeat for both branches: dev, main
+gh api -X PUT repos/:owner/:repo/branches/<branch>/protection \
   -f required_status_checks.strict=true \
   -f required_status_checks.contexts[]='Backend (pytest)' \
   -f required_status_checks.contexts[]='Frontend (Vitest + lint)' \
@@ -82,9 +119,6 @@ gh api -X PUT repos/:owner/:repo/branches/main/protection \
   -f required_pull_request_reviews.required_approving_review_count=0 \
   -f restrictions=null
 
-# Require signed commits on main
+# Signed commits on main only
 gh api -X POST repos/:owner/:repo/branches/main/protection/required_signatures
 ```
-
-Prereq for signed commits: `git config --global commit.gpgsign true` and a GPG
-or SSH signing key registered with GitHub.
