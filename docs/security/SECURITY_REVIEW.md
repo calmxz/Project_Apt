@@ -11,6 +11,33 @@ Findings use IDs (`H-1`, `M-2`, …) referenced by `docs/security/SECURITY_FIXPL
 
 ---
 
+## Resolution Status
+
+All 12 findings resolved on `security/audit-2026-05-23` across 4 phased commits. Verified by `pytest` (110 tests green) at each phase boundary.
+
+| ID  | Title                                                   | Severity | Status   | Commit    |
+|-----|---------------------------------------------------------|----------|----------|-----------|
+| H-1 | Unbounded paid embedding calls via `/api/upload`        | High     | Resolved | `b7ffa1e` |
+| H-2 | No upload file size limit                               | High     | Resolved | `212b105` |
+| H-3 | Unbounded string inputs across Pydantic request models  | High     | Resolved | `212b105` |
+| H-4 | No ownership check on session/document endpoints        | High     | Resolved | `212b105` |
+| H-5 | Raw exception strings returned to clients               | High     | Resolved | `b7ffa1e` |
+| M-1 | CORS overly permissive                                  | Medium   | Resolved | `b7ffa1e` |
+| M-2 | Path-traversal escape hatch in upload + ingestion       | Medium   | Resolved | `212b105` |
+| M-3 | Retrieved PDF chunks without untrusted-data delimiter   | Medium   | Resolved | `9c96047` |
+| M-4 | Backend container runs as root                          | Medium   | Resolved | `9c96047` |
+| M-5 | LiteLLM pinned to 1.41.11 (old)                         | Medium   | Resolved | `9c96047` |
+| L-1 | `log.exception(...)` writes full stack traces to stderr | Low      | Resolved | `f819a41` |
+| L-2 | Speculative `.gitignore` patterns absent                | Low      | Resolved | `f819a41` |
+
+Phase summary:
+- **Phase 1** (`b7ffa1e`) — rate-limit upload, narrow CORS, sanitize retrieval error.
+- **Phase 2** (`212b105`) — maxLength caps, upload size limit, filename traversal hardening, ownership enforcement.
+- **Phase 3** (`9c96047`) — prompt-injection wrap, non-root container, LiteLLM bump to 1.85.1.
+- **Phase 4** (`f819a41`) — structured error logs (env-gated `exc_info`), speculative `.gitignore` patterns.
+
+---
+
 ## Critical
 
 None.
