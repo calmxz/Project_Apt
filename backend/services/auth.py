@@ -79,7 +79,10 @@ def current_user_id(request: Request) -> str:
             detail="missing_token",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    token = auth.split(None, 1)[1].strip()
+    # `auth[7:]` skips the "Bearer " prefix matched above; safer than split
+    # because `"Bearer "` (trailing space, no token) returns "" cleanly,
+    # whereas split(None, 1)[1] raises IndexError on whitespace-only suffix.
+    token = auth[7:].strip()
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

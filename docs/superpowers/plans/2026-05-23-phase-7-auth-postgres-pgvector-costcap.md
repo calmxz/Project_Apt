@@ -138,19 +138,23 @@ User-side prereqs before code lands:
 
 - After all `openapi.yaml` edits: run `python backend/scripts/gen_contracts.py`. Commit the regenerated `backend/contracts/*.py`. CI drift check enforces zero diff.
 
-### 9. Tests
+### 9. Tests — COMPLETE 2026-05-23
 
-**Backend (new + rewritten):**
-- `tests/conftest.py`: replace `client` fixture's `user_id` injection with a dependency override that yields a fixed `test_user_id` string.
-- Every `test_*_for_wrong_user` test rewritten: instead of passing `user_id=B`, override the dependency for one request only to return `B`'s ID, assert 404.
-- `tests/test_cost_cap.py` (new): see Task 5.
-- `tests/test_pgvector_retrieval.py` (new): chunks written, top-k cosine query returns expected order. Uses pytest-postgresql or testcontainers; fall back to a local Postgres on `127.0.0.1:55432` for dev.
-- `tests/test_auth_dependency.py` (new): valid JWT → 200; missing → 401; expired → 401; wrong signature → 401.
+**Backend (shipped):**
+- `tests/conftest.py`: `_AuthInjectingClient` shim + `current_user_id` dependency override (shipped during T3a).
+- `tests/test_cost_cap.py`: shipped during T5.
+- `tests/test_pgvector_retrieval.py` (new): live-Postgres integration test gated on `TEST_DATABASE_URL`. Asserts cosine ordering, session isolation, k-limit, and row visibility. Skipped locally without env var; CI runs against `pgvector/pgvector:pg16`.
+- `tests/test_auth_dependency.py` (new): RSA keypair generated in-process, `_get_jwks_client` stubbed to vend the public key. 10 cases covering valid token, missing header, non-bearer scheme, empty bearer, expired, wrong audience, missing `sub`, wrong signature, malformed token, `auth_not_configured` when JWKS URL is empty. **Surfaced a bug** in `services/auth.py` — `Authorization: Bearer ` (trailing space, no token) raised `IndexError` instead of returning 401. Fixed by switching from `auth.split(None, 1)[1]` to `auth[7:].strip()`.
 
-**Frontend (new):**
-- `src/__tests__/loginView.test.js`: form submission triggers `supabase.auth.signInWithOtp`.
-- `src/__tests__/authGuard.test.js`: no session → router pushes to `/login`.
-- `e2e/auth.spec.js` (Playwright): magic-link mocked via `page.route`. Login → app loads.
+Backend totals after T9: 163 passed, 4 skipped (pgvector), coverage 92.56% (Phase 6 gate ≥75% held).
+
+**Frontend (shipped):**
+- `src/__tests__/loginView.test.js`: shipped during T6.
+- `src/__tests__/authStore.test.js`: shipped during T6 (covers `signInWithMagicLink`, `signOut`, `init`, `onAuthStateChange`).
+- `src/__tests__/router.test.js`: covers the auth guard — unauthenticated → `/login`, authenticated on `/login` → home, onboarding redirects honored.
+- `e2e/auth.spec.js` (Playwright, new): three flows — unauthenticated visit to `/` redirects to `/login`; submit button disabled until valid email; submitting valid email shows "Check your inbox" via mocked Supabase OTP endpoint. Per [project memory](../../memory/project_e2e_gating_phase6.md), e2e workflow stays `continue-on-error: true` through demo.
+
+Frontend totals after T9: 156 passed.
 
 ### 10. Docs — PARTIAL 2026-05-23 (post-T4 items deferred)
 
@@ -165,6 +169,8 @@ Deferred until T4 lands (pgvector replaces ChromaDB):
 - `CLAUDE.md` architecture diagram + repo-layout chromadb references — keep ChromaDB references accurate until the migration lands; update in one pass post-T4 so the doc never describes a state the code doesn't match.
 
 ### 11. Verification
+
+Full step-by-step manual smoke runbook: [`2026-05-23-phase-7-smoke-runbook.md`](2026-05-23-phase-7-smoke-runbook.md).
 
 - [ ] Local Postgres + pgvector reachable from backend container
 - [ ] Backend `pytest -v` green against Postgres (CI matrix or local toggle)
