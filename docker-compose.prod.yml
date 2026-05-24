@@ -23,11 +23,11 @@ services:
     environment:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       MODEL: ${MODEL:-gemini/gemini-3.1-flash-lite}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-gemini-embedding-2}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-gemini/gemini-embedding-2}
       DAILY_CAP: ${DAILY_CAP:-50}
       DATABASE_URL: ${DATABASE_URL}
       SUPABASE_URL: ${SUPABASE_URL}
-      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY}
       LLM_SOFT_CAP_USD: ${LLM_SOFT_CAP_USD:-2.00}
       LLM_HARD_CAP_USD: ${LLM_HARD_CAP_USD:-3.00}
       UPLOADS_PATH: /data/uploads

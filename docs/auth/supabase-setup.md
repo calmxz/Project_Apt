@@ -9,7 +9,7 @@ reads, and the JWT verification model.
 1. Sign up / sign in at <https://supabase.com>.
 2. New project → free tier. Region close to you (e.g. `Southeast Asia (Singapore)`).
 3. Database password: generate + store. You will not need it for the app
-   (the app authenticates with the service-role key, not the password) but
+   (the app authenticates with the secret API key, not the password) but
    you need it for direct `psql` access from `docs/db/postgres-pgvector-setup.md`.
 4. Wait for provisioning to finish (~1-2 min).
 
@@ -35,17 +35,24 @@ The Phase 7 plan locks magic-link only.
 
 ## 3. Collect the four env vars
 
-`Project Settings → API`:
+AdaptLearn uses Supabase's **2025+ API key model** — `publishable` (frontend)
++ `secret` (backend). Legacy `anon` + `service_role` keys are not used.
+Enable the new keys at `Project Settings → API Keys` and rotate the legacy
+keys off after migration.
+
+`Project Settings → API Keys`:
 
 | Env var | Where in Supabase | Used by |
 |---|---|---|
-| `SUPABASE_URL` | `Project URL` | backend + frontend |
-| `SUPABASE_ANON_KEY` | `Project API keys → anon public` | frontend |
-| `SUPABASE_SERVICE_ROLE_KEY` | `Project API keys → service_role secret` | backend only — never ship to client |
+| `SUPABASE_URL` | `Project URL` (under `Project Settings → API`) | backend + frontend |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | `API Keys → Publishable` (`sb_publishable_…`) | frontend |
+| `SUPABASE_SECRET_KEY` | `API Keys → Secret` (`sb_secret_…`) | backend only — never ship to client |
 | `DATABASE_URL` | `Project Settings → Database → Connection string → URI (pooler)` | backend |
 
 Notes:
-- `SUPABASE_SERVICE_ROLE_KEY` is **secret** — bypasses RLS. Backend-only.
+- `SUPABASE_SECRET_KEY` is **secret** — bypasses RLS. Backend-only. Treat
+  rotation like the old `service_role` key: dashboard → API Keys → Roll.
+- The publishable key is safe to ship in the frontend bundle by design.
 - `DATABASE_URL` from the **pooler** (port 6543, mode `transaction`). The
   direct connection (port 5432) is fine for migrations but the pooler is what
   the app uses at runtime.
@@ -56,7 +63,7 @@ Backend (`.env` at repo root, gitignored):
 
 ```dotenv
 SUPABASE_URL=https://<project-ref>.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=<service_role secret>
+SUPABASE_SECRET_KEY=sb_secret_<...>
 DATABASE_URL=postgresql+psycopg://postgres.<ref>:<password>@<region>.pooler.supabase.com:6543/postgres
 LLM_SOFT_CAP_USD=2.00
 LLM_HARD_CAP_USD=3.00
@@ -66,7 +73,7 @@ Frontend (`frontend/.env.local`, gitignored):
 
 ```dotenv
 VITE_SUPABASE_URL=https://<project-ref>.supabase.co
-VITE_SUPABASE_ANON_KEY=<anon public key>
+VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_<...>
 ```
 
 `.env.example` files in each location already document the placeholders;
@@ -92,7 +99,7 @@ fill in real values locally, never commit.
 ## 6. RLS — not used
 
 Supabase Postgres ships with Row Level Security available. AdaptLearn does
-**not** enable RLS. The backend uses `SUPABASE_SERVICE_ROLE_KEY` (or a direct
+**not** enable RLS. The backend uses `SUPABASE_SECRET_KEY` (or a direct
 `DATABASE_URL`) which bypasses RLS, and enforces ownership in application
 code via the `current_user_id` dependency + `session.user_id` checks already
 present in routes. Reasons:

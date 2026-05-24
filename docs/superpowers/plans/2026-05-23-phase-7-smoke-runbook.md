@@ -16,11 +16,11 @@ Run each section in order. If anything fails, stop and triage — do not move on
   - `GEMINI_API_KEY=<real key>`
   - `DATABASE_URL=postgresql+psycopg://postgres.<ref>:<pwd>@<region>.pooler.supabase.com:6543/postgres`
   - `SUPABASE_URL=https://<ref>.supabase.co`
-  - `SUPABASE_SERVICE_ROLE_KEY=<service_role secret>`
+  - `SUPABASE_SECRET_KEY=sb_secret_<...>`
   - `LLM_HARD_CAP_USD=3.00` (will override per-section below)
 - `frontend/.env.local` populated with:
   - `VITE_SUPABASE_URL=https://<ref>.supabase.co`
-  - `VITE_SUPABASE_ANON_KEY=<anon public key>`
+  - `VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_<...>`
   - `VITE_API_BASE_URL=http://localhost:8000/api`
 - Alembic migrations applied: `python -m alembic upgrade head` (run from `backend/`).
 - Supabase project Authentication → Providers → Email → Magic-link enabled.

@@ -20,7 +20,7 @@ Create `.env` at the **repo root** (not `backend/`):
 ```
 GEMINI_API_KEY=your-key-here
 MODEL=gemini/gemini-3.1-flash-lite
-EMBEDDING_MODEL=gemini-embedding-2
+EMBEDDING_MODEL=gemini/gemini-embedding-2
 DAILY_CAP=50
 ```
 

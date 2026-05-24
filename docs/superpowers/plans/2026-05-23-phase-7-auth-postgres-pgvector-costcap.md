@@ -48,7 +48,7 @@ Verify `dev` is at `cb93a28` or later before branching.
 
 User-side prereqs before code lands:
 - Create Supabase project (free tier).
-- Note: `SUPABASE_URL`, `SUPABASE_ANON_KEY` (frontend), `SUPABASE_SERVICE_ROLE_KEY` (backend, server-only), `DATABASE_URL` (direct Postgres connection string with pooler).
+- Note: `SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` (frontend `sb_publishable_…`), `SUPABASE_SECRET_KEY` (backend `sb_secret_…`, server-only), `DATABASE_URL` (direct Postgres connection string with pooler). Uses Supabase 2025+ key model — legacy `anon` / `service_role` keys are NOT used.
 - Enable Email auth (magic-link). Optionally GitHub OAuth.
 - Apply pgvector extension: `CREATE EXTENSION IF NOT EXISTS vector;` (Supabase SQL editor).
 - Add all four secrets to `.env.example` (placeholders) and `.env` (real values, gitignored).
@@ -115,7 +115,7 @@ Live verification against Supabase Postgres 17.6 + pgvector 0.8.0:
 ### 6. Frontend — Supabase Auth — SHIPPED 2026-05-23
 
 - `@supabase/supabase-js@^2.45.0` added to `frontend/package.json`.
-- `frontend/src/services/supabase.js` — lazy singleton client (constructed on first `getSupabase()` call). Falls back to a placeholder URL/key if `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY` are unset so the module is importable in dev before the user provisions Supabase (live calls will fail loudly, which is the intended dev signal).
+- `frontend/src/services/supabase.js` — lazy singleton client (constructed on first `getSupabase()` call). Falls back to a placeholder URL/key if `VITE_SUPABASE_URL`/`VITE_SUPABASE_PUBLISHABLE_KEY` are unset so the module is importable in dev before the user provisions Supabase (live calls will fail loudly, which is the intended dev signal).
 - `frontend/src/stores/auth.js` (new) — Pinia store: `session`, `ready`, `userId` / `accessToken` / `isAuthenticated` computeds, `init()` / `signInWithMagicLink()` / `signOut()` actions. `init()` is idempotent and subscribes to `onAuthStateChange` so token refresh + SIGNED_IN/SIGNED_OUT events propagate.
 - `frontend/src/main.js` — `await useAuthStore().init()` before `app.mount` so the router guard has a deterministic auth answer on first navigation (avoids the init/guard race the advisor flagged).
 - `frontend/src/router/index.js` — added `/login` route + global guard. Guard chain: `!auth.ready → await auth.init()`; `!isAuthenticated && to !== login → /login`; `isAuthenticated && to === login → /home`; `isAuthenticated && !onboarded && to !== onboarding → /onboarding`; `onboarded && to === onboarding && !retake → /home`.
@@ -244,7 +244,7 @@ Full step-by-step manual smoke runbook: [`2026-05-23-phase-7-smoke-runbook.md`](
 3. **Migrations:** Alembic. Baseline revision generated against empty Postgres on first apply. Every schema change = `alembic revision --autogenerate` + `alembic upgrade head`.
 4. **Cost cap reset window:** UTC midnight. Aligns with existing daily-message cap; one boundary across all counters. Ledger keyed by `(user_id, date)`.
 5. **Cost cap currency:** USD. LiteLLM's `cost_callback` returns USD natively across providers (OpenAI, Anthropic). No conversion needed.
-6. **Supabase project:** USER creates project upfront and supplies `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL` before code lands. Real values enable integration tests against live JWKS.
+6. **Supabase project:** USER creates project upfront and supplies `SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` (`sb_publishable_…`), `SUPABASE_SECRET_KEY` (`sb_secret_…`), `DATABASE_URL` before code lands. Uses Supabase 2025+ key model — legacy `anon` / `service_role` keys are NOT used. Real values enable integration tests against live JWKS.
 
 ## Open items deferred to Phase 8
 

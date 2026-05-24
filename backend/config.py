@@ -17,8 +17,8 @@ class Settings(BaseSettings):
     )
 
     gemini_api_key: str = ""
-    model: str = "gemini-3.1-flash-lite"
-    embedding_model: str = "gemini-embedding-2"
+    model: str = "gemini/gemini-3.1-flash-lite"
+    embedding_model: str = "gemini/gemini-embedding-2"
     daily_cap: int = 50
     database_url: str = f"sqlite:///{(_DATA_DIR / 'app.db').as_posix()}"
     embedding_dim: int = 768
@@ -28,9 +28,9 @@ class Settings(BaseSettings):
     env: str = "dev"
 
     supabase_url: str = ""
-    supabase_anon_key: str = ""
+    supabase_publishable_key: str = ""
     supabase_jwks_url_override: str = ""
-    supabase_service_role_key: str = ""
+    supabase_secret_key: str = ""
     llm_soft_cap_usd: float = 2.00
     llm_hard_cap_usd: float = 3.00
 
