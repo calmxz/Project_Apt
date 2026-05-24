@@ -11,6 +11,9 @@ RUN npm run build
 
 # Serve stage: lean nginx with SPA fallback + /api proxy.
 FROM nginx:1.27.5-alpine
+# Pull latest alpine patches (closes CVE-2026-31789 in libssl3/libcrypto3 that
+# ships in 1.27.5-alpine baseline). Trivy scan gates merges on CRITICAL CVEs.
+RUN apk --no-cache upgrade
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
