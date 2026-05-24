@@ -96,7 +96,7 @@ describe('session store cost-cap envelope', () => {
     setActivePinia(createPinia())
     const s = useStore()
     await s.createSession({ topic: 't' })
-    await expect(s.sendMessage({ text: 'hi' })).rejects.toThrow()
+    await expect(s.sendMessage({ text: 'hi' })).rejects.toThrow('api')
     expect(s.costCapReached).toBe(true)
     expect(s.costCapInfo.used_usd).toBe('3.5000')
     expect(s.costCapInfo.hard_cap_usd).toBe('3.0')

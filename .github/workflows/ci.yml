@@ -113,7 +113,7 @@ jobs:
       - name: pip-audit (backend deps)
         uses: pypa/gh-action-pip-audit@v1.1.0
         with:
-          inputs: backend/pyproject.toml
+          inputs: backend/
 
       - name: npm install (frontend, for audit)
         working-directory: frontend

@@ -1,6 +1,9 @@
 import { test, expect } from '@playwright/test'
 
-test.describe('daily cap UI', () => {
+// TODO(phase-8): rebuild e2e harness for Phase 7 auth + Postgres. Spec assumes
+// pre-auth flow (no /login gate) and SQLite backend; both removed in Phase 7.
+// Restore once auth session seeding helper + Postgres service in e2e.yml land.
+test.describe.skip('daily cap UI', () => {
   test.beforeEach(async ({ context }) => {
     await context.clearCookies()
     await context.addInitScript(() => {
