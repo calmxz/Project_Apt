@@ -187,15 +187,15 @@ Then on the PR, check GitHub Actions:
 
 ## Sign-off checklist
 
-- [ ] §1 stack up clean
-- [ ] §2 magic-link landed on home
-- [ ] §3 chat got a real Gemini reply, rows in Postgres
-- [ ] §4 PDF ingested, citations visible, chunk_embeddings has rows
-- [ ] §5 user B got 404 for user A's session (UI + curl)
-- [ ] §6 cost cap blocked the request, banner rendered, 429 in network tab
-- [ ] §7 sign-out cleared session + bounced to /login
-- [ ] §8 backend pytest + frontend vitest + lint all green
-- [ ] CI on PR: backend, frontend, contract-drift all green
+- [x] §1 stack up clean
+- [x] §2 magic-link landed on home
+- [x] §3 chat got a real Gemini reply, rows in Postgres
+- [x] §4 PDF ingested, citations visible, chunk_embeddings has rows
+- [x] §5 user B got 404 for user A's session (UI + curl)
+- [x] §6 cost cap blocked the request, banner rendered, 429 in network tab
+- [x] §7 sign-out cleared session + bounced to /login
+- [x] §8 backend pytest + frontend vitest + lint all green
+- [ ] CI on PR: backend, frontend, contract-drift all green — pending PR open
 
 When all boxes ticked, T11 is done. Move plan §11 to status `complete` and
 merge the branch.

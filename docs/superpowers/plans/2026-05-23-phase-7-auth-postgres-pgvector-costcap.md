@@ -178,17 +178,17 @@ Shipped 2026-05-24 (post-T4 sweep):
 
 Full step-by-step manual smoke runbook: [`2026-05-23-phase-7-smoke-runbook.md`](2026-05-23-phase-7-smoke-runbook.md).
 
-- [ ] Local Postgres + pgvector reachable from backend container
-- [ ] Backend `pytest -v` green against Postgres (CI matrix or local toggle)
-- [ ] Coverage ≥ 75% (Phase 6 gate held)
-- [ ] Frontend `npm run test:unit -- --run` green
-- [ ] Frontend `npm run lint` clean
-- [ ] Playwright `auth.spec.js` green
-- [ ] Contract drift check green (regen produces zero diff)
-- [ ] Manual: sign up via magic link, create session, chat, upload PDF, hit cost cap (set `LLM_HARD_CAP_USD=0.01` to force), see banner
-- [ ] Manual: sign in as user B, try to GET user A's session → 404
-- [ ] Manual: docker compose up succeeds without `chromadb` service
-- [ ] CI green on PR `phase/7-auth-postgres-pgvector-costcap` → `dev`
+- [x] Local Postgres + pgvector reachable from backend container
+- [x] Backend `pytest -v` green against Postgres (CI matrix or local toggle) — 163 passed, 4 skipped (2026-05-24)
+- [x] Coverage ≥ 75% (Phase 6 gate held) — 92.56% (2026-05-24)
+- [x] Frontend `npm run test:unit -- --run` green — 159 passed (2026-05-24)
+- [x] Frontend `npm run lint` clean (2026-05-24)
+- [ ] Playwright `auth.spec.js` green — continue-on-error through Phase 5; manual review on PR
+- [x] Contract drift check green (regen produces zero diff)
+- [x] Manual: sign up via magic link, create session, chat, upload PDF, hit cost cap (set `LLM_HARD_CAP_USD=0.01` to force), see banner — T11 smoke §2-§4, §6 (2026-05-24)
+- [x] Manual: sign in as user B, try to GET user A's session → 404 — T11 smoke §5 (2026-05-24)
+- [x] Manual: docker compose up succeeds without `chromadb` service
+- [ ] CI green on PR `phase/7-auth-postgres-pgvector-costcap` → `dev` — pending PR open
 
 ### 12. Manual post-merge (USER, web UI)
 
