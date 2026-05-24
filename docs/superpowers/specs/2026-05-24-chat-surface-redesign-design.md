@@ -1,7 +1,7 @@
 # Chat Surface Redesign — Design Spec
 
 **Status:** Approved 2026-05-24. Supersedes `2026-05-24-chat-surface-redesign-DRAFT.md`.
-**Target branch:** `phase/7.5-chat-redesign` (cut from `dev` after Phase 7 PR #17 merged).
+**Target branch:** `feat/chat-surface-redesign` (cut from `dev` after Phase 7 PR #17 merged).
 **Scope:** Full chat surface redesign — message rendering pipeline, SSE token streaming, Claude.ai-tier visual polish, aggressive component decomposition.
 
 ## 1. Problem
