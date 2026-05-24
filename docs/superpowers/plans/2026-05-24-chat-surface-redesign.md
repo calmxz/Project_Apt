@@ -4207,3 +4207,58 @@ Run this checklist mentally before declaring the plan done.
 **Open clarifications resolved inline:**
 - `chat/EmptyState.vue` was renamed in the plan to import the existing generic `EmptyState.vue` as a building block (Task 22), avoiding namespace ambiguity.
 - `dispatch_tool` and `check_cost_cap` symbol paths in Task 12 must be verified against the real `backend/agent/tutor.py` before writing tests — note included.
+
+---
+
+## Execution
+
+Decide which execution mode to use when resuming. Both modes consume this plan task-by-task with checkbox tracking. Default: subagent-driven.
+
+### Option 1 — Subagent-driven (recommended)
+
+Dispatch a fresh subagent per task. Each subagent receives only the spec + this plan + the specific task. The parent reviews diffs between tasks and approves before the next dispatch.
+
+**Why:** Keeps each task's context window small and focused; the parent never accumulates implementation noise; reviews are forced cadence rather than at-the-end. Two-stage review (code-reviewer subagent → human) catches more before merge.
+
+**How to resume:**
+
+1. Reopen this conversation (or a new one) with: "execute this plan: docs/superpowers/plans/2026-05-24-chat-surface-redesign.md, subagent-driven mode".
+2. The orchestrator will invoke `superpowers:subagent-driven-development` and start at Task 0.
+3. Between tasks: review the diff, approve or request changes, then dispatch the next subagent.
+
+**Best for:** Phase 2 and Phase 3 — backend SSE, cancellation plumbing, schema migration, and the 10-component split are independent enough to isolate; reviewing each in isolation is cheaper than reviewing them stacked.
+
+### Option 2 — Inline execution
+
+Execute tasks sequentially in the same session via `superpowers:executing-plans`. Batch execution with explicit human checkpoints (every N tasks, or at every PR boundary).
+
+**Why:** Faster turnaround when tasks share short-lived context (e.g., several markdown-pipeline tasks in a row). No subagent dispatch overhead. Easier to debug cross-task issues live.
+
+**How to resume:**
+
+1. Reopen with: "execute this plan: docs/superpowers/plans/2026-05-24-chat-surface-redesign.md, inline mode".
+2. The orchestrator invokes `superpowers:executing-plans` and starts at Task 0.
+3. Checkpoints recommended at: end of Task 9 (Phase 1 PR), end of Task 19 (Phase 2 PR), end of Task 28 (shell rewrite), end of Task 31 (final PR).
+
+**Best for:** Phase 1 — tightly coupled markdown-pipeline tasks (Tasks 1-8) share library + token context; one-shot execution avoids re-onboarding cost.
+
+### Suggested hybrid
+
+If wanting fastest progress with reasonable safety:
+
+- **Phase 1** — inline. Tasks 1-9 are mechanical and share context.
+- **Phase 2** — subagent-driven. Tasks 10-19 cross backend + frontend + DB boundaries; isolation pays off here.
+- **Phase 3** — subagent-driven. Tasks 20-28 are 9 component extracts that look similar but each has its own contracts/tests; parallel review windows help.
+
+The decision is non-binding — switch between modes at any phase boundary.
+
+### Before resuming — confirm prereqs
+
+Whichever mode you pick, before Task 0 fires the orchestrator should verify:
+
+1. `dev` branch is current (`git fetch origin && git log --oneline origin/dev | head -3`).
+2. PR #17 (Phase 7 Supabase) is merged into `dev` and CI is green.
+3. Frontend + backend test suites pass cleanly on the chosen base commit.
+4. The `feat/chat-surface-redesign` branch does not already exist on remote (else negotiate: continue or restart).
+
+If any of these are false, fix them before dispatching Task 0.
