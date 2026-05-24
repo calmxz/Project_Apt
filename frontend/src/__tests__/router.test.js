@@ -1,11 +1,19 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import router from '@/router/index.js'
+import { useAuthStore } from '@/stores/auth.js'
 import { useUserStore } from '@/stores/user.js'
+
+function setAuth(authed) {
+  const auth = useAuthStore()
+  auth.session = authed ? { user: { id: 'u-1' }, access_token: 'tok' } : null
+  auth.ready = true
+}
 
 describe('router', () => {
   beforeEach(async () => {
     setActivePinia(createPinia())
+    setAuth(true)
     await router.push('/')
     await router.isReady()
   })
@@ -21,18 +29,39 @@ describe('router', () => {
         'new-session',
         'session',
         'session-profile',
+        'login',
       ]),
     )
   })
 
-  it('redirects to onboarding when onboarding incomplete', async () => {
+  it('redirects unauthenticated user to /login', async () => {
+    setAuth(false)
+    const user = useUserStore()
+    user.onboardingComplete = true
+    await router.push({ name: 'home' })
+    expect(router.currentRoute.value.name).toBe('login')
+  })
+
+  it('redirects authenticated user away from /login to home', async () => {
+    setAuth(true)
+    const user = useUserStore()
+    user.onboardingComplete = true
+    await router.push({ name: 'login' })
+    expect(router.currentRoute.value.name).toBe('home')
+  })
+
+  it('redirects to onboarding when authed but onboarding incomplete', async () => {
+    setAuth(true)
     const user = useUserStore()
     user.onboardingComplete = false
-    await router.push({ name: 'home' })
+    // Push to a non-default route to avoid hitting the "same route" no-op path
+    // when a prior test or beforeEach left us on /onboarding already.
+    await router.push({ name: 'settings' })
     expect(router.currentRoute.value.name).toBe('onboarding')
   })
 
   it('redirects away from onboarding when complete (no retake query)', async () => {
+    setAuth(true)
     const user = useUserStore()
     user.onboardingComplete = true
     await router.push({ name: 'settings' })
@@ -41,6 +70,7 @@ describe('router', () => {
   })
 
   it('allows onboarding when retake=1 even if complete', async () => {
+    setAuth(true)
     const user = useUserStore()
     user.onboardingComplete = true
     await router.push({ name: 'onboarding', query: { retake: '1' } })

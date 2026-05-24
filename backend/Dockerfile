@@ -6,6 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# hadolint ignore=DL3008
 RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential curl \
     && rm -rf /var/lib/apt/lists/*
@@ -16,7 +17,7 @@ RUN pip install --no-cache-dir .
 COPY . ./
 
 RUN adduser --system --no-create-home --group --uid 1000 app \
-    && mkdir -p /app/data/uploads /app/data/chroma \
+    && mkdir -p /app/data/uploads \
     && chown -R app:app /app
 
 USER app

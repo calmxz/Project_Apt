@@ -85,12 +85,10 @@ import { useRouter } from 'vue-router'
 
 import BackButton from '../components/BackButton.vue'
 import { useSessionStore } from '../stores/session.js'
-import { useUserStore } from '../stores/user.js'
 import { findActiveSessionByTopic, formatRelative, shortId } from '../utils/formatDate.js'
 
 const router = useRouter()
 const store = useSessionStore()
-const user = useUserStore()
 
 const topic = ref('')
 const error = ref(null)
@@ -105,8 +103,8 @@ const quickPicks = [
 ]
 
 onMounted(async () => {
-  if (user.userId && !store.sessions.length) {
-    await store.listSessions(user.userId).catch(() => {})
+  if (!store.sessions.length) {
+    await store.listSessions().catch(() => {})
   }
 })
 
@@ -138,7 +136,6 @@ async function submit() {
   }
   try {
     const created = await store.createSession({
-      userId: user.userId,
       topic: topic.value.trim(),
       seedMode: 'fresh',
       priorSessionId: null,

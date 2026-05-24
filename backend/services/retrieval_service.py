@@ -1,8 +1,8 @@
-"""Vector retrieval over a session's ChromaDB collection (Spec §3.3, §4.2).
+"""Vector retrieval via pgvector (Spec §3.3, §4.2; Phase 7 T4).
 
-retrieve() looks up the most-recent Document for the session. If ingestion is
-not ready, returns status="no_results". Otherwise embeds the query and
-queries Chroma collection session_{session_id}.
+retrieve() looks up the most-recent Document for the session. If ingestion
+is not ready, returns status="no_results". Otherwise embeds the query and
+runs a cosine-distance search over `chunk_embeddings` scoped to the session.
 """
 
 import logging
@@ -15,7 +15,7 @@ from agent.types import ToolContext
 from config import settings
 from contracts import RetrieveChunksArgs, ToolResult
 from db.models import Document
-from services import chroma_client
+from services import pgvector_store
 
 
 log = logging.getLogger(__name__)
@@ -54,10 +54,9 @@ def retrieve(db: Session, ctx: ToolContext, args: RetrieveChunksArgs) -> ToolRes
             if isinstance(resp.data[0], dict)
             else resp.data[0].embedding
         )
-        collection = chroma_client.get_chroma().get_or_create_collection(
-            name=chroma_client.collection_name(ctx.session_id)
+        hits = pgvector_store.query_chunks(
+            db, session_id=ctx.session_id, query_embedding=query_vec, k=args.k or 5
         )
-        result = collection.query(query_embeddings=[query_vec], n_results=args.k or 5)
     except Exception as e:
         log.error(
             "retrieval failed",
@@ -66,20 +65,15 @@ def retrieve(db: Session, ctx: ToolContext, args: RetrieveChunksArgs) -> ToolRes
         )
         return ToolResult(ok=False, status="failed", error="retrieval_failed")
 
-    docs = (result.get("documents") or [[]])[0]
-    metas = (result.get("metadatas") or [[]])[0]
-    distances = (result.get("distances") or [[None] * len(docs)])[0]
-
-    chunks = []
-    for text, meta, dist in zip(docs, metas, distances):
-        chunks.append(
-            {
-                "doc_id": (meta or {}).get("doc_id", ""),
-                "text": text,
-                "page": (meta or {}).get("page"),
-                "score": dist,
-            }
-        )
+    chunks = [
+        {
+            "doc_id": str(h.doc_id),
+            "text": h.chunk_text,
+            "page": h.page,
+            "score": h.score,
+        }
+        for h in hits
+    ]
 
     if not chunks:
         return ToolResult(

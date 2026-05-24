@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
 
 import * as sessionsApi from '@/services/sessionsApi.js'
 import { postChat } from '@/services/chatApi.js'
@@ -9,6 +10,7 @@ describe('api wrappers', () => {
   let fetchMock
   let listener
   beforeEach(() => {
+    setActivePinia(createPinia())
     fetchMock = vi.fn()
     globalThis.fetch = fetchMock
     listener = vi.fn()
@@ -27,62 +29,66 @@ describe('api wrappers', () => {
     })
   }
 
-  it('createSession posts user_id and topic', async () => {
+  // Phase 7: user_id is no longer carried in any payload — the backend
+  // resolves it from the Authorization header.
+
+  it('createSession posts topic + seed_mode (no user_id)', async () => {
     fetchMock.mockReturnValueOnce(ok({ id: 's1' }))
-    await sessionsApi.createSession({ userId: 'u', topic: 't', seedMode: 'm' })
+    await sessionsApi.createSession({ topic: 't', seedMode: 'm' })
     const init = fetchMock.mock.calls[0][1]
     const body = JSON.parse(init.body)
-    expect(body.user_id).toBe('u')
+    expect(body.user_id).toBeUndefined()
     expect(body.topic).toBe('t')
     expect(body.seed_mode).toBe('m')
     expect(body.prior_session_id).toBeNull()
   })
 
-  it('listSessions appends user_id query', async () => {
+  it('listSessions hits /sessions without user_id query', async () => {
     fetchMock.mockReturnValueOnce(ok([]))
-    await sessionsApi.listSessions('u1')
-    expect(fetchMock.mock.calls[0][0]).toContain('user_id=u1')
+    await sessionsApi.listSessions()
+    expect(fetchMock.mock.calls[0][0]).not.toContain('user_id=')
   })
 
-  it('getSession hits /sessions/:id with user_id query', async () => {
+  it('getSession hits /sessions/:id without user_id query', async () => {
     fetchMock.mockReturnValueOnce(ok({ id: 's1' }))
-    await sessionsApi.getSession('s1', 'u1')
+    await sessionsApi.getSession('s1')
     expect(fetchMock.mock.calls[0][0]).toContain('/sessions/s1')
-    expect(fetchMock.mock.calls[0][0]).toContain('user_id=u1')
+    expect(fetchMock.mock.calls[0][0]).not.toContain('user_id=')
   })
 
-  it('endSession POSTs to /end with user_id query', async () => {
+  it('endSession POSTs to /end without user_id query', async () => {
     fetchMock.mockReturnValueOnce(ok({ ended_at: 'x' }))
-    await sessionsApi.endSession('s1', 'u1')
+    await sessionsApi.endSession('s1')
     expect(fetchMock.mock.calls[0][0]).toContain('/sessions/s1/end')
-    expect(fetchMock.mock.calls[0][0]).toContain('user_id=u1')
+    expect(fetchMock.mock.calls[0][0]).not.toContain('user_id=')
     expect(fetchMock.mock.calls[0][1].method).toBe('POST')
   })
 
-  it('reopenSession POSTs to /reopen with user_id query', async () => {
+  it('reopenSession POSTs to /reopen without user_id query', async () => {
     fetchMock.mockReturnValueOnce(ok({ ok: true }))
-    await sessionsApi.reopenSession('s1', 'u1')
+    await sessionsApi.reopenSession('s1')
     expect(fetchMock.mock.calls[0][0]).toContain('/sessions/s1/reopen')
-    expect(fetchMock.mock.calls[0][0]).toContain('user_id=u1')
+    expect(fetchMock.mock.calls[0][0]).not.toContain('user_id=')
   })
 
-  it('postChat sends session_id, user_id, message', async () => {
+  it('postChat sends session_id + message (no user_id)', async () => {
     fetchMock.mockReturnValueOnce(ok({ assistant_message: 'hi' }))
-    await postChat({ sessionId: 's', userId: 'u', message: 'm' })
+    await postChat({ sessionId: 's', message: 'm' })
     const body = JSON.parse(fetchMock.mock.calls[0][1].body)
-    expect(body).toEqual({ session_id: 's', user_id: 'u', message: 'm' })
+    expect(body).toEqual({ session_id: 's', message: 'm' })
   })
 
-  it('getSessionProfile hits /profile/:id with user_id query', async () => {
+  it('getSessionProfile hits /profile/:id without user_id query', async () => {
     fetchMock.mockReturnValueOnce(ok({}))
-    await getSessionProfile('s1', 'u1')
+    await getSessionProfile('s1')
     expect(fetchMock.mock.calls[0][0]).toContain('/profile/s1')
-    expect(fetchMock.mock.calls[0][0]).toContain('user_id=u1')
+    expect(fetchMock.mock.calls[0][0]).not.toContain('user_id=')
   })
 
-  it('getAggregateProfile passes user_id query', async () => {
+  it('getAggregateProfile hits /profile/aggregate without user_id query', async () => {
     fetchMock.mockReturnValueOnce(ok({}))
-    await getAggregateProfile('u1')
-    expect(fetchMock.mock.calls[0][0]).toContain('/profile/aggregate?user_id=u1')
+    await getAggregateProfile()
+    expect(fetchMock.mock.calls[0][0]).toContain('/profile/aggregate')
+    expect(fetchMock.mock.calls[0][0]).not.toContain('user_id=')
   })
 })

@@ -3,7 +3,10 @@ import { defineStore } from 'pinia'
 
 import * as sessionsApi from '../services/sessionsApi.js'
 import { postChat } from '../services/chatApi.js'
-import { ERR_DAILY_CAP_REACHED } from '../lib/errorCodes.js'
+import {
+  ERR_DAILY_CAP_REACHED,
+  ERR_DAILY_COST_CAP_REACHED,
+} from '../lib/errorCodes.js'
 
 export const useSessionStore = defineStore('session', () => {
   const currentSessionId = ref(null)
@@ -14,6 +17,8 @@ export const useSessionStore = defineStore('session', () => {
   const error = ref(null)
   const dailyCapInfo = ref(null) // { cap, used, resets_at }
   const dailyCapReached = computed(() => dailyCapInfo.value !== null)
+  const costCapInfo = ref(null) // { used_usd, soft_cap_usd, hard_cap_usd, resets_at }
+  const costCapReached = computed(() => costCapInfo.value !== null)
 
   function _setError(e) {
     error.value = e instanceof Error ? e.message : String(e)
@@ -24,11 +29,11 @@ export const useSessionStore = defineStore('session', () => {
     error.value = msg
   }
 
-  async function listSessions(userId) {
+  async function listSessions() {
     loading.value = true
     error.value = null
     try {
-      sessions.value = await sessionsApi.listSessions(userId)
+      sessions.value = await sessionsApi.listSessions()
       return sessions.value
     } catch (e) {
       _setError(e)
@@ -37,12 +42,11 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  async function createSession({ userId, topic, seedMode, priorSessionId } = {}) {
+  async function createSession({ topic, seedMode, priorSessionId } = {}) {
     loading.value = true
     error.value = null
     try {
       const created = await sessionsApi.createSession({
-        userId,
         topic,
         seedMode,
         priorSessionId,
@@ -58,11 +62,11 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  async function loadSession(id, userId) {
+  async function loadSession(id) {
     loading.value = true
     error.value = null
     try {
-      const s = await sessionsApi.getSession(id, userId)
+      const s = await sessionsApi.getSession(id)
       currentSession.value = s
       currentSessionId.value = s.id
       messages.value = (s.messages || []).map((m) => ({
@@ -80,7 +84,7 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  async function sendMessage({ userId, text }) {
+  async function sendMessage({ text }) {
     if (!currentSessionId.value) throw new Error('no active session')
     const trimmed = (text || '').trim()
     if (!trimmed) return null
@@ -91,7 +95,6 @@ export const useSessionStore = defineStore('session', () => {
     try {
       const resp = await postChat({
         sessionId: currentSessionId.value,
-        userId,
         message: trimmed,
       })
       messages.value.push({
@@ -109,6 +112,16 @@ export const useSessionStore = defineStore('session', () => {
           used: e.body.detail.used,
           resets_at: e.body.detail.resets_at,
         }
+      } else if (
+        e?.status === 429 &&
+        e?.body?.detail?.code === ERR_DAILY_COST_CAP_REACHED
+      ) {
+        costCapInfo.value = {
+          used_usd: e.body.detail.used_usd,
+          soft_cap_usd: e.body.detail.soft_cap_usd,
+          hard_cap_usd: e.body.detail.hard_cap_usd,
+          resets_at: e.body.detail.resets_at,
+        }
       }
       _setError(e)
     } finally {
@@ -120,12 +133,16 @@ export const useSessionStore = defineStore('session', () => {
     dailyCapInfo.value = null
   }
 
-  async function endSession(userId) {
+  function clearCostCap() {
+    costCapInfo.value = null
+  }
+
+  async function endSession() {
     if (!currentSessionId.value) throw new Error('no active session')
     loading.value = true
     error.value = null
     try {
-      const resp = await sessionsApi.endSession(currentSessionId.value, userId)
+      const resp = await sessionsApi.endSession(currentSessionId.value)
       const summaryText = resp?.summary?.text ?? ''
       if (currentSession.value) {
         currentSession.value.ended_at = resp.ended_at
@@ -144,11 +161,11 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  async function reopenSession(sessionId, userId) {
+  async function reopenSession(sessionId) {
     loading.value = true
     error.value = null
     try {
-      const resp = await sessionsApi.reopenSession(sessionId, userId)
+      const resp = await sessionsApi.reopenSession(sessionId)
       if (currentSession.value && currentSession.value.id === sessionId) {
         currentSession.value.ended_at = null
       }
@@ -169,6 +186,7 @@ export const useSessionStore = defineStore('session', () => {
     messages.value = []
     error.value = null
     dailyCapInfo.value = null
+    costCapInfo.value = null
   }
 
   return {
@@ -180,6 +198,8 @@ export const useSessionStore = defineStore('session', () => {
     error,
     dailyCapReached,
     dailyCapInfo,
+    costCapReached,
+    costCapInfo,
     listSessions,
     createSession,
     loadSession,
@@ -188,6 +208,7 @@ export const useSessionStore = defineStore('session', () => {
     reopenSession,
     setError,
     clearDailyCap,
+    clearCostCap,
     reset,
   }
 })

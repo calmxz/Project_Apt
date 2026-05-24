@@ -165,10 +165,7 @@ import BackButton from '../components/BackButton.vue'
 import EmptyState from '../components/EmptyState.vue'
 import { friendlyError } from '../lib/errors.js'
 import { getAggregateProfile } from '../services/profileApi.js'
-import { useUserStore } from '../stores/user.js'
 import { formatRelative } from '../utils/formatDate.js'
-
-const user = useUserStore()
 
 const data = ref(null)
 const loading = ref(false)
@@ -177,14 +174,10 @@ const error = ref('')
 const levelKeys = ['beginner', 'intermediate', 'advanced', 'unknown']
 
 async function load() {
-  if (!user.userId) {
-    error.value = 'No user — finish onboarding first.'
-    return
-  }
   loading.value = true
   error.value = ''
   try {
-    data.value = await getAggregateProfile(user.userId)
+    data.value = await getAggregateProfile()
   } catch (e) {
     error.value = friendlyError(e)
   } finally {

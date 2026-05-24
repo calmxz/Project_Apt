@@ -1,17 +1,14 @@
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
 
+// Phase 7+: identity comes from `useAuthStore` (Supabase JWT). This store
+// only persists local UX preferences — name + feedback style + onboarding
+// completion — keyed off Supabase userId at the auth-store boundary, not
+// here. The legacy `userId` field has been removed.
+
 const STORAGE_KEY = 'adaptlearn:user:v1'
 
-function generateUserId() {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID()
-  }
-  return 'u_' + Math.random().toString(36).slice(2) + Date.now().toString(36)
-}
-
 export const useUserStore = defineStore('user', () => {
-  const userId = ref(null)
   const name = ref(null)
   const interactionPreferences = ref(null)
   const onboardingComplete = ref(false)
@@ -22,12 +19,10 @@ export const useUserStore = defineStore('user', () => {
     if (!raw) return
     try {
       const data = JSON.parse(raw)
-      userId.value = data.userId ?? null
       name.value = data.name ?? null
       interactionPreferences.value = data.interactionPreferences ?? null
       onboardingComplete.value = Boolean(data.onboardingComplete)
     } catch {
-      // Corrupt entry — drop it so onboarding can recover.
       localStorage.removeItem(STORAGE_KEY)
     }
   }
@@ -37,7 +32,6 @@ export const useUserStore = defineStore('user', () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
-        userId: userId.value,
         name: name.value,
         interactionPreferences: interactionPreferences.value,
         onboardingComplete: onboardingComplete.value,
@@ -46,7 +40,6 @@ export const useUserStore = defineStore('user', () => {
   }
 
   function completeOnboarding({ name: displayName, feedback }) {
-    if (!userId.value) userId.value = generateUserId()
     name.value = displayName?.trim() || 'Learner'
     interactionPreferences.value = { feedback }
     onboardingComplete.value = true
@@ -54,7 +47,6 @@ export const useUserStore = defineStore('user', () => {
   }
 
   function resetOnboarding() {
-    userId.value = null
     name.value = null
     interactionPreferences.value = null
     onboardingComplete.value = false
@@ -73,7 +65,6 @@ export const useUserStore = defineStore('user', () => {
   }
 
   return {
-    userId,
     name,
     interactionPreferences,
     onboardingComplete,

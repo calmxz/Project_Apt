@@ -64,20 +64,27 @@ def test_missing_session_id_field_400(client, seeded):
     assert r.status_code in (400, 422)
 
 
-def test_unknown_session_id_400(client, seeded):
+def test_unknown_session_id_404(client, seeded):
+    # Phase 7: ownership check folds unknown-session and wrong-owner into 404
+    # to avoid an existence oracle (matches the sessions/profile pattern).
     files = {"file": ("notes.pdf", io.BytesIO(b"%PDF-fake"), "application/pdf")}
     r = client.post(
         "/api/upload",
         data={"user_id": USER_ID, "session_id": "does_not_exist"},
         files=files,
     )
-    assert r.status_code == 400
+    assert r.status_code == 404
 
 
-def test_missing_user_id_field_422(client, seeded):
+def test_missing_auth_header_401(client, seeded):
+    # Phase 7: user_id no longer carried in form. Missing Authorization
+    # header => 401. Override returns "test-user" default => /api/upload
+    # would reach ownership check and 404 because seeded session belongs to
+    # a different user. Either response is acceptable as long as auth gates
+    # the request before the form is even validated.
     files = {"file": ("notes.pdf", io.BytesIO(b"%PDF-fake"), "application/pdf")}
     r = client.post("/api/upload", data={"session_id": SESSION_ID}, files=files)
-    assert r.status_code in (400, 422)
+    assert r.status_code in (401, 404)
 
 
 def test_upload_returns_429_when_cap_reached(client, seeded, monkeypatch):

@@ -4,7 +4,6 @@ import { createPinia, setActivePinia } from 'pinia'
 
 import SessionView from '@/views/SessionView.vue'
 import { useSessionStore } from '@/stores/session.js'
-import { useUserStore } from '@/stores/user.js'
 
 const push = vi.fn()
 vi.mock('vue-router', () => ({
@@ -75,8 +74,6 @@ describe('SessionView', () => {
     showError.mockClear()
     uploadPdf.mockReset()
     getUploadStatus.mockReset()
-    const user = useUserStore()
-    user.userId = 'u1'
   })
 
   it('renders 404 state when loadSession 404s', async () => {
@@ -111,7 +108,7 @@ describe('SessionView', () => {
     await wrapper.get('[data-testid="session-input"]').setValue('hello')
     await wrapper.get('[data-testid="session-send"]').trigger('click')
     await flushPromises()
-    expect(sendSpy).toHaveBeenCalledWith({ userId: 'u1', text: 'hello' })
+    expect(sendSpy).toHaveBeenCalledWith({ text: 'hello' })
     expect(wrapper.get('[data-testid="session-input"]').element.value).toBe('')
   })
 
@@ -149,7 +146,7 @@ describe('SessionView', () => {
     await wrapper.get('[data-testid="session-error-retry"]').trigger('click')
     await flushPromises()
     expect(sendSpy).toHaveBeenCalledTimes(2)
-    expect(sendSpy.mock.calls[1][0]).toEqual({ userId: 'u1', text: 'retry me' })
+    expect(sendSpy.mock.calls[1][0]).toEqual({ text: 'retry me' })
   })
 
   it('enter key sends without shift', async () => {
@@ -164,7 +161,7 @@ describe('SessionView', () => {
     await input.setValue('via enter')
     await input.trigger('keydown', { key: 'Enter' })
     await flushPromises()
-    expect(sendSpy).toHaveBeenCalledWith({ userId: 'u1', text: 'via enter' })
+    expect(sendSpy).toHaveBeenCalledWith({ text: 'via enter' })
   })
 
   it('shift+enter does not send', async () => {
@@ -249,7 +246,7 @@ describe('SessionView', () => {
     await flushPromises()
     await wrapper.get('[data-testid="resume-btn"]').trigger('click')
     await flushPromises()
-    expect(reopenSpy).toHaveBeenCalledWith('s1', 'u1')
+    expect(reopenSpy).toHaveBeenCalledWith('s1')
   })
 
   it('daily cap banner shown when cap reached', async () => {
@@ -279,8 +276,8 @@ describe('SessionView', () => {
     Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
     await input.trigger('change')
     await flushPromises()
-    expect(uploadPdf).toHaveBeenCalledWith({ userId: 'u1', sessionId: 's1', file })
-    expect(getUploadStatus).toHaveBeenCalledWith('doc-1', 'u1')
+    expect(uploadPdf).toHaveBeenCalledWith({ sessionId: 's1', file })
+    expect(getUploadStatus).toHaveBeenCalledWith('doc-1')
     expect(wrapper.find('[data-testid="upload-status-ready"]').exists()).toBe(true)
   })
 })

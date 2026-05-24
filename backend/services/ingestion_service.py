@@ -9,7 +9,7 @@ Pipeline:
   2. pypdf -> [(page_num, text), ...].
   3. lib.chunking.chunk_text (500 / 50 overlap).
   4. litellm.embedding in batches of 100.
-  5. chromadb collection_per_session add(...).
+  5. pgvector_store.insert_chunks (Postgres `chunk_embeddings` table).
   6. lib.keyword_index.merge_into_session(stems).
   7. Document.status = ready, page_count populated.
 
@@ -26,7 +26,7 @@ from config import settings
 from db.database import SessionLocal
 from db.models import Document
 from lib import chunking, keyword_index
-from services import chroma_client
+from services import pgvector_store
 
 
 log = logging.getLogger(__name__)
@@ -83,21 +83,13 @@ def run(document_id: int) -> None:
 
             embeddings = _embed_all([c.text for c in chunks])
 
-            collection = chroma_client.get_chroma().get_or_create_collection(
-                name=chroma_client.collection_name(doc.session_id)
-            )
-            collection.add(
-                ids=[f"doc_{doc.id}_{c.chunk_idx}" for c in chunks],
-                embeddings=embeddings,
-                documents=[c.text for c in chunks],
-                metadatas=[
-                    {
-                        "doc_id": str(doc.id),
-                        "chunk_idx": c.chunk_idx,
-                        "page": c.page,
-                        "session_id": doc.session_id,
-                    }
-                    for c in chunks
+            pgvector_store.insert_chunks(
+                db,
+                session_id=doc.session_id,
+                document_id=doc.id,
+                rows=[
+                    (c.chunk_idx, c.page, c.text, embedding)
+                    for c, embedding in zip(chunks, embeddings)
                 ],
             )
 

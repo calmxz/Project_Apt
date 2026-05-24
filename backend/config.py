@@ -17,20 +17,34 @@ class Settings(BaseSettings):
     )
 
     gemini_api_key: str = ""
-    model: str = "gemini-3.1-flash-lite"
-    embedding_model: str = "gemini-embedding-2"
+    model: str = "gemini/gemini-3.1-flash-lite"
+    embedding_model: str = "gemini/gemini-embedding-2"
     daily_cap: int = 50
     database_url: str = f"sqlite:///{(_DATA_DIR / 'app.db').as_posix()}"
-    chroma_host: str = "localhost"
-    chroma_port: int = 8001
+    embedding_dim: int = 768
     uploads_path: str = (_DATA_DIR / "uploads").as_posix()
     llm_stub: bool = False
     cors_origins: str = "http://localhost:5173"
     env: str = "dev"
 
+    supabase_url: str = ""
+    supabase_publishable_key: str = ""
+    supabase_jwks_url_override: str = ""
+    supabase_secret_key: str = ""
+    llm_soft_cap_usd: float = 2.00
+    llm_hard_cap_usd: float = 3.00
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def supabase_jwks_url(self) -> str:
+        if self.supabase_jwks_url_override:
+            return self.supabase_jwks_url_override
+        if not self.supabase_url:
+            return ""
+        return self.supabase_url.rstrip("/") + "/auth/v1/.well-known/jwks.json"
 
     @property
     def llm_stub_enabled(self) -> bool:
@@ -40,7 +54,6 @@ class Settings(BaseSettings):
 settings = Settings()
 
 # Ensure runtime directories exist (data/uploads/ and parent of the sqlite file).
-# Chroma persistence lives in the chromadb container's bind mount, not on the backend host.
 for _p in (
     Path(settings.uploads_path),
     Path(settings.database_url.replace("sqlite:///", "", 1)).parent

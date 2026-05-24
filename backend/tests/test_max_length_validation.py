@@ -18,11 +18,16 @@ from contracts import (
 
 
 def _base(model):
-    """Minimal valid kwargs to satisfy required fields per model."""
+    """Minimal valid kwargs to satisfy required fields per model.
+
+    Phase 7: `user_id` is no longer carried in request bodies — it's resolved
+    server-side from the Supabase JWT. So `_base` no longer seeds `user_id`
+    for ChatRequest / SessionCreateRequest.
+    """
     if model is ChatRequest:
-        return {"user_id": "u", "session_id": "s", "message": "hi"}
+        return {"session_id": "s", "message": "hi"}
     if model is SessionCreateRequest:
-        return {"user_id": "u", "topic": "t", "seed_mode": "fresh"}
+        return {"topic": "t", "seed_mode": "fresh"}
     if model is RetrieveChunksArgs:
         return {"session_id": "s", "query": "q"}
     if model is UpdateTopicProfileArgs:
@@ -39,10 +44,8 @@ def _base(model):
 
 MAX_LENGTH_CASES = [
     # (Model, field, cap)
-    (ChatRequest, "user_id", 64),
     (ChatRequest, "session_id", 64),
     (ChatRequest, "message", 4000),
-    (SessionCreateRequest, "user_id", 64),
     (SessionCreateRequest, "topic", 200),
     (SessionCreateRequest, "prior_session_id", 64),
     (RetrieveChunksArgs, "session_id", 64),

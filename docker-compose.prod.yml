@@ -1,4 +1,5 @@
-# Production stack: nginx-served frontend + uvicorn backend + ChromaDB.
+# Production stack: nginx-served frontend + uvicorn backend.
+# Phase 7+: Postgres + pgvector are Supabase-managed (not in compose).
 # Run from repo root:
 #   docker compose -f docker-compose.prod.yml --env-file .env up --build
 # Public URL via:
@@ -22,31 +23,23 @@ services:
     environment:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       MODEL: ${MODEL:-gemini/gemini-3.1-flash-lite}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-gemini-embedding-2}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-gemini/gemini-embedding-2}
       DAILY_CAP: ${DAILY_CAP:-50}
-      DATABASE_URL: sqlite:////data/app.db
+      DATABASE_URL: ${DATABASE_URL}
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY}
+      LLM_SOFT_CAP_USD: ${LLM_SOFT_CAP_USD:-2.00}
+      LLM_HARD_CAP_USD: ${LLM_HARD_CAP_USD:-3.00}
       UPLOADS_PATH: /data/uploads
-      CHROMA_HOST: chromadb
-      CHROMA_PORT: 8000
       # Same-origin via nginx — no browser-side CORS preflight needed.
       # Keep the localhost dev origin too in case you reverse-proxy directly.
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost,http://localhost:5173}
       LLM_STUB: ${LLM_STUB:-0}
     volumes:
       - ./data:/data
-    depends_on:
-      chromadb:
-        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
       interval: 15s
       timeout: 5s
       retries: 6
       start_period: 20s
-
-  chromadb:
-    image: chromadb/chroma:1.5.9
-    expose:
-      - "8000"
-    volumes:
-      - ./data/chroma:/chroma/chroma

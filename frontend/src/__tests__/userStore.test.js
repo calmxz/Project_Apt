@@ -12,7 +12,6 @@ describe('user store', () => {
 
   it('initial state is empty', () => {
     const u = useUserStore()
-    expect(u.userId).toBeNull()
     expect(u.name).toBeNull()
     expect(u.onboardingComplete).toBe(false)
   })
@@ -21,7 +20,6 @@ describe('user store', () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
-        userId: 'u_x',
         name: 'Eddy',
         interactionPreferences: { feedback: 'hints' },
         onboardingComplete: true,
@@ -29,7 +27,6 @@ describe('user store', () => {
     )
     const u = useUserStore()
     u.loadFromLocalStorage()
-    expect(u.userId).toBe('u_x')
     expect(u.name).toBe('Eddy')
     expect(u.onboardingComplete).toBe(true)
   })
@@ -39,19 +36,18 @@ describe('user store', () => {
     const u = useUserStore()
     u.loadFromLocalStorage()
     expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
-    expect(u.userId).toBeNull()
+    expect(u.name).toBeNull()
   })
 
   it('loadFromLocalStorage does nothing when no entry', () => {
     const u = useUserStore()
     u.loadFromLocalStorage()
-    expect(u.userId).toBeNull()
+    expect(u.name).toBeNull()
   })
 
-  it('completeOnboarding assigns id, name, prefs and persists', () => {
+  it('completeOnboarding sets name, prefs and persists', () => {
     const u = useUserStore()
     u.completeOnboarding({ name: 'Edward', feedback: 'direct_answers' })
-    expect(u.userId).toBeTruthy()
     expect(u.name).toBe('Edward')
     expect(u.interactionPreferences.feedback).toBe('direct_answers')
     expect(u.onboardingComplete).toBe(true)
@@ -65,19 +61,10 @@ describe('user store', () => {
     expect(u.name).toBe('Learner')
   })
 
-  it('completeOnboarding preserves existing userId', () => {
-    const u = useUserStore()
-    u.completeOnboarding({ name: 'A', feedback: 'hints' })
-    const first = u.userId
-    u.completeOnboarding({ name: 'B', feedback: 'hints' })
-    expect(u.userId).toBe(first)
-  })
-
   it('resetOnboarding clears everything', () => {
     const u = useUserStore()
     u.completeOnboarding({ name: 'A', feedback: 'hints' })
     u.resetOnboarding()
-    expect(u.userId).toBeNull()
     expect(u.name).toBeNull()
     expect(u.onboardingComplete).toBe(false)
     expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
@@ -98,23 +85,5 @@ describe('user store', () => {
     u.completeOnboarding({ name: 'A', feedback: 'hints' })
     u.updateProfile({ name: '   ' })
     expect(u.name).toBe('Learner')
-  })
-
-  it('generates uuid when crypto.randomUUID exists, falls back otherwise', () => {
-    const u = useUserStore()
-    const originalCrypto = globalThis.crypto
-    Object.defineProperty(globalThis, 'crypto', {
-      value: { randomUUID: () => 'fixed-uuid' },
-      configurable: true,
-    })
-    u.completeOnboarding({ name: 'A', feedback: 'hints' })
-    expect(u.userId).toBe('fixed-uuid')
-
-    u.resetOnboarding()
-    Object.defineProperty(globalThis, 'crypto', { value: {}, configurable: true })
-    u.completeOnboarding({ name: 'B', feedback: 'hints' })
-    expect(u.userId).toMatch(/^u_/)
-
-    Object.defineProperty(globalThis, 'crypto', { value: originalCrypto, configurable: true })
   })
 })

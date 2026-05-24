@@ -1,15 +1,19 @@
-"""TDD: services.retrieval_service.retrieve."""
+"""TDD: services.retrieval_service.retrieve (pgvector backend, Phase 7 T4).
+
+Unit tests mock services.pgvector_store.query_chunks so they run against
+the in-memory SQLite fixture. End-to-end cosine-distance behavior is
+covered in tests/test_pgvector_retrieval.py against a live Postgres.
+"""
 
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
-import chromadb
 import pytest
 
 from agent.types import ToolContext
 from contracts import RetrieveChunksArgs, TopicProfile
 from db.models import Document, Session as SessionModel, User
-from services import retrieval_service
+from services import pgvector_store, retrieval_service
 
 
 SESSION_ID = "sess_ret"
@@ -42,13 +46,6 @@ def ctx(db_session):
 
 
 @pytest.fixture
-def chroma(monkeypatch):
-    client = chromadb.EphemeralClient()
-    monkeypatch.setattr("services.retrieval_service.chroma_client.get_chroma", lambda: client)
-    return client
-
-
-@pytest.fixture
 def mock_embed(monkeypatch):
     def fake_embedding(model, input, **_):
         if isinstance(input, str):
@@ -60,34 +57,48 @@ def mock_embed(monkeypatch):
     )
 
 
-def _seed_ready_doc(db_session, chroma):
+def _stub_query(monkeypatch, hits: list[pgvector_store.RetrievedChunk]):
+    def fake(db, *, session_id, query_embedding, k):
+        assert session_id == SESSION_ID
+        return list(hits)[:k]
+
+    monkeypatch.setattr("services.retrieval_service.pgvector_store.query_chunks", fake)
+
+
+def _seed_ready_doc(db_session) -> Document:
     doc = Document(session_id=SESSION_ID, filename="x.pdf", status="ready")
     db_session.add(doc)
     db_session.commit()
     db_session.refresh(doc)
-    collection = chroma.get_or_create_collection(name=f"session_{SESSION_ID}")
-    collection.add(
-        ids=[f"doc_{doc.id}_0"],
-        embeddings=[[0.1] * 8],
-        documents=["Inner joins return matching rows."],
-        metadatas=[{"doc_id": str(doc.id), "chunk_idx": 0, "page": 1, "session_id": SESSION_ID}],
-    )
     return doc
 
 
-def test_ready_doc_returns_chunks(session, ctx, chroma, mock_embed, db_session):
-    _seed_ready_doc(db_session, chroma)
+def test_ready_doc_returns_chunks(session, ctx, mock_embed, db_session, monkeypatch):
+    doc = _seed_ready_doc(db_session)
+    _stub_query(
+        monkeypatch,
+        [
+            pgvector_store.RetrievedChunk(
+                doc_id=doc.id,
+                chunk_text="Inner joins return matching rows.",
+                page=1,
+                score=0.12,
+            )
+        ],
+    )
     result = retrieval_service.retrieve(
         db_session, ctx, RetrieveChunksArgs(session_id=SESSION_ID, query="inner join", k=5)
     )
     assert result.ok is True
     assert result.status == "ok"
     chunks = (result.data or {}).get("chunks", [])
-    assert len(chunks) >= 1
+    assert len(chunks) == 1
     assert "matching rows" in chunks[0]["text"]
+    assert chunks[0]["doc_id"] == str(doc.id)
+    assert chunks[0]["page"] == 1
 
 
-def test_pending_doc_returns_no_results(session, ctx, chroma, mock_embed, db_session):
+def test_pending_doc_returns_no_results(session, ctx, mock_embed, db_session):
     db_session.add(Document(session_id=SESSION_ID, filename="x.pdf", status="pending"))
     db_session.commit()
     result = retrieval_service.retrieve(
@@ -97,23 +108,30 @@ def test_pending_doc_returns_no_results(session, ctx, chroma, mock_embed, db_ses
     assert (result.data or {}).get("chunks", []) == []
 
 
-def test_no_documents_returns_no_results(session, ctx, chroma, mock_embed, db_session):
+def test_no_documents_returns_no_results(session, ctx, mock_embed, db_session):
     result = retrieval_service.retrieve(
         db_session, ctx, RetrieveChunksArgs(session_id=SESSION_ID, query="q", k=5)
     )
     assert result.status == "no_results"
 
 
-def test_chroma_exception_returns_failed(session, ctx, chroma, mock_embed, db_session, monkeypatch):
-    _seed_ready_doc(db_session, chroma)
+def test_empty_hits_returns_no_results(session, ctx, mock_embed, db_session, monkeypatch):
+    _seed_ready_doc(db_session)
+    _stub_query(monkeypatch, [])
+    result = retrieval_service.retrieve(
+        db_session, ctx, RetrieveChunksArgs(session_id=SESSION_ID, query="q", k=5)
+    )
+    assert result.status == "no_results"
+    assert (result.data or {}).get("chunks", []) == []
+
+
+def test_pgvector_exception_returns_failed(session, ctx, mock_embed, db_session, monkeypatch):
+    _seed_ready_doc(db_session)
 
     def boom(*a, **k):
-        raise RuntimeError("chroma down")
+        raise RuntimeError("pgvector down")
 
-    monkeypatch.setattr(
-        "services.retrieval_service.chroma_client.get_chroma",
-        lambda: SimpleNamespace(get_or_create_collection=boom),
-    )
+    monkeypatch.setattr("services.retrieval_service.pgvector_store.query_chunks", boom)
     result = retrieval_service.retrieve(
         db_session, ctx, RetrieveChunksArgs(session_id=SESSION_ID, query="q", k=5)
     )
@@ -122,27 +140,33 @@ def test_chroma_exception_returns_failed(session, ctx, chroma, mock_embed, db_se
     assert result.error == "retrieval_failed"
 
 
-def test_chroma_exception_does_not_leak_internal_message(
-    session, ctx, chroma, mock_embed, db_session, monkeypatch
+def test_pgvector_exception_does_not_leak_internal_message(
+    session, ctx, mock_embed, db_session, monkeypatch
 ):
     """H-5 regression: a future change that reintroduces str(e) into the
     error field would leak server internals (file paths, traceback fragments,
     or attacker-controlled input echoes) into chat tool-call traces. Lock
     the generic literal and assert the sentinel exception text is absent."""
-    _seed_ready_doc(db_session, chroma)
+    _seed_ready_doc(db_session)
 
     sentinel = "SENSITIVE_INTERNAL_PATH_/srv/secret/keys.db"
 
     def boom(*a, **k):
         raise RuntimeError(sentinel)
 
-    monkeypatch.setattr(
-        "services.retrieval_service.chroma_client.get_chroma",
-        lambda: SimpleNamespace(get_or_create_collection=boom),
-    )
+    monkeypatch.setattr("services.retrieval_service.pgvector_store.query_chunks", boom)
     result = retrieval_service.retrieve(
         db_session, ctx, RetrieveChunksArgs(session_id=SESSION_ID, query="q", k=5)
     )
     assert result.error == "retrieval_failed"
     serialized = result.model_dump_json()
     assert sentinel not in serialized, "raw exception message leaked into ToolResult"
+
+
+def test_session_id_mismatch_returns_failed(session, ctx, mock_embed, db_session):
+    result = retrieval_service.retrieve(
+        db_session, ctx, RetrieveChunksArgs(session_id="other_session", query="q", k=5)
+    )
+    assert result.ok is False
+    assert result.status == "failed"
+    assert "mismatch" in (result.error or "")

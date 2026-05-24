@@ -39,10 +39,14 @@ backend/htmlcov/
 backend/.coverage
 backend/uv.lock
 
-# Data volumes (never commit SQLite, uploads, or ChromaDB)
+# Data volumes (never commit SQLite, uploads, or ChromaDB).
+# Both `data/` at repo root and `backend/data/` matter: when uvicorn is
+# launched from `backend/`, UPLOADS_PATH / sqlite default to cwd-relative
+# `./data` which lands under `backend/`.
 data/*.db
 data/uploads/
 data/chroma/
+backend/data/
 
 # Playwright artifacts
 frontend/test-results/
@@ -70,3 +74,4 @@ spike/outputs/**/*_turn8.md
 spike/.env
 
 CLAUDE.md
+.superpowers/

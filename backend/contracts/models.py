@@ -112,7 +112,6 @@ class ChatRequest(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    user_id: constr(max_length=64)
     session_id: constr(max_length=64)
     message: constr(max_length=4000)
 
@@ -131,7 +130,6 @@ class SessionCreateRequest(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    user_id: constr(max_length=64)
     topic: constr(max_length=200)
     seed_mode: Literal["fresh", "resume"]
     prior_session_id: constr(max_length=64) | None = None

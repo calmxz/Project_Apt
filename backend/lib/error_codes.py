@@ -6,3 +6,4 @@ toast copy).
 """
 
 DAILY_CAP_REACHED = "daily_cap_reached"
+DAILY_COST_CAP_REACHED = "daily_cost_cap_reached"

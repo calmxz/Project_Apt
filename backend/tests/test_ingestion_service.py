@@ -1,13 +1,15 @@
-"""TDD: services.ingestion_service.run pipeline (pypdf -> chunk -> embed -> chroma -> kw_index)."""
+"""TDD: services.ingestion_service.run pipeline.
+
+Pipeline: pypdf -> chunk -> embed -> pgvector_store.insert_chunks -> kw_index.
+Tests mock the embed + storage layers so they run against in-memory SQLite.
+"""
 
 import json
 from types import SimpleNamespace
 
-import chromadb
 import pytest
 
 from contracts import TopicProfile
-from db.database import SessionLocal
 from db.models import Document, Session as SessionModel, User
 
 
@@ -46,10 +48,28 @@ def setup_doc(db_session, monkeypatch):
 
 
 @pytest.fixture
-def chroma(monkeypatch):
-    client = chromadb.EphemeralClient()
-    monkeypatch.setattr("services.ingestion_service.chroma_client.get_chroma", lambda: client)
-    return client
+def insert_capture(monkeypatch):
+    """Capture pgvector_store.insert_chunks calls instead of writing rows.
+
+    SQLite has no `vector` type or cosine-distance operator, so the test
+    DB can't accept ChunkEmbedding inserts. Capturing the call lets us
+    assert the ingestion service hands the right payload to the storage
+    layer; live row insertion is covered in test_pgvector_retrieval.py.
+    """
+    calls: list[dict] = []
+
+    def fake(db, *, session_id, document_id, rows):
+        calls.append(
+            {
+                "session_id": session_id,
+                "document_id": document_id,
+                "rows": list(rows),
+            }
+        )
+        return len(rows)
+
+    monkeypatch.setattr("services.ingestion_service.pgvector_store.insert_chunks", fake)
+    return calls
 
 
 @pytest.fixture
@@ -89,7 +109,7 @@ def _path_exists_stub(monkeypatch):
     monkeypatch.setattr("services.ingestion_service.os.path.exists", lambda p: True)
 
 
-def test_success_path(setup_doc, chroma, mock_pdf, mock_embed, db_session, monkeypatch):
+def test_success_path(setup_doc, insert_capture, mock_pdf, mock_embed, db_session, monkeypatch):
     _path_exists_stub(monkeypatch)
     from services import ingestion_service
 
@@ -101,15 +121,22 @@ def test_success_path(setup_doc, chroma, mock_pdf, mock_embed, db_session, monke
     assert doc.error is None
     assert doc.page_count == 2
 
-    collection = chroma.get_collection(name=f"session_{SESSION_ID}")
-    assert collection.count() >= 1
+    assert len(insert_capture) == 1
+    call = insert_capture[0]
+    assert call["session_id"] == SESSION_ID
+    assert call["document_id"] == setup_doc
+    assert len(call["rows"]) >= 1
+    chunk_idx, page, text, embedding = call["rows"][0]
+    assert isinstance(chunk_idx, int)
+    assert isinstance(text, str) and text
+    assert isinstance(embedding, list) and len(embedding) == 8
 
     session = db_session.get(SessionModel, SESSION_ID)
     stems = set(json.loads(session.kw_index_json))
     assert len(stems) > 0
 
 
-def test_pypdf_failure_marks_failed(setup_doc, chroma, mock_embed, db_session, monkeypatch):
+def test_pypdf_failure_marks_failed(setup_doc, insert_capture, mock_embed, db_session, monkeypatch):
     _path_exists_stub(monkeypatch)
 
     def boom(_path):
@@ -123,10 +150,11 @@ def test_pypdf_failure_marks_failed(setup_doc, chroma, mock_embed, db_session, m
     doc = db_session.get(Document, setup_doc)
     assert doc.status == "failed"
     assert "corrupt" in (doc.error or "")
+    assert insert_capture == []
 
 
 def test_embedding_failure_marks_failed(
-    setup_doc, chroma, mock_pdf, db_session, monkeypatch
+    setup_doc, insert_capture, mock_pdf, db_session, monkeypatch
 ):
     _path_exists_stub(monkeypatch)
 
@@ -141,3 +169,22 @@ def test_embedding_failure_marks_failed(
     doc = db_session.get(Document, setup_doc)
     assert doc.status == "failed"
     assert "embedding" in (doc.error or "")
+    assert insert_capture == []
+
+
+def test_pgvector_insert_failure_marks_failed(
+    setup_doc, mock_pdf, mock_embed, db_session, monkeypatch
+):
+    _path_exists_stub(monkeypatch)
+
+    def boom(*a, **k):
+        raise RuntimeError("pgvector insert failed")
+
+    monkeypatch.setattr("services.ingestion_service.pgvector_store.insert_chunks", boom)
+    from services import ingestion_service
+
+    ingestion_service.run(setup_doc)
+    db_session.expire_all()
+    doc = db_session.get(Document, setup_doc)
+    assert doc.status == "failed"
+    assert "pgvector" in (doc.error or "")

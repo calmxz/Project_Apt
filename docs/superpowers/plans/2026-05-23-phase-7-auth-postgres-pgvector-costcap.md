@@ -1,0 +1,259 @@
+# Phase 7 Plan — Auth (Supabase) + Postgres + pgvector + LLM Cost Circuit Breaker
+
+> **Status: DRAFT — 2026-05-23**
+> Branch `phase/7-auth-postgres-pgvector-costcap` off `dev`.
+> Predecessor: Phase 6 shipped as `cb93a28` (CI security automation + regression locks).
+> Successor: Phase 8 (Fly.io deploy, R2 backups, ToS/privacy, invite-only waitlist gating, launch).
+
+## Context
+
+AdaptLearn v1 spec originally targeted trusted-friends scope with `Auth | None (localStorage userId)`. Release target was raised to **public deploy** during the 2026-05-23 security audit. Phase 6 hardened the CI surface and locked existing fixes; Phase 7 closes the structural gaps that block a public release:
+
+1. **Identity** — `user_id` from localStorage is forge-able; any client can read/end any session by guessing IDs. Public deploy requires real auth.
+2. **Data layer** — SQLite + file-based Chroma are single-machine assumptions. Public deploy needs a managed DB with a vector extension, both reachable from a Fly machine.
+3. **Cost ceiling** — LiteLLM with no per-user spend cap means one runaway loop can drain the OpenAI/Anthropic balance. Need a soft + hard cap before the URL is public.
+
+All three changes ripple across the schema, contracts, frontend session bootstrap, and tests. Bundling them is unavoidable — auth needs Postgres (Supabase requires Postgres), pgvector replaces Chroma in the same DB, and the cost-cap ledger lives in that DB too. Splitting into PRs across this branch is fine; splitting into separate branches risks merge hell.
+
+## Branch
+
+Off `dev`: **`phase/7-auth-postgres-pgvector-costcap`**
+
+Verify `dev` is at `cb93a28` or later before branching.
+
+## Scope (in)
+
+| Area | Items |
+|---|---|
+| Auth | Supabase Auth (email magic-link or OAuth) on frontend; FastAPI dependency validates Supabase JWT and resolves `user_id` server-side; all routes drop `user_id` from request body in favor of token-derived identity |
+| DB migration | SQLite → Postgres (Supabase-managed). Schema replayed via Alembic (or hand-applied if no Alembic yet). Hard cutover; no data migration script — existing localStorage userIds wiped per user direction |
+| Vector store | ChromaDB → pgvector (same Postgres). Removes `chromadb` container from compose. `services/retrieval_service.py` and `services/ingestion_service.py` swap backend |
+| LLM cost cap | `$2 soft warn / $3 hard cap` per user per day. LiteLLM `cost_callback` writes to a `daily_cost_ledger` table; chat/upload routes check before invoking the model and return `429 CODE_COST_CAP_REACHED` when exceeded |
+| Contract updates | `openapi.yaml` drops `user_id` from chat/session/upload bodies; adds `Authorization: Bearer <jwt>` security scheme; adds `cost_cap_reached` error envelope. Regen via `gen_contracts.py` |
+| Tests | Backend: replace `user_id` Form params in test fixtures with mocked JWT dependency; new `test_cost_cap.py`; new `test_pgvector_retrieval.py` (uses test Postgres in CI); update existing ownership tests to use auth header instead of query param. Frontend: Supabase client init + login view + auth guard on router; replace `localStorage userId` usage |
+| Docs | Update `CLAUDE.md` architecture section (drop chromadb container, add Postgres + auth), update `SECURITY_REVIEW.md` (close H-4 retroactively now that auth is real), new `docs/auth/supabase-setup.md`, new `docs/db/postgres-pgvector-setup.md` |
+
+## Scope (out)
+
+- Fly.io deploy (Phase 8)
+- R2 backup automation (Phase 8)
+- ToS / privacy templates (Phase 8)
+- Invite-only waitlist gate (Phase 8)
+- Email/transactional via Supabase beyond magic-link login (Phase 8)
+- Data migration of existing dev/local userIds (hard cutover per user direction; document in launch checklist)
+
+## Tasks
+
+### 1. Supabase project bootstrap (manual, user-executed)
+
+User-side prereqs before code lands:
+- Create Supabase project (free tier).
+- Note: `SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` (frontend `sb_publishable_…`), `SUPABASE_SECRET_KEY` (backend `sb_secret_…`, server-only), `DATABASE_URL` (direct Postgres connection string with pooler). Uses Supabase 2025+ key model — legacy `anon` / `service_role` keys are NOT used.
+- Enable Email auth (magic-link). Optionally GitHub OAuth.
+- Apply pgvector extension: `CREATE EXTENSION IF NOT EXISTS vector;` (Supabase SQL editor).
+- Add all four secrets to `.env.example` (placeholders) and `.env` (real values, gitignored).
+
+### 2. Backend — Postgres schema replay
+
+- Add `sqlalchemy[postgresql]` + `psycopg[binary]` to `backend/pyproject.toml`. Keep `sqlalchemy` version pinned.
+- `backend/db/database.py`: switch engine URL to `DATABASE_URL` env. Drop sqlite fallback (test env can use `DATABASE_URL=postgresql://...test`).
+- Apply existing `models.py` schema to Postgres. If no Alembic yet, add it and generate baseline `revision --autogenerate -m "phase-7 baseline"` against an empty Postgres. Run `alembic upgrade head`.
+- Add `daily_cost_ledger` table to `models.py`: `(user_id PK, date PK, cost_usd_cents NUMERIC(10,2), updated_at)`.
+- Verify all backend pytest passes against Postgres (CI matrix or local toggle).
+
+### 3. Backend — Supabase Auth integration
+
+- `backend/services/auth.py` (new):
+  - `verify_supabase_jwt(token: str) -> str` returns `user_id` (Supabase `sub` claim). Use `supabase-py` lib or raw `pyjwt` against Supabase JWKS URL (cache JWKS).
+  - FastAPI dependency `current_user_id(authorization: str = Header(...)) -> str` extracts bearer, calls verify, returns ID. Raises `401` on invalid/missing.
+- All routes in `backend/routes/*` drop `user_id: str = Form/Body(...)` and add `user_id: str = Depends(current_user_id)`.
+- `openapi.yaml`: add `securitySchemes.BearerAuth` + apply to all auth-required paths. Drop `user_id` request params. Regen contracts.
+- Update every test that passes `user_id` to instead inject a mocked dependency (override `current_user_id` in test client fixture).
+
+### 4. Backend — pgvector replaces Chroma — SHIPPED 2026-05-23 (verified live 2026-05-24)
+
+Live verification against Supabase Postgres 17.6 + pgvector 0.8.0:
+- `tests/test_pgvector_retrieval.py` 4/4 pass when `TEST_DATABASE_URL` points at Supabase pooler.
+- `chunk_embeddings` table present, ivfflat index per spec.
+- ChromaDB removed from `docker-compose.yml`, `docker-compose.prod.yml`, `backend/pyproject.toml`.
+
+
+- `backend/services/retrieval_service.py`: replace Chroma client with raw SQLAlchemy + pgvector query. Schema:
+  ```sql
+  CREATE TABLE chunk_embeddings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    session_id TEXT NOT NULL,
+    chunk_text TEXT NOT NULL,
+    chunk_index INT NOT NULL,
+    embedding vector(1536),  -- match LiteLLM embed dimension
+    created_at TIMESTAMPTZ DEFAULT now()
+  );
+  CREATE INDEX ON chunk_embeddings USING ivfflat (embedding vector_cosine_ops);
+  ```
+- `backend/services/ingestion_service.py`: write embeddings to `chunk_embeddings` instead of Chroma collection.
+- Drop `chromadb` from `backend/pyproject.toml` deps + remove the `chromadb` service from `docker-compose.yml` and `docker-compose.prod.yml`.
+- Add `pgvector==<latest>` to backend deps for the SQLAlchemy adapter.
+- Existing retrieval tests (mocked Chroma) rewritten against an in-memory pgvector or live test Postgres.
+
+### 5. Backend — LLM cost cap — SHIPPED 2026-05-23
+
+- `backend/services/cost_meter.py` (new):
+  - `record_cost(db, user_id, cost_usd)` upserts into `daily_cost_ledger` for today's UTC date. Ignores zero/negative inputs.
+  - `check_cap(db, user_id) -> CapStatus` returns a frozen dataclass `(allowed, used, soft_breached, soft_cap, hard_cap)` — semantically equivalent to the planned `(allowed, current_usd, level)` tuple but with both thresholds exposed for the envelope.
+  - Thresholds: `llm_soft_cap_usd=2.00`, `llm_hard_cap_usd=3.00` from `config.Settings` (env-overridable).
+- Cost recording moved from a global LiteLLM `success_callback` into the `agent/tutor.py` loop — per-`acompletion` call we read `litellm.completion_cost(completion_response=resp)` and call `cost_meter.record_cost`. Reason: the agent loop fires up to MAX_ITERS=8 calls per chat turn for tool dispatch; a single post-turn record would undercount. Also keeps DB writes inside the same request's session.
+- `routes/chat.py` pre-call gate: `cost_meter.check_cap` → 429 with envelope `{code: "daily_cost_cap_reached", soft_cap_usd, hard_cap_usd, used_usd, resets_at}`. Post-call: re-check, set `X-Cost-Warning: soft_cap_breached;used_usd=...;soft_cap_usd=...;hard_cap_usd=...` header when above soft and below hard.
+- Mid-turn defense: `tutor.run` re-checks `check_cap` at the top of each iteration (i>0); if a single LLM call alone pushes spend past the hard cap, the loop short-circuits to `FALLBACK_TEXT` instead of issuing another acompletion.
+- `lib/error_codes.py`: added `DAILY_COST_CAP_REACHED = "daily_cost_cap_reached"`.
+- Upload route is **not** gated on cost (the original plan called for it). Rationale: upload's only LLM-touching path is the background ingestion task, which mints embeddings asynchronously and currently doesn't surface 429s back to the client; gating the upload synchronously would block a free action. Revisit in T7 if embeddings cost becomes material.
+- New `backend/tests/test_cost_cap.py` — 12 tests, all green:
+  - Unit: zero-spend default, row-create, accumulation, zero/negative ignore, allowed/soft-breached/hard-blocked check_cap.
+  - Integration: 429 envelope when pre-seeded ledger ≥ hard cap; `X-Cost-Warning` header when seeded between soft and hard; header absent when below soft.
+  - Tutor-loop: per-acompletion cost recording into ledger; short-circuit when first call pushes spend past hard cap.
+- Coverage: `services/cost_meter.py` 100%, full suite 150 passed / 88.24% overall.
+
+### 6. Frontend — Supabase Auth — SHIPPED 2026-05-23
+
+- `@supabase/supabase-js@^2.45.0` added to `frontend/package.json`.
+- `frontend/src/services/supabase.js` — lazy singleton client (constructed on first `getSupabase()` call). Falls back to a placeholder URL/key if `VITE_SUPABASE_URL`/`VITE_SUPABASE_PUBLISHABLE_KEY` are unset so the module is importable in dev before the user provisions Supabase (live calls will fail loudly, which is the intended dev signal).
+- `frontend/src/stores/auth.js` (new) — Pinia store: `session`, `ready`, `userId` / `accessToken` / `isAuthenticated` computeds, `init()` / `signInWithMagicLink()` / `signOut()` actions. `init()` is idempotent and subscribes to `onAuthStateChange` so token refresh + SIGNED_IN/SIGNED_OUT events propagate.
+- `frontend/src/main.js` — `await useAuthStore().init()` before `app.mount` so the router guard has a deterministic auth answer on first navigation (avoids the init/guard race the advisor flagged).
+- `frontend/src/router/index.js` — added `/login` route + global guard. Guard chain: `!auth.ready → await auth.init()`; `!isAuthenticated && to !== login → /login`; `isAuthenticated && to === login → /home`; `isAuthenticated && !onboarded && to !== onboarding → /onboarding`; `onboarded && to === onboarding && !retake → /home`.
+- `frontend/src/views/LoginView.vue` (new) — magic-link form. Email validity gates submit; "check your inbox" state on success; error banner on Supabase failure.
+- `frontend/src/services/apiClient.js` — injects `Authorization: Bearer <token>` from `useAuthStore` if Pinia is active; no-op otherwise (so apiClient tests without Pinia still work).
+- `frontend/src/services/uploadApi.js` — same Bearer header pattern, and `user_id` dropped from the FormData (server resolves from JWT).
+- `frontend/src/services/chatApi.js` / `sessionsApi.js` / `profileApi.js` — `userId` argument removed from every wrapper. `apiClient` no longer carries `user_id` in any body or query.
+- `frontend/src/stores/session.js` — `userId` argument removed from `listSessions`, `createSession`, `loadSession`, `sendMessage`, `endSession`, `reopenSession`. View callsites updated in: `HomeView.vue`, `SessionView.vue`, `NewSessionView.vue`, `ProfileView.vue`, `AggregateProfileView.vue`.
+- `frontend/src/stores/user.js` — `userId` field, generator, and persistence removed. Store now only owns `name` / `interactionPreferences` / `onboardingComplete` (local UX state). Identity comes from `useAuthStore.userId`.
+- `frontend/src/__tests__/setup.js` (new) — wired via `vitest.config.js` `setupFiles`. Globally mocks `@supabase/supabase-js` with a stub auth client exposed at `globalThis.__supabaseAuthStub` so individual tests can refine behavior via `mockResolvedValueOnce`.
+- New tests: `authStore.test.js` (9), `loginView.test.js` (3). Updated tests: `userStore.test.js` (drop `userId` assertions), `apiWrappers.test.js` (assert no `user_id` in payloads/queries), `uploadApi.test.js` (assert no `user_id` in FormData), `homeView.test.js`, `newSessionView.test.js`, `sessionView.test.js` (drop `userId` from store-call expectations), `router.test.js` (add /login guard tests, seed `authStore` for onboarding-flow tests).
+- Sign-out button in `App.vue` topnav: **SHIPPED 2026-05-24**. Visible only when `isAuthenticated`; `data-testid="nav-sign-out"`; click calls `authStore.signOut()` then `router.push('/login')`. Errors surface via `useToast.showError`. Covered by 3 new `appView.test.js` cases.
+- Test status: 22 files / 151 pass (was 140 pre-T6). After sign-out button: 23 files / 159 pass.
+
+### 7. Frontend — Cost cap UX — SHIPPED 2026-05-23
+
+- `lib/errorCodes.js`: added `ERR_DAILY_COST_CAP_REACHED` mirror of the backend constant.
+- `services/costBus.js` (new): EventTarget for `cost-warning` events. apiClient dispatches when a successful response carries `X-Cost-Warning`. Pattern mirrors `errorBus`.
+- `services/apiClient.js`: reads `resp.headers.get('x-cost-warning')` after every successful request; if present, calls `reportCostWarning({ header, path })`.
+- `stores/session.js`: parallel cost-cap state — `costCapInfo` ref + `costCapReached` computed + `clearCostCap()` action. `sendMessage`'s 429 catch routes `daily_cost_cap_reached` payloads into `costCapInfo` (existing `daily_cap_reached` path is untouched).
+- `views/SessionView.vue`: composer disabled when `costCapReached`; new `session-cost-cap-banner` mirrors the existing daily-cap banner; `watch(costCapReached)` fires a `showError` toast on first cap hit; `costBus.cost-warning` listener fires `showInfo` once per view-mount (soft-cap warning toast is intentionally throttled to once per session-entry).
+- New `__tests__/costCapUx.test.js` — 5 tests covering: apiClient bus dispatch when header set / absent; session store captures the cost-cap 429 envelope into `costCapInfo`; SessionView renders the banner + toast on hard cap; soft-warning toast fires exactly once even if the event fires multiple times.
+- Test status: 23 files / 156 pass (was 151 pre-T7).
+
+### 8. Contract regen
+
+- After all `openapi.yaml` edits: run `python backend/scripts/gen_contracts.py`. Commit the regenerated `backend/contracts/*.py`. CI drift check enforces zero diff.
+
+### 9. Tests — COMPLETE 2026-05-23
+
+**Backend (shipped):**
+- `tests/conftest.py`: `_AuthInjectingClient` shim + `current_user_id` dependency override (shipped during T3a).
+- `tests/test_cost_cap.py`: shipped during T5.
+- `tests/test_pgvector_retrieval.py` (new): live-Postgres integration test gated on `TEST_DATABASE_URL`. Asserts cosine ordering, session isolation, k-limit, and row visibility. Skipped locally without env var; CI runs against `pgvector/pgvector:pg16`.
+- `tests/test_auth_dependency.py` (new): RSA keypair generated in-process, `_get_jwks_client` stubbed to vend the public key. 10 cases covering valid token, missing header, non-bearer scheme, empty bearer, expired, wrong audience, missing `sub`, wrong signature, malformed token, `auth_not_configured` when JWKS URL is empty. **Surfaced a bug** in `services/auth.py` — `Authorization: Bearer ` (trailing space, no token) raised `IndexError` instead of returning 401. Fixed by switching from `auth.split(None, 1)[1]` to `auth[7:].strip()`.
+
+Backend totals after T9: 163 passed, 4 skipped (pgvector), coverage 92.56% (Phase 6 gate ≥75% held).
+
+**Frontend (shipped):**
+- `src/__tests__/loginView.test.js`: shipped during T6.
+- `src/__tests__/authStore.test.js`: shipped during T6 (covers `signInWithMagicLink`, `signOut`, `init`, `onAuthStateChange`).
+- `src/__tests__/router.test.js`: covers the auth guard — unauthenticated → `/login`, authenticated on `/login` → home, onboarding redirects honored.
+- `e2e/auth.spec.js` (Playwright, new): three flows — unauthenticated visit to `/` redirects to `/login`; submit button disabled until valid email; submitting valid email shows "Check your inbox" via mocked Supabase OTP endpoint. Per [project memory](../../memory/project_e2e_gating_phase6.md), e2e workflow stays `continue-on-error: true` through demo.
+
+Frontend totals after T9: 156 passed.
+
+### 10. Docs — PARTIAL 2026-05-23 (post-T4 items deferred)
+
+Shipped:
+- `docs/auth/supabase-setup.md` (new) — magic-link only, env var matrix, JWKS verification model, RLS-not-used rationale.
+- `docs/db/postgres-pgvector-setup.md` (new) — pgvector enable, `chunk_embeddings` schema, ivfflat tuning, `daily_cost_ledger` schema, local-test Postgres recipe.
+- `docs/security/SECURITY_REVIEW.md` — H-4 row annotated with Phase 7 hard-close; new Phase 7 close-out block added below the Phase 6 regression-lock note. Cost-cap call-out included.
+- `docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md` — Auth row flipped to `Supabase magic-link (JWT)` with Phase 7 change-point note; v2 backlog entry struck through with reference to new auth doc.
+- `CLAUDE.md` — Phase 7 row marked PARTIAL (auth + cost cap shipped, T4 pgvector pending) with link to new docs. NOTE: `CLAUDE.md` is gitignored in this repo (per `.gitignore:72`), so this edit is local-only — it benefits any further Claude Code runs in this working tree but won't propagate via `git pull`.
+
+Shipped 2026-05-24 (post-T4 sweep):
+- `CLAUDE.md` architecture diagram + repo-layout — ChromaDB references replaced with Postgres + pgvector. Phase 7 row flipped to Complete pending T11 manual smoke.
+
+### 11. Verification
+
+Full step-by-step manual smoke runbook: [`2026-05-23-phase-7-smoke-runbook.md`](2026-05-23-phase-7-smoke-runbook.md).
+
+- [x] Local Postgres + pgvector reachable from backend container
+- [x] Backend `pytest -v` green against Postgres (CI matrix or local toggle) — 163 passed, 4 skipped (2026-05-24)
+- [x] Coverage ≥ 75% (Phase 6 gate held) — 92.56% (2026-05-24)
+- [x] Frontend `npm run test:unit -- --run` green — 159 passed (2026-05-24)
+- [x] Frontend `npm run lint` clean (2026-05-24)
+- [ ] Playwright `auth.spec.js` green — continue-on-error through Phase 5; manual review on PR
+- [x] Contract drift check green (regen produces zero diff)
+- [x] Manual: sign up via magic link, create session, chat, upload PDF, hit cost cap (set `LLM_HARD_CAP_USD=0.01` to force), see banner — T11 smoke §2-§4, §6 (2026-05-24)
+- [x] Manual: sign in as user B, try to GET user A's session → 404 — T11 smoke §5 (2026-05-24)
+- [x] Manual: docker compose up succeeds without `chromadb` service
+- [ ] CI green on PR `phase/7-auth-postgres-pgvector-costcap` → `dev` — pending PR open
+
+### 12. Manual post-merge (USER, web UI)
+
+- Rotate any test Supabase keys before public deploy.
+- Confirm Supabase project's allowed redirect URLs include both `http://localhost:5173` (dev) and the eventual production origin (set in Phase 8).
+- Wipe any dev SQLite DB before promoting `dev` → `main` (hard cutover; no migration).
+
+## Critical files
+
+**Created (~14):**
+- `backend/services/auth.py`
+- `backend/services/cost_meter.py`
+- `backend/db/alembic/` (if introducing Alembic)
+- `backend/tests/test_cost_cap.py`
+- `backend/tests/test_pgvector_retrieval.py`
+- `backend/tests/test_auth_dependency.py`
+- `frontend/src/services/supabase.js`
+- `frontend/src/views/LoginView.vue`
+- `frontend/src/__tests__/loginView.test.js`
+- `frontend/src/__tests__/authGuard.test.js`
+- `frontend/e2e/auth.spec.js`
+- `docs/auth/supabase-setup.md`
+- `docs/db/postgres-pgvector-setup.md`
+- `docs/superpowers/plans/2026-05-23-phase-7-auth-postgres-pgvector-costcap.md` (this file)
+
+**Modified (~25):**
+- `backend/db/database.py`
+- `backend/db/models.py`
+- `backend/services/retrieval_service.py`
+- `backend/services/ingestion_service.py`
+- `backend/routes/chat.py`, `sessions.py`, `upload.py`, `profile.py`
+- `backend/pyproject.toml`
+- `backend/main.py` (auth dependency wiring)
+- All `backend/tests/test_*.py` that fixture `user_id`
+- `docs/api/openapi.yaml`
+- `backend/contracts/*.py` (regenerated)
+- `frontend/package.json`
+- `frontend/src/router/index.js`
+- `frontend/src/stores/user.js`, `session.js`
+- `frontend/src/services/*Api.js` (every file — switch to bearer auth)
+- `frontend/src/views/*.vue` (drop user_id usage)
+- `frontend/src/App.vue` (sign-out button)
+- `docker-compose.yml`, `docker-compose.prod.yml` (drop chromadb service)
+- `.env.example`
+- `CLAUDE.md`
+- `docs/security/SECURITY_REVIEW.md`
+- `docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md`
+
+## Decisions (locked 2026-05-23)
+
+1. **Auth provider:** Magic-link only. No OAuth in Phase 7.
+2. **pgvector index:** `ivfflat` with default `lists=100`. Revisit if RAG latency degrades or dataset crosses 100k chunks.
+3. **Migrations:** Alembic. Baseline revision generated against empty Postgres on first apply. Every schema change = `alembic revision --autogenerate` + `alembic upgrade head`.
+4. **Cost cap reset window:** UTC midnight. Aligns with existing daily-message cap; one boundary across all counters. Ledger keyed by `(user_id, date)`.
+5. **Cost cap currency:** USD. LiteLLM's `cost_callback` returns USD natively across providers (OpenAI, Anthropic). No conversion needed.
+6. **Supabase project:** USER creates project upfront and supplies `SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` (`sb_publishable_…`), `SUPABASE_SECRET_KEY` (`sb_secret_…`), `DATABASE_URL` before code lands. Uses Supabase 2025+ key model — legacy `anon` / `service_role` keys are NOT used. Real values enable integration tests against live JWKS.
+
+## Open items deferred to Phase 8
+
+| Item | Reason |
+|---|---|
+| Fly.io deploy | Needs Phase 7 stack landed. |
+| R2 backup automation | Cron job in Fly machine; needs Fly account + R2 bucket. |
+| ToS / privacy from generator | Pre-launch checklist. |
+| Invite-only waitlist gate | Application-level guard, depends on auth (Phase 7) + deploy (Phase 8). |
+| Custom domain + TLS | Fly.io handles; Phase 8. |
+| Sentry / error tracking | Optional; defer unless time. |
+| Observability (logs to external sink) | Optional; Fly tail OK for v1 launch. |

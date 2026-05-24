@@ -38,6 +38,6 @@ def stub_response(messages: list[dict], system_prompt: str) -> str:
     summary = _extract_summary(system_prompt)
     last_user = _last_user_message(messages) or "(empty)"
     if summary:
-        digest = hashlib.sha1(summary.encode("utf-8")).hexdigest()[:8]
+        digest = hashlib.sha256(summary.encode("utf-8"), usedforsecurity=False).hexdigest()[:8]
         return f"[STUB:resumed:{digest}] Echo: {last_user}"
     return f"[STUB:fresh] Echo: {last_user}"

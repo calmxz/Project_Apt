@@ -60,7 +60,7 @@ Most "AI tutors" today are a chat box bolted onto a generic LLM. They ask the sa
 - **Live learner profile per topic.** Knowledge level, confirmed gaps, mastered concepts, and one current focus gap. Updated via Pydantic-validated tool calls every turn.
 - **Profile demotion on retest failure.** Get a previously mastered concept wrong, and the server removes it from your mastered list. No silent inflation.
 - **Focus-clearing guard rail.** The agent cannot clear the current focus without server-verifiable evidence — a `LearningEvent` logged that turn with `correct=true`.
-- **PDF → RAG ingestion.** Upload course materials. They're chunked, embedded with `gemini-embedding-2`, and stored in ChromaDB. Chat answers cite the source chunk.
+- **PDF → RAG ingestion.** Upload course materials. They're chunked, embedded with `gemini/gemini-embedding-2`, and stored in Supabase Postgres via pgvector. Chat answers cite the source chunk.
 - **Server-side retrieval arbitration.** A keyword check decides whether retrieval is _required_; the agent decides whether to call the tool. Two-stage gate keeps it from RAG-ing chitchat.
 - **Multi-session, resumable.** Every topic is its own session. Close one with a summary; resume later with prior context restored.
 - **Read-only profile views.** Per-session profile (`/profile/:sessionId`) plus a cross-session aggregate dashboard (`/profile`) — see exactly what the model believes about you.
@@ -73,10 +73,11 @@ Most "AI tutors" today are a chat box bolted onto a generic LLM. They ask the sa
 |---|---|---|
 | Frontend | Vue 3, Vite, Pinia, PrimeVue | Reactive SPA, fast dev loop, accessible components out of the box |
 | Backend | FastAPI, Uvicorn, Python 3.12 | Typed routes, automatic OpenAPI, async-friendly |
-| ORM / DB | SQLAlchemy + SQLite | File-backed, zero ops; fine for single-user local + small-scale deploys |
-| Vector store | ChromaDB 1.5.x | Self-hosted, persistent, embedded or server mode |
+| ORM / DB | SQLAlchemy + Supabase Postgres 17 | Managed Postgres + Alembic migrations; pooled connection via Supabase pgbouncer |
+| Vector store | pgvector 0.8.x in Supabase Postgres | Co-located with app schema; `ivfflat` cosine index on `chunk_embeddings` |
+| Auth | Supabase Auth (magic-link) | JWT verified server-side against Supabase JWKS |
 | LLM gateway | LiteLLM direct | One client, swap providers via env var (Gemini default, Anthropic fallback) |
-| LLM | `gemini/gemini-3.1-flash-lite` (chat), `gemini-embedding-2` (embeddings) | Cheap, fast, large context |
+| LLM | `gemini/gemini-3.1-flash-lite` (chat), `gemini/gemini-embedding-2` (embeddings) | Cheap, fast, large context |
 | Tests | pytest, vitest, Playwright | Backend unit/integration, frontend unit, e2e |
 | Deploy | Docker Compose; ngrok for public demo | Reproducible local stack; tunneled public preview |
 
@@ -261,11 +262,13 @@ The backend reads `.env` at the repo root. With Docker, it's mounted into the co
 | Variable | Purpose | Default |
 |---|---|---|
 | `MODEL` | LiteLLM-prefixed chat model id. Swap to `anthropic/claude-sonnet-4-6` if reliability checkpoints fail. | `gemini/gemini-3.1-flash-lite` |
-| `EMBEDDING_MODEL` | Embedding model used by ChromaDB ingestion + retrieval. | `gemini-embedding-2` |
+| `EMBEDDING_MODEL` | Embedding model used by pgvector ingestion + retrieval. | `gemini/gemini-embedding-2` |
 | `DAILY_CAP` | Per-user daily request cap. | `100` |
-| `DATABASE_URL` | SQLAlchemy connection string. | `sqlite:///./data/app.db` (Docker overrides to `/data/app.db`) |
-| `CHROMA_HOST` | ChromaDB host. | `localhost` (Docker overrides to `chromadb`) |
-| `CHROMA_PORT` | ChromaDB port. | `8001` |
+| `DATABASE_URL` | SQLAlchemy connection string (Supabase pooler URI; bare `postgresql://` auto-converted to `postgresql+psycopg://`). | `sqlite:///./data/app.db` (legacy default; Phase 7+ requires Supabase Postgres URL) |
+| `EMBEDDING_DIM` | Vector dimension for `chunk_embeddings`. Must match the migration; changing requires re-embedding. | `768` |
+| `SUPABASE_URL` | Project URL — used to derive JWKS endpoint for JWT verification. | — |
+| `SUPABASE_SECRET_KEY` | Backend-only secret API key (`sb_secret_…`; replaces legacy `service_role` per Supabase 2025 key model). | — |
+| `LLM_SOFT_CAP_USD` / `LLM_HARD_CAP_USD` | Per-user daily LLM spend thresholds (soft = warning header, hard = 429). | `2.00` / `3.00` |
 
 ### Frontend `.env.local`
 

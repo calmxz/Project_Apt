@@ -10,6 +10,7 @@ import { definePreset } from '@primeuix/themes'
 
 import App from './App.vue'
 import router from './router'
+import { useAuthStore } from './stores/auth.js'
 import { useUserStore } from './stores/user.js'
 import { useTheme } from './composables/useTheme.js'
 
@@ -71,20 +72,27 @@ const AdaptPreset = definePreset(Aura, {
   },
 })
 
-const app = createApp(App)
-
-app.use(createPinia())
-useUserStore().loadFromLocalStorage()
-useTheme().init()
-app.use(router)
-app.use(PrimeVue, {
-  theme: {
-    preset: AdaptPreset,
-    options: {
-      darkModeSelector: '[data-theme="dark"]',
+async function bootstrap() {
+  const app = createApp(App)
+  app.use(createPinia())
+  useUserStore().loadFromLocalStorage()
+  useTheme().init()
+  // Resolve Supabase session before the router guard fires, so the first
+  // navigation has a deterministic auth answer rather than racing with the
+  // SDK's initial getSession() call.
+  await useAuthStore().init()
+  app.use(router)
+  app.use(PrimeVue, {
+    theme: {
+      preset: AdaptPreset,
+      options: {
+        darkModeSelector: '[data-theme="dark"]',
+      },
     },
-  },
-})
-app.use(ToastService)
+  })
+  app.use(ToastService)
 
-app.mount('#app')
+  app.mount('#app')
+}
+
+bootstrap()
