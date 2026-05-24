@@ -70,7 +70,13 @@ User-side prereqs before code lands:
 - `openapi.yaml`: add `securitySchemes.BearerAuth` + apply to all auth-required paths. Drop `user_id` request params. Regen contracts.
 - Update every test that passes `user_id` to instead inject a mocked dependency (override `current_user_id` in test client fixture).
 
-### 4. Backend — pgvector replaces Chroma — SHIPPED 2026-05-23
+### 4. Backend — pgvector replaces Chroma — SHIPPED 2026-05-23 (verified live 2026-05-24)
+
+Live verification against Supabase Postgres 17.6 + pgvector 0.8.0:
+- `tests/test_pgvector_retrieval.py` 4/4 pass when `TEST_DATABASE_URL` points at Supabase pooler.
+- `chunk_embeddings` table present, ivfflat index per spec.
+- ChromaDB removed from `docker-compose.yml`, `docker-compose.prod.yml`, `backend/pyproject.toml`.
+
 
 - `backend/services/retrieval_service.py`: replace Chroma client with raw SQLAlchemy + pgvector query. Schema:
   ```sql
@@ -121,8 +127,8 @@ User-side prereqs before code lands:
 - `frontend/src/stores/user.js` — `userId` field, generator, and persistence removed. Store now only owns `name` / `interactionPreferences` / `onboardingComplete` (local UX state). Identity comes from `useAuthStore.userId`.
 - `frontend/src/__tests__/setup.js` (new) — wired via `vitest.config.js` `setupFiles`. Globally mocks `@supabase/supabase-js` with a stub auth client exposed at `globalThis.__supabaseAuthStub` so individual tests can refine behavior via `mockResolvedValueOnce`.
 - New tests: `authStore.test.js` (9), `loginView.test.js` (3). Updated tests: `userStore.test.js` (drop `userId` assertions), `apiWrappers.test.js` (assert no `user_id` in payloads/queries), `uploadApi.test.js` (assert no `user_id` in FormData), `homeView.test.js`, `newSessionView.test.js`, `sessionView.test.js` (drop `userId` from store-call expectations), `router.test.js` (add /login guard tests, seed `authStore` for onboarding-flow tests).
-- Sign-out button in `App.vue` topnav: **deferred to T7/T10** (not strictly required for auth gating; UX nicety).
-- Test status: 22 files / 151 pass (was 140 pre-T6).
+- Sign-out button in `App.vue` topnav: **SHIPPED 2026-05-24**. Visible only when `isAuthenticated`; `data-testid="nav-sign-out"`; click calls `authStore.signOut()` then `router.push('/login')`. Errors surface via `useToast.showError`. Covered by 3 new `appView.test.js` cases.
+- Test status: 22 files / 151 pass (was 140 pre-T6). After sign-out button: 23 files / 159 pass.
 
 ### 7. Frontend — Cost cap UX — SHIPPED 2026-05-23
 
@@ -165,8 +171,8 @@ Shipped:
 - `docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md` — Auth row flipped to `Supabase magic-link (JWT)` with Phase 7 change-point note; v2 backlog entry struck through with reference to new auth doc.
 - `CLAUDE.md` — Phase 7 row marked PARTIAL (auth + cost cap shipped, T4 pgvector pending) with link to new docs. NOTE: `CLAUDE.md` is gitignored in this repo (per `.gitignore:72`), so this edit is local-only — it benefits any further Claude Code runs in this working tree but won't propagate via `git pull`.
 
-Deferred until T4 lands (pgvector replaces ChromaDB):
-- `CLAUDE.md` architecture diagram + repo-layout chromadb references — keep ChromaDB references accurate until the migration lands; update in one pass post-T4 so the doc never describes a state the code doesn't match.
+Shipped 2026-05-24 (post-T4 sweep):
+- `CLAUDE.md` architecture diagram + repo-layout — ChromaDB references replaced with Postgres + pgvector. Phase 7 row flipped to Complete pending T11 manual smoke.
 
 ### 11. Verification
 

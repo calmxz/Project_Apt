@@ -1,14 +1,19 @@
 <script setup>
 import { onBeforeUnmount, onMounted } from 'vue'
-import { RouterLink, RouterView } from 'vue-router'
+import { RouterLink, RouterView, useRouter } from 'vue-router'
+import { storeToRefs } from 'pinia'
 import Toast from 'primevue/toast'
 import { useTheme } from './composables/useTheme.js'
 import { useToast } from './composables/useToast.js'
 import { errorBus } from './services/errorBus.js'
+import { useAuthStore } from './stores/auth.js'
 import Logo from './components/Logo.vue'
 
 const { isDark, toggle } = useTheme()
 const { showError } = useToast()
+const router = useRouter()
+const authStore = useAuthStore()
+const { isAuthenticated } = storeToRefs(authStore)
 
 // Skip 429 (daily-cap has dedicated banner+toast in SessionView) and 404
 // (consumers typically render "not found" inline; double-surfacing is noisy).
@@ -20,6 +25,16 @@ const onApiError = (e) => {
 }
 onMounted(() => errorBus.addEventListener('api-error', onApiError))
 onBeforeUnmount(() => errorBus.removeEventListener('api-error', onApiError))
+
+async function onSignOut() {
+  try {
+    await authStore.signOut()
+  } catch (err) {
+    showError(err?.message || 'Sign out failed')
+    return
+  }
+  router.push('/login')
+}
 </script>
 
 <template>
@@ -57,6 +72,16 @@ onBeforeUnmount(() => errorBus.removeEventListener('api-error', onApiError))
         <RouterLink to="/settings" class="icon-btn" aria-label="Settings">
           <i class="pi pi-cog" />
         </RouterLink>
+        <button
+          v-if="isAuthenticated"
+          type="button"
+          class="icon-btn"
+          aria-label="Sign out"
+          data-testid="nav-sign-out"
+          @click="onSignOut"
+        >
+          <i class="pi pi-sign-out" />
+        </button>
       </nav>
     </div>
   </header>
