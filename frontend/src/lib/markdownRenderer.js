@@ -28,6 +28,10 @@ hljs.registerLanguage('markdown', markdown)
 
 let _md = null
 
+function escapeAttr(s) {
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
+}
+
 function build() {
   const md = new MarkdownIt({
     html: false,
@@ -45,6 +49,29 @@ function build() {
     },
   })
   md.use(mdKatex, { throwOnError: false, errorColor: 'var(--math-accent, #ff6b5b)' })
+
+  md.renderer.rules.fence = (tokens, idx) => {
+    const token = tokens[idx]
+    const langRaw = token.info.trim().split(/\s+/)[0] || ''
+    const lang = langRaw || 'plain'
+    let body
+    if (langRaw && hljs.getLanguage(langRaw)) {
+      body = hljs.highlight(token.content, { language: langRaw, ignoreIllegals: true }).value
+    } else {
+      body = md.utils.escapeHtml(token.content)
+    }
+    const langClass = langRaw ? `language-${escapeAttr(langRaw)} hljs` : 'hljs'
+    return (
+      `<pre class="code-block">` +
+      `<div class="code-block-header">` +
+      `<span class="code-block-lang">${escapeAttr(lang)}</span>` +
+      `<button type="button" class="code-block-copy" data-copy-button>copy</button>` +
+      `</div>` +
+      `<code class="${langClass}">${body}</code>` +
+      `</pre>`
+    )
+  }
+
   return md
 }
 

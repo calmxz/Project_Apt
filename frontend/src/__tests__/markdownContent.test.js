@@ -13,7 +13,7 @@ describe('MarkdownContent', () => {
     const w = mount(MarkdownContent, {
       props: { text: '```python\ndef foo():\n    pass\n```' },
     })
-    expect(w.html()).toMatch(/<pre[^>]*><code class="language-python[^"]*"/)
+    expect(w.html()).toMatch(/<code class="language-python[^"]*"/)
   })
 
   it('renders inline math through KaTeX', () => {
