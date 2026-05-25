@@ -14,6 +14,32 @@
 
 ---
 
+## Execution Progress (live status — updated 2026-05-25)
+
+**Mode:** Hybrid. Phase 1 ran inline; Phase 2 + 3 run subagent-driven (`superpowers:subagent-driven-development`).
+
+### Phase 1 (PR 1) — COMPLETE (Tasks 0-8), awaiting human merge of PR1
+Tasks 0-8 implemented, TDD-tested, committed, pushed to `feat/chat-surface-redesign` (8 commits on base `dev`@cf25f03). Verification: frontend **197 tests pass** (28 files), `vite build` clean, `npm audit` **0 vulns**, backend **163 pass / 4 skip** (untouched — no backend changes in PR1).
+
+**Task 9 (PR):** user is opening + merging PR1 via GitHub web. PR body saved at `.superpowers/pr-body-phase1.md`. Compare base `dev` ← `feat/chat-surface-redesign`.
+
+Commits: `b2dc911` deps · `8159e56` stream-buffer · `129ab64` MarkdownContent · `e1afe47` code-chrome · `f9ecb8c` CitationsList · `44781c1` ToolCallChip · `e9d5464` SessionView wire · `494cea8` aura-tokens.
+
+**Deviations from plan as-written (carry forward):**
+1. **KaTeX plugin** = `@vscode/markdown-it-katex` (NOT `markdown-it-katex@2` — unfixable XSS GHSA-5ff8-jcf9-fw62). Import unwrap: `const mdKatex = mdKatexImport.default ?? mdKatexImport`.
+2. **`Citation` contract is `{doc_id, text}`** (no `page`/`doc_name`; `extra="forbid"`). `CitationsList.vue` hardened to tolerate absence. **Task 14 MUST add `page` + `doc_name`** to the Citation schema (edit `docs/api/openapi.yaml` then `python backend/scripts/gen_contracts.py`) and propagate them in `TutorAgent` citation construction. Spec (source of truth) requires page-numbered citations.
+3. **Test assertions:** avoid trailing-space `toContain(...)` (`@vue/test-utils` `.html()` runs js-beautify, trims trailing whitespace) and the `<pre><code>` adjacency regex (Task 4 fence override inserts a `<div class="code-block-header">` between them).
+
+### Phase 2 (PR 2) — NOT STARTED. **<<< RESUME HERE >>>**
+**Resume after PR1 is merged to `dev`:** open a session and say "start Phase 2 of the chat redesign plan, subagent-driven". Orchestrator then:
+1. `git checkout dev && git pull --ff-only origin dev && git checkout feat/chat-surface-redesign && git merge dev` (plan Task 9 Step 3).
+2. Re-create the task list for Tasks 10-31 (modes: all subagent-driven).
+3. Dispatch a fresh subagent per task (10→19). Extract each task's full text from this file and pass it INLINE in the dispatch prompt — do NOT have the subagent read this plan file. Two-stage review (spec compliance, then code quality) after each. Pass the Task-14 contract obligation (deviation #2) to the Task 10 subagent so it knows the contract is moving.
+
+### Phase 3 (PR 3) — NOT STARTED. Tasks 20-31, subagent-driven. Final task (31) runs `superpowers:finishing-a-development-branch`.
+
+---
+
 ## Task 0: Branch + prerequisites
 
 **Files:** none modified — this is a setup task.

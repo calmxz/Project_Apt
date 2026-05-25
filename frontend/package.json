@@ -19,6 +19,11 @@
   "dependencies": {
     "@primeuix/themes": "^2.0.3",
     "@supabase/supabase-js": "^2.45.0",
+    "@vscode/markdown-it-katex": "^1.1.2",
+    "dompurify": "^3.4.5",
+    "highlight.js": "^11.11.1",
+    "katex": "^0.16.47",
+    "markdown-it": "^14.2.0",
     "pinia": "^3.0.4",
     "primeicons": "^7.0.0",
     "primevue": "^4.5.5",
@@ -28,6 +33,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.60.0",
+    "@types/markdown-it": "^14.1.2",
     "@vitejs/plugin-vue": "^6.0.6",
     "@vitest/coverage-v8": "^4.1.4",
     "@vitest/eslint-plugin": "^1.6.16",

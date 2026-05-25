@@ -1,0 +1,25 @@
+/* Chat surface design tokens (spec section 5).
+ * Consumed by MarkdownContent.vue, ToolCallChip.vue, CitationsList.vue and the
+ * Phase 3 component split. Declared here so the var() fallbacks in those
+ * components resolve to real values. */
+:root {
+  --chat-bubble-bg: #ffffff;
+  --chat-bubble-border: rgba(0, 0, 0, 0.06);
+  --chat-bubble-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  --chat-bubble-radius: 14px;
+
+  --code-block-bg: #f7f3ed;
+  --code-block-border: rgba(0, 0, 0, 0.06);
+  --code-block-text: #2c2316;
+
+  --math-bg: #fff8ed;
+  --math-accent: #ff6b5b;
+
+  --tool-pill-bg: rgba(255, 107, 91, 0.08);
+  --tool-pill-border: rgba(255, 107, 91, 0.2);
+  --tool-pill-text: #c44;
+
+  --user-bubble-bg: #ff6b5b;
+  --user-bubble-text: #ffffff;
+  --user-bubble-radius: 18px 18px 4px 18px;
+}

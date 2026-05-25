@@ -130,13 +130,17 @@
             </span>
             <div class="msg-body">
               <span class="role-tag">{{ m.role === 'user' ? 'you' : 'tutor' }}</span>
-              <p class="content">{{ m.content }}</p>
-              <ul v-if="m.citations && m.citations.length" class="citations">
-                <li v-for="(c, j) in m.citations" :key="j">
-                  <span class="citation-id">{{ c.doc_id }}</span>
-                  <span class="citation-text">{{ c.text }}</span>
-                </li>
-              </ul>
+              <template v-if="m.role === 'assistant' && (m.tool_calls || []).length">
+                <span
+                  v-for="(tc, ti) in m.tool_calls"
+                  :key="`tc-${ti}`"
+                  class="tool-call-row"
+                >
+                  <ToolCallChip :tool_call="tc" state="done" />
+                </span>
+              </template>
+              <MarkdownContent class="content" :text="m.content || ''" />
+              <CitationsList v-if="m.role === 'assistant'" :citations="m.citations || []" />
             </div>
           </article>
         </TransitionGroup>
@@ -287,6 +291,9 @@ import Dialog from 'primevue/dialog'
 
 import BackButton from '../components/BackButton.vue'
 import SessionEndedBanner from '../components/SessionEndedBanner.vue'
+import MarkdownContent from '../components/chat/MarkdownContent.vue'
+import ToolCallChip from '../components/chat/ToolCallChip.vue'
+import CitationsList from '../components/chat/CitationsList.vue'
 import { friendlyError } from '../lib/errors.js'
 import { useSessionStore } from '../stores/session.js'
 import { useToast } from '../composables/useToast.js'
@@ -822,36 +829,9 @@ function goHome() {
   color: var(--color-text);
 }
 
-.citations {
-  margin: 0.625rem 0 0;
-  padding: 0.625rem 0.875rem;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  font-family: var(--font-sans);
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-  background: var(--color-surface-soft);
-  border-radius: var(--radius-md);
-  border: 1px dashed var(--color-border);
-}
-
-.citations li {
-  display: flex;
-  gap: 0.5rem;
-  align-items: baseline;
-}
-
-.citation-id {
-  color: var(--color-accent);
-  font-weight: 600;
-  font-family: var(--font-mono);
-  flex-shrink: 0;
-}
-
-.citation-text {
-  color: var(--color-text-muted);
+.tool-call-row {
+  display: inline-flex;
+  margin: 0 0 0.4rem;
 }
 
 .msg.typing .content {
