@@ -45,4 +45,14 @@ describe('CitationsList', () => {
     })
     expect(w.text()).toContain('fallback-id')
   })
+
+  it('renders doc name with no page chips when citations lack a page field', () => {
+    // Phase 1 shape: { doc_id, text } with no page. Must not render p.undefined.
+    const w = mount(CitationsList, {
+      props: { citations: [{ doc_id: 'algo-ch3', text: 'a snippet' }] },
+    })
+    expect(w.text()).toContain('algo-ch3')
+    expect(w.text()).not.toContain('p.')
+    expect(w.find('.citation-pages').exists()).toBe(false)
+  })
 })

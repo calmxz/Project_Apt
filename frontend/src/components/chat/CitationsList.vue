@@ -11,7 +11,9 @@ const grouped = computed(() => {
     const key = c.doc_id
     const name = c.doc_name || c.doc_id
     if (!map.has(key)) map.set(key, { doc_id: key, doc_name: name, pages: [] })
-    map.get(key).pages.push(c.page)
+    // Phase 1 citations are {doc_id, text} with no page; Phase 2 (Task 14)
+    // extends the contract with page. Only show chips for real page numbers.
+    if (c.page !== undefined && c.page !== null) map.get(key).pages.push(c.page)
   }
   return Array.from(map.values())
 })
@@ -21,7 +23,7 @@ const grouped = computed(() => {
   <div v-if="grouped.length" class="citations-list">
     <div v-for="doc in grouped" :key="doc.doc_id" class="citation-doc">
       <span class="citation-doc-name">{{ doc.doc_name }}</span>
-      <span class="citation-pages">
+      <span v-if="doc.pages.length" class="citation-pages">
         <span v-for="(p, i) in doc.pages" :key="i" class="citation-page">p.{{ p }}</span>
       </span>
     </div>

@@ -26,6 +26,10 @@ const parts = computed(() => {
 
 <style scoped>
 .markdown-content { line-height: 1.6; }
+/* Rendered markdown is real HTML; reset any inherited white-space: pre-wrap
+   so inter-tag newlines don't render as blank lines. The deferred tail keeps
+   pre-wrap (set below) for faithful streaming display. */
+.md-rendered { white-space: normal; }
 .md-rendered :deep(p) { margin: 0 0 0.6em 0; }
 .md-rendered :deep(pre) {
   background: var(--code-block-bg, #f7f3ed);
