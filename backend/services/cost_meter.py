@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
+import litellm
 from sqlalchemy.orm import Session
 
 from config import settings
@@ -88,3 +89,36 @@ def check_cap(db: Session, user_id: str) -> CapStatus:
         soft_cap=soft_cap,
         hard_cap=hard_cap,
     )
+
+
+# Per-1000-token USD rates. VERIFY against live pricing before launch; update on model/pricing change.
+MODEL_RATES: dict[str, dict[str, Decimal]] = {
+    # Google Gemini 3.1 Flash-Lite — flash-lite tier (placeholder; verify at ai.google.dev/pricing)
+    "gemini/gemini-3.1-flash-lite": {
+        "input_per_1k": Decimal("0.000075"),   # $0.075 / 1M tokens
+        "output_per_1k": Decimal("0.000300"),  # $0.30  / 1M tokens
+    },
+    # Anthropic Claude Sonnet 4.6 — project fallback model if gemini underperforms
+    "anthropic/claude-sonnet-4-6": {
+        "input_per_1k": Decimal("0.003"),      # $3.00  / 1M tokens
+        "output_per_1k": Decimal("0.015"),     # $15.00 / 1M tokens
+    },
+}
+
+
+def estimate_cancelled_cost(model: str, delta_text: str, prompt_tokens: int) -> Decimal:
+    """Return an estimated USD cost for a cancelled streaming LLM reply.
+
+    Charges the full prompt cost (all tokens were sent to the model before
+    cancellation) plus the output cost for however many tokens were streamed
+    in `delta_text`.
+
+    Raises KeyError if `model` has no entry in MODEL_RATES.
+    """
+    if model not in MODEL_RATES:
+        raise KeyError(f"no rate entry for model: {model}")
+    rates = MODEL_RATES[model]
+    output_tokens = litellm.token_counter(model=model, text=delta_text or "")
+    prompt_cost = Decimal(prompt_tokens) * rates["input_per_1k"]
+    output_cost = Decimal(output_tokens) * rates["output_per_1k"]
+    return (prompt_cost + output_cost) / Decimal(1000)
