@@ -9,8 +9,7 @@ Adds two columns to the chat_messages table:
                  restricting values to ('complete', 'cancelled', 'error').
   - cancelled_at DateTime(timezone=True) nullable.
 
-Postgres-only — on SQLite (legacy dev / pytest) this migration is a no-op
-because the test suite validates the model-derived schema, not alembic.
+Targets Postgres/Supabase only — no dialect branching needed.
 """
 from typing import Sequence, Union
 
@@ -24,10 +23,6 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    bind = op.get_bind()
-    if bind.dialect.name != "postgresql":
-        return
-
     op.add_column(
         "chat_messages",
         sa.Column(
@@ -53,10 +48,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    bind = op.get_bind()
-    if bind.dialect.name != "postgresql":
-        return
-
     op.drop_constraint("chat_messages_status_check", "chat_messages", type_="check")
     op.drop_column("chat_messages", "cancelled_at")
     op.drop_column("chat_messages", "status")
