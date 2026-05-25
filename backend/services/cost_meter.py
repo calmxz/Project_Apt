@@ -98,7 +98,7 @@ MODEL_RATES: dict[str, dict[str, Decimal]] = {
         "input_per_1k": Decimal("0.000075"),   # $0.075 / 1M tokens
         "output_per_1k": Decimal("0.000300"),  # $0.30  / 1M tokens
     },
-    # Anthropic Claude Sonnet 4.6 — project fallback model if gemini underperforms
+    # Anthropic Claude Sonnet 4.6 — project fallback model if gemini underperforms (verify at anthropic.com/pricing)
     "anthropic/claude-sonnet-4-6": {
         "input_per_1k": Decimal("0.003"),      # $3.00  / 1M tokens
         "output_per_1k": Decimal("0.015"),     # $15.00 / 1M tokens
@@ -112,6 +112,14 @@ def estimate_cancelled_cost(model: str, delta_text: str, prompt_tokens: int) -> 
     Charges the full prompt cost (all tokens were sent to the model before
     cancellation) plus the output cost for however many tokens were streamed
     in `delta_text`.
+
+    The returned value is intentionally NOT quantized: record_cost quantizes
+    on write, so accumulating raw sub-cent cancellation costs before truncation
+    preserves arithmetic accuracy across multiple cancelled turns.
+
+    litellm.token_counter confirmed to return sane (non-zero) counts for
+    'gemini/gemini-3.1-flash-lite' — returns 6 for a 6-word phrase — so no
+    fallback guard is needed for this model id.
 
     Raises KeyError if `model` has no entry in MODEL_RATES.
     """
