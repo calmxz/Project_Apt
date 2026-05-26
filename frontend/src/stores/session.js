@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 
 import * as sessionsApi from '../services/sessionsApi.js'
 import { postChat } from '../services/chatApi.js'
+import { streamChat } from '../services/chatStreamService.js'
 import {
   ERR_DAILY_CAP_REACHED,
   ERR_DAILY_COST_CAP_REACHED,
@@ -179,6 +180,96 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
+  const streamingMessage = ref(null)
+  const streamState = ref('idle') // 'idle' | 'streaming' | 'tool_running' | 'stopping'
+  const abortController = ref(null)
+
+  function appendAssistantDelta(text) {
+    if (!streamingMessage.value) return
+    streamingMessage.value.content += text
+  }
+
+  function recordToolCall({ kind, tool_call }) {
+    if (!streamingMessage.value) return
+    if (kind === 'start') {
+      streamingMessage.value.tool_calls.push({ ...tool_call, state: 'running' })
+      streamState.value = 'tool_running'
+    } else if (kind === 'done') {
+      const tc = streamingMessage.value.tool_calls.find((t) => t.id === tool_call.id)
+      if (tc) { tc.state = tool_call.status === 'error' ? 'error' : 'done'; tc.summary = tool_call.summary }
+      streamState.value = 'streaming'
+    }
+  }
+
+  function setCitations(citations) {
+    if (!streamingMessage.value) return
+    streamingMessage.value.citations = citations
+  }
+
+  function finalizeMessage(message_id) {
+    if (!streamingMessage.value) return
+    messages.value.push({ ...streamingMessage.value, message_id, status: 'complete' })
+    streamingMessage.value = null
+    streamState.value = 'idle'
+    abortController.value = null
+  }
+
+  function handleCancelled(message_id, partial_chars, estimated_cost_usd) {
+    if (!streamingMessage.value) return
+    messages.value.push({ ...streamingMessage.value, message_id, status: 'cancelled', partial_content_chars: partial_chars, estimated_cost_usd })
+    streamingMessage.value = null
+    streamState.value = 'idle'
+    abortController.value = null
+  }
+
+  function stopStream() {
+    if (abortController.value) { abortController.value.abort(); streamState.value = 'stopping' }
+  }
+
+  async function sendMessageStreaming({ text }) {
+    if (!currentSessionId.value) throw new Error('no active session')
+    const trimmed = (text || '').trim()
+    if (!trimmed) return null
+    messages.value.push({ role: 'user', content: trimmed })
+    streamingMessage.value = { role: 'assistant', content: '', tool_calls: [], citations: [] }
+    streamState.value = 'streaming'
+    const ctrl = new AbortController()
+    abortController.value = ctrl
+    error.value = null
+    try {
+      await streamChat({
+        sessionId: currentSessionId.value,
+        message: trimmed,
+        signal: ctrl.signal,
+        onEvent: ({ event, data }) => {
+          switch (event) {
+            case 'tool_call_start': recordToolCall({ kind: 'start', tool_call: data }); break
+            case 'tool_call_done': recordToolCall({ kind: 'done', tool_call: data }); break
+            case 'assistant_delta': appendAssistantDelta(data.text); break
+            case 'citations': setCitations(data); break
+            case 'done': finalizeMessage(data.message_id); break
+            case 'cancelled': handleCancelled(data.message_id, data.partial_content_chars, data.estimated_cost_usd); break
+            case 'error':
+              error.value = data.message || data.code
+              streamingMessage.value = null
+              streamState.value = 'idle'
+              abortController.value = null
+              break
+          }
+        },
+      })
+    } catch (e) {
+      if (e?.name === 'AbortError') {
+        if (streamingMessage.value) handleCancelled('pending', streamingMessage.value.content.length, '0')
+        return
+      }
+      streamingMessage.value = null
+      streamState.value = 'idle'
+      abortController.value = null
+      _setError(e)
+    }
+  }
+
   function reset() {
     currentSessionId.value = null
     currentSession.value = null
@@ -187,6 +278,9 @@ export const useSessionStore = defineStore('session', () => {
     error.value = null
     dailyCapInfo.value = null
     costCapInfo.value = null
+    streamingMessage.value = null
+    streamState.value = 'idle'
+    abortController.value = null
   }
 
   return {
@@ -200,6 +294,9 @@ export const useSessionStore = defineStore('session', () => {
     dailyCapInfo,
     costCapReached,
     costCapInfo,
+    streamingMessage,
+    streamState,
+    abortController,
     listSessions,
     createSession,
     loadSession,
@@ -209,6 +306,13 @@ export const useSessionStore = defineStore('session', () => {
     setError,
     clearDailyCap,
     clearCostCap,
+    appendAssistantDelta,
+    recordToolCall,
+    setCitations,
+    finalizeMessage,
+    handleCancelled,
+    stopStream,
+    sendMessageStreaming,
     reset,
   }
 })
