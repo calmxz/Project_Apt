@@ -1,7 +1,9 @@
+import asyncio
 import json
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -20,13 +22,19 @@ from services.auth import current_user_id
 router = APIRouter(prefix="/api")
 
 
-@router.post("/chat", response_model=ChatResponse)
-async def chat(
+async def _prepare_turn(
     req: ChatRequest,
-    response: Response,
-    user_id: str = Depends(current_user_id),
-    db: Session = Depends(get_db),
-):
+    user_id: str,
+    db: Session,
+) -> tuple[list[dict], str, ToolContext]:
+    """Shared pre-flight for /chat and /chat/stream.
+
+    Checks cost cap and rate limit (raises HTTPException 429 on breach),
+    auto-creates User if missing, validates session (raises 404 if absent),
+    loads history, persists the user ChatMessage (committed so it survives
+    even if the stream ends early), builds the system prompt, and returns
+    (messages, system_prompt, ctx).
+    """
     cost_status = cost_meter.check_cap(db, user_id)
     if not cost_status.allowed:
         raise HTTPException(
@@ -73,7 +81,7 @@ async def chat(
 
     user_msg = ChatMessage(session_id=req.session_id, role="user", content=req.message)
     db.add(user_msg)
-    db.flush()
+    db.commit()
 
     profile = profile_service.load_profile(db, req.session_id)
     latest_doc = db.execute(
@@ -104,6 +112,19 @@ async def chat(
         user_id=user_id,
         turn_started_at=datetime.now(timezone.utc),
     )
+
+    return messages, system_prompt, ctx
+
+
+@router.post("/chat", response_model=ChatResponse)
+async def chat(
+    req: ChatRequest,
+    response: Response,
+    user_id: str = Depends(current_user_id),
+    db: Session = Depends(get_db),
+):
+    messages, system_prompt, ctx = await _prepare_turn(req, user_id, db)
+
     reply, tool_calls, citations = await tutor.run(messages, system_prompt, ctx)
 
     assistant_msg = ChatMessage(
@@ -129,4 +150,62 @@ async def chat(
         message_id=assistant_msg.id,
         tool_calls=tool_calls,
         citations=citations,
+    )
+
+
+@router.post("/chat/stream")
+async def chat_stream(
+    req: ChatRequest,
+    request: Request,
+    user_id: str = Depends(current_user_id),
+    db: Session = Depends(get_db),
+):
+    """Streaming SSE endpoint. Yields StreamEvent payloads as text/event-stream.
+
+    Pre-flight (_prepare_turn) runs synchronously before StreamingResponse is
+    returned, so HTTPException(404/429) surfaces as normal JSON error responses.
+    run_streaming owns persistence of the assistant ChatMessage on both normal
+    completion and cancellation.
+    """
+    messages, system_prompt, ctx = await _prepare_turn(req, user_id, db)
+
+    async def event_stream():
+        queue: asyncio.Queue = asyncio.Queue()
+
+        async def produce():
+            try:
+                async for event in tutor.run_streaming(messages, system_prompt, ctx):
+                    await queue.put(event)
+            finally:
+                await queue.put(None)  # sentinel
+
+        task = asyncio.create_task(produce())
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=0.25)
+                except asyncio.TimeoutError:
+                    continue
+                if event is None:
+                    break
+                yield event.to_sse()
+                if event.type in ("done", "error", "cancelled"):
+                    break
+        finally:
+            if not task.done():
+                task.cancel()
+                try:
+                    await task
+                except BaseException:
+                    pass
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
     )

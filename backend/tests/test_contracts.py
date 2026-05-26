@@ -4,6 +4,7 @@ from pydantic import ValidationError
 from contracts import (
     ChatRequest,
     ChatResponse,
+    Citation,
     HealthResponse,
     ProfileResponse,
     RecordLearningEventArgs,
@@ -138,6 +139,36 @@ def test_profile_response_shape():
 
 def test_health_response():
     assert HealthResponse(status="ok").status == "ok"
+
+
+def test_citation_minimal_two_arg():
+    c = Citation(doc_id="d", text="t")
+    assert c.doc_id == "d"
+    assert c.text == "t"
+    assert c.page is None
+    assert c.doc_name is None
+
+
+def test_citation_full_fields_round_trip():
+    c = Citation(doc_id="d", text="t", page=42, doc_name="Algorithms Ch3")
+    dump = c.model_dump()
+    assert dump["doc_id"] == "d"
+    assert dump["text"] == "t"
+    assert dump["page"] == 42
+    assert dump["doc_name"] == "Algorithms Ch3"
+
+
+def test_citation_null_page_and_doc_name_in_dump():
+    dump = Citation(doc_id="x", text="y").model_dump()
+    assert "page" in dump
+    assert "doc_name" in dump
+    assert dump["page"] is None
+    assert dump["doc_name"] is None
+
+
+def test_citation_extra_fields_rejected():
+    with pytest.raises(ValidationError):
+        Citation(doc_id="d", text="t", surprise="x")
 
 
 def test_array_fields_accept_none_quirk():

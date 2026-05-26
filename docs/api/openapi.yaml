@@ -342,8 +342,10 @@ components:
       additionalProperties: false
       required: [doc_id, text]
       properties:
-        doc_id: { type: string }
-        text:   { type: string }
+        doc_id:   { type: string }
+        text:     { type: string }
+        page:     { type: [integer, "null"], default: null }
+        doc_name: { type: [string, "null"], default: null }
 
     ToolCallRecord:
       type: object
@@ -663,3 +665,86 @@ components:
       required: [detail]
       properties:
         detail: { type: string }
+
+# ---------------------------------------------------------------------------
+# SSE event contract reference (vendor extension — not processed by codegen)
+# Describes the Server-Sent Events emitted by POST /chat/stream.
+# Field names must match what agent/tutor.py actually yields.
+# ---------------------------------------------------------------------------
+
+x-sse-events:
+  tool_call_start:
+    data:
+      type: object
+      required: [id, name, args]
+      properties:
+        id:   { type: string }
+        name: { type: string }
+        args: { type: object }
+
+  tool_call_done:
+    data:
+      type: object
+      required: [id, status]
+      properties:
+        id:      { type: string }
+        status:  { type: string, enum: [ok, error] }
+        summary: { type: [string, "null"], default: null }
+        error:   { type: [string, "null"], default: null }
+
+  assistant_delta:
+    data:
+      type: object
+      required: [text]
+      properties:
+        text: { type: string }
+
+  citations:
+    data:
+      type: array
+      items:
+        type: object
+        required: [doc_id]
+        properties:
+          doc_id:   { type: string }
+          text:     { type: [string, "null"], default: null }
+          page:     { type: [integer, "null"], default: null }
+          doc_name: { type: [string, "null"], default: null }
+
+  cost_warning:
+    data:
+      type: object
+      required: [code, used_usd, soft_cap_usd, hard_cap_usd]
+      properties:
+        code:         { type: string }
+        used_usd:     { type: string }
+        soft_cap_usd: { type: string }
+        hard_cap_usd: { type: string }
+
+  done:
+    data:
+      type: object
+      required: [message_id]
+      properties:
+        message_id:    { type: string }
+        total_cost_usd: { type: [string, "null"], default: null }
+
+  cancelled:
+    data:
+      type: object
+      required: [message_id, partial_content_chars, estimated_cost_usd]
+      properties:
+        message_id:           { type: string }
+        partial_content_chars: { type: integer }
+        estimated_cost_usd:   { type: string }
+
+  error:
+    data:
+      type: object
+      required: [code]
+      properties:
+        code:         { type: string }
+        message:      { type: [string, "null"], default: null }
+        used_usd:     { type: [string, "null"], default: null }
+        soft_cap_usd: { type: [string, "null"], default: null }
+        hard_cap_usd: { type: [string, "null"], default: null }

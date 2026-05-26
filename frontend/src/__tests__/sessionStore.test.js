@@ -152,3 +152,85 @@ describe('session store', () => {
     expect(s.currentSessionId).toBeNull()
   })
 })
+
+import * as streamSvc from '../services/chatStreamService.js'
+
+describe('session store — streaming', () => {
+  beforeEach(() => { setActivePinia(createPinia()) })
+
+  it('starts in idle stream state with no streaming message', () => {
+    const s = useSessionStore()
+    expect(s.streamState).toBe('idle')
+    expect(s.streamingMessage).toBeNull()
+  })
+
+  it('appendAssistantDelta accumulates text on streamingMessage', () => {
+    const s = useSessionStore()
+    s.streamingMessage = { role: 'assistant', content: '', tool_calls: [], citations: [] }
+    s.appendAssistantDelta('Hello ')
+    s.appendAssistantDelta('world')
+    expect(s.streamingMessage.content).toBe('Hello world')
+  })
+
+  it('recordToolCall (start) appends to tool_calls and flips state', () => {
+    const s = useSessionStore()
+    s.streamingMessage = { role: 'assistant', content: '', tool_calls: [], citations: [] }
+    s.streamState = 'streaming'
+    s.recordToolCall({ kind: 'start', tool_call: { id: 't1', name: 'retrieve_chunks' } })
+    expect(s.streamState).toBe('tool_running')
+    expect(s.streamingMessage.tool_calls).toHaveLength(1)
+    expect(s.streamingMessage.tool_calls[0].state).toBe('running')
+  })
+
+  it('recordToolCall (done) marks chip done and returns to streaming', () => {
+    const s = useSessionStore()
+    s.streamingMessage = { role: 'assistant', content: '', citations: [], tool_calls: [{ id: 't1', name: 'retrieve_chunks', state: 'running' }] }
+    s.streamState = 'tool_running'
+    s.recordToolCall({ kind: 'done', tool_call: { id: 't1', summary: '5 found' } })
+    expect(s.streamingMessage.tool_calls[0].state).toBe('done')
+    expect(s.streamingMessage.tool_calls[0].summary).toBe('5 found')
+    expect(s.streamState).toBe('streaming')
+  })
+
+  it('finalizeMessage moves streamingMessage to messages[] and clears state', () => {
+    const s = useSessionStore()
+    s.streamingMessage = { role: 'assistant', content: 'done', tool_calls: [], citations: [] }
+    s.streamState = 'streaming'
+    s.finalizeMessage('msg_xyz')
+    expect(s.streamingMessage).toBeNull()
+    expect(s.streamState).toBe('idle')
+    expect(s.messages.at(-1)).toMatchObject({ role: 'assistant', content: 'done', message_id: 'msg_xyz', status: 'complete' })
+  })
+
+  it('handleCancelled persists partial as status=cancelled', () => {
+    const s = useSessionStore()
+    s.streamingMessage = { role: 'assistant', content: 'partial', tool_calls: [], citations: [] }
+    s.streamState = 'stopping'
+    s.handleCancelled('msg_x', 7, '0.0019')
+    expect(s.streamingMessage).toBeNull()
+    expect(s.streamState).toBe('idle')
+    expect(s.messages.at(-1)).toMatchObject({ status: 'cancelled', content: 'partial' })
+  })
+
+  it('sendMessageStreaming wires through streamChat and dispatches events', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 's1'
+    const spy = vi.spyOn(streamSvc, 'streamChat').mockImplementation(async ({ onEvent }) => {
+      onEvent({ event: 'assistant_delta', data: { text: 'Hi' } })
+      onEvent({ event: 'done', data: { message_id: 'm1' } })
+    })
+    await s.sendMessageStreaming({ text: 'q' })
+    expect(spy).toHaveBeenCalled()
+    expect(s.messages.at(-1)).toMatchObject({ message_id: 'm1' })
+  })
+
+  it('stopStream invokes abortController.abort() and transitions to stopping', () => {
+    const s = useSessionStore()
+    const abort = vi.fn()
+    s.abortController = { abort }
+    s.streamState = 'streaming'
+    s.stopStream()
+    expect(abort).toHaveBeenCalled()
+    expect(s.streamState).toBe('stopping')
+  })
+})

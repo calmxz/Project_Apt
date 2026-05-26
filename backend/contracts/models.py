@@ -26,6 +26,8 @@ class Citation(BaseModel):
     )
     doc_id: str
     text: str
+    page: int | None = None
+    doc_name: str | None = None
 
 
 class ToolCallRecord(BaseModel):

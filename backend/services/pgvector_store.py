@@ -15,7 +15,7 @@ from typing import Sequence
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from db.models import ChunkEmbedding
+from db.models import ChunkEmbedding, Document
 
 
 @dataclass(frozen=True)
@@ -24,6 +24,7 @@ class RetrievedChunk:
     chunk_text: str
     page: int | None
     score: float | None
+    doc_name: str | None = None
 
 
 def insert_chunks(
@@ -59,7 +60,8 @@ def query_chunks(
     """Return top-k chunks for the session, ordered by cosine distance asc."""
     distance = ChunkEmbedding.embedding.cosine_distance(query_embedding)
     stmt = (
-        select(ChunkEmbedding, distance.label("score"))
+        select(ChunkEmbedding, distance.label("score"), Document.filename)
+        .join(Document, ChunkEmbedding.document_id == Document.id)
         .where(ChunkEmbedding.session_id == session_id)
         .order_by(distance)
         .limit(k)
@@ -71,6 +73,7 @@ def query_chunks(
             chunk_text=row[0].chunk_text,
             page=row[0].page,
             score=float(row[1]) if row[1] is not None else None,
+            doc_name=row[2],
         )
         for row in rows
     ]

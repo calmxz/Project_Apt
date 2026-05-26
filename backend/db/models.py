@@ -5,7 +5,7 @@ from typing import Any
 from uuid import uuid4
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, Numeric, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from config import settings
@@ -45,6 +45,12 @@ class Session(Base):
 
 class ChatMessage(Base):
     __tablename__ = "chat_messages"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('complete', 'cancelled', 'error')",
+            name="chat_messages_status_check",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     session_id: Mapped[str] = mapped_column(ForeignKey("sessions.id"), nullable=False)
@@ -53,6 +59,8 @@ class ChatMessage(Base):
     tool_calls_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     citations_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="complete")
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     session: Mapped["Session"] = relationship("Session", back_populates="messages")
 

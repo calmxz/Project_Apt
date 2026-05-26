@@ -71,6 +71,7 @@ def retrieve(db: Session, ctx: ToolContext, args: RetrieveChunksArgs) -> ToolRes
             "text": h.chunk_text,
             "page": h.page,
             "score": h.score,
+            "doc_name": h.doc_name,
         }
         for h in hits
     ]

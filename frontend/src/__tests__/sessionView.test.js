@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { nextTick } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
@@ -279,5 +280,19 @@ describe('SessionView', () => {
     expect(uploadPdf).toHaveBeenCalledWith({ sessionId: 's1', file })
     expect(getUploadStatus).toHaveBeenCalledWith('doc-1')
     expect(wrapper.find('[data-testid="upload-status-ready"]').exists()).toBe(true)
+  })
+
+  it('renders streaming bubble when store.streamingMessage is set', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession()
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    store.streamingMessage = { role: 'assistant', content: 'streaming text', tool_calls: [], citations: [] }
+    await nextTick()
+    const bubble = wrapper.find('[data-testid="msg-streaming"]')
+    expect(bubble.exists()).toBe(true)
+    expect(bubble.text()).toContain('streaming text')
   })
 })
