@@ -166,6 +166,16 @@ async def test_run_streaming_yields_tool_then_delta_then_done(db_session, monkey
     assert msg.content == "Hello world"
     assert msg.role == "assistant"
 
+    # Parity with non-streaming run(): the persisted row carries the tool calls
+    # and citations so a resumed session renders them (agent owns persistence).
+    assert json.loads(msg.citations_json) == [
+        {"doc_id": "d1", "text": "leaves convert light"}
+    ]
+    persisted_tcs = json.loads(msg.tool_calls_json)
+    assert len(persisted_tcs) == 1
+    assert persisted_tcs[0]["name"] == "retrieve_chunks"
+    assert persisted_tcs[0]["status"] == "ok"
+
 
 @pytest.mark.asyncio
 async def test_run_streaming_persists_cancelled_on_cancel(db_session, monkeypatch):

@@ -161,20 +161,24 @@ async def run(
 # ---------------------------------------------------------------------------
 
 
-def _persist_assistant_message(ctx, content, status, cancelled_at=None):
+def _persist_assistant_message(
+    ctx, content, status, cancelled_at=None, tool_calls=None, citations=None
+):
     # run_streaming OWNS persistence of the streaming assistant message on BOTH
     # normal completion and cancel. This differs from non-streaming run(), whose
     # caller (the chat route) persists the message: a cancelled stream cannot be
     # persisted from the route after the client disconnects, so the agent does it.
-    # NOTE: tool_calls_json / citations_json are left at their "[]" defaults here;
-    # those payloads are delivered live via StreamEvents. Backfilling the columns
-    # on the persisted row is deferred to the stream route work (Task 13).
+    # tool_calls_json / citations_json are serialized here with the same shape the
+    # chat route uses for run(), so a resumed session renders streamed messages
+    # (including partial ones on cancel) with their tool calls and citations.
     m = ChatMessage(
         session_id=ctx.session_id,
         role="assistant",
         content=content,
         status=status,
         cancelled_at=cancelled_at,
+        tool_calls_json=json.dumps([tc.model_dump() for tc in (tool_calls or [])]),
+        citations_json=json.dumps([c.model_dump() for c in (citations or [])]),
     )
     ctx.db.add(m)
     ctx.db.commit()
@@ -233,6 +237,8 @@ async def run_streaming(
     full: list[dict] = [{"role": "system", "content": system_prompt}] + list(messages)
     accumulated_text = ""
     prompt_tokens_total = 0
+    tool_calls_record: list[ToolCallRecord] = []
+    citations: list[Citation] = []
 
     try:
         for _i in range(max_iters):
@@ -316,7 +322,13 @@ async def run_streaming(
                     except Exception as e:
                         log.warning("cost_meter.record_cost failed: %s", e)
 
-                msg_id = _persist_assistant_message(ctx, accumulated_text, "complete")
+                msg_id = _persist_assistant_message(
+                    ctx,
+                    accumulated_text,
+                    "complete",
+                    tool_calls=tool_calls_record,
+                    citations=citations,
+                )
                 yield StreamEvent("done", {"message_id": str(msg_id)})
                 return
 
@@ -356,6 +368,11 @@ async def run_streaming(
                 )
 
                 result = tools.dispatch(name, args, ctx)
+                tool_calls_record.append(
+                    ToolCallRecord(
+                        name=name, args=args, status=result.status, error=result.error
+                    )
+                )
 
                 if result.ok:
                     yield StreamEvent(
@@ -370,12 +387,15 @@ async def run_streaming(
 
                 if name == "retrieve_chunks" and result.ok:
                     raw_chunks = (result.data or {}).get("chunks", [])
-                    cites = [
-                        {"doc_id": str(ch.get("doc_id", "")), "text": ch.get("text", "")}
+                    new_cites = [
+                        Citation(doc_id=str(ch.get("doc_id", "")), text=ch.get("text", ""))
                         for ch in raw_chunks
                     ]
-                    if cites:
-                        yield StreamEvent("citations", cites)
+                    citations.extend(new_cites)
+                    if new_cites:
+                        yield StreamEvent(
+                            "citations", [c.model_dump() for c in new_cites]
+                        )
                     wrapped_chunks = [
                         {
                             **ch,
@@ -426,6 +446,8 @@ async def run_streaming(
             accumulated_text,
             "cancelled",
             cancelled_at=datetime.now(timezone.utc),
+            tool_calls=tool_calls_record,
+            citations=citations,
         )
         yield StreamEvent(
             "cancelled",
