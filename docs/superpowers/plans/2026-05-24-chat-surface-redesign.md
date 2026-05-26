@@ -14,11 +14,11 @@
 
 ---
 
-## Execution Progress (live status — updated 2026-05-25)
+## Execution Progress (live status — updated 2026-05-26)
 
 **Mode:** Hybrid. Phase 1 ran inline; Phase 2 + 3 run subagent-driven (`superpowers:subagent-driven-development`).
 
-### Phase 1 (PR 1) — COMPLETE (Tasks 0-8), awaiting human merge of PR1
+### Phase 1 (PR 1) — COMPLETE + MERGED to `dev` (PR #19)
 Tasks 0-8 implemented, TDD-tested, committed, pushed to `feat/chat-surface-redesign` (8 commits on base `dev`@cf25f03). Verification: frontend **197 tests pass** (28 files), `vite build` clean, `npm audit` **0 vulns**, backend **163 pass / 4 skip** (untouched — no backend changes in PR1).
 
 **Task 9 (PR):** user is opening + merging PR1 via GitHub web. PR body saved at `.superpowers/pr-body-phase1.md`. Compare base `dev` ← `feat/chat-surface-redesign`.
@@ -30,8 +30,8 @@ Commits: `b2dc911` deps · `8159e56` stream-buffer · `129ab64` MarkdownContent 
 2. **`Citation` contract is `{doc_id, text}`** (no `page`/`doc_name`; `extra="forbid"`). `CitationsList.vue` hardened to tolerate absence. **Task 14 MUST add `page` + `doc_name`** to the Citation schema (edit `docs/api/openapi.yaml` then `python backend/scripts/gen_contracts.py`) and propagate them in `TutorAgent` citation construction. Spec (source of truth) requires page-numbered citations.
 3. **Test assertions:** avoid trailing-space `toContain(...)` (`@vue/test-utils` `.html()` runs js-beautify, trims trailing whitespace) and the `<pre><code>` adjacency regex (Task 4 fence override inserts a `<div class="code-block-header">` between them).
 
-### Phase 2 (PR 2) — COMPLETE (Tasks 10-18), awaiting human merge of PR2
-Tasks 10-18 implemented subagent-driven, committed, pushed to `feat/chat-surface-redesign`. Verification: backend **186 passed / 4 skip**, frontend **217 passed** (30 files). Task 19 (PR2) opened against `dev`.
+### Phase 2 (PR 2) — COMPLETE + MERGED to `dev` (PR #20, merge `df5532f`)
+Tasks 10-18 implemented subagent-driven, committed, pushed. Verification: backend **186 passed / 4 skip**, frontend **217 passed** (30 files). PR2 (`feat/chat-surface-redesign` → `dev`) merged 2026-05-26; `dev` then merged back into the feature branch — **branch is already in sync, ready for Phase 3** (no further git-sync needed at Phase 3 start unless `dev` advances again).
 
 Commits: `8226dbb`/`636a525` messages.status migration · `5f577e2`/`068b2fd` cost estimator · `f52e35e`/`b1b2b54` run_streaming (+resume-parity) · `0ed2f46` /chat/stream route · `cd2932f` Citation page+doc_name + x-sse-events · `4dfce9a` SSE parser · `7cdd633` chatStreamService · `b10d2e5` Pinia stream state · `2e58b26` VITE_CHAT_STREAM flag.
 
@@ -45,8 +45,8 @@ Commits: `8226dbb`/`636a525` messages.status migration · `5f577e2`/`068b2fd` co
 7. **`Citation` now has optional `page` + `doc_name`** (deviation #2 done): `page` flows from chunks; `doc_name` via a `Document.filename` join added to `pgvector_store.query_chunks`. Contract regenerated (`gen_contracts.py`), zero drift.
 8. **Frontend auth/services:** auth store exposes computed `accessToken` (from `session.access_token`) — NO `auth.token`. Services use `BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'` and LOWERCASE header keys; non-ok → `ApiError(status, body, path)` from `apiClient.js`. In `SessionView.vue` the store var is `store`; the session store is a Pinia setup store.
 
-### Phase 3 (PR 3) — NOT STARTED. **<<< RESUME HERE after PR2 merges to `dev` >>>**
-Tasks 20-31, subagent-driven. Resume: open a session, say "start Phase 3 of the chat redesign plan, subagent-driven". Orchestrator: `git checkout dev && git pull --ff-only origin dev && git checkout feat/chat-surface-redesign && git merge dev`, rebuild task list for 20-31, dispatch a fresh subagent per task with task text passed INLINE (do NOT have subagents read this plan). Reconcile each plan snippet against the real code first (see deviations above — the plan text is frequently wrong about names/shape). Final task (31) runs `superpowers:finishing-a-development-branch`.
+### Phase 3 (PR 3) — NOT STARTED. **<<< RESUME HERE >>>** (PR2 merged; branch in sync as of 2026-05-26)
+Tasks 20-31, subagent-driven. Resume: open a session, say "start Phase 3 of the chat redesign plan, subagent-driven". Orchestrator: first `git fetch origin` and only re-sync if `origin/dev` advanced past `df5532f` (`git checkout dev && git pull --ff-only origin dev && git checkout feat/chat-surface-redesign && git merge dev`); the branch is already merged up to PR2. Then rebuild the task list for 20-31 and dispatch a fresh subagent per task with task text passed INLINE (do NOT have subagents read this plan). Reconcile each plan snippet against the real code first (see deviations above — the plan text is frequently wrong about names/shape; Phase 3 touches `SessionView.vue`, splits it into components, applies Claude.ai visual tokens, wires the Stop button to `store.stopStream()`, and flips `VITE_CHAT_STREAM` default to true in Task 30). Final task (31) runs `superpowers:finishing-a-development-branch`.
 
 ---
 
