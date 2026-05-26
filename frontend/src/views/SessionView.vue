@@ -145,7 +145,7 @@
           </article>
         </TransitionGroup>
         <article
-          v-if="awaitingResponse"
+          v-if="awaitingResponse && !store.streamingMessage"
           class="msg assistant typing"
           data-testid="msg-typing"
         >
@@ -162,6 +162,32 @@
             <p class="content typing-dots" aria-label="Tutor is thinking">
               <span></span><span></span><span></span>
             </p>
+          </div>
+        </article>
+        <article
+          v-if="store.streamingMessage"
+          class="msg assistant streaming"
+          data-testid="msg-streaming"
+        >
+          <span class="msg-avatar" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="18" height="18" focusable="false">
+              <path
+                d="M12 0.5 L13.6 10.4 L23.5 12 L13.6 13.6 L12 23.5 L10.4 13.6 L0.5 12 L10.4 10.4 Z"
+                fill="currentColor"
+              />
+            </svg>
+          </span>
+          <div class="msg-body">
+            <span class="role-tag">tutor</span>
+            <span
+              v-for="tc in store.streamingMessage.tool_calls"
+              :key="tc.id"
+              class="tool-call-row"
+            >
+              <ToolCallChip :tool_call="tc" :state="tc.state" />
+            </span>
+            <MarkdownContent class="content" :text="store.streamingMessage.content || ''" streaming />
+            <CitationsList :citations="store.streamingMessage.citations || []" />
           </div>
         </article>
       </div>
@@ -305,6 +331,8 @@ const props = defineProps({ id: { type: String, required: true } })
 
 const router = useRouter()
 const store = useSessionStore()
+
+const streamEnabled = import.meta.env.VITE_CHAT_STREAM === 'true'
 
 const draft = ref('')
 const lastSentText = ref('')
@@ -468,7 +496,11 @@ async function send() {
   lastError.value = null
   sending.value = true
   try {
-    await store.sendMessage({ text })
+    if (streamEnabled) {
+      await store.sendMessageStreaming({ text })
+    } else {
+      await store.sendMessage({ text })
+    }
     lastSentText.value = ''
   } catch (e) {
     draft.value = text
