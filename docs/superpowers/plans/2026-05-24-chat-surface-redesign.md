@@ -30,13 +30,23 @@ Commits: `b2dc911` deps · `8159e56` stream-buffer · `129ab64` MarkdownContent 
 2. **`Citation` contract is `{doc_id, text}`** (no `page`/`doc_name`; `extra="forbid"`). `CitationsList.vue` hardened to tolerate absence. **Task 14 MUST add `page` + `doc_name`** to the Citation schema (edit `docs/api/openapi.yaml` then `python backend/scripts/gen_contracts.py`) and propagate them in `TutorAgent` citation construction. Spec (source of truth) requires page-numbered citations.
 3. **Test assertions:** avoid trailing-space `toContain(...)` (`@vue/test-utils` `.html()` runs js-beautify, trims trailing whitespace) and the `<pre><code>` adjacency regex (Task 4 fence override inserts a `<div class="code-block-header">` between them).
 
-### Phase 2 (PR 2) — NOT STARTED. **<<< RESUME HERE >>>**
-**Resume after PR1 is merged to `dev`:** open a session and say "start Phase 2 of the chat redesign plan, subagent-driven". Orchestrator then:
-1. `git checkout dev && git pull --ff-only origin dev && git checkout feat/chat-surface-redesign && git merge dev` (plan Task 9 Step 3).
-2. Re-create the task list for Tasks 10-31 (modes: all subagent-driven).
-3. Dispatch a fresh subagent per task (10→19). Extract each task's full text from this file and pass it INLINE in the dispatch prompt — do NOT have the subagent read this plan file. Two-stage review (spec compliance, then code quality) after each. Pass the Task-14 contract obligation (deviation #2) to the Task 10 subagent so it knows the contract is moving.
+### Phase 2 (PR 2) — COMPLETE (Tasks 10-18), awaiting human merge of PR2
+Tasks 10-18 implemented subagent-driven, committed, pushed to `feat/chat-surface-redesign`. Verification: backend **186 passed / 4 skip**, frontend **217 passed** (30 files). Task 19 (PR2) opened against `dev`.
 
-### Phase 3 (PR 3) — NOT STARTED. Tasks 20-31, subagent-driven. Final task (31) runs `superpowers:finishing-a-development-branch`.
+Commits: `8226dbb`/`636a525` messages.status migration · `5f577e2`/`068b2fd` cost estimator · `f52e35e`/`b1b2b54` run_streaming (+resume-parity) · `0ed2f46` /chat/stream route · `cd2932f` Citation page+doc_name + x-sse-events · `4dfce9a` SSE parser · `7cdd633` chatStreamService · `b10d2e5` Pinia stream state · `2e58b26` VITE_CHAT_STREAM flag.
+
+**Plan-vs-reality deviations discovered (carry into Phase 3):**
+1. **`tutor.py` is a module-level `async def run(...)`, NOT a `class TutorAgent`.** Streaming variant is `async def run_streaming(messages, system_prompt, ctx: ToolContext, max_iters)` yielding `StreamEvent` (from `agent.stream_events`). The plan's Task 12/13 class-based snippets were fictional.
+2. **No `backend.` import prefix** anywhere (tests run from `backend/`): `from agent import tutor`, `from services.cost_meter import ...`, etc.
+3. **Message model = `ChatMessage` / table `chat_messages`**, SQLAlchemy 2.0 `mapped_column`. Tests use the in-memory-SQLite `db_session` fixture (schema from `Base.metadata.create_all`), NOT Supabase / a live DATABASE_URL.
+4. **`settings.model` = `gemini/gemini-3.1-flash-lite`** (MODEL_RATES key). No `DEFAULT_MODEL` constant exists. Cost cap = `cost_meter.check_cap()->CapStatus.allowed` (no `DailyCostCapReached`).
+5. **Agent owns streaming persistence** (decision): `run_streaming` persists the assistant `ChatMessage` on BOTH complete and cancel, including `tool_calls_json`/`citations_json` for resume parity. The `/chat/stream` route does NOT persist the assistant message. Shared pre-flight extracted into `_prepare_turn` in `routes/chat.py` (used by both `/chat` and `/chat/stream`).
+6. **Stream strategy = real streaming** (decision): `stream=True` every iteration, assemble tool-call deltas by index, live `assistant_delta` tokens. Stub mode = chunked deltas.
+7. **`Citation` now has optional `page` + `doc_name`** (deviation #2 done): `page` flows from chunks; `doc_name` via a `Document.filename` join added to `pgvector_store.query_chunks`. Contract regenerated (`gen_contracts.py`), zero drift.
+8. **Frontend auth/services:** auth store exposes computed `accessToken` (from `session.access_token`) — NO `auth.token`. Services use `BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'` and LOWERCASE header keys; non-ok → `ApiError(status, body, path)` from `apiClient.js`. In `SessionView.vue` the store var is `store`; the session store is a Pinia setup store.
+
+### Phase 3 (PR 3) — NOT STARTED. **<<< RESUME HERE after PR2 merges to `dev` >>>**
+Tasks 20-31, subagent-driven. Resume: open a session, say "start Phase 3 of the chat redesign plan, subagent-driven". Orchestrator: `git checkout dev && git pull --ff-only origin dev && git checkout feat/chat-surface-redesign && git merge dev`, rebuild task list for 20-31, dispatch a fresh subagent per task with task text passed INLINE (do NOT have subagents read this plan). Reconcile each plan snippet against the real code first (see deviations above — the plan text is frequently wrong about names/shape). Final task (31) runs `superpowers:finishing-a-development-branch`.
 
 ---
 
