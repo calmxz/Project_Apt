@@ -154,7 +154,9 @@ async def test_run_streaming_yields_tool_then_delta_then_done(db_session, monkey
     assert start.data["args"] == {"query": "photosynthesis"}
 
     cites = next(e for e in events if e.type == "citations")
-    assert cites.data == [{"doc_id": "d1", "text": "leaves convert light"}]
+    assert cites.data == [
+        {"doc_id": "d1", "text": "leaves convert light", "page": None, "doc_name": None}
+    ]
 
     # Persisted assistant message.
     msg = (
@@ -169,7 +171,7 @@ async def test_run_streaming_yields_tool_then_delta_then_done(db_session, monkey
     # Parity with non-streaming run(): the persisted row carries the tool calls
     # and citations so a resumed session renders them (agent owns persistence).
     assert json.loads(msg.citations_json) == [
-        {"doc_id": "d1", "text": "leaves convert light"}
+        {"doc_id": "d1", "text": "leaves convert light", "page": None, "doc_name": None}
     ]
     persisted_tcs = json.loads(msg.tool_calls_json)
     assert len(persisted_tcs) == 1

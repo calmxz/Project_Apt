@@ -124,7 +124,12 @@ async def run(
                 raw_chunks = (result.data or {}).get("chunks", [])
                 for ch in raw_chunks:
                     citations.append(
-                        Citation(doc_id=str(ch.get("doc_id", "")), text=ch.get("text", ""))
+                        Citation(
+                            doc_id=str(ch.get("doc_id", "")),
+                            text=ch.get("text", ""),
+                            page=ch.get("page"),
+                            doc_name=ch.get("doc_name"),
+                        )
                     )
                 wrapped_chunks = [
                     {
@@ -388,7 +393,12 @@ async def run_streaming(
                 if name == "retrieve_chunks" and result.ok:
                     raw_chunks = (result.data or {}).get("chunks", [])
                     new_cites = [
-                        Citation(doc_id=str(ch.get("doc_id", "")), text=ch.get("text", ""))
+                        Citation(
+                            doc_id=str(ch.get("doc_id", "")),
+                            text=ch.get("text", ""),
+                            page=ch.get("page"),
+                            doc_name=ch.get("doc_name"),
+                        )
                         for ch in raw_chunks
                     ]
                     citations.extend(new_cites)
