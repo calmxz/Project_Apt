@@ -1,8 +1,10 @@
 <template>
   <header class="head">
     <div class="head-text">
-      <span class="folio">{{ isEnded ? 'archived' : 'in session' }}</span>
-      <h1 class="topic">{{ session?.topic || 'Session' }}</h1>
+      <div class="head-title-row">
+        <span class="folio" :class="{ 'is-archived': isEnded }">{{ isEnded ? 'archived' : 'in session' }}</span>
+        <h1 class="topic">{{ session?.topic || 'Session' }}</h1>
+      </div>
       <p class="muted" data-testid="session-id">id · {{ id }}</p>
     </div>
     <div class="head-actions">
@@ -51,44 +53,71 @@ const canEnd = computed(() => Boolean(props.session && !props.session.ended_at))
 <style scoped>
 .head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 1.5rem;
+  gap: 1rem;
   flex-wrap: wrap;
 }
 
 .head-text {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.head-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  flex-wrap: wrap;
 }
 
 .folio {
+  flex: 0 0 auto;
   font-family: var(--font-sans);
   font-size: var(--fs-label);
   text-transform: uppercase;
   letter-spacing: var(--tracking-label);
   font-weight: 600;
   color: var(--color-accent);
+  background: var(--color-accent-soft);
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-pill);
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.folio.is-archived {
+  color: var(--color-text-muted);
+  background: var(--color-surface-soft);
 }
 
 .topic {
   font-family: var(--font-display);
-  font-size: clamp(1.875rem, 4vw, 2.25rem);
+  font-size: clamp(1.375rem, 2.5vw, 1.625rem);
   font-weight: 700;
   letter-spacing: var(--tracking-display);
-  line-height: 1.1;
+  line-height: 1.15;
   color: var(--color-heading);
   margin: 0;
   overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 
 .muted {
   color: var(--color-text-faint);
   margin: 0;
+  max-width: 100%;
   font-family: var(--font-mono);
-  font-size: var(--fs-caption);
+  font-size: var(--fs-label);
   letter-spacing: 0.04em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .head-actions {
