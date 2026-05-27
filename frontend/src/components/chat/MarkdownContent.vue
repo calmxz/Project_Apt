@@ -31,6 +31,36 @@ const parts = computed(() => {
    pre-wrap (set below) for faithful streaming display. */
 .md-rendered { white-space: normal; }
 .md-rendered :deep(p) { margin: 0 0 0.6em 0; }
+
+/* Bubble-tuned block rhythm: em-relative list indent + breathing between
+   items, and headings sized to sit inside the bubble rather than as page
+   titles. Trailing margins trimmed so the bubble hugs its content. */
+.md-rendered :deep(ul), .md-rendered :deep(ol) {
+  margin: 0 0 0.6em;
+  padding-left: 1.35em;
+}
+.md-rendered :deep(li) { margin: 0 0 0.35em; }
+.md-rendered :deep(li > p) { margin: 0; }
+.md-rendered :deep(h1),
+.md-rendered :deep(h2),
+.md-rendered :deep(h3),
+.md-rendered :deep(h4) {
+  font-size: 1.05em;
+  line-height: 1.3;
+  margin: 0.5em 0 0.3em;
+}
+.md-rendered :deep(h1:first-child),
+.md-rendered :deep(h2:first-child),
+.md-rendered :deep(h3:first-child),
+.md-rendered :deep(h4:first-child) { margin-top: 0; }
+.md-rendered :deep(blockquote) {
+  margin: 0 0 0.6em;
+  padding-left: 0.9em;
+  border-left: 3px solid var(--color-border);
+  color: var(--color-text-muted);
+}
+.md-rendered :deep(> :last-child) { margin-bottom: 0; }
+.md-rendered :deep(li:last-child) { margin-bottom: 0; }
 .md-rendered :deep(pre) {
   background: var(--color-surface-soft);
   color: var(--color-text);
