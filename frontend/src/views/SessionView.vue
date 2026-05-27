@@ -134,14 +134,7 @@
         </details>
       </div>
 
-      <p
-        v-if="uploadStatus"
-        class="upload-status"
-        :data-testid="`upload-status-${uploadStatus.kind}`"
-        :class="`upload-status-${uploadStatus.kind}`"
-      >
-        {{ uploadStatus.text }}
-      </p>
+      <UploadStatus :upload="uploadStatus" />
 
       <div v-if="!isEnded" class="composer-wrap">
         <input
@@ -243,6 +236,7 @@ import SessionEndedBanner from '../components/SessionEndedBanner.vue'
 import MarkdownContent from '../components/chat/MarkdownContent.vue'
 import ToolCallChip from '../components/chat/ToolCallChip.vue'
 import CitationsList from '../components/chat/CitationsList.vue'
+import UploadStatus from '../components/chat/UploadStatus.vue'
 import { friendlyError } from '../lib/errors.js'
 import { useSessionStore } from '../stores/session.js'
 import { useToast } from '../composables/useToast.js'
@@ -754,28 +748,6 @@ function goHome() {
 .error-details pre {
   white-space: pre-wrap;
   margin: 0.4rem 0 0;
-}
-
-.upload-status {
-  margin: 0;
-  padding: 0.5rem 0.875rem;
-  font-family: var(--font-sans);
-  font-size: 0.8125rem;
-  border-radius: var(--radius-pill);
-  background: var(--color-accent-soft);
-  color: var(--color-accent);
-  align-self: flex-start;
-  display: inline-block;
-}
-
-.upload-status-ready {
-  background: rgba(34, 197, 94, 0.12);
-  color: var(--signal-success);
-}
-
-.upload-status-failed {
-  background: rgba(239, 68, 68, 0.12);
-  color: var(--signal-error);
 }
 
 /* Composer — native textarea + icon buttons in a CSS grid. Replaced the
