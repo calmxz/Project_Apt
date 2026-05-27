@@ -191,12 +191,15 @@ describe('SessionView', () => {
     vi.spyOn(store, 'loadSession').mockImplementation(async () => {
       setupSession()
     })
+    const sendSpy = vi.spyOn(store, 'sendMessage').mockResolvedValue()
     const wrapper = mountView()
     await flushPromises()
     await wrapper.get('[data-testid="quick-prompt-0"]').trigger('click')
     expect(wrapper.get('[data-testid="session-input"]').element.value).toBe(
       'Where should I start with this topic?',
     )
+    // Quick prompts fill the composer; they must not auto-send.
+    expect(sendSpy).not.toHaveBeenCalled()
   })
 
   it('ended session hides composer and shows banner', async () => {
