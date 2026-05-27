@@ -1,10 +1,9 @@
 <template>
-  <header class="head">
-    <div class="head-text">
-      <span class="folio">{{ isEnded ? 'archived' : 'in session' }}</span>
-      <h1 class="topic">{{ session?.topic || 'Session' }}</h1>
-      <p class="muted" data-testid="session-id">id · {{ id }}</p>
-    </div>
+  <div class="nav-session">
+    <span class="folio" :class="{ 'is-archived': isEnded }">
+      {{ isEnded ? 'archived' : 'in session' }}
+    </span>
+    <h1 class="topic">{{ session?.topic || 'Session' }}</h1>
     <div class="head-actions">
       <router-link
         :to="{ name: 'session-profile', params: { id } }"
@@ -13,7 +12,7 @@
         aria-label="View this session's profile"
       >
         <i class="pi pi-id-card" aria-hidden="true" />
-        <span>Profile</span>
+        <span class="action-label">Profile</span>
       </router-link>
       <Button
         v-if="!isEnded"
@@ -27,7 +26,7 @@
         @click="$emit('end-session')"
       />
     </div>
-  </header>
+  </div>
 </template>
 
 <script setup>
@@ -49,52 +48,57 @@ const canEnd = computed(() => Boolean(props.session && !props.session.ended_at))
 </script>
 
 <style scoped>
-.head {
+/* Rendered inside the global navbar (teleported from SessionView). Lays out as
+   a single inline row: status badge + topic title left, actions pushed right. */
+.nav-session {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1.5rem;
-  flex-wrap: wrap;
-}
-
-.head-text {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  align-items: center;
+  gap: 0.625rem;
+  flex: 1;
+  min-width: 0;
 }
 
 .folio {
+  flex: 0 0 auto;
   font-family: var(--font-sans);
   font-size: var(--fs-label);
   text-transform: uppercase;
   letter-spacing: var(--tracking-label);
   font-weight: 600;
   color: var(--color-accent);
+  background: var(--color-accent-soft);
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-pill);
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.folio.is-archived {
+  color: var(--color-text-muted);
+  background: var(--color-surface-soft);
 }
 
 .topic {
+  flex: 0 1 auto;
+  min-width: 0;
   font-family: var(--font-display);
-  font-size: clamp(1.875rem, 4vw, 2.25rem);
-  font-weight: 700;
-  letter-spacing: var(--tracking-display);
-  line-height: 1.1;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: var(--tracking-tight);
+  line-height: 1.2;
   color: var(--color-heading);
   margin: 0;
-  overflow-wrap: anywhere;
-}
-
-.muted {
-  color: var(--color-text-faint);
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: var(--fs-caption);
-  letter-spacing: 0.04em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .head-actions {
+  margin-left: auto;
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
+  flex: 0 0 auto;
 }
 
 /* Header action buttons */
@@ -115,5 +119,15 @@ const canEnd = computed(() => Boolean(props.session && !props.session.ended_at))
   border-color: var(--signal-error);
   background: rgba(239, 68, 68, 0.08);
   transform: translateY(-1px);
+}
+
+/* Tight navbars: drop the status badge first, then the action labels, so the
+   title still fits beside the global nav icons. */
+@media (max-width: 720px) {
+  .folio { display: none; }
+}
+
+@media (max-width: 560px) {
+  .action-label { display: none; }
 }
 </style>

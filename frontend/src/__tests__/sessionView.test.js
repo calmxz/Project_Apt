@@ -26,6 +26,9 @@ vi.mock('@/services/uploadApi.js', () => ({
 }))
 
 const stubs = {
+  // ChatHeader is teleported to the navbar slot; stub Teleport so its content
+  // renders inline within the wrapper and remains queryable.
+  teleport: true,
   BackButton: { template: '<button data-testid="back" />' },
   SessionEndedBanner: {
     props: ['endedAt', 'loading'],

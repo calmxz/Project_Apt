@@ -1,8 +1,7 @@
 <template>
   <section class="session">
-    <BackButton />
-
     <div v-if="notFound" class="not-found" data-testid="session-not-found">
+      <BackButton />
       <span class="folio">404</span>
       <h1 class="topic">Session not found</h1>
       <p class="not-found-sub">
@@ -14,11 +13,15 @@
     </div>
 
     <template v-else>
-      <ChatHeader :session="store.currentSession" :id="id" @end-session="end" />
+      <!-- Session title + actions render in the global navbar (App.vue slot);
+           all end-session/dialog/store logic stays here. -->
+      <Teleport to="#session-nav-slot">
+        <ChatHeader :session="store.currentSession" :id="id" @end-session="end" />
+      </Teleport>
+
+      <BackButton />
 
       <CapBanners />
-
-      <hr class="hairline" />
 
       <SessionEndedBanner
         v-if="isEnded"
@@ -187,6 +190,13 @@ function onCostWarning() {
 onMounted(() => costBus.addEventListener('cost-warning', onCostWarning))
 onUnmounted(() => costBus.removeEventListener('cost-warning', onCostWarning))
 
+// App-shell lock: while in a session, the document itself must not scroll —
+// only the .messages box does. A body class drives the route-scoped overflow
+// lock and flex-height cascade (see <style>). Removed unconditionally on leave
+// so other routes regain normal document scroll.
+onMounted(() => document.body.classList.add('chat-locked'))
+onUnmounted(() => document.body.classList.remove('chat-locked'))
+
 // Show the "typing" placeholder when we've appended the user message but the
 // tutor reply hasn't arrived yet. Driven by `sending` rather than `store.loading`
 // so list-load spinners don't flicker the placeholder.
@@ -197,6 +207,7 @@ const awaitingResponse = computed(() => {
 })
 
 function scrollToBottom() {
+  // App-shell: the .messages box is the sole scroller, so drive it directly.
   nextTick(() => {
     const el = messagesEl.value
     if (el) el.scrollTop = el.scrollHeight
@@ -347,12 +358,31 @@ function goHome() {
 </script>
 
 <style scoped>
+/* App-shell: while in a session the document is locked to the viewport and the
+   .messages box is the only scroller. The body.chat-locked class (toggled on
+   mount/unmount) drives the overflow lock and the flex-height cascade — every
+   ancestor down to the scroller needs min-height: 0 so it can shrink instead of
+   overflowing. Scoped to this route; other routes keep normal document scroll. */
+:global(body.chat-locked) { overflow: hidden; }
+:global(body.chat-locked #app) { height: 100vh; height: 100dvh; }
+:global(body.chat-locked .page) { min-height: 0; }
+:global(body.chat-locked .page-inner) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding-top: clamp(1rem, 3vw, 1.75rem);
+  padding-bottom: 0;
+}
+
 .session {
   max-width: 48rem;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1.25rem;
+  flex: 1;
+  min-height: 0;
 }
 
 .folio {
@@ -379,26 +409,32 @@ function goHome() {
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  min-height: clamp(10rem, 32vh, 18rem);
-  max-height: calc(100vh - 22rem);
+  /* Sole scroller in the app-shell. min-height: 0 lets it shrink within the
+     flex column instead of forcing the page to overflow. */
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
-  padding: 0.75rem 0.25rem 1rem 0;
-  scroll-behavior: smooth;
+  padding: 0.5rem 0.25rem;
   scrollbar-width: thin;
   scrollbar-color: var(--color-border-strong) transparent;
 }
+
+.messages::-webkit-scrollbar { width: 8px; }
+.messages::-webkit-scrollbar-button { display: none; height: 0; width: 0; }
+.messages::-webkit-scrollbar-track { background: transparent; }
+.messages::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.messages::-webkit-scrollbar-thumb:hover { background: var(--color-text-faint); }
 
 .messages.is-empty {
   /* When the conversation is empty, let the empty-state anchor naturally
      near the top of the conversation area instead of being orphaned in a
      vertically-centered void. */
   justify-content: flex-start;
-}
-
-.messages::-webkit-scrollbar { width: 6px; }
-.messages::-webkit-scrollbar-thumb {
-  background: var(--color-border-strong);
-  border-radius: 3px;
 }
 
 /* Banners */

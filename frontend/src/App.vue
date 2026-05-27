@@ -43,6 +43,9 @@ async function onSignOut() {
       <RouterLink to="/" class="brand" aria-label="AdaptLearn home">
         <Logo size="md" variant="full" />
       </RouterLink>
+      <!-- In-session header teleports its title + actions here (SessionView).
+           Empty (and zero-width) on every other route. -->
+      <div id="session-nav-slot" class="topnav-session"></div>
       <nav class="actions">
         <RouterLink
           to="/profile"
@@ -117,6 +120,19 @@ async function onSignOut() {
   border-radius: var(--radius-pill);
   box-shadow: var(--shadow-lift);
   border: 1px solid var(--color-border);
+}
+
+/* Teleport target for the in-session header. Grows to fill the bar between the
+   brand and the global actions while in a session; collapses to nothing on
+   every other route (the node stays so Teleport can always find it). */
+.topnav-session {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+.topnav-session:empty {
+  flex: 0 0 0;
 }
 
 .brand {

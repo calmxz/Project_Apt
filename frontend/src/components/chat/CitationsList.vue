@@ -32,7 +32,7 @@ const grouped = computed(() => {
 
 <style scoped>
 .citations-list {
-  border-top: 1px dashed rgba(0,0,0,0.15);
+  border-top: 1px dashed var(--color-border);
   margin-top: 10px;
   padding-top: 8px;
   font-size: 11px;

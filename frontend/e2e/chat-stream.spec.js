@@ -32,7 +32,7 @@ test.describe.skip('chat stream', () => {
     await page.getByTestId('new-topic').fill(topic)
     await page.getByTestId('new-submit').click()
     await expect(page).toHaveURL(/\/session\//)
-    await expect(page.getByTestId('session-id')).toBeVisible()
+    await expect(page.getByTestId('session-input')).toBeVisible()
   }
 
   test('renders a streamed assistant reply', async ({ page }) => {

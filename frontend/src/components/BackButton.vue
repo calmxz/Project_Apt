@@ -2,12 +2,14 @@
   <button
     type="button"
     class="back-btn"
+    :class="{ 'is-icon-only': iconOnly }"
     data-testid="back-button"
     :aria-label="label"
+    :title="iconOnly ? label : null"
     @click="onClick"
   >
     <span class="arrow" aria-hidden="true">&larr;</span>
-    <span class="label">{{ label }}</span>
+    <span v-if="!iconOnly" class="label">{{ label }}</span>
   </button>
 </template>
 
@@ -17,6 +19,7 @@ import { useRouter } from 'vue-router'
 const props = defineProps({
   label: { type: String, default: 'Back' },
   fallback: { type: String, default: '/' },
+  iconOnly: { type: Boolean, default: false },
 })
 
 const router = useRouter()
@@ -48,6 +51,12 @@ function onClick() {
   text-transform: uppercase;
   border-radius: var(--radius-sm);
   transition: color 180ms ease, background 180ms ease;
+}
+
+.back-btn.is-icon-only {
+  margin: 0;
+  padding: 0.375rem;
+  gap: 0;
 }
 
 .back-btn:hover,

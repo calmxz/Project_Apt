@@ -1,25 +1,31 @@
 /* Chat surface design tokens (spec section 5).
- * Consumed by MarkdownContent.vue, ToolCallChip.vue, CitationsList.vue and the
- * Phase 3 component split. Declared here so the var() fallbacks in those
- * components resolve to real values. */
+ * Consumed as var() fallbacks by MarkdownContent.vue, ToolCallChip.vue,
+ * CitationsList.vue and the Phase 3 component split.
+ *
+ * Repointed (2026-05-27 chat-surface-polish): these formerly held light-only
+ * hex values, which rendered cream/tan blocks and invisible black borders on
+ * the dark surface. They are now routed to the dark-aware --color-* semantics
+ * in base.css so any remaining consumer resolves correctly in both themes.
+ * Components themselves now reference the semantics directly (Tasks 5/6);
+ * these declarations remain only as safe fallbacks. */
 :root {
-  --chat-bubble-bg: #ffffff;
-  --chat-bubble-border: rgba(0, 0, 0, 0.06);
-  --chat-bubble-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-  --chat-bubble-radius: 14px;
+  --chat-bubble-bg: var(--color-surface-raised);
+  --chat-bubble-border: var(--color-border);
+  --chat-bubble-shadow: var(--shadow-paper);
+  --chat-bubble-radius: var(--radius-md);
 
-  --code-block-bg: #f7f3ed;
-  --code-block-border: rgba(0, 0, 0, 0.06);
-  --code-block-text: #2c2316;
+  --code-block-bg: var(--color-surface-soft);
+  --code-block-border: var(--color-border);
+  --code-block-text: var(--color-text);
 
-  --math-bg: #fff8ed;
-  --math-accent: #ff6b5b;
+  --math-bg: var(--color-surface-soft);
+  --math-accent: var(--color-accent);
 
-  --tool-pill-bg: rgba(255, 107, 91, 0.08);
-  --tool-pill-border: rgba(255, 107, 91, 0.2);
-  --tool-pill-text: #c44;
+  --tool-pill-bg: var(--color-accent-soft);
+  --tool-pill-border: var(--color-accent);
+  --tool-pill-text: var(--color-accent-hover);
 
-  --user-bubble-bg: #ff6b5b;
+  --user-bubble-bg: var(--color-accent);
   --user-bubble-text: #ffffff;
   --user-bubble-radius: 18px 18px 4px 18px;
 }

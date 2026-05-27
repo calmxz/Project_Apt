@@ -74,6 +74,6 @@ defineProps({
   font-family: var(--font-sans);
   font-size: 0.9375rem;
   text-align: left;
-  box-shadow: 0 4px 12px -4px rgba(255, 107, 92, 0.35);
+  box-shadow: 0 2px 8px -4px rgba(255, 107, 92, 0.22);
 }
 </style>

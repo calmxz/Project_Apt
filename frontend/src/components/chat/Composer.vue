@@ -160,12 +160,9 @@ defineExpose({ focus })
    through the wrapper and breaking the layout (white box overflowing the
    dark pill). Owning the markup gives us deterministic styling. */
 .composer-wrap {
-  position: sticky;
-  bottom: 1rem;
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  z-index: 2;
 }
 
 .composer {
@@ -229,11 +226,16 @@ defineExpose({ focus })
   cursor: not-allowed;
 }
 
-.composer-input::-webkit-scrollbar { width: 6px; }
+.composer-input::-webkit-scrollbar { width: 8px; }
+.composer-input::-webkit-scrollbar-button { display: none; height: 0; width: 0; }
+.composer-input::-webkit-scrollbar-track { background: transparent; }
 .composer-input::-webkit-scrollbar-thumb {
   background: var(--color-border-strong);
-  border-radius: 3px;
+  border-radius: var(--radius-pill);
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
+.composer-input::-webkit-scrollbar-thumb:hover { background: var(--color-text-faint); }
 
 /* Attach, send, and stop share the round-icon vocabulary. Sizes intentionally
    identical so the composer reads as balanced book-ends around the input. */
