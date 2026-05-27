@@ -160,17 +160,9 @@ defineExpose({ focus })
    through the wrapper and breaking the layout (white box overflowing the
    dark pill). Owning the markup gives us deterministic styling. */
 .composer-wrap {
-  position: sticky;
-  bottom: 0;
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
-  z-index: 3;
-  /* Opaque page-colored backing so messages scroll cleanly behind the pinned
-     composer instead of bleeding through the wrapper gaps and the hints row.
-     Extends to the viewport bottom (bottom: 0 + padding-bottom). */
-  padding: 0.5rem 0 1rem;
-  background: var(--color-background);
 }
 
 .composer {

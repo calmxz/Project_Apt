@@ -186,6 +186,13 @@ function onCostWarning() {
 onMounted(() => costBus.addEventListener('cost-warning', onCostWarning))
 onUnmounted(() => costBus.removeEventListener('cost-warning', onCostWarning))
 
+// App-shell lock: while in a session, the document itself must not scroll —
+// only the .messages box does. A body class drives the route-scoped overflow
+// lock and flex-height cascade (see <style>). Removed unconditionally on leave
+// so other routes regain normal document scroll.
+onMounted(() => document.body.classList.add('chat-locked'))
+onUnmounted(() => document.body.classList.remove('chat-locked'))
+
 // Show the "typing" placeholder when we've appended the user message but the
 // tutor reply hasn't arrived yet. Driven by `sending` rather than `store.loading`
 // so list-load spinners don't flicker the placeholder.
@@ -196,11 +203,10 @@ const awaitingResponse = computed(() => {
 })
 
 function scrollToBottom() {
-  // The conversation now scrolls with the page (single scroll plane), so drive
-  // the window rather than the messages element. The sticky composer stays
-  // pinned at the viewport bottom while the document scrolls underneath.
+  // App-shell: the .messages box is the sole scroller, so drive it directly.
   nextTick(() => {
-    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' })
+    const el = messagesEl.value
+    if (el) el.scrollTop = el.scrollHeight
   })
 }
 
@@ -348,21 +354,31 @@ function goHome() {
 </script>
 
 <style scoped>
+/* App-shell: while in a session the document is locked to the viewport and the
+   .messages box is the only scroller. The body.chat-locked class (toggled on
+   mount/unmount) drives the overflow lock and the flex-height cascade — every
+   ancestor down to the scroller needs min-height: 0 so it can shrink instead of
+   overflowing. Scoped to this route; other routes keep normal document scroll. */
+:global(body.chat-locked) { overflow: hidden; }
+:global(body.chat-locked #app) { height: 100vh; height: 100dvh; }
+:global(body.chat-locked .page) { min-height: 0; }
+:global(body.chat-locked .page-inner) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding-top: clamp(1rem, 3vw, 1.75rem);
+  padding-bottom: 0;
+}
+
 .session {
   max-width: 48rem;
-  /* Negative bottom margin swallows the global .page-inner padding-bottom (4rem)
-     for this route only, so the page doesn't scroll past the pinned composer
-     into empty space. The composer keeps its own small internal bottom pad. */
-  margin: 0 auto -4rem;
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
-  /* Fill the viewport below the navbar so the composer sits at the bottom edge
-     even on short conversations. .messages (flex: 1) absorbs the slack; the
-     sticky composer then pins on long, scrolling conversations. The clamp
-     mirrors .page-inner's top padding; padding-bottom is canceled by the
-     negative margin above, so the math nets to one viewport. */
-  min-height: calc(100dvh - var(--topnav-h) - clamp(2rem, 6vw, 4.5rem));
+  flex: 1;
+  min-height: 0;
 }
 
 .folio {
@@ -389,12 +405,26 @@ function goHome() {
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  /* Grow to fill the session column so the composer is pushed to the bottom
-     edge on short conversations; min-height is the empty-state floor. */
+  /* Sole scroller in the app-shell. min-height: 0 lets it shrink within the
+     flex column instead of forcing the page to overflow. */
   flex: 1 1 auto;
-  min-height: clamp(10rem, 32vh, 18rem);
+  min-height: 0;
+  overflow-y: auto;
   padding: 0.5rem 0.25rem;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
 }
+
+.messages::-webkit-scrollbar { width: 8px; }
+.messages::-webkit-scrollbar-button { display: none; height: 0; width: 0; }
+.messages::-webkit-scrollbar-track { background: transparent; }
+.messages::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.messages::-webkit-scrollbar-thumb:hover { background: var(--color-text-faint); }
 
 .messages.is-empty {
   /* When the conversation is empty, let the empty-state anchor naturally
