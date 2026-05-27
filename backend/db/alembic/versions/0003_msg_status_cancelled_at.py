@@ -1,7 +1,11 @@
 """chat_messages: add status + cancelled_at for stream-cancel persistence
 
-Revision ID: 0003_messages_status_cancelled_at
+Revision ID: 0003_msg_status_cancelled_at
 Revises: 0002_chunk_embeddings
+
+NOTE: alembic stores version_num as VARCHAR(32). Keep revision IDs <= 32 chars
+(the original "0003_messages_status_cancelled_at" was 33 and Postgres rejected
+the alembic_version UPDATE).
 Create Date: 2026-05-25
 
 Adds two columns to the chat_messages table:
@@ -16,7 +20,7 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0003_messages_status_cancelled_at"
+revision: str = "0003_msg_status_cancelled_at"
 down_revision: Union[str, None] = "0002_chunk_embeddings"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
