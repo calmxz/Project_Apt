@@ -1,13 +1,9 @@
 <template>
-  <header class="head">
-    <BackButton icon-only label="Back to sessions" class="head-back" />
-    <div class="head-text">
-      <div class="head-title-row">
-        <span class="folio" :class="{ 'is-archived': isEnded }">{{ isEnded ? 'archived' : 'in session' }}</span>
-        <h1 class="topic">{{ session?.topic || 'Session' }}</h1>
-      </div>
-      <p class="muted" data-testid="session-id">id · {{ id }}</p>
-    </div>
+  <div class="nav-session">
+    <span class="folio" :class="{ 'is-archived': isEnded }">
+      {{ isEnded ? 'archived' : 'in session' }}
+    </span>
+    <h1 class="topic">{{ session?.topic || 'Session' }}</h1>
     <div class="head-actions">
       <router-link
         :to="{ name: 'session-profile', params: { id } }"
@@ -16,7 +12,7 @@
         aria-label="View this session's profile"
       >
         <i class="pi pi-id-card" aria-hidden="true" />
-        <span>Profile</span>
+        <span class="action-label">Profile</span>
       </router-link>
       <Button
         v-if="!isEnded"
@@ -30,13 +26,12 @@
         @click="$emit('end-session')"
       />
     </div>
-  </header>
+  </div>
 </template>
 
 <script setup>
 import { computed } from 'vue'
 import Button from 'primevue/button'
-import BackButton from '../BackButton.vue'
 
 const props = defineProps({
   // Nullable: SessionView renders the header before loadSession resolves, so
@@ -53,32 +48,14 @@ const canEnd = computed(() => Boolean(props.session && !props.session.ended_at))
 </script>
 
 <style scoped>
-.head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-.head-back {
-  flex: 0 0 auto;
-  align-self: flex-start;
-  margin-top: 0.15rem;
-}
-
-.head-text {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  min-width: 0;
-}
-
-.head-title-row {
+/* Rendered inside the global navbar (teleported from SessionView). Lays out as
+   a single inline row: status badge + topic title left, actions pushed right. */
+.nav-session {
   display: flex;
   align-items: center;
   gap: 0.625rem;
-  flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
 }
 
 .folio {
@@ -102,36 +79,26 @@ const canEnd = computed(() => Boolean(props.session && !props.session.ended_at))
 }
 
 .topic {
+  flex: 0 1 auto;
+  min-width: 0;
   font-family: var(--font-display);
-  font-size: clamp(1.375rem, 2.5vw, 1.625rem);
-  font-weight: 700;
-  letter-spacing: var(--tracking-display);
-  line-height: 1.15;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: var(--tracking-tight);
+  line-height: 1.2;
   color: var(--color-heading);
   margin: 0;
-  overflow-wrap: anywhere;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
-}
-
-.muted {
-  color: var(--color-text-faint);
-  margin: 0;
-  max-width: 100%;
-  font-family: var(--font-mono);
-  font-size: var(--fs-label);
-  letter-spacing: 0.04em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .head-actions {
+  margin-left: auto;
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
+  flex: 0 0 auto;
 }
 
 /* Header action buttons */
@@ -152,5 +119,15 @@ const canEnd = computed(() => Boolean(props.session && !props.session.ended_at))
   border-color: var(--signal-error);
   background: rgba(239, 68, 68, 0.08);
   transform: translateY(-1px);
+}
+
+/* Tight navbars: drop the status badge first, then the action labels, so the
+   title still fits beside the global nav icons. */
+@media (max-width: 720px) {
+  .folio { display: none; }
+}
+
+@media (max-width: 560px) {
+  .action-label { display: none; }
 }
 </style>

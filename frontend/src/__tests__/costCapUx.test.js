@@ -111,6 +111,8 @@ describe('session store cost-cap envelope', () => {
 // ---------------------------------------------------------------------------
 
 const stubs = {
+  // ChatHeader teleports to the navbar slot; stub Teleport so it renders inline.
+  teleport: true,
   BackButton: { template: '<button data-testid="back" />' },
   SessionEndedBanner: { template: '<div />' },
   Button: {

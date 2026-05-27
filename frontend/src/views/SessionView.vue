@@ -13,11 +13,15 @@
     </div>
 
     <template v-else>
-      <ChatHeader :session="store.currentSession" :id="id" @end-session="end" />
+      <!-- Session title + actions render in the global navbar (App.vue slot);
+           all end-session/dialog/store logic stays here. -->
+      <Teleport to="#session-nav-slot">
+        <ChatHeader :session="store.currentSession" :id="id" @end-session="end" />
+      </Teleport>
+
+      <BackButton />
 
       <CapBanners />
-
-      <hr class="hairline" />
 
       <SessionEndedBanner
         v-if="isEnded"

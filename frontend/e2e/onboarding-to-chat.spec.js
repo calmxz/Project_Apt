@@ -37,7 +37,7 @@ test.describe.skip('onboarding to chat', () => {
     await page.getByTestId('new-submit').click()
 
     await expect(page).toHaveURL(/\/session\//)
-    await expect(page.getByTestId('session-id')).toBeVisible()
+    await expect(page.getByTestId('session-input')).toBeVisible()
 
     await page.getByTestId('session-input').fill('what is recursion?')
     await page.getByTestId('session-send').click()
