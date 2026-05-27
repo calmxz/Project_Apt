@@ -1,5 +1,6 @@
 <template>
   <header class="head">
+    <BackButton icon-only label="Back to sessions" class="head-back" />
     <div class="head-text">
       <div class="head-title-row">
         <span class="folio" :class="{ 'is-archived': isEnded }">{{ isEnded ? 'archived' : 'in session' }}</span>
@@ -35,6 +36,7 @@
 <script setup>
 import { computed } from 'vue'
 import Button from 'primevue/button'
+import BackButton from '../BackButton.vue'
 
 const props = defineProps({
   // Nullable: SessionView renders the header before loadSession resolves, so
@@ -63,6 +65,12 @@ const canEnd = computed(() => Boolean(props.session && !props.session.ended_at))
   padding: 0.5rem 0;
   /* Opaque page-colored bar so messages scroll cleanly underneath it. */
   background: var(--color-background);
+}
+
+.head-back {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  margin-top: 0.15rem;
 }
 
 .head-text {

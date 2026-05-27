@@ -1,8 +1,7 @@
 <template>
   <section class="session">
-    <BackButton />
-
     <div v-if="notFound" class="not-found" data-testid="session-not-found">
+      <BackButton />
       <span class="folio">404</span>
       <h1 class="topic">Session not found</h1>
       <p class="not-found-sub">
@@ -364,13 +363,6 @@ function goHome() {
      mirrors .page-inner's top padding; padding-bottom is canceled by the
      negative margin above, so the math nets to one viewport. */
   min-height: calc(100dvh - var(--topnav-h) - clamp(2rem, 6vw, 4.5rem));
-}
-
-/* Scoped in-session pull-up: trim the BackButton's bottom margin so the
-   conversation starts higher. Global .page-inner top padding is left
-   untouched (it governs every route) — this only tightens within SessionView. */
-.session :deep(.back-btn) {
-  margin-bottom: 0.25rem;
 }
 
 .folio {
