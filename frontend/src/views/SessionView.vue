@@ -33,83 +33,12 @@
           :archived="isEnded"
           @quick-prompt="useQuickPrompt"
         />
-        <TransitionGroup name="msg-fade" tag="div" class="msg-list">
-          <article
-            v-for="(m, i) in store.messages"
-            :key="m.message_id || `m-${i}`"
-            :class="['msg', m.role]"
-            :data-testid="`msg-${m.role}`"
-          >
-            <span v-if="m.role === 'assistant'" class="msg-avatar" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="18" height="18" focusable="false">
-                <path
-                  d="M12 0.5 L13.6 10.4 L23.5 12 L13.6 13.6 L12 23.5 L10.4 13.6 L0.5 12 L10.4 10.4 Z"
-                  fill="currentColor"
-                />
-              </svg>
-            </span>
-            <div class="msg-body">
-              <span class="role-tag">{{ m.role === 'user' ? 'you' : 'tutor' }}</span>
-              <template v-if="m.role === 'assistant' && (m.tool_calls || []).length">
-                <span
-                  v-for="(tc, ti) in m.tool_calls"
-                  :key="`tc-${ti}`"
-                  class="tool-call-row"
-                >
-                  <ToolCallChip :tool_call="tc" state="done" />
-                </span>
-              </template>
-              <MarkdownContent class="content" :text="m.content || ''" />
-              <CitationsList v-if="m.role === 'assistant'" :citations="m.citations || []" />
-            </div>
-          </article>
-        </TransitionGroup>
-        <article
-          v-if="awaitingResponse && !store.streamingMessage"
-          class="msg assistant typing"
-          data-testid="msg-typing"
-        >
-          <span class="msg-avatar" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="18" height="18" focusable="false">
-              <path
-                d="M12 0.5 L13.6 10.4 L23.5 12 L13.6 13.6 L12 23.5 L10.4 13.6 L0.5 12 L10.4 10.4 Z"
-                fill="currentColor"
-              />
-            </svg>
-          </span>
-          <div class="msg-body">
-            <span class="role-tag">tutor</span>
-            <p class="content typing-dots" aria-label="Tutor is thinking">
-              <span></span><span></span><span></span>
-            </p>
-          </div>
-        </article>
-        <article
-          v-if="store.streamingMessage"
-          class="msg assistant streaming"
-          data-testid="msg-streaming"
-        >
-          <span class="msg-avatar" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="18" height="18" focusable="false">
-              <path
-                d="M12 0.5 L13.6 10.4 L23.5 12 L13.6 13.6 L12 23.5 L10.4 13.6 L0.5 12 L10.4 10.4 Z"
-                fill="currentColor"
-              />
-            </svg>
-          </span>
-          <div class="msg-body">
-            <span class="role-tag">tutor</span>
-            <span
-              v-for="tc in store.streamingMessage.tool_calls"
-              :key="tc.id"
-              class="tool-call-row"
-            >
-              <ToolCallChip :tool_call="tc" :state="tc.state" />
-            </span>
-            <MarkdownContent class="content" :text="store.streamingMessage.content || ''" streaming />
-            <CitationsList :citations="store.streamingMessage.citations || []" />
-          </div>
-        </article>
+        <MessageList
+          v-if="store.messages.length || store.streamingMessage || awaitingResponse"
+          :messages="store.messages"
+          :streaming-message="store.streamingMessage"
+          :awaiting="awaitingResponse"
+        />
       </div>
 
       <div
@@ -184,10 +113,8 @@ import CapBanners from '../components/chat/CapBanners.vue'
 import ChatEmptyState from '../components/chat/EmptyState.vue'
 import ChatHeader from '../components/chat/ChatHeader.vue'
 import Composer from '../components/chat/Composer.vue'
+import MessageList from '../components/chat/MessageList.vue'
 import SessionEndedBanner from '../components/SessionEndedBanner.vue'
-import MarkdownContent from '../components/chat/MarkdownContent.vue'
-import ToolCallChip from '../components/chat/ToolCallChip.vue'
-import CitationsList from '../components/chat/CitationsList.vue'
 import UploadStatus from '../components/chat/UploadStatus.vue'
 import { friendlyError } from '../lib/errors.js'
 import { useSessionStore } from '../stores/session.js'
@@ -470,137 +397,6 @@ function goHome() {
 .messages::-webkit-scrollbar-thumb {
   background: var(--color-border-strong);
   border-radius: 3px;
-}
-
-.msg-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.msg-fade-enter-active,
-.msg-fade-leave-active {
-  transition: opacity var(--motion-base) ease, transform var(--motion-base) var(--motion-bounce);
-}
-
-.msg-fade-enter-from { opacity: 0; transform: translateY(8px); }
-.msg-fade-leave-to { opacity: 0; transform: translateY(-4px); }
-
-/* Messages */
-.msg {
-  display: flex;
-  gap: 0.625rem;
-  max-width: 100%;
-  align-items: flex-start;
-}
-
-.msg-avatar {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: var(--radius-pill);
-  background: var(--color-accent-soft);
-  color: var(--color-accent);
-  margin-top: 0.125rem;
-}
-
-.msg-body {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  min-width: 0;
-  max-width: calc(100% - 2.6rem);
-}
-
-.role-tag {
-  font-family: var(--font-sans);
-  font-size: var(--fs-label);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  font-weight: 600;
-  color: var(--color-text-faint);
-}
-
-.msg.user {
-  flex-direction: row-reverse;
-  align-self: flex-end;
-  max-width: 88%;
-}
-
-.msg.user .msg-body {
-  align-items: flex-end;
-  text-align: left;
-  max-width: 100%;
-}
-
-.msg.user .role-tag {
-  color: var(--color-accent);
-}
-
-.msg.user .content {
-  display: inline-block;
-  background: var(--color-accent);
-  color: #FFFFFF;
-  padding: 0.875rem 1.125rem;
-  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-lg);
-  font-family: var(--font-sans);
-  font-size: 0.9375rem;
-  text-align: left;
-  box-shadow: 0 4px 12px -4px rgba(255, 107, 92, 0.35);
-}
-
-.msg.assistant {
-  align-self: flex-start;
-  max-width: 95%;
-}
-
-.msg.assistant .content {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  padding: 0.875rem 1.125rem;
-  border-radius: var(--radius-sm) var(--radius-lg) var(--radius-lg) var(--radius-lg);
-  box-shadow: var(--shadow-paper);
-}
-
-.content {
-  margin: 0;
-  white-space: pre-wrap;
-  font-family: var(--font-sans);
-  font-size: 0.9375rem;
-  line-height: 1.6;
-  color: var(--color-text);
-}
-
-.tool-call-row {
-  display: inline-flex;
-  margin: 0 0 0.4rem;
-}
-
-.msg.typing .content {
-  display: inline-flex;
-  gap: 0.3rem;
-  padding: 0.875rem 1.125rem;
-  align-items: center;
-}
-
-.typing-dots span {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--color-accent);
-  animation: typing-bob 1200ms ease-in-out infinite;
-}
-
-.typing-dots span:nth-child(2) { animation-delay: 200ms; }
-.typing-dots span:nth-child(3) { animation-delay: 400ms; }
-
-@keyframes typing-bob {
-  0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
-  30% { transform: translateY(-5px); opacity: 1; }
 }
 
 /* Banners */
