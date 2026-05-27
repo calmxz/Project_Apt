@@ -27,7 +27,7 @@ export async function streamChat({ sessionId, message, onEvent, signal }) {
 
   if (!resp.ok) {
     const text = await resp.text().catch(() => '')
-    let body = null
+    let body
     try { body = text ? JSON.parse(text) : null } catch { body = text }
     throw new ApiError(resp.status, body, '/chat/stream')
   }

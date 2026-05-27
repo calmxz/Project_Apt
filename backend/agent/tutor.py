@@ -314,7 +314,6 @@ async def run_streaming(
 
             # No tool calls assembled -> the streamed content was the final answer.
             if not tool_frags:
-                cost = 0.0
                 try:
                     built = litellm.stream_chunk_builder(chunks, messages=full)
                     cost = litellm.completion_cost(completion_response=built) or 0.0
@@ -438,7 +437,6 @@ async def run_streaming(
         return
 
     except asyncio.CancelledError:
-        cost = Decimal("0")
         try:
             cost = cost_meter.estimate_cancelled_cost(
                 settings.model, accumulated_text, prompt_tokens_total
