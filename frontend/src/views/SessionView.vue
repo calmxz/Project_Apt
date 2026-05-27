@@ -197,9 +197,11 @@ const awaitingResponse = computed(() => {
 })
 
 function scrollToBottom() {
+  // The conversation now scrolls with the page (single scroll plane), so drive
+  // the window rather than the messages element. The sticky composer stays
+  // pinned at the viewport bottom while the document scrolls underneath.
   nextTick(() => {
-    const el = messagesEl.value
-    if (el) el.scrollTop = el.scrollHeight
+    window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' })
   })
 }
 
@@ -387,12 +389,7 @@ function goHome() {
   flex-direction: column;
   gap: 1rem;
   min-height: clamp(10rem, 32vh, 18rem);
-  max-height: calc(100vh - 22rem);
-  overflow-y: auto;
   padding: 0.5rem 0.25rem;
-  scroll-behavior: smooth;
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-border-strong) transparent;
 }
 
 .messages.is-empty {
@@ -401,17 +398,6 @@ function goHome() {
      vertically-centered void. */
   justify-content: flex-start;
 }
-
-.messages::-webkit-scrollbar { width: 8px; }
-.messages::-webkit-scrollbar-button { display: none; height: 0; width: 0; }
-.messages::-webkit-scrollbar-track { background: transparent; }
-.messages::-webkit-scrollbar-thumb {
-  background: var(--color-border-strong);
-  border-radius: var(--radius-pill);
-  border: 2px solid transparent;
-  background-clip: padding-box;
-}
-.messages::-webkit-scrollbar-thumb:hover { background: var(--color-text-faint); }
 
 /* Banners */
 .error-banner {
