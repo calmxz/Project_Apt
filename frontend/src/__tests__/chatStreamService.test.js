@@ -3,7 +3,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
 import { streamChat } from '@/services/chatStreamService.js'
-import { ApiError } from '@/services/apiClient.js'
 import { useAuthStore } from '@/stores/auth.js'
 
 // Build a Response whose body is a ReadableStream containing the given SSE text.
