@@ -53,8 +53,8 @@ const display = computed(() => {
   animation: tool-pill-pulse 1s ease-in-out infinite;
 }
 .tool-pill--error {
-  background: rgba(0,0,0,0.04);
-  border-color: rgba(0,0,0,0.1);
+  background: var(--color-surface-soft);
+  border-color: var(--color-border);
   color: var(--color-text-muted, #888);
 }
 @keyframes tool-pill-pulse {
