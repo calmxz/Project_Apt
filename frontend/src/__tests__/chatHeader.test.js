@@ -75,4 +75,12 @@ describe('ChatHeader', () => {
     })
     expect(wrapper.find('[data-testid="session-profile-link"]').exists()).toBe(true)
   })
+
+  it('renders with a null session during load and disables End', () => {
+    const wrapper = mountHeader({ session: null, id: 's1' })
+    expect(wrapper.find('.topic').text()).toBe('Session')
+    const end = wrapper.find('[data-testid="session-end"]')
+    expect(end.exists()).toBe(true)
+    expect(end.attributes('disabled')).toBeDefined()
+  })
 })

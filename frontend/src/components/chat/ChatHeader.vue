@@ -35,7 +35,10 @@ import { computed } from 'vue'
 import Button from 'primevue/button'
 
 const props = defineProps({
-  session: { type: Object, required: true },
+  // Nullable: SessionView renders the header before loadSession resolves, so
+  // session is null during the initial load. canEnd gates the End button off
+  // until it arrives.
+  session: { type: Object, default: null },
   id: { type: String, required: true },
 })
 
