@@ -14,35 +14,7 @@
     </div>
 
     <template v-else>
-      <header class="head">
-        <div class="head-text">
-          <span class="folio">{{ isEnded ? 'archived' : 'in session' }}</span>
-          <h1 class="topic">{{ store.currentSession?.topic || 'Session' }}</h1>
-          <p class="muted" data-testid="session-id">id · {{ id }}</p>
-        </div>
-        <div class="head-actions">
-          <router-link
-            :to="{ name: 'session-profile', params: { id } }"
-            class="profile-link profile-link-compact"
-            data-testid="session-profile-link"
-            aria-label="View this session's profile"
-          >
-            <i class="pi pi-id-card" aria-hidden="true" />
-            <span>Profile</span>
-          </router-link>
-          <Button
-            v-if="!isEnded"
-            label="End session"
-            icon="pi pi-flag"
-            icon-pos="right"
-            severity="secondary"
-            data-testid="session-end"
-            :disabled="!canEnd"
-            class="end-btn"
-            @click="end"
-          />
-        </div>
-      </header>
+      <ChatHeader :session="store.currentSession" :id="id" @end-session="end" />
 
       <div
         v-if="store.dailyCapReached"
@@ -316,6 +288,7 @@ import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 
 import BackButton from '../components/BackButton.vue'
+import ChatHeader from '../components/chat/ChatHeader.vue'
 import SessionEndedBanner from '../components/SessionEndedBanner.vue'
 import MarkdownContent from '../components/chat/MarkdownContent.vue'
 import ToolCallChip from '../components/chat/ToolCallChip.vue'
@@ -609,20 +582,6 @@ function goHome() {
   gap: 1.5rem;
 }
 
-.head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1.5rem;
-  flex-wrap: wrap;
-}
-
-.head-text {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
 .folio {
   font-family: var(--font-sans);
   font-size: var(--fs-label);
@@ -641,14 +600,6 @@ function goHome() {
   color: var(--color-heading);
   margin: 0;
   overflow-wrap: anywhere;
-}
-
-.muted {
-  color: var(--color-text-faint);
-  margin: 0;
-  font-family: var(--font-mono);
-  font-size: var(--fs-caption);
-  letter-spacing: 0.04em;
 }
 
 .messages {
@@ -1178,32 +1129,6 @@ function goHome() {
     width: 2.25rem;
     height: 2.25rem;
   }
-}
-
-/* Header action buttons */
-.end-btn :deep(.p-button),
-.end-btn.p-button {
-  background: transparent;
-  color: var(--color-text-muted);
-  border: 1px solid var(--color-border);
-  font-family: var(--font-sans);
-  font-weight: 500;
-  padding: 0.5rem 1rem;
-  border-radius: var(--radius-pill);
-  transition: background var(--motion-fast) ease, color var(--motion-fast) ease, border-color var(--motion-fast) ease, transform var(--motion-fast) var(--motion-bounce);
-}
-
-.end-btn :deep(.p-button):not(:disabled):hover {
-  color: var(--signal-error);
-  border-color: var(--signal-error);
-  background: rgba(239, 68, 68, 0.08);
-  transform: translateY(-1px);
-}
-
-.head-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
 }
 
 /* Cap banner — pill style */

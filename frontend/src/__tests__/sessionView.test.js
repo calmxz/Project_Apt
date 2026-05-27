@@ -4,6 +4,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 import SessionView from '@/views/SessionView.vue'
+import ChatHeader from '@/components/chat/ChatHeader.vue'
 import { useSessionStore } from '@/stores/session.js'
 
 const push = vi.fn()
@@ -96,6 +97,11 @@ describe('SessionView', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('Calculus')
     expect(wrapper.find('[data-testid="session-input"]').exists()).toBe(true)
+    // Header content is now delegated to ChatHeader
+    const header = wrapper.findComponent(ChatHeader)
+    expect(header.exists()).toBe(true)
+    expect(header.props('id')).toBe('s1')
+    expect(header.props('session')).toMatchObject({ topic: 'Calculus' })
   })
 
   it('send dispatches sendMessage and clears draft', async () => {
