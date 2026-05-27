@@ -4,7 +4,7 @@
 
 **Date:** 2026-05-27
 **Author:** brainstormed with user (calmxz)
-**Status:** awaiting go to execute
+**Status:** executed on `feat/chat-surface-polish` — Tasks 0-7 shipped, Task 8 gates green (tests 284/284, lint clean, build OK). **Deferred:** manual smoke + before/after screenshots in both themes (needs a live session — handed to reviewer), and the inline-code AA contrast check (§5 Risk 3). Edge-fade took the documented fallback (skipped); scrollbar fix shipped (commit 09101ac).
 
 ---
 
