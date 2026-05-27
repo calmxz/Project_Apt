@@ -351,7 +351,10 @@ function goHome() {
 <style scoped>
 .session {
   max-width: 48rem;
-  margin: 0 auto;
+  /* Negative bottom margin swallows the global .page-inner padding-bottom (4rem)
+     for this route only, so the page doesn't scroll past the pinned composer
+     into empty space. The composer keeps its own small internal bottom pad. */
+  margin: 0 auto -4rem;
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
