@@ -32,9 +32,9 @@ const parts = computed(() => {
 .md-rendered { white-space: normal; }
 .md-rendered :deep(p) { margin: 0 0 0.6em 0; }
 .md-rendered :deep(pre) {
-  background: var(--code-block-bg, #f7f3ed);
-  color: var(--code-block-text, #2c2316);
-  border: 1px solid var(--code-block-border, rgba(0,0,0,0.06));
+  background: var(--color-surface-soft);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 12px 14px;
   font-family: 'Consolas', 'Monaco', monospace;
@@ -42,16 +42,16 @@ const parts = computed(() => {
   overflow-x: auto;
 }
 .md-rendered :deep(code:not(pre code)) {
-  background: #f4e9d8;
-  color: #8a4a00;
+  background: var(--color-accent-soft);
+  color: var(--color-accent-hover);
   padding: 1px 5px;
   border-radius: 3px;
   font-family: 'Consolas', 'Monaco', monospace;
   font-size: 0.9em;
 }
 .md-rendered :deep(.katex-display) {
-  background: var(--math-bg, #fff8ed);
-  border-left: 3px solid var(--math-accent, #ff6b5b);
+  background: var(--color-surface-soft);
+  border-left: 3px solid var(--color-accent);
   padding: 8px 12px;
   margin: 6px 0;
 }
@@ -60,7 +60,7 @@ const parts = computed(() => {
   margin: 8px 0;
 }
 .md-rendered :deep(th), .md-rendered :deep(td) {
-  border: 1px solid rgba(0,0,0,0.08);
+  border: 1px solid var(--color-border);
   padding: 4px 8px;
 }
 .deferred {
