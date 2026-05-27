@@ -44,11 +44,6 @@ const stubs = {
     template:
       '<div v-if="visible" data-testid="dialog"><slot /><slot name="footer" /></div>',
   },
-  Textarea: {
-    props: ['modelValue', 'disabled'],
-    template:
-      '<textarea :value="modelValue" :disabled="disabled" @input="$emit(\'update:modelValue\', $event.target.value)" @keydown="$emit(\'keydown\', $event)" />',
-  },
   RouterLink: { template: '<a><slot /></a>' },
 }
 

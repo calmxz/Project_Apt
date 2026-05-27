@@ -136,68 +136,19 @@
 
       <UploadStatus :upload="uploadStatus" />
 
-      <div v-if="!isEnded" class="composer-wrap">
-        <input
-          ref="fileInputEl"
-          type="file"
-          accept="application/pdf"
-          data-testid="session-upload-input"
-          hidden
-          @change="onUploadFile"
-        />
-        <div class="composer" :class="{ 'is-disabled': !canSend }">
-          <button
-            type="button"
-            class="composer-attach"
-            data-testid="session-upload-btn"
-            :disabled="!canSend || uploading"
-            :aria-label="uploading ? 'Uploading PDF' : 'Attach a PDF'"
-            :title="uploading ? 'Uploading…' : 'Attach PDF'"
-            @click="openFilePicker"
-          >
-            <i v-if="!uploading" class="pi pi-paperclip" aria-hidden="true" />
-            <i v-else class="pi pi-spin pi-spinner" aria-hidden="true" />
-          </button>
-
-          <textarea
-            ref="composerEl"
-            v-model="draft"
-            data-testid="session-input"
-            class="composer-input"
-            rows="1"
-            placeholder="Ask anything. Press Enter to send · Shift + Enter for a new line."
-            :disabled="!canSend"
-            :maxlength="MAX_DRAFT_LEN"
-            @keydown="onKeydown"
-            @input="autoResize"
-          />
-
-          <button
-            type="button"
-            class="composer-send"
-            data-testid="session-send"
-            :disabled="!draft.trim() || !canSend || sending"
-            :aria-label="sending ? 'Sending message' : 'Send message'"
-            @click="send"
-          >
-            <i
-              :class="sending ? 'pi pi-spin pi-spinner' : 'pi pi-arrow-up'"
-              aria-hidden="true"
-            />
-          </button>
-        </div>
-
-        <div class="composer-hints" :class="{ 'is-near-limit': nearCharLimit }">
-          <span class="composer-hint">
-            <kbd>⏎</kbd> to send
-            <span class="composer-hint-sep">·</span>
-            <kbd>⇧</kbd>+<kbd>⏎</kbd> newline
-          </span>
-          <span v-if="draft.length" class="composer-count" aria-live="polite">
-            {{ draft.length.toLocaleString() }} / {{ MAX_DRAFT_LEN.toLocaleString() }}
-          </span>
-        </div>
-      </div>
+      <Composer
+        v-if="!isEnded"
+        ref="composerRef"
+        :model-value="draft"
+        @update:model-value="draft = $event"
+        :disabled="!canSend"
+        :uploading="uploading"
+        :sending="sending"
+        :stream-state="store.streamState"
+        @send="send"
+        @stop="store.stopStream"
+        @attach="onAttachFile"
+      />
 
       <Dialog
         v-model:visible="summaryDialog"
@@ -232,6 +183,7 @@ import BackButton from '../components/BackButton.vue'
 import CapBanners from '../components/chat/CapBanners.vue'
 import ChatEmptyState from '../components/chat/EmptyState.vue'
 import ChatHeader from '../components/chat/ChatHeader.vue'
+import Composer from '../components/chat/Composer.vue'
 import SessionEndedBanner from '../components/SessionEndedBanner.vue'
 import MarkdownContent from '../components/chat/MarkdownContent.vue'
 import ToolCallChip from '../components/chat/ToolCallChip.vue'
@@ -260,17 +212,14 @@ const notFound = ref(false)
 const resuming = ref(false)
 const sending = ref(false)
 const messagesEl = ref(null)
-const composerEl = ref(null)
-const fileInputEl = ref(null)
+const composerRef = ref(null)
 const uploading = ref(false)
 const uploadStatus = ref(null)
 const lastError = ref(null)
 
 const isEnded = computed(() => Boolean(store.currentSession?.ended_at))
 const canEnd = computed(() => Boolean(store.currentSession && !store.currentSession.ended_at))
-const canSend = computed(
-  () => canEnd.value && !store.dailyCapReached && !store.costCapReached,
-)
+const canSend = computed(() => canEnd.value && !store.dailyCapReached && !store.costCapReached)
 
 const { showError, showInfo } = useToast()
 watch(
@@ -318,23 +267,6 @@ const awaitingResponse = computed(() => {
   return !last || last.role === 'user'
 })
 
-const MAX_DRAFT_LEN = 2000
-const COMPOSER_MAX_HEIGHT_PX = 220
-const nearCharLimit = computed(() => draft.value.length >= MAX_DRAFT_LEN * 0.9)
-
-function autoResize() {
-  // Native textarea grows up to COMPOSER_MAX_HEIGHT_PX, then scrolls. Reset to
-  // auto first so shrinking on backspace works (otherwise scrollHeight stays
-  // high once the box has grown).
-  const inner = composerEl.value
-  if (!inner) return
-  inner.style.height = 'auto'
-  const next = Math.min(inner.scrollHeight, COMPOSER_MAX_HEIGHT_PX)
-  inner.style.height = `${next}px`
-}
-
-watch(draft, () => nextTick(autoResize))
-
 function scrollToBottom() {
   nextTick(() => {
     const el = messagesEl.value
@@ -360,26 +292,7 @@ onMounted(async () => {
 })
 
 function focusComposer() {
-  nextTick(() => {
-    // composerEl is now a native <textarea>, not a PrimeVue wrapper, so focus
-    // it directly. Defensive fallback covers the (legacy) PrimeVue case to
-    // avoid breaking if this template is reverted upstream.
-    const el = composerEl.value
-    const node =
-      el && typeof el.focus === 'function'
-        ? el
-        : el?.$el?.querySelector?.('textarea')
-    node?.focus()
-  })
-}
-
-function onKeydown(ev) {
-  // Enter sends; Shift+Enter inserts a newline. Block while a request is
-  // already in flight so spam-enter doesn't pile up duplicate sends.
-  if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing) {
-    ev.preventDefault()
-    if (draft.value.trim() && canSend.value && !sending.value) send()
-  }
+  nextTick(() => composerRef.value?.focus())
 }
 
 function useQuickPrompt(text) {
@@ -442,14 +355,7 @@ async function end() {
   }
 }
 
-function openFilePicker() {
-  fileInputEl.value?.click()
-}
-
-async function onUploadFile(ev) {
-  const file = ev.target.files?.[0]
-  ev.target.value = ''
-  if (!file) return
+async function onAttachFile(file) {
   uploading.value = true
   uploadStatus.value = { kind: 'pending', text: `Uploading ${file.name}…` }
   try {
@@ -748,221 +654,6 @@ function goHome() {
 .error-details pre {
   white-space: pre-wrap;
   margin: 0.4rem 0 0;
-}
-
-/* Composer — native textarea + icon buttons in a CSS grid. Replaced the
-   previous PrimeVue Textarea + Button because Aura's tokens were bleeding
-   through the wrapper and breaking the layout (white box overflowing the
-   dark pill). Owning the markup gives us deterministic styling. */
-.composer-wrap {
-  position: sticky;
-  bottom: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  z-index: 2;
-}
-
-.composer {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: end;
-  gap: 0.5rem;
-  padding: 0.55rem 0.55rem 0.55rem 0.6rem;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lift);
-  transition:
-    border-color var(--motion-fast) ease,
-    box-shadow var(--motion-base) ease,
-    transform var(--motion-base) var(--motion-bounce);
-}
-
-.composer:focus-within {
-  border-color: var(--color-accent);
-  box-shadow:
-    var(--shadow-lift),
-    0 0 0 4px var(--color-accent-ring);
-  transform: translateY(-1px);
-}
-
-.composer.is-disabled {
-  opacity: 0.7;
-}
-
-.composer-input {
-  grid-column: 2;
-  align-self: stretch;
-  width: 100%;
-  min-height: 2.5rem;
-  max-height: 220px;
-  padding: 0.625rem 0.25rem;
-  margin: 0;
-  background: transparent;
-  border: 0;
-  outline: 0;
-  resize: none;
-  overflow-y: auto;
-
-  font-family: var(--font-sans);
-  font-size: 1rem;
-  line-height: 1.5;
-  color: var(--color-text);
-  caret-color: var(--color-accent);
-
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-border-strong) transparent;
-}
-
-.composer-input::placeholder {
-  color: var(--color-text-faint);
-  opacity: 1;
-}
-
-.composer-input:disabled {
-  cursor: not-allowed;
-}
-
-.composer-input::-webkit-scrollbar { width: 6px; }
-.composer-input::-webkit-scrollbar-thumb {
-  background: var(--color-border-strong);
-  border-radius: 3px;
-}
-
-/* Attach + send share the round-icon vocabulary. Sizes intentionally
-   identical so the composer reads as balanced book-ends around the input. */
-.composer-attach,
-.composer-send {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.5rem;
-  height: 2.5rem;
-  flex-shrink: 0;
-  border-radius: var(--radius-pill);
-  font-size: 1rem;
-  cursor: pointer;
-  transition:
-    background var(--motion-fast) ease,
-    color var(--motion-fast) ease,
-    border-color var(--motion-fast) ease,
-    transform var(--motion-fast) var(--motion-bounce),
-    box-shadow var(--motion-fast) ease,
-    opacity var(--motion-fast) ease;
-}
-
-.composer-attach {
-  grid-column: 1;
-  align-self: end;
-  margin-bottom: 0.1rem;
-  background: transparent;
-  color: var(--color-text-muted);
-  border: 1px solid var(--color-border);
-}
-
-.composer-attach:hover:not(:disabled),
-.composer-attach:focus-visible {
-  background: var(--color-accent-soft);
-  border-color: var(--color-accent-soft);
-  color: var(--color-accent);
-  outline: none;
-}
-
-.composer-attach:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.composer-send {
-  grid-column: 3;
-  align-self: end;
-  margin-bottom: 0.1rem;
-  background: var(--color-accent);
-  color: #FFFFFF;
-  border: 0;
-  box-shadow: var(--shadow-pop);
-  font-weight: 600;
-}
-
-.composer-send:not(:disabled):hover,
-.composer-send:not(:disabled):focus-visible {
-  transform: translateY(-2px);
-  outline: none;
-}
-
-.composer-send:not(:disabled):active {
-  transform: translateY(3px);
-  box-shadow: var(--shadow-pop-pressed);
-}
-
-.composer-send:disabled {
-  background: var(--color-surface-soft);
-  color: var(--color-text-faint);
-  box-shadow: none;
-  cursor: not-allowed;
-}
-
-/* Footer hint strip — keyboard cheatsheet left, character count right.
-   Mono caption styling keeps it editorial without competing with the input. */
-.composer-hints {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0 0.5rem;
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  letter-spacing: 0.04em;
-  color: var(--color-text-faint);
-  user-select: none;
-}
-
-.composer-hint {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  flex-wrap: wrap;
-}
-
-.composer-hint kbd {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1.25rem;
-  height: 1.25rem;
-  padding: 0 0.3rem;
-  border: 1px solid var(--color-border);
-  border-bottom-width: 2px;
-  border-radius: 4px;
-  background: var(--color-surface-soft);
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  color: var(--color-text-muted);
-  line-height: 1;
-}
-
-.composer-hint-sep {
-  color: var(--color-border-strong);
-}
-
-.composer-count {
-  font-variant-numeric: tabular-nums;
-  transition: color var(--motion-fast) ease;
-}
-
-.composer-hints.is-near-limit .composer-count {
-  color: var(--signal-warning);
-  font-weight: 600;
-}
-
-@media (max-width: 600px) {
-  .composer-hints { display: none; }
-  .composer-attach,
-  .composer-send {
-    width: 2.25rem;
-    height: 2.25rem;
-  }
 }
 
 .error {
