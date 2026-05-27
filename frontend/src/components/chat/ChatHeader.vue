@@ -52,11 +52,17 @@ const canEnd = computed(() => Boolean(props.session && !props.session.ended_at))
 
 <style scoped>
 .head {
+  position: sticky;
+  top: var(--topnav-h, 4.75rem);
+  z-index: 5;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
   flex-wrap: wrap;
+  padding: 0.5rem 0;
+  /* Opaque page-colored bar so messages scroll cleanly underneath it. */
+  background: var(--color-background);
 }
 
 .head-text {
