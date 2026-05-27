@@ -65,7 +65,7 @@ async def _prepare_turn(
         db.flush()
 
     session = db.get(SessionModel, req.session_id)
-    if session is None:
+    if session is None or session.user_id != user_id:
         raise HTTPException(status_code=404, detail="session not found")
 
     history = db.execute(
