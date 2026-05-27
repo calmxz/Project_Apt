@@ -352,7 +352,14 @@ function goHome() {
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1.25rem;
+}
+
+/* Scoped in-session pull-up: trim the BackButton's bottom margin so the
+   conversation starts higher. Global .page-inner top padding is left
+   untouched (it governs every route) — this only tightens within SessionView. */
+.session :deep(.back-btn) {
+  margin-bottom: 0.25rem;
 }
 
 .folio {
@@ -382,7 +389,7 @@ function goHome() {
   min-height: clamp(10rem, 32vh, 18rem);
   max-height: calc(100vh - 22rem);
   overflow-y: auto;
-  padding: 0.75rem 0.25rem 1rem 0;
+  padding: 0.5rem 0.25rem;
   scroll-behavior: smooth;
   scrollbar-width: thin;
   scrollbar-color: var(--color-border-strong) transparent;
