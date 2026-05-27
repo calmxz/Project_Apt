@@ -91,11 +91,11 @@ defineProps({
 }
 
 .msg.assistant .content {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+  border: none;
   padding: 0.875rem 1.125rem;
   border-radius: var(--radius-sm) var(--radius-lg) var(--radius-lg) var(--radius-lg);
-  box-shadow: var(--shadow-paper);
+  box-shadow: none;
 }
 
 .tool-call-row {
