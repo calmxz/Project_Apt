@@ -395,11 +395,16 @@ function goHome() {
   justify-content: flex-start;
 }
 
-.messages::-webkit-scrollbar { width: 6px; }
+.messages::-webkit-scrollbar { width: 8px; }
+.messages::-webkit-scrollbar-button { display: none; height: 0; width: 0; }
+.messages::-webkit-scrollbar-track { background: transparent; }
 .messages::-webkit-scrollbar-thumb {
   background: var(--color-border-strong);
-  border-radius: 3px;
+  border-radius: var(--radius-pill);
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
+.messages::-webkit-scrollbar-thumb:hover { background: var(--color-text-faint); }
 
 /* Banners */
 .error-banner {
