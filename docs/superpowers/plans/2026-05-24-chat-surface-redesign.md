@@ -14,11 +14,11 @@
 
 ---
 
-## Execution Progress (live status — updated 2026-05-25)
+## Execution Progress (live status — updated 2026-05-26)
 
 **Mode:** Hybrid. Phase 1 ran inline; Phase 2 + 3 run subagent-driven (`superpowers:subagent-driven-development`).
 
-### Phase 1 (PR 1) — COMPLETE (Tasks 0-8), awaiting human merge of PR1
+### Phase 1 (PR 1) — COMPLETE + MERGED to `dev` (PR #19)
 Tasks 0-8 implemented, TDD-tested, committed, pushed to `feat/chat-surface-redesign` (8 commits on base `dev`@cf25f03). Verification: frontend **197 tests pass** (28 files), `vite build` clean, `npm audit` **0 vulns**, backend **163 pass / 4 skip** (untouched — no backend changes in PR1).
 
 **Task 9 (PR):** user is opening + merging PR1 via GitHub web. PR body saved at `.superpowers/pr-body-phase1.md`. Compare base `dev` ← `feat/chat-surface-redesign`.
@@ -30,8 +30,8 @@ Commits: `b2dc911` deps · `8159e56` stream-buffer · `129ab64` MarkdownContent 
 2. **`Citation` contract is `{doc_id, text}`** (no `page`/`doc_name`; `extra="forbid"`). `CitationsList.vue` hardened to tolerate absence. **Task 14 MUST add `page` + `doc_name`** to the Citation schema (edit `docs/api/openapi.yaml` then `python backend/scripts/gen_contracts.py`) and propagate them in `TutorAgent` citation construction. Spec (source of truth) requires page-numbered citations.
 3. **Test assertions:** avoid trailing-space `toContain(...)` (`@vue/test-utils` `.html()` runs js-beautify, trims trailing whitespace) and the `<pre><code>` adjacency regex (Task 4 fence override inserts a `<div class="code-block-header">` between them).
 
-### Phase 2 (PR 2) — COMPLETE (Tasks 10-18), awaiting human merge of PR2
-Tasks 10-18 implemented subagent-driven, committed, pushed to `feat/chat-surface-redesign`. Verification: backend **186 passed / 4 skip**, frontend **217 passed** (30 files). Task 19 (PR2) opened against `dev`.
+### Phase 2 (PR 2) — COMPLETE + MERGED to `dev` (PR #20, merge `df5532f`)
+Tasks 10-18 implemented subagent-driven, committed, pushed. Verification: backend **186 passed / 4 skip**, frontend **217 passed** (30 files). PR2 (`feat/chat-surface-redesign` → `dev`) merged 2026-05-26; `dev` then merged back into the feature branch — **branch is already in sync, ready for Phase 3** (no further git-sync needed at Phase 3 start unless `dev` advances again).
 
 Commits: `8226dbb`/`636a525` messages.status migration · `5f577e2`/`068b2fd` cost estimator · `f52e35e`/`b1b2b54` run_streaming (+resume-parity) · `0ed2f46` /chat/stream route · `cd2932f` Citation page+doc_name + x-sse-events · `4dfce9a` SSE parser · `7cdd633` chatStreamService · `b10d2e5` Pinia stream state · `2e58b26` VITE_CHAT_STREAM flag.
 
@@ -45,8 +45,25 @@ Commits: `8226dbb`/`636a525` messages.status migration · `5f577e2`/`068b2fd` co
 7. **`Citation` now has optional `page` + `doc_name`** (deviation #2 done): `page` flows from chunks; `doc_name` via a `Document.filename` join added to `pgvector_store.query_chunks`. Contract regenerated (`gen_contracts.py`), zero drift.
 8. **Frontend auth/services:** auth store exposes computed `accessToken` (from `session.access_token`) — NO `auth.token`. Services use `BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'` and LOWERCASE header keys; non-ok → `ApiError(status, body, path)` from `apiClient.js`. In `SessionView.vue` the store var is `store`; the session store is a Pinia setup store.
 
-### Phase 3 (PR 3) — NOT STARTED. **<<< RESUME HERE after PR2 merges to `dev` >>>**
-Tasks 20-31, subagent-driven. Resume: open a session, say "start Phase 3 of the chat redesign plan, subagent-driven". Orchestrator: `git checkout dev && git pull --ff-only origin dev && git checkout feat/chat-surface-redesign && git merge dev`, rebuild task list for 20-31, dispatch a fresh subagent per task with task text passed INLINE (do NOT have subagents read this plan). Reconcile each plan snippet against the real code first (see deviations above — the plan text is frequently wrong about names/shape). Final task (31) runs `superpowers:finishing-a-development-branch`.
+### Phase 3 (PR 3) — COMPLETE (subagent-driven). PR to `dev` pending (open manually; `gh` unauthed).
+Tasks 20-31 implemented subagent-driven on 2026-05-27, commit range `87e1d47..HEAD` (13 commits). Each task: fresh implementer subagent (task text inline) -> spec-compliance review -> code-quality review, reconciling every plan snippet against the real code. Verification: frontend **284 tests pass** (38 files), `npm run lint` clean (oxlint + eslint), `vite build` succeeds. Backend untouched (frontend-only phase). SessionView shrank ~1300 -> ~350 lines as a shell composing 7 new `components/chat/` components: `ChatHeader`, `CapBanners`, `EmptyState` (begin + archived variants), `UploadStatus`, `Composer` (Send<->Stop swap), `UserBubble`, `AssistantBubble` (unified regular+streaming + cancelled marker), `MessageList` (TransitionGroup + typing + streaming bubble). Stop button wired to `store.stopStream()`; `VITE_CHAT_STREAM` default flipped to true (SSE is now the default chat path).
+
+**Plan-vs-reality deviations applied in Phase 3 (the plan snippets were heavily simplified; real code preserved):**
+1. **`draft` stays in SessionView**, passed to `Composer` via `v-model` (`modelValue`/`update:modelValue`) — quick-prompts and retry mutate it from outside, so it could not move into the composer. `Composer` exposes `focus()` via `defineExpose`; SessionView's `focusComposer` calls it.
+2. **Composer preserves real UX:** plain-Enter sends / Shift+Enter newline (NOT the plan's Cmd/Ctrl+Enter), char counter, `autoResize`, attach button + PrimeVue spinners. `onUploadFile(ev)` was refactored to `onAttachFile(file)` (Composer extracts the File and emits `attach`).
+3. **Stop button:** shows when `store.streamState !== 'idle'` (4 states: idle/streaming/tool_running/stopping), disabled while `stopping`, emits `stop` -> `store.stopStream`. JSON mode never leaves `idle`, so Stop never appears there.
+4. **EmptyState quick-prompts FILL the draft** (`useQuickPrompt`), they do not auto-send (a unit test asserts no-send). Two variants via an `archived` prop.
+5. **UploadStatus** prop shape is the real local `{ kind, text }` (kind: pending|ready|failed) — there is NO upload store; polling stays in SessionView.
+6. **AssistantBubble** is one component for both regular and streaming: dynamic `data-testid` (`msg-assistant` vs `msg-streaming`), `:state="tc.state || 'done'"` unifies stored vs live tool calls.
+7. **MessageList** keeps the avatar SVG + `TransitionGroup` + bespoke typing indicator (driven by an `awaiting` prop = SessionView's `awaitingResponse`, NOT the plan's `streamState`).
+8. **Scoped-CSS fix:** SessionView's `.messages:has(.empty)` would break cross-scope once `.empty` moved into a child, so it was replaced by `:class="{ 'is-empty': !store.messages.length }"` + `.messages.is-empty`.
+9. **Flag-flip test handling:** `SessionView` uses `VITE_CHAT_STREAM !== 'false'` (default on); `vitest.config.js` pins `env: { VITE_CHAT_STREAM: 'false' }` so send-flow unit tests stay deterministic on the JSON path (streaming covered by store/chatStreamService tests + the `msg-streaming` render test).
+10. **`eslint.config.js`** has a one-file override disabling `vue/multi-word-component-names` for the (plan-specified single-word) `Composer.vue`.
+
+**Outstanding (not blockers for the PR):**
+- Manual smoke + visual-token walk-through (Task 29 step 1) — deferred to a human pass, matching the Phase 5/7 manual-smoke pattern. `aura-tokens.css` left as-is (component CSS preserved verbatim, no regression).
+- `e2e/chat-stream.spec.js` is `test.describe.skip`'d like its siblings, pending the Phase 8 auth-seeding harness.
+- **Pre-existing bug (NOT introduced by Phase 3, NOT fixed here):** `useToast()` does not export `showInfo`, but `SessionView.onCostWarning()` calls it — a `cost-warning` event throws `TypeError: showInfo is not a function`. Hidden by tests that mock `useToast` with `showInfo`. File as a separate issue / fix on a branch off `dev`.
 
 ---
 

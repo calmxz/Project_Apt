@@ -4,6 +4,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 import SessionView from '@/views/SessionView.vue'
+import ChatHeader from '@/components/chat/ChatHeader.vue'
 import { useSessionStore } from '@/stores/session.js'
 
 const push = vi.fn()
@@ -42,11 +43,6 @@ const stubs = {
     emits: ['update:visible'],
     template:
       '<div v-if="visible" data-testid="dialog"><slot /><slot name="footer" /></div>',
-  },
-  Textarea: {
-    props: ['modelValue', 'disabled'],
-    template:
-      '<textarea :value="modelValue" :disabled="disabled" @input="$emit(\'update:modelValue\', $event.target.value)" @keydown="$emit(\'keydown\', $event)" />',
   },
   RouterLink: { template: '<a><slot /></a>' },
 }
@@ -96,6 +92,11 @@ describe('SessionView', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('Calculus')
     expect(wrapper.find('[data-testid="session-input"]').exists()).toBe(true)
+    // Header content is now delegated to ChatHeader
+    const header = wrapper.findComponent(ChatHeader)
+    expect(header.exists()).toBe(true)
+    expect(header.props('id')).toBe('s1')
+    expect(header.props('session')).toMatchObject({ topic: 'Calculus' })
   })
 
   it('send dispatches sendMessage and clears draft', async () => {
@@ -185,12 +186,15 @@ describe('SessionView', () => {
     vi.spyOn(store, 'loadSession').mockImplementation(async () => {
       setupSession()
     })
+    const sendSpy = vi.spyOn(store, 'sendMessage').mockResolvedValue()
     const wrapper = mountView()
     await flushPromises()
     await wrapper.get('[data-testid="quick-prompt-0"]').trigger('click')
     expect(wrapper.get('[data-testid="session-input"]').element.value).toBe(
       'Where should I start with this topic?',
     )
+    // Quick prompts fill the composer; they must not auto-send.
+    expect(sendSpy).not.toHaveBeenCalled()
   })
 
   it('ended session hides composer and shows banner', async () => {

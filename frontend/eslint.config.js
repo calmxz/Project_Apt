@@ -42,5 +42,11 @@ export default defineConfig([
 
   ...pluginOxlint.buildFromOxlintConfigFile('.oxlintrc.json'),
 
+  // Single-word component names that are intentional (design-specified filenames).
+  {
+    files: ['src/components/chat/Composer.vue'],
+    rules: { 'vue/multi-word-component-names': 'off' },
+  },
+
   skipFormatting,
 ])
