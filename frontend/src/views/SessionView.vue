@@ -128,7 +128,9 @@ const props = defineProps({ id: { type: String, required: true } })
 const router = useRouter()
 const store = useSessionStore()
 
-const streamEnabled = import.meta.env.VITE_CHAT_STREAM === 'true'
+// Streaming (SSE) is the default chat path. Set VITE_CHAT_STREAM=false to fall
+// back to the JSON POST /api/chat endpoint.
+const streamEnabled = import.meta.env.VITE_CHAT_STREAM !== 'false'
 
 const draft = ref('')
 const lastSentText = ref('')
