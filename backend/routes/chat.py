@@ -198,7 +198,8 @@ async def chat_stream(
                 task.cancel()
                 try:
                     await task
-                except BaseException:
+                except (asyncio.CancelledError, Exception):
+                    # Producer cancelled or errored during disconnect cleanup; suppress.
                     pass
 
     return StreamingResponse(

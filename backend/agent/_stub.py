@@ -12,7 +12,7 @@ import hashlib
 import re
 
 
-_SUMMARY_LINE = re.compile(r"^LAST_SESSION_SUMMARY:\s*(.*)$", re.MULTILINE)
+_SUMMARY_LINE = re.compile(r"^LAST_SESSION_SUMMARY:(.*)$", re.MULTILINE)
 
 
 def _last_user_message(messages: list[dict]) -> str:
