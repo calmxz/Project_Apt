@@ -358,6 +358,12 @@ function goHome() {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
+  /* Fill the viewport below the navbar so the composer sits at the bottom edge
+     even on short conversations. .messages (flex: 1) absorbs the slack; the
+     sticky composer then pins on long, scrolling conversations. The clamp
+     mirrors .page-inner's top padding; padding-bottom is canceled by the
+     negative margin above, so the math nets to one viewport. */
+  min-height: calc(100dvh - var(--topnav-h) - clamp(2rem, 6vw, 4.5rem));
 }
 
 /* Scoped in-session pull-up: trim the BackButton's bottom margin so the
@@ -391,6 +397,9 @@ function goHome() {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  /* Grow to fill the session column so the composer is pushed to the bottom
+     edge on short conversations; min-height is the empty-state floor. */
+  flex: 1 1 auto;
   min-height: clamp(10rem, 32vh, 18rem);
   padding: 0.5rem 0.25rem;
 }
