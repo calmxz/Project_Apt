@@ -4,7 +4,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 import SessionView from '@/views/SessionView.vue'
-import ChatHeader from '@/components/chat/ChatHeader.vue'
+import SessionHeader from '@/components/chat/SessionHeader.vue'
 import { useSessionStore } from '@/stores/session.js'
 
 const push = vi.fn()
@@ -26,9 +26,6 @@ vi.mock('@/services/uploadApi.js', () => ({
 }))
 
 const stubs = {
-  // ChatHeader is teleported to the navbar slot; stub Teleport so its content
-  // renders inline within the wrapper and remains queryable.
-  teleport: true,
   BackButton: { template: '<button data-testid="back" />' },
   SessionEndedBanner: {
     props: ['endedAt', 'loading'],
@@ -95,11 +92,11 @@ describe('SessionView', () => {
     await flushPromises()
     expect(wrapper.text()).toContain('Calculus')
     expect(wrapper.find('[data-testid="session-input"]').exists()).toBe(true)
-    // Header content is now delegated to ChatHeader
-    const header = wrapper.findComponent(ChatHeader)
+    // Header renders inline (no teleport); topic comes from props
+    const header = wrapper.findComponent(SessionHeader)
     expect(header.exists()).toBe(true)
-    expect(header.props('id')).toBe('s1')
-    expect(header.props('session')).toMatchObject({ topic: 'Calculus' })
+    expect(header.props('topic')).toBe('Calculus')
+    expect(wrapper.find('[data-testid="session-header"]').exists()).toBe(true)
   })
 
   it('send dispatches sendMessage and clears draft', async () => {
@@ -211,21 +208,38 @@ describe('SessionView', () => {
     expect(wrapper.find('[data-testid="session-input"]').exists()).toBe(false)
   })
 
-  it('end click opens summary dialog with returned text', async () => {
+  it('opens summary dialog when store.pendingSummary targets this session', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'loadSession').mockImplementation(async () => {
       setupSession()
     })
-    vi.spyOn(store, 'endSession').mockResolvedValue({
-      summary: { kind: 'summary', text: 'Great progress on derivatives.' },
-    })
     const wrapper = mountView()
     await flushPromises()
-    await wrapper.get('[data-testid="session-end"]').trigger('click')
+    // Simulate the End trigger originating from the sidebar row menu —
+    // it lands in pendingSummary and SessionView consumes it.
+    store.pendingSummary = {
+      sessionId: 's1',
+      kind: 'summary',
+      text: 'Great progress on derivatives.',
+    }
     await flushPromises()
     expect(wrapper.get('[data-testid="session-summary-summary"]').text()).toContain(
       'Great progress on derivatives.',
     )
+    expect(store.pendingSummary).toBe(null)
+  })
+
+  it('ignores pendingSummary targeting a different session', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession()
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    store.pendingSummary = { sessionId: 'other', kind: 'summary', text: 'x' }
+    await flushPromises()
+    expect(wrapper.find('[data-testid="session-summary-summary"]').exists()).toBe(false)
+    expect(store.pendingSummary).not.toBe(null)
   })
 
   it('summary close routes home', async () => {
@@ -233,12 +247,9 @@ describe('SessionView', () => {
     vi.spyOn(store, 'loadSession').mockImplementation(async () => {
       setupSession()
     })
-    vi.spyOn(store, 'endSession').mockResolvedValue({
-      summary: { kind: 'summary', text: 'done' },
-    })
     const wrapper = mountView()
     await flushPromises()
-    await wrapper.get('[data-testid="session-end"]').trigger('click')
+    store.pendingSummary = { sessionId: 's1', kind: 'summary', text: 'done' }
     await flushPromises()
     await wrapper.get('[data-testid="session-summary-close"]').trigger('click')
     expect(push).toHaveBeenCalledWith({ name: 'home' })

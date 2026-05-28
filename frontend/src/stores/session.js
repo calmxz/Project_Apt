@@ -21,6 +21,10 @@ export const useSessionStore = defineStore('session', () => {
   const dailyCapReached = computed(() => dailyCapInfo.value !== null)
   const costCapInfo = ref(null) // { used_usd, soft_cap_usd, hard_cap_usd, resets_at }
   const costCapReached = computed(() => costCapInfo.value !== null)
+  // Set by endSession so an open SessionView can show its closing summary
+  // dialog regardless of *where* the End action was triggered (sidebar row
+  // menu, future shortcuts, etc.). SessionView consumes and clears it.
+  const pendingSummary = ref(null) // { sessionId, kind, text } | null
 
   function _setError(e) {
     error.value = friendlyError(e)
@@ -156,12 +160,26 @@ export const useSessionStore = defineStore('session', () => {
       }
       const idx = sessions.value.findIndex((s) => s.id === id)
       if (idx !== -1) sessions.value[idx].ended_at = resp.ended_at
+      const summary = resp?.summary
+      pendingSummary.value = {
+        sessionId: id,
+        kind: summary?.kind || 'summary',
+        text:
+          summary?.text ||
+          (summary?.kind === 'no_exchanges'
+            ? 'This session ended without any exchanges. Start a new session to continue.'
+            : 'Session ended.'),
+      }
       return resp
     } catch (e) {
       _setError(e)
     } finally {
       loading.value = false
     }
+  }
+
+  function consumePendingSummary() {
+    pendingSummary.value = null
   }
 
   async function reopenSession(sessionId) {
@@ -280,6 +298,7 @@ export const useSessionStore = defineStore('session', () => {
     error.value = null
     dailyCapInfo.value = null
     costCapInfo.value = null
+    pendingSummary.value = null
     streamingMessage.value = null
     streamState.value = 'idle'
     abortController.value = null
@@ -296,6 +315,8 @@ export const useSessionStore = defineStore('session', () => {
     dailyCapInfo,
     costCapReached,
     costCapInfo,
+    pendingSummary,
+    consumePendingSummary,
     streamingMessage,
     streamState,
     abortController,
