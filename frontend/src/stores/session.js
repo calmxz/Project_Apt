@@ -139,21 +139,22 @@ export const useSessionStore = defineStore('session', () => {
     costCapInfo.value = null
   }
 
-  async function endSession() {
-    if (!currentSessionId.value) throw new Error('no active session')
+  async function endSession(sessionId) {
+    const id = sessionId || currentSessionId.value
+    if (!id) throw new Error('no active session')
     loading.value = true
     error.value = null
     try {
-      const resp = await sessionsApi.endSession(currentSessionId.value)
+      const resp = await sessionsApi.endSession(id)
       const summaryText = resp?.summary?.text ?? ''
-      if (currentSession.value) {
+      if (currentSession.value && currentSession.value.id === id) {
         currentSession.value.ended_at = resp.ended_at
         currentSession.value.topic_profile = {
           ...currentSession.value.topic_profile,
           last_session_summary: summaryText,
         }
       }
-      const idx = sessions.value.findIndex((s) => s.id === currentSessionId.value)
+      const idx = sessions.value.findIndex((s) => s.id === id)
       if (idx !== -1) sessions.value[idx].ended_at = resp.ended_at
       return resp
     } catch (e) {

@@ -1,19 +1,75 @@
 <script setup>
-import { computed } from 'vue'
-import { RouterLink, useRouter } from 'vue-router'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useSidebar } from '@/composables/useSidebar.js'
 import { useTheme } from '@/composables/useTheme.js'
 import { useAuthStore } from '@/stores/auth.js'
+import { useSessionStore } from '@/stores/session.js'
 import { useToast } from '@/composables/useToast.js'
 import Logo from '@/components/Logo.vue'
+import SidebarSessionRow from './SidebarSessionRow.vue'
+import SidebarSkeletonList from './SidebarSkeletonList.vue'
 
 const { mode, isDesktop, toggleDesktop, closeDrawer } = useSidebar()
 const { isDark, toggle: toggleTheme } = useTheme()
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 const { isAuthenticated } = storeToRefs(authStore)
+const sessionStore = useSessionStore()
+const { sessions, loading } = storeToRefs(sessionStore)
 const { showError } = useToast()
+
+const listEl = ref(null)
+const endedOpen = ref(true)
+
+const activeSessions = computed(() =>
+  sessions.value.filter((s) => !s.ended_at),
+)
+
+const endedSessions = computed(() =>
+  sessions.value.filter((s) => Boolean(s.ended_at)),
+)
+
+const showSkeleton = computed(() => loading.value && !sessions.value.length)
+
+const showEmptyHint = computed(
+  () => !loading.value && !activeSessions.value.length && !endedSessions.value.length,
+)
+
+// Fetch only if we haven't loaded yet. HomeView also calls listSessions on mount;
+// shared Pinia store means second call refetches (and that's fine — it'll be
+// fresh data), but skipping when populated avoids the deep-link redundant fetch.
+onMounted(async () => {
+  if (isAuthenticated.value && !sessions.value.length) {
+    await sessionStore.listSessions().catch(() => {})
+  }
+})
+
+// Auto-collapse Ended section when there are many ended sessions, default open
+// when there are few. Per spec: collapsed if > 5, open if ≤ 5.
+watch(
+  endedSessions,
+  (rows) => {
+    if (rows.length > 5) endedOpen.value = false
+    else endedOpen.value = true
+  },
+  { immediate: true },
+)
+
+// Scroll the active session row into view on route change.
+watch(
+  () => route.params.id,
+  async () => {
+    await nextTick()
+    if (!listEl.value) return
+    const target = listEl.value.querySelector(
+      `[data-session-id="${route.params.id}"]`,
+    )
+    target?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  },
+)
 
 const isExpanded = computed(() => mode.value === 'expanded' || mode.value === 'drawer-open')
 const showCollapseToggle = computed(() => isDesktop.value)
@@ -89,11 +145,78 @@ function onNewSession() {
       </button>
     </div>
 
-    <nav class="sb-list-wrap" aria-label="Sessions">
-      <!-- S2 fills in: SidebarSessionRow list + sections + skeleton + empty hint -->
-      <slot name="list">
-        <div v-if="isExpanded" class="sb-empty-placeholder" aria-hidden="true" />
-      </slot>
+    <nav ref="listEl" class="sb-list-wrap" aria-label="Sessions">
+      <template v-if="isExpanded">
+        <section class="sb-section sb-section--active" data-testid="sidebar-section-active">
+          <h3 class="sb-section-label label">
+            Active
+            <span v-if="!showSkeleton" class="sb-section-count">({{ activeSessions.length }})</span>
+          </h3>
+          <SidebarSkeletonList v-if="showSkeleton" :count="3" />
+          <ul v-else-if="activeSessions.length" class="sb-session-list">
+            <SidebarSessionRow
+              v-for="s in activeSessions"
+              :key="s.id"
+              :session="s"
+              state="active"
+            />
+          </ul>
+          <p
+            v-else-if="showEmptyHint"
+            class="sb-empty-hint"
+            data-testid="sidebar-empty-hint"
+          >
+            No sessions yet. Click + New session above.
+          </p>
+        </section>
+
+        <section
+          v-if="endedSessions.length"
+          class="sb-section sb-section--ended"
+          data-testid="sidebar-section-ended"
+        >
+          <button
+            type="button"
+            class="sb-section-toggle label"
+            :aria-expanded="endedOpen"
+            aria-controls="sb-ended-list"
+            data-testid="sidebar-ended-toggle"
+            @click="endedOpen = !endedOpen"
+          >
+            <span>
+              Ended <span class="sb-section-count">({{ endedSessions.length }})</span>
+            </span>
+            <i
+              :class="endedOpen ? 'pi pi-chevron-down' : 'pi pi-chevron-right'"
+              aria-hidden="true"
+            />
+          </button>
+          <ul
+            v-show="endedOpen"
+            id="sb-ended-list"
+            class="sb-session-list"
+          >
+            <SidebarSessionRow
+              v-for="s in endedSessions"
+              :key="s.id"
+              :session="s"
+              state="ended"
+            />
+          </ul>
+        </section>
+      </template>
+
+      <!-- Collapsed icon rail: compact row markers without sections -->
+      <template v-else>
+        <ul v-if="sessions.length" class="sb-session-list sb-session-list--collapsed">
+          <SidebarSessionRow
+            v-for="s in [...activeSessions, ...endedSessions]"
+            :key="s.id"
+            :session="s"
+            :state="s.ended_at ? 'ended' : 'active'"
+          />
+        </ul>
+      </template>
     </nav>
 
     <footer class="sb-rail" :class="{ 'sb-rail--column': !isExpanded }">
@@ -268,8 +391,71 @@ function onNewSession() {
   padding: 0.25rem 0.5rem;
 }
 
-.sb-empty-placeholder {
-  min-height: 4rem;
+.sb-section {
+  margin-bottom: 0.75rem;
+}
+
+.sb-section-label,
+.sb-section-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0.5rem 0.75rem 0.25rem;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  cursor: default;
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  font-weight: 600;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.sb-section-toggle {
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: color var(--motion-fast) ease, background var(--motion-fast) ease;
+}
+
+.sb-section-toggle:hover {
+  color: var(--color-text);
+}
+
+.sb-section-toggle:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+}
+
+.sb-section-count {
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-faint);
+  font-weight: 500;
+}
+
+.sb-session-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.sb-session-list--collapsed {
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.sb-empty-hint {
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  color: var(--color-text-muted);
+  padding: 0.5rem 0.75rem;
+  margin: 0;
+  line-height: 1.4;
 }
 
 .sb-rail {
