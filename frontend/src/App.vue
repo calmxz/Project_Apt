@@ -51,6 +51,7 @@ async function onSignOut() {
           to="/profile"
           class="icon-btn"
           aria-label="Combined profile"
+          title="Combined profile"
           data-testid="nav-profile"
         >
           <i class="pi pi-user" />
@@ -61,6 +62,7 @@ async function onSignOut() {
           role="switch"
           :aria-checked="isDark"
           :aria-label="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
+          :title="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
           :data-mode="isDark ? 'dark' : 'light'"
           @click="toggle"
         >
@@ -72,7 +74,7 @@ async function onSignOut() {
             <i class="pi pi-moon" />
           </span>
         </button>
-        <RouterLink to="/settings" class="icon-btn" aria-label="Settings">
+        <RouterLink to="/settings" class="icon-btn" aria-label="Settings" title="Settings">
           <i class="pi pi-cog" />
         </RouterLink>
         <button
@@ -80,6 +82,7 @@ async function onSignOut() {
           type="button"
           class="icon-btn"
           aria-label="Sign out"
+          title="Sign out"
           data-testid="nav-sign-out"
           @click="onSignOut"
         >

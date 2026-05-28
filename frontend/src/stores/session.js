@@ -4,6 +4,7 @@ import { defineStore } from 'pinia'
 import * as sessionsApi from '../services/sessionsApi.js'
 import { postChat } from '../services/chatApi.js'
 import { streamChat } from '../services/chatStreamService.js'
+import { friendlyError } from '../lib/errors.js'
 import {
   ERR_DAILY_CAP_REACHED,
   ERR_DAILY_COST_CAP_REACHED,
@@ -22,7 +23,7 @@ export const useSessionStore = defineStore('session', () => {
   const costCapReached = computed(() => costCapInfo.value !== null)
 
   function _setError(e) {
-    error.value = e instanceof Error ? e.message : String(e)
+    error.value = friendlyError(e)
     throw e
   }
 

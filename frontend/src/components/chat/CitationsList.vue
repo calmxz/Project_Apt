@@ -33,15 +33,15 @@ const grouped = computed(() => {
 <style scoped>
 .citations-list {
   border-top: 1px dashed var(--color-border);
-  margin-top: 10px;
-  padding-top: 8px;
-  font-size: 11px;
-  color: var(--color-text-muted, #888);
+  margin-top: 0.625rem;
+  padding-top: 0.5rem;
+  font-size: var(--fs-label);
+  color: var(--color-text-muted);
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 0.125rem;
 }
-.citation-doc { display: flex; gap: 8px; align-items: baseline; }
+.citation-doc { display: flex; gap: 0.5rem; align-items: baseline; }
 .citation-doc-name { font-weight: 600; }
-.citation-pages { display: inline-flex; gap: 6px; }
+.citation-pages { display: inline-flex; gap: 0.375rem; }
 </style>

@@ -61,7 +61,7 @@
     </div>
 
     <p v-if="store.loading" class="muted">Loading...</p>
-    <p v-else-if="store.error" class="error" data-testid="home-error">{{ store.error }}</p>
+    <p v-else-if="store.error" class="error" data-testid="home-error">{{ friendlyError(store.error) }}</p>
 
     <template v-else-if="tab === 'active'">
       <div
@@ -121,8 +121,8 @@
           :data-testid="`home-row-active-${s.id}`"
           :aria-label="rowLabel(s, 'active')"
         >
-          <div class="tile-glyph" :style="{ background: tileTint(s.topic) }">
-            <i :class="['pi', tileIcon(s.topic)]" aria-hidden="true" />
+          <div class="tile-glyph" :style="{ background: tileTint(s) }">
+            <i :class="['pi', tileIcon(s)]" aria-hidden="true" />
           </div>
           <div class="tile-body">
             <h3 class="tile-topic">{{ s.topic || 'Untitled' }}</h3>
@@ -160,7 +160,7 @@
             :aria-label="rowLabel(s, 'ended')"
           >
             <div class="tile-glyph tile-glyph-muted">
-              <i :class="['pi', tileIcon(s.topic)]" aria-hidden="true" />
+              <i :class="['pi', tileIcon(s)]" aria-hidden="true" />
             </div>
             <div class="tile-body">
               <h3 class="tile-topic">{{ s.topic || 'Untitled' }}</h3>
@@ -193,6 +193,7 @@ import { useRouter } from 'vue-router'
 
 import EmptyState from '../components/EmptyState.vue'
 
+import { friendlyError } from '../lib/errors.js'
 import * as sessionsApi from '../services/sessionsApi.js'
 import { useSessionStore } from '../stores/session.js'
 import {
@@ -267,11 +268,11 @@ function hashTopic(topic) {
   for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) | 0
   return Math.abs(h)
 }
-function tileIcon(topic) {
-  return ICONS[hashTopic(topic) % ICONS.length]
+function tileIcon(row) {
+  return ICONS[hashTopic(row?.id || row?.topic || '') % ICONS.length]
 }
-function tileTint(topic) {
-  return TINTS[hashTopic(topic) % TINTS.length]
+function tileTint(row) {
+  return TINTS[hashTopic(row?.id || row?.topic || '') % TINTS.length]
 }
 
 async function resume(row) {
@@ -303,7 +304,7 @@ async function cleanupDuplicates() {
 
 <style scoped>
 .home {
-  max-width: 64rem;
+  max-width: 72rem;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
@@ -469,6 +470,7 @@ async function cleanupDuplicates() {
 
 .tab-active .tab-count {
   background: rgba(255, 255, 255, 0.22);
+  color: var(--accent-coral-900);
 }
 
 /* Tile grid */
