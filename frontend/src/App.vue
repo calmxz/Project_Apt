@@ -1,19 +1,27 @@
 <script setup>
-import { onBeforeUnmount, onMounted } from 'vue'
-import { RouterLink, RouterView, useRouter } from 'vue-router'
+import { onBeforeUnmount, onMounted, watch } from 'vue'
+import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import Toast from 'primevue/toast'
 import { useTheme } from './composables/useTheme.js'
 import { useToast } from './composables/useToast.js'
+import { useSidebar } from './composables/useSidebar.js'
 import { errorBus } from './services/errorBus.js'
 import { useAuthStore } from './stores/auth.js'
 import Logo from './components/Logo.vue'
+import Sidebar from './components/sidebar/Sidebar.vue'
 
 const { isDark, toggle } = useTheme()
 const { showError } = useToast()
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
 const { isAuthenticated } = storeToRefs(authStore)
+const { closeDrawer } = useSidebar()
+
+// Close mobile drawer on every route change so tapping a session row
+// dismisses the overlay (mobile UX expectation).
+watch(() => route.fullPath, () => closeDrawer())
 
 // Skip 429 (daily-cap has dedicated banner+toast in SessionView) and 404
 // (consumers typically render "not found" inline; double-surfacing is noisy).
@@ -38,7 +46,10 @@ async function onSignOut() {
 </script>
 
 <template>
-  <header class="topnav">
+  <div class="shell">
+    <Sidebar />
+    <div class="shell-main">
+      <header class="topnav">
     <div class="topnav-inner">
       <RouterLink to="/" class="brand" aria-label="AdaptLearn home">
         <Logo size="md" variant="full" />
@@ -91,19 +102,35 @@ async function onSignOut() {
       </nav>
     </div>
   </header>
-  <main class="page">
-    <div class="page-inner">
-      <RouterView v-slot="{ Component }">
-        <transition name="fade" mode="out-in">
-          <component :is="Component" />
-        </transition>
-      </RouterView>
+      <main class="page">
+        <div class="page-inner">
+          <RouterView v-slot="{ Component }">
+            <transition name="fade" mode="out-in">
+              <component :is="Component" />
+            </transition>
+          </RouterView>
+        </div>
+      </main>
     </div>
-  </main>
+  </div>
   <Toast position="top-right" />
 </template>
 
 <style>
+.shell {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  min-height: 100vh;
+  align-items: stretch;
+}
+
+.shell-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 100vh;
+}
+
 .topnav {
   position: sticky;
   top: 0;

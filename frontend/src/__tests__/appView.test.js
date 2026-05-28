@@ -11,6 +11,7 @@ vi.mock('vue-router', () => ({
   RouterLink: { template: '<a><slot /></a>', props: ['to'] },
   RouterView: { template: '<div />' },
   useRouter: () => ({ push: routerPush }),
+  useRoute: () => ({ fullPath: '/' }),
 }))
 vi.mock('primevue/toast', () => ({
   default: { template: '<div data-testid="toast" />' },

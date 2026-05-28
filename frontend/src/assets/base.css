@@ -83,6 +83,11 @@
   --motion-fast:   140ms;
   --motion-base:   220ms;
 
+  /* Sidebar shell */
+  --sidebar-width-expanded:  16rem;
+  --sidebar-width-collapsed: 3rem;
+  --sidebar-mobile-strip-height: 3rem;
+
   /* Semantic colors — light */
   --color-background: var(--paper-100);
   --color-surface: var(--paper-50);
