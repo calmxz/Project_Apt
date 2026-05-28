@@ -1,4 +1,6 @@
 <script setup>
+defineOptions({ name: 'AppSidebar' })
+
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
@@ -92,9 +94,22 @@ function onNewSession() {
 </script>
 
 <template>
+  <Teleport to="body" :disabled="isDesktop">
+    <div
+      v-if="!isDesktop && mode === 'drawer-open'"
+      class="sb-backdrop"
+      data-testid="sidebar-backdrop"
+      @click="closeDrawer"
+    />
+  </Teleport>
   <aside
     class="sidebar"
-    :class="{ 'sidebar--expanded': isExpanded, 'sidebar--collapsed': !isExpanded }"
+    :class="{
+      'sidebar--expanded': isExpanded,
+      'sidebar--collapsed': !isExpanded && isDesktop,
+      'sidebar--drawer': !isDesktop,
+      'sidebar--drawer-open': !isDesktop && mode === 'drawer-open',
+    }"
     :data-mode="mode"
     aria-label="App navigation"
   >
@@ -287,6 +302,42 @@ function onNewSession() {
 
 .sidebar--collapsed {
   width: var(--sidebar-width-collapsed, 3rem);
+}
+
+/* Mobile drawer: fixed overlay that slides in from the left. The shell grid
+   column collapses to zero so the main column gets full width when the drawer
+   is closed. */
+.sidebar--drawer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: var(--sidebar-width-expanded, 16rem);
+  max-width: 85vw;
+  transform: translateX(-100%);
+  transition: transform var(--motion-base) ease;
+  box-shadow: var(--shadow-lift);
+}
+
+.sidebar--drawer-open {
+  transform: translateX(0);
+}
+
+/* Collapsed grid column when the drawer is closed on mobile. */
+.sidebar--drawer:not(.sidebar--drawer-open) {
+  pointer-events: none;
+}
+
+.sb-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 29;
+  background: rgba(0, 0, 0, 0.5);
+  animation: sb-fade-in var(--motion-fast) ease;
+}
+
+@keyframes sb-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .sb-header {
