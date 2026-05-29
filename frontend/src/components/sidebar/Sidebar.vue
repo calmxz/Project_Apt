@@ -1,7 +1,7 @@
 <script setup>
 defineOptions({ name: 'AppSidebar' })
 
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useSidebar } from '@/composables/useSidebar.js'
@@ -13,7 +13,7 @@ import Logo from '@/components/Logo.vue'
 import SidebarSessionRow from './SidebarSessionRow.vue'
 import SidebarSkeletonList from './SidebarSkeletonList.vue'
 
-const { mode, isDesktop, toggleDesktop, closeDrawer } = useSidebar()
+const { mode, isDesktop, drawerOpen, toggleDesktop, closeDrawer } = useSidebar()
 const { isDark, toggle: toggleTheme } = useTheme()
 const router = useRouter()
 const route = useRoute()
@@ -24,7 +24,66 @@ const { sessions, loading } = storeToRefs(sessionStore)
 const { showError } = useToast()
 
 const listEl = ref(null)
+const asideEl = ref(null)
 const endedOpen = ref(true)
+let lastFocused = null
+
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+function getFocusables() {
+  if (!asideEl.value) return []
+  return Array.from(asideEl.value.querySelectorAll(FOCUSABLE_SELECTOR)).filter(
+    (el) => !el.hasAttribute('disabled') && el.offsetParent !== null,
+  )
+}
+
+function onTrapKeydown(e) {
+  if (e.key === 'Escape') {
+    e.preventDefault()
+    closeDrawer()
+    return
+  }
+  if (e.key !== 'Tab') return
+  const focusables = getFocusables()
+  if (focusables.length === 0) {
+    e.preventDefault()
+    return
+  }
+  const first = focusables[0]
+  const last = focusables[focusables.length - 1]
+  const active = document.activeElement
+  if (e.shiftKey && (active === first || !asideEl.value?.contains(active))) {
+    e.preventDefault()
+    last.focus()
+  } else if (!e.shiftKey && active === last) {
+    e.preventDefault()
+    first.focus()
+  }
+}
+
+watch(drawerOpen, async (open) => {
+  if (typeof document === 'undefined') return
+  if (open && !isDesktop.value) {
+    lastFocused = document.activeElement
+    document.addEventListener('keydown', onTrapKeydown, true)
+    await nextTick()
+    const focusables = getFocusables()
+    focusables[0]?.focus()
+  } else {
+    document.removeEventListener('keydown', onTrapKeydown, true)
+    if (lastFocused && typeof lastFocused.focus === 'function') {
+      lastFocused.focus()
+    }
+    lastFocused = null
+  }
+})
+
+onBeforeUnmount(() => {
+  if (typeof document !== 'undefined') {
+    document.removeEventListener('keydown', onTrapKeydown, true)
+  }
+})
 
 const activeSessions = computed(() =>
   sessions.value.filter((s) => !s.ended_at),
@@ -103,6 +162,7 @@ function onNewSession() {
     />
   </Teleport>
   <aside
+    ref="asideEl"
     class="sidebar"
     :class="{
       'sidebar--expanded': isExpanded,

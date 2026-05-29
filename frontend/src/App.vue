@@ -13,10 +13,24 @@ const route = useRoute()
 const { isDesktop, closeDrawer } = useSidebar()
 
 const showShell = computed(() => route.meta?.sidebar !== false)
+const { drawerOpen } = useSidebar()
 
 // Close mobile drawer on every route change so tapping a session row
 // dismisses the overlay (mobile UX expectation).
 watch(() => route.fullPath, () => closeDrawer())
+
+// Lock body scroll while the mobile drawer is open so the user doesn't
+// scroll the page underneath the backdrop.
+watch(drawerOpen, (open) => {
+  if (typeof document === 'undefined') return
+  if (open) document.body.classList.add('sb-scroll-lock')
+  else document.body.classList.remove('sb-scroll-lock')
+})
+onBeforeUnmount(() => {
+  if (typeof document !== 'undefined') {
+    document.body.classList.remove('sb-scroll-lock')
+  }
+})
 
 // Skip 429 (daily-cap has dedicated banner+toast in SessionView) and 404
 // (consumers typically render "not found" inline; double-surfacing is noisy).
@@ -32,6 +46,9 @@ onBeforeUnmount(() => errorBus.removeEventListener('api-error', onApiError))
 
 <template>
   <div v-if="showShell" class="shell">
+    <a class="skip-link" href="#main-content" data-testid="skip-link">
+      Skip to main content
+    </a>
     <Sidebar />
     <div class="shell-main">
       <SidebarMobileTopStrip v-if="!isDesktop" />

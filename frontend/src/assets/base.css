@@ -242,6 +242,36 @@ button {
   border: 0;
 }
 
+/* Skip link — visible only on keyboard focus, jumps to <main id="main-content">. */
+.skip-link {
+  position: absolute;
+  left: 0.75rem;
+  top: -2.5rem;
+  z-index: 100;
+  padding: 0.5rem 0.875rem;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
+  color: #fff;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.875rem;
+  text-decoration: none;
+  transition: top var(--motion-fast) ease;
+}
+
+.skip-link:focus,
+.skip-link:focus-visible {
+  top: 0.75rem;
+  color: #fff;
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+}
+
+/* Lock body scroll while the mobile sidebar drawer is open. */
+body.sb-scroll-lock {
+  overflow: hidden;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
