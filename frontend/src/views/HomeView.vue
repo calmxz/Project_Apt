@@ -13,17 +13,6 @@
           </template>
         </p>
       </div>
-      <div class="head-cta">
-        <button
-          type="button"
-          class="cta-primary"
-          data-testid="home-new-session"
-          @click="goNew"
-        >
-          <span>New session</span>
-          <i class="pi pi-plus" aria-hidden="true" />
-        </button>
-      </div>
     </header>
 
     <p v-if="store.loading" class="muted">Loading...</p>
@@ -60,6 +49,58 @@
         </button>
       </div>
 
+      <section
+        v-if="store.sessions.length"
+        class="recent"
+        data-testid="home-recent"
+      >
+        <h2 class="recent-label">Recent activity</h2>
+        <ul class="recent-list">
+          <li
+            v-for="s in sortedRecent"
+            :key="s.id"
+            class="recent-row"
+            :data-testid="`home-recent-${s.id}`"
+          >
+            <div
+              class="recent-link"
+              role="button"
+              tabindex="0"
+              @click="openSession(s.id)"
+              @keydown.enter="openSession(s.id)"
+            >
+              <span
+                class="recent-dot"
+                :class="{ 'recent-dot-active': !s.ended_at }"
+                aria-hidden="true"
+              />
+              <div class="recent-body">
+                <div class="recent-head">
+                  <span class="recent-topic">{{ s.topic || 'untitled' }}</span>
+                  <span class="recent-when">{{ formatRelative(s.created_at) }}</span>
+                  <button
+                    v-if="s.ended_at"
+                    type="button"
+                    class="recent-continue"
+                    :data-testid="`home-continue-${s.id}`"
+                    @click.stop="continueSession(s.id)"
+                  >
+                    Continue
+                  </button>
+                </div>
+                <p
+                  class="recent-snippet"
+                  :class="{ 'recent-snippet-muted': !s.last_session_summary }"
+                >
+                  {{ s.last_session_summary || 'In progress — pick up where you left off.' }}
+                </p>
+              </div>
+              <i class="pi pi-arrow-right recent-arrow" aria-hidden="true" />
+            </div>
+          </li>
+        </ul>
+      </section>
+
       <EmptyState
         v-if="!store.sessions.length"
         data-testid="home-empty-active"
@@ -69,12 +110,29 @@
         subtext="Start your first one — the tutor adapts as you go."
       >
         <template #cta>
-          <button type="button" class="cta-primary" @click="goNew">
+          <button
+            type="button"
+            class="cta-primary"
+            data-testid="home-new-session"
+            @click="goNew"
+          >
             <span>Start your first session</span>
             <i class="pi pi-arrow-right" aria-hidden="true" />
           </button>
         </template>
       </EmptyState>
+
+      <div v-if="store.sessions.length" class="cta-center">
+        <button
+          type="button"
+          class="cta-primary"
+          data-testid="home-new-session"
+          @click="goNew"
+        >
+          <span>New session</span>
+          <i class="pi pi-plus" aria-hidden="true" />
+        </button>
+      </div>
     </template>
   </section>
 </template>
@@ -88,15 +146,22 @@ import EmptyState from '../components/EmptyState.vue'
 import { friendlyError } from '../lib/errors.js'
 import * as sessionsApi from '../services/sessionsApi.js'
 import { useSessionStore } from '../stores/session.js'
-import { normalizeTopicKey } from '../utils/formatDate.js'
+import { formatRelative, normalizeTopicKey } from '../utils/formatDate.js'
+import { getAggregateProfile } from '../services/profileApi.js'
 
 const router = useRouter()
 const store = useSessionStore()
 
 const cleaning = ref(false)
+const recentTopics = ref([])
 
 onMounted(async () => {
   await store.listSessions().catch(() => {})
+  await getAggregateProfile()
+    .then((d) => {
+      recentTopics.value = d?.recent_topics || []
+    })
+    .catch(() => {})
 })
 
 const activeSessions = computed(() =>
@@ -122,6 +187,23 @@ const duplicateActiveIds = computed(() => {
 })
 
 const duplicateCount = computed(() => duplicateActiveIds.value.length)
+
+const sortedRecent = computed(() =>
+  [...recentTopics.value].sort(
+    (a, b) =>
+      Number(a.ended_at != null) - Number(b.ended_at != null) ||
+      new Date(b.created_at) - new Date(a.created_at),
+  ),
+)
+
+function openSession(id) {
+  router.push({ name: 'session', params: { id } })
+}
+
+async function continueSession(id) {
+  await store.reopenSession(id)
+  router.push({ name: 'session', params: { id } })
+}
 
 function goNew() {
   router.push({ name: 'new-session' })
@@ -189,13 +271,6 @@ async function cleanupDuplicates() {
   color: var(--color-text-muted);
   max-width: 32rem;
   font-size: 1.0625rem;
-}
-
-.head-cta {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.625rem;
-  flex-wrap: wrap;
 }
 
 .cta-primary {
@@ -294,5 +369,157 @@ async function cleanupDuplicates() {
 .dupe-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* Recent activity feed */
+.recent {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+.recent-label {
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  font-weight: 600;
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.recent-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.recent-row {
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  transition: border-color var(--motion-fast) ease, transform var(--motion-fast) var(--motion-bounce);
+}
+
+.recent-row:hover {
+  border-color: var(--color-accent-soft);
+  transform: translateY(-1px);
+}
+
+.recent-link {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.875rem 1.125rem;
+  color: inherit;
+  cursor: pointer;
+}
+
+.recent-link:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+}
+
+.recent-dot {
+  margin-top: 0.4rem;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 999px;
+  border: 1.5px solid var(--color-border-strong);
+  flex-shrink: 0;
+}
+
+.recent-dot-active {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.recent-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.recent-head {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.recent-topic {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--color-heading);
+  letter-spacing: var(--tracking-tight);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recent-when {
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.recent-continue {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 0.3rem 0.75rem;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  border: 1px solid var(--color-accent-soft);
+  color: var(--color-accent);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: background var(--motion-fast) ease;
+}
+
+.recent-continue:hover {
+  background: var(--color-accent-soft);
+}
+
+.recent-snippet {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-text);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.recent-snippet-muted {
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.recent-arrow {
+  margin-top: 0.25rem;
+  color: var(--color-text-faint);
+  font-size: 0.9rem;
+  flex-shrink: 0;
+  transition: transform var(--motion-fast) var(--motion-bounce), color var(--motion-fast) ease;
+}
+
+.recent-row:hover .recent-arrow {
+  color: var(--color-accent);
+  transform: translateX(3px);
+}
+
+.cta-center {
+  display: flex;
+  justify-content: center;
+  padding-top: 0.5rem;
 }
 </style>
