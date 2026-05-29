@@ -27,6 +27,39 @@
 
 ---
 
+## Task 0: Branch setup
+
+Branch off `dev` (not the current `feat/sidebar-shell`) so this feature is independently reviewable and mergeable.
+
+- [ ] **Step 1: Fetch and branch from `dev`**
+
+```bash
+git fetch origin
+git switch -c feat/home-recent-feed origin/dev
+```
+
+Expected: new branch `feat/home-recent-feed` created from the latest `origin/dev`. If `origin/dev` is unavailable, fall back to local `dev`: `git switch -c feat/home-recent-feed dev`.
+
+- [ ] **Step 2: Carry the spec + plan docs onto the new branch**
+
+The spec and this plan were committed on `feat/sidebar-shell`, so they are absent from a branch cut off `dev`. Bring them over:
+
+```bash
+git checkout feat/sidebar-shell -- \
+  docs/superpowers/specs/2026-05-29-home-recent-activity-feed-design.md \
+  docs/superpowers/plans/2026-05-29-home-recent-activity-feed.md
+git commit -m "docs: bring home-recent-feed spec + plan onto feature branch"
+```
+
+Expected: both docs present on `feat/home-recent-feed`. (If they are already on `dev`, this step is a no-op — skip it.)
+
+- [ ] **Step 3: Confirm clean starting point**
+
+Run: `git status`
+Expected: on `feat/home-recent-feed`, working tree clean. All subsequent task commits land here.
+
+---
+
 ## Task 1: Contract — add `last_session_summary` to recent_topics
 
 **Files:**
