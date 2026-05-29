@@ -9,8 +9,9 @@ services:
   frontend:
     build:
       context: ./frontend
+    # Container serves on 8080 (nginx runs unprivileged); expose it on host 80.
     ports:
-      - "80:80"
+      - "80:8080"
     depends_on:
       backend:
         condition: service_healthy
