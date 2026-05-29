@@ -32,6 +32,10 @@ The feed is **not** a duplicate of the sidebar list because each row carries `la
 | 6 | Layout | Feed renders below the header; the `New session` CTA moves to a centered card **below the feed** (matches the sidebar-spec sketch). The feed is the page focus; the CTA closes the page. |
 | 7 | Empty state (zero sessions) | Existing `EmptyState` unchanged. No feed renders. |
 | 8 | Styling | Reuse the `.recent-*` row styles already proven in `AggregateProfileView.vue`. No new design tokens. |
+| 9 | Feed contains ended sessions | Yes. `recent_topics` mixes active + ended; both appear (ended is where summaries live). |
+| 10 | Feed order | **Active first, then ended**, each group newest-first. Requires a client-side re-sort of `recent_topics` (sort by `ended_at == null` desc, then `created_at` desc). |
+| 11 | Row body click | `router.push({ name: 'session', params: { id } })` for both active and ended rows. SessionView already renders an ended session read-only with its closing summary — no reopen on a plain click. |
+| 12 | Ended row Continue action | Ended rows show a small **Continue** button (alongside the row). Click → `store.reopenSession(id)` then navigate. Active rows do not show it (already active). This mirrors the sidebar row-menu Resume; two entry points is acceptable. `@click.stop` so it does not also fire the row-body navigation. |
 
 ## Layout
 
@@ -44,12 +48,12 @@ The feed is **not** a duplicate of the sidebar list because each row carries `la
 
   RECENT ACTIVITY
   ┌────────────────────────────────────────────────────────┐
-  │ ● Big-O notation                          2 days ago    │
+  │ ● Binary trees                            4 hours ago   │   ← active first
+  │   In progress — pick up where you left off.        →    │
+  ├────────────────────────────────────────────────────────┤
+  │ ○ Big-O notation              2 days ago  [Continue]    │   ← ended: Continue button
   │   Covered amortized analysis; gap found in              │
   │   logarithmic bounds.                              →    │
-  ├────────────────────────────────────────────────────────┤
-  │ ○ Binary trees                            4 hours ago   │
-  │   In progress — pick up where you left off.        →    │   ← active, no summary
   └────────────────────────────────────────────────────────┘
 
               ┌──────────────────────────────┐
@@ -58,6 +62,8 @@ The feed is **not** a duplicate of the sidebar list because each row carries `la
 ```
 
 Order in the template: header → dupe banner (gated) → recent-activity feed (when sessions exist) OR `EmptyState` (when zero sessions) → centered CTA card.
+
+Within the feed: active rows first (newest-first), then ended rows (newest-first). Active rows have no Continue button (already active); ended rows show one.
 
 ## Changes by layer
 
@@ -98,13 +104,14 @@ Extend `backend/tests/test_profile_aggregate.py::test_aggregate_event_count_and_
 ### 3. Frontend — `frontend/src/views/HomeView.vue`
 
 - On mount, call `getAggregateProfile()` (from `services/profileApi.js`). Keep the existing duplicate-detection logic — it still needs the session list; decide during implementation whether to keep `listSessions()` alongside or derive dupes differently. Simplest: keep both calls (`listSessions` for dupe logic, `getAggregateProfile` for the feed).
-- Add a "Recent activity" section (label uses existing `.label`/`folio` styling) rendering `recent_topics`. Each row:
+- Add a "Recent activity" section (label uses existing `.label`/`folio` styling) rendering `recent_topics`, **re-sorted active-first then ended** (decision #10): `[...recent].sort((a,b) => (Number(a.ended_at!=null) - Number(b.ended_at!=null)) || (new Date(b.created_at) - new Date(a.created_at)))`. Each row:
   - active/ended marker dot (`ended_at` null → active `●`, else `○`)
   - topic (display font, truncated)
   - `formatRelative(created_at)` — reuse existing util
   - `last_session_summary` clamped to 2 lines (`-webkit-line-clamp: 2`); when null/empty, render the muted fallback line from decision #5
   - trailing arrow
-  - click → `router.push({ name: 'session', params: { id } })` (confirm router name during implementation)
+  - **ended rows only**: a `Continue` button → `@click.stop` → `await store.reopenSession(id)` then `router.push({ name: 'session', params: { id } })` (decision #12)
+  - row-body click → `router.push({ name: 'session', params: { id } })` (confirm router name during implementation)
 - Move the `New session` CTA out of the header into a centered card below the feed.
 - Reuse `.recent-row` / `.recent-link` / `.recent-topic` / `.recent-when` / `.recent-arrow` styles from `AggregateProfileView.vue` (copy into `HomeView` scoped styles or lift to a shared component if duplication is meaningful).
 - `EmptyState` (zero sessions) unchanged.
@@ -113,8 +120,11 @@ Extend `backend/tests/test_profile_aggregate.py::test_aggregate_event_count_and_
 
 Add/adjust:
 - Feed renders one row per `recent_topics` entry.
+- Feed orders active rows before ended rows (active-first re-sort).
 - Row shows summary snippet when present; shows fallback copy when `last_session_summary` is null.
-- Clicking a row navigates to the session route.
+- Clicking a row body navigates to the session route.
+- Ended rows show a `Continue` button; active rows do not.
+- Clicking `Continue` calls `store.reopenSession(id)` then navigates (and does not double-fire the row-body navigation — `@click.stop`).
 - Zero sessions → no feed, `EmptyState` shown.
 - Keep existing: loading, error (friendlyError), dupe banner, cleanup, CTA navigates.
 - Mock `getAggregateProfile` in the test setup.
@@ -128,10 +138,11 @@ Add/adjust:
 
 ## Acceptance checks
 
-- Home with ≥1 ended session: feed shows that session with its summary snippet, newest first.
-- Home with only active sessions: feed shows rows with the "In progress" fallback line.
+- Home with ≥1 ended session: feed shows that session with its summary snippet; active rows sort above ended.
+- Home with only active sessions: feed shows rows with the "In progress" fallback line, no Continue button.
 - Home with zero sessions: no feed, `EmptyState` + first-session CTA only.
-- Clicking a feed row opens `/session/:id`.
+- Clicking a feed row body opens `/session/:id`.
+- Ended row Continue button reopens the session then opens it.
 - `New session` CTA sits centered below the feed and navigates to the new-session route.
 - `python backend/scripts/gen_contracts.py` produces no diff after the YAML edit (contracts in sync).
 - `pytest` (backend) and `npm run test:unit -- --run` (frontend) green.
