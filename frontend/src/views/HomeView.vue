@@ -50,7 +50,7 @@
       </div>
 
       <section
-        v-if="store.sessions.length"
+        v-if="sortedRecent.length"
         class="recent"
         data-testid="home-recent"
       >
@@ -157,6 +157,7 @@ const recentTopics = ref([])
 
 onMounted(async () => {
   await store.listSessions().catch(() => {})
+  // Feed degrades to empty if the aggregate fetch fails; listSessions errors surface via store.error.
   await getAggregateProfile()
     .then((d) => {
       recentTopics.value = d?.recent_topics || []
