@@ -289,6 +289,7 @@ class RecentSessionSummary(BaseModel):
     topic: str
     created_at: datetime
     ended_at: datetime | None = None
+    last_session_summary: str | None = None
 
 
 class AggregateProfileResponse(BaseModel):
