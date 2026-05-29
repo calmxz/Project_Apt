@@ -269,7 +269,10 @@ async def run_streaming(
                     model=settings.model, messages=full
                 )
             except Exception as e:
-                log.warning("token_counter failed: %s", e)
+                # litellm.token_counter is local tokenization (no API call); the
+                # exception carries no credential. The rule trips on "token" in
+                # the message, not on any logged secret.
+                log.warning("token_counter failed: %s", e)  # nosemgrep: python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure
 
             resp = await litellm.acompletion(
                 model=settings.model,
