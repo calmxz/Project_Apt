@@ -66,9 +66,9 @@
 
     <div class="composer-hints" :class="{ 'is-near-limit': nearCharLimit }">
       <span class="composer-hint">
-        <kbd>⏎</kbd> to send
-        <span class="composer-hint-sep">·</span>
-        <kbd>⇧</kbd>+<kbd>⏎</kbd> newline
+        <kbd aria-label="Enter"><span aria-hidden="true">⏎</span></kbd> to send
+        <span class="composer-hint-sep" aria-hidden="true">·</span>
+        <kbd aria-label="Shift"><span aria-hidden="true">⇧</span></kbd>+<kbd aria-label="Enter"><span aria-hidden="true">⏎</span></kbd> newline
       </span>
       <span v-if="modelValue.length" class="composer-count" aria-live="polite">
         {{ modelValue.length.toLocaleString() }} / {{ MAX_DRAFT_LEN.toLocaleString() }}

@@ -19,7 +19,7 @@ vi.mock('@/services/sessionsApi.js', () => ({
 const stubs = {
   EmptyState: {
     props: ['tone', 'eyebrow', 'headline', 'subtext'],
-    template: '<div><slot name="subtext" /><slot name="cta" /></div>',
+    template: '<div data-testid="empty-stub"><slot name="subtext" /><slot name="cta" /></div>',
   },
   RouterLink: { props: ['to'], template: '<a><slot /></a>' },
 }
@@ -67,41 +67,54 @@ describe('HomeView', () => {
     expect(wrapper.get('[data-testid="home-error"]').text()).toBe('list failed')
   })
 
-  it('empty active state when no sessions', () => {
-    vi.spyOn(useSessionStore(), 'listSessions').mockResolvedValue([])
-    const wrapper = mountView()
-    expect(wrapper.find('[data-testid="home-empty-active"]').exists()).toBe(true)
-  })
-
-  it('active tab renders one row per active session', async () => {
+  it('lede shows zero-session welcome when no sessions', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    store.sessions = [makeSession('a1', 'Calculus'), makeSession('a2', 'Algebra')]
     const wrapper = mountView()
     await flushPromises()
-    expect(wrapper.find('[data-testid="home-row-active-a1"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="home-row-active-a2"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="home-lede"]').text()).toContain(
+      'A study session is one conversation',
+    )
   })
 
-  it('switches to ended tab and renders ended rows', async () => {
-    const store = useSessionStore()
-    vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    store.sessions = [makeSession('e1', 'Old topic', true)]
-    const wrapper = mountView()
-    await flushPromises()
-    await wrapper.get('[data-testid="home-tab-ended"]').trigger('click')
-    expect(wrapper.find('[data-testid="home-row-ended-e1"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="home-resume-e1"]').exists()).toBe(true)
-  })
-
-  it('shows empty ended state when no ended sessions', async () => {
+  it('lede shows active count and points to sidebar when sessions exist', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'listSessions').mockResolvedValue([])
     store.sessions = [makeSession('a1', 'Calculus')]
     const wrapper = mountView()
     await flushPromises()
-    await wrapper.get('[data-testid="home-tab-ended"]').trigger('click')
-    expect(wrapper.find('[data-testid="home-empty-ended"]').exists()).toBe(true)
+    const lede = wrapper.get('[data-testid="home-lede"]').text()
+    expect(lede).toContain('1 active session')
+    expect(lede).toContain('Pick one from the sidebar')
+  })
+
+  it('lede pluralises when multiple active sessions', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'listSessions').mockResolvedValue([])
+    store.sessions = [
+      makeSession('a1', 'Calculus'),
+      makeSession('a2', 'Algebra'),
+    ]
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.get('[data-testid="home-lede"]').text()).toContain('2 active sessions')
+  })
+
+  it('empty state renders when zero sessions (active or ended)', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'listSessions').mockResolvedValue([])
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="home-empty-active"]').exists()).toBe(true)
+  })
+
+  it('empty state does not render when ended sessions exist', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'listSessions').mockResolvedValue([])
+    store.sessions = [makeSession('e1', 'Topic', true)]
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="home-empty-active"]').exists()).toBe(false)
   })
 
   it('new session button routes to new-session', async () => {
@@ -111,35 +124,6 @@ describe('HomeView', () => {
     await flushPromises()
     await wrapper.get('[data-testid="home-new-session"]').trigger('click')
     expect(push).toHaveBeenCalledWith({ name: 'new-session' })
-  })
-
-  it('resume invokes reopenSession then routes to session', async () => {
-    const store = useSessionStore()
-    vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    const reopenSpy = vi.spyOn(store, 'reopenSession').mockResolvedValue()
-    store.sessions = [makeSession('e1', 'Topic', true)]
-    const wrapper = mountView()
-    await flushPromises()
-    await wrapper.get('[data-testid="home-tab-ended"]').trigger('click')
-    await wrapper.get('[data-testid="home-resume-e1"]').trigger('click')
-    await flushPromises()
-    expect(reopenSpy).toHaveBeenCalledWith('e1')
-    expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'e1' } })
-  })
-
-  it('resume failure still clears resumingId state', async () => {
-    const store = useSessionStore()
-    vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    vi.spyOn(store, 'reopenSession').mockRejectedValue(new Error('boom'))
-    store.sessions = [makeSession('e1', 'Topic', true)]
-    const wrapper = mountView()
-    await flushPromises()
-    await wrapper.get('[data-testid="home-tab-ended"]').trigger('click')
-    await wrapper.get('[data-testid="home-resume-e1"]').trigger('click')
-    await flushPromises()
-    expect(push).not.toHaveBeenCalledWith({ name: 'session', params: { id: 'e1' } })
-    const resumeBtn = wrapper.get('[data-testid="home-resume-e1"]')
-    expect(resumeBtn.attributes('disabled')).toBeUndefined()
   })
 
   it('duplicate banner appears when two active sessions share topic', async () => {
@@ -187,5 +171,16 @@ describe('HomeView', () => {
     await wrapper.get('[data-testid="home-dupe-cleanup"]').trigger('click')
     await flushPromises()
     expect(setErrorSpy).toHaveBeenCalledWith('end failed')
+  })
+
+  it('does not render tile grid or tabs (sidebar owns the list now)', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'listSessions').mockResolvedValue([])
+    store.sessions = [makeSession('a1', 'Calculus')]
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="home-tabs"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="home-row-active-a1"]').exists()).toBe(false)
+    expect(wrapper.find('.tile-grid').exists()).toBe(false)
   })
 })

@@ -10,7 +10,7 @@ const router = createRouter({
       path: '/login',
       name: 'login',
       component: () => import('../views/LoginView.vue'),
-      meta: { public: true },
+      meta: { public: true, sidebar: false },
     },
     {
       path: '/',
@@ -21,6 +21,7 @@ const router = createRouter({
       path: '/onboarding',
       name: 'onboarding',
       component: () => import('../views/OnboardingView.vue'),
+      meta: { sidebar: false },
     },
     {
       path: '/settings',

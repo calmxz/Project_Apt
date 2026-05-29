@@ -4,6 +4,7 @@ import { defineStore } from 'pinia'
 import * as sessionsApi from '../services/sessionsApi.js'
 import { postChat } from '../services/chatApi.js'
 import { streamChat } from '../services/chatStreamService.js'
+import { friendlyError } from '../lib/errors.js'
 import {
   ERR_DAILY_CAP_REACHED,
   ERR_DAILY_COST_CAP_REACHED,
@@ -20,9 +21,13 @@ export const useSessionStore = defineStore('session', () => {
   const dailyCapReached = computed(() => dailyCapInfo.value !== null)
   const costCapInfo = ref(null) // { used_usd, soft_cap_usd, hard_cap_usd, resets_at }
   const costCapReached = computed(() => costCapInfo.value !== null)
+  // Set by endSession so an open SessionView can show its closing summary
+  // dialog regardless of *where* the End action was triggered (sidebar row
+  // menu, future shortcuts, etc.). SessionView consumes and clears it.
+  const pendingSummary = ref(null) // { sessionId, kind, text } | null
 
   function _setError(e) {
-    error.value = e instanceof Error ? e.message : String(e)
+    error.value = friendlyError(e)
     throw e
   }
 
@@ -138,28 +143,43 @@ export const useSessionStore = defineStore('session', () => {
     costCapInfo.value = null
   }
 
-  async function endSession() {
-    if (!currentSessionId.value) throw new Error('no active session')
+  async function endSession(sessionId) {
+    const id = sessionId || currentSessionId.value
+    if (!id) throw new Error('no active session')
     loading.value = true
     error.value = null
     try {
-      const resp = await sessionsApi.endSession(currentSessionId.value)
+      const resp = await sessionsApi.endSession(id)
       const summaryText = resp?.summary?.text ?? ''
-      if (currentSession.value) {
+      if (currentSession.value && currentSession.value.id === id) {
         currentSession.value.ended_at = resp.ended_at
         currentSession.value.topic_profile = {
           ...currentSession.value.topic_profile,
           last_session_summary: summaryText,
         }
       }
-      const idx = sessions.value.findIndex((s) => s.id === currentSessionId.value)
+      const idx = sessions.value.findIndex((s) => s.id === id)
       if (idx !== -1) sessions.value[idx].ended_at = resp.ended_at
+      const summary = resp?.summary
+      pendingSummary.value = {
+        sessionId: id,
+        kind: summary?.kind || 'summary',
+        text:
+          summary?.text ||
+          (summary?.kind === 'no_exchanges'
+            ? 'This session ended without any exchanges. Start a new session to continue.'
+            : 'Session ended.'),
+      }
       return resp
     } catch (e) {
       _setError(e)
     } finally {
       loading.value = false
     }
+  }
+
+  function consumePendingSummary() {
+    pendingSummary.value = null
   }
 
   async function reopenSession(sessionId) {
@@ -278,6 +298,7 @@ export const useSessionStore = defineStore('session', () => {
     error.value = null
     dailyCapInfo.value = null
     costCapInfo.value = null
+    pendingSummary.value = null
     streamingMessage.value = null
     streamState.value = 'idle'
     abortController.value = null
@@ -294,6 +315,8 @@ export const useSessionStore = defineStore('session', () => {
     dailyCapInfo,
     costCapReached,
     costCapInfo,
+    pendingSummary,
+    consumePendingSummary,
     streamingMessage,
     streamState,
     abortController,

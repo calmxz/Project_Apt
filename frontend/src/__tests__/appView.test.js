@@ -11,6 +11,7 @@ vi.mock('vue-router', () => ({
   RouterLink: { template: '<a><slot /></a>', props: ['to'] },
   RouterView: { template: '<div />' },
   useRouter: () => ({ push: routerPush }),
+  useRoute: () => ({ fullPath: '/', params: {} }),
 }))
 vi.mock('primevue/toast', () => ({
   default: { template: '<div data-testid="toast" />' },
@@ -85,7 +86,7 @@ describe('App.vue sign-out button', () => {
 
   it('hidden when unauthenticated', () => {
     wrapper = mount(App)
-    expect(wrapper.find('[data-testid="nav-sign-out"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="sidebar-sign-out"]').exists()).toBe(false)
   })
 
   it('visible when authenticated; click signs out and redirects to /login', async () => {
@@ -93,7 +94,7 @@ describe('App.vue sign-out button', () => {
     const auth = useAuthStore()
     auth.session = { user: { id: 'u-1' }, access_token: 't' }
     await flushPromises()
-    const btn = wrapper.find('[data-testid="nav-sign-out"]')
+    const btn = wrapper.find('[data-testid="sidebar-sign-out"]')
     expect(btn.exists()).toBe(true)
     await btn.trigger('click')
     await flushPromises()
@@ -109,7 +110,7 @@ describe('App.vue sign-out button', () => {
     const auth = useAuthStore()
     auth.session = { user: { id: 'u-1' }, access_token: 't' }
     await flushPromises()
-    await wrapper.find('[data-testid="nav-sign-out"]').trigger('click')
+    await wrapper.find('[data-testid="sidebar-sign-out"]').trigger('click')
     await flushPromises()
     expect(showError).toHaveBeenCalledWith('network down')
     expect(routerPush).not.toHaveBeenCalled()

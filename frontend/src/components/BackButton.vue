@@ -62,7 +62,7 @@ function onClick() {
 .back-btn:hover,
 .back-btn:focus-visible {
   color: var(--color-heading);
-  background: var(--color-surface);
+  background: var(--color-surface-soft);
   outline: none;
 }
 

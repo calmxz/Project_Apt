@@ -83,6 +83,11 @@
   --motion-fast:   140ms;
   --motion-base:   220ms;
 
+  /* Sidebar shell */
+  --sidebar-width-expanded:  16rem;
+  --sidebar-width-collapsed: 3rem;
+  --sidebar-mobile-strip-height: 3rem;
+
   /* Semantic colors — light */
   --color-background: var(--paper-100);
   --color-surface: var(--paper-50);
@@ -235,4 +240,45 @@ button {
   height: 1px;
   background: var(--color-border);
   border: 0;
+}
+
+/* Skip link — visible only on keyboard focus, jumps to <main id="main-content">. */
+.skip-link {
+  position: absolute;
+  left: 0.75rem;
+  top: -2.5rem;
+  z-index: 100;
+  padding: 0.5rem 0.875rem;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
+  color: #fff;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.875rem;
+  text-decoration: none;
+  transition: top var(--motion-fast) ease;
+}
+
+.skip-link:focus,
+.skip-link:focus-visible {
+  top: 0.75rem;
+  color: #fff;
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+}
+
+/* Lock body scroll while the mobile sidebar drawer is open. */
+body.sb-scroll-lock {
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

@@ -143,7 +143,7 @@ onMounted(load)
 
 <style scoped>
 .sprof {
-  max-width: 56rem;
+  max-width: 72rem;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
@@ -195,8 +195,11 @@ onMounted(load)
 
 .level-pill[data-level='beginner'] {
   background: rgba(91, 141, 239, 0.16);
-  color: var(--signal-info);
+  color: #2E5DC4;
   border-color: rgba(91, 141, 239, 0.3);
+}
+:root[data-theme='dark'] .level-pill[data-level='beginner'] {
+  color: #7AA3F5;
 }
 
 .level-pill[data-level='intermediate'] {
@@ -215,6 +218,7 @@ onMounted(load)
   color: var(--signal-success);
   border-color: rgba(34, 197, 94, 0.3);
 }
+:root:not([data-theme='dark']) .level-pill[data-level='advanced'] { color: #0E7A36; }
 
 .level-pill[data-level='unknown'] {
   background: var(--color-surface-soft);
@@ -330,10 +334,11 @@ onMounted(load)
   color: var(--signal-success);
   border-color: rgba(34, 197, 94, 0.3);
 }
+:root:not([data-theme='dark']) .chip-mastered { color: #0E7A36; }
 
 .chip-gap {
   background: rgba(255, 176, 32, 0.16);
-  color: #B5800F;
+  color: #8A5A00;
   border-color: rgba(255, 176, 32, 0.35);
 }
 :root[data-theme='dark'] .chip-gap { color: var(--signal-warning); }

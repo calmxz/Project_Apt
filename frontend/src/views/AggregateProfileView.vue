@@ -66,13 +66,18 @@
 
         <div class="dist" data-testid="agg-dist">
           <h2 class="section-title">Knowledge level distribution</h2>
-          <div class="dist-bar">
+          <div
+            class="dist-bar"
+            role="img"
+            :aria-label="distAriaLabel"
+          >
             <span
               v-for="key in levelKeys"
               :key="key"
               :class="['dist-seg', `seg-${key}`]"
               :style="{ flexGrow: data.knowledge_level_distribution[key] || 0 }"
               :title="`${key}: ${data.knowledge_level_distribution[key]}`"
+              aria-hidden="true"
             />
           </div>
           <ul class="dist-legend">
@@ -159,7 +164,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
 import BackButton from '../components/BackButton.vue'
 import EmptyState from '../components/EmptyState.vue'
@@ -172,6 +177,12 @@ const loading = ref(false)
 const error = ref('')
 
 const levelKeys = ['beginner', 'intermediate', 'advanced', 'unknown']
+
+const distAriaLabel = computed(() => {
+  const d = data.value?.knowledge_level_distribution || {}
+  const parts = levelKeys.map((k) => `${d[k] || 0} ${k}`)
+  return `Knowledge level distribution: ${parts.join(', ')}`
+})
 
 async function load() {
   loading.value = true
@@ -190,7 +201,7 @@ onMounted(load)
 
 <style scoped>
 .agg {
-  max-width: 60rem;
+  max-width: 72rem;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
@@ -323,7 +334,7 @@ onMounted(load)
 :root[data-theme='dark'] .stat-yellow {
   background: linear-gradient(180deg, rgba(255, 197, 77, 0.18) 0%, var(--color-surface) 70%);
 }
-.stat-yellow .stat-glyph { background: rgba(255, 176, 32, 0.28); color: #B5800F; }
+.stat-yellow .stat-glyph { background: rgba(255, 176, 32, 0.28); color: #8A5A00; }
 :root[data-theme='dark'] .stat-yellow .stat-glyph { color: var(--signal-warning); }
 
 .stat-blue {
@@ -476,10 +487,11 @@ onMounted(load)
   color: var(--signal-success);
   border-color: rgba(34, 197, 94, 0.3);
 }
+:root:not([data-theme='dark']) .chip-mastered { color: #0E7A36; }
 
 .chip-gap {
   background: rgba(255, 176, 32, 0.16);
-  color: #B5800F;
+  color: #8A5A00;
   border-color: rgba(255, 176, 32, 0.35);
 }
 :root[data-theme='dark'] .chip-gap { color: var(--signal-warning); }

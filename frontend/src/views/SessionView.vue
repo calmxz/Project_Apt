@@ -13,11 +13,7 @@
     </div>
 
     <template v-else>
-      <!-- Session title + actions render in the global navbar (App.vue slot);
-           all end-session/dialog/store logic stays here. -->
-      <Teleport to="#session-nav-slot">
-        <ChatHeader :session="store.currentSession" :id="id" @end-session="end" />
-      </Teleport>
+      <SessionHeader :topic="store.currentSession?.topic || ''" />
 
       <BackButton />
 
@@ -114,9 +110,9 @@ import Dialog from 'primevue/dialog'
 import BackButton from '../components/BackButton.vue'
 import CapBanners from '../components/chat/CapBanners.vue'
 import ChatEmptyState from '../components/chat/EmptyState.vue'
-import ChatHeader from '../components/chat/ChatHeader.vue'
 import Composer from '../components/chat/Composer.vue'
 import MessageList from '../components/chat/MessageList.vue'
+import SessionHeader from '../components/chat/SessionHeader.vue'
 import SessionEndedBanner from '../components/SessionEndedBanner.vue'
 import UploadStatus from '../components/chat/UploadStatus.vue'
 import { friendlyError } from '../lib/errors.js'
@@ -280,20 +276,20 @@ async function retryLastMessage() {
   await send()
 }
 
-async function end() {
-  try {
-    const resp = await store.endSession()
-    const summary = resp?.summary
-    summaryKind.value = summary?.kind || 'summary'
-    summaryText.value =
-      summary?.text || (summary?.kind === 'no_exchanges'
-        ? 'This session ended without any exchanges. Start a new session to continue.'
-        : 'Session ended.')
+// End is triggered from the sidebar row context menu (S2). When the store
+// commits the End and the ended session matches this view's id, surface the
+// closing summary modal here. Watching pendingSummary keeps the trigger
+// location decoupled from the dialog owner.
+watch(
+  () => store.pendingSummary,
+  (s) => {
+    if (!s || s.sessionId !== props.id) return
+    summaryKind.value = s.kind
+    summaryText.value = s.text
     summaryDialog.value = true
-  } catch {
-    /* error already surfaced via store.error */
-  }
-}
+    store.consumePendingSummary()
+  },
+)
 
 async function onAttachFile(file) {
   uploading.value = true
@@ -376,7 +372,7 @@ function goHome() {
 }
 
 .session {
-  max-width: 48rem;
+  max-width: 56rem;
   margin: 0 auto;
   display: flex;
   flex-direction: column;

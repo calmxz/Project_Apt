@@ -75,3 +75,5 @@ spike/.env
 
 CLAUDE.md
 .superpowers/
+
+.playwright-mcp/

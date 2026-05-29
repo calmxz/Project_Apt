@@ -65,10 +65,10 @@ const parts = computed(() => {
   background: var(--color-surface-soft);
   color: var(--color-text);
   border: 1px solid var(--color-border);
-  border-radius: 8px;
-  padding: 12px 14px;
-  font-family: 'Consolas', 'Monaco', monospace;
-  font-size: 12px;
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 0.875rem;
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
   overflow-x: auto;
 }
 .md-rendered :deep(code:not(pre code)) {
