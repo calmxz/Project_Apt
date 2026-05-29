@@ -196,3 +196,30 @@ def test_aggregate_isolates_per_user(client, db_session):
     body = r.json()
     assert body["total_sessions"] == 1
     assert [c["concept"] for c in body["combined_mastered_concepts"]] == ["alpha-only"]
+
+
+def test_aggregate_recent_topics_carry_last_session_summary(client, db_session):
+    db_session.add(User(id=USER_ID))
+    db_session.flush()
+    ended_profile = TopicProfile(last_session_summary="Covered Big-O; gap in log bounds.")
+    _mk_session(
+        db_session,
+        "ended1",
+        topic="Big-O",
+        profile=ended_profile,
+        created_at=datetime(2026, 5, 1, tzinfo=timezone.utc),
+        ended_at=datetime(2026, 5, 2, tzinfo=timezone.utc),
+    )
+    _mk_session(
+        db_session,
+        "active1",
+        topic="Trees",
+        profile=TopicProfile(),
+        created_at=datetime(2026, 5, 3, tzinfo=timezone.utc),
+    )
+    db_session.commit()
+
+    body = client.get("/api/profile/aggregate", params={"user_id": USER_ID}).json()
+    by_id = {t["id"]: t for t in body["recent_topics"]}
+    assert by_id["ended1"]["last_session_summary"] == "Covered Big-O; gap in log bounds."
+    assert by_id["active1"]["last_session_summary"] is None

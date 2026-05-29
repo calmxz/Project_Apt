@@ -193,6 +193,9 @@ def aggregate_for_user(db: Session, user_id: str) -> AggregateProfileResponse:
             topic=s.topic or "",
             created_at=s.created_at,
             ended_at=s.ended_at,
+            last_session_summary=TopicProfile.model_validate_json(
+                s.topic_profile_json or "{}"
+            ).last_session_summary,
         )
         for s in recent
     ]
