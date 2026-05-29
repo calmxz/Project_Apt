@@ -234,6 +234,37 @@ describe('HomeView', () => {
     expect(rows[1].attributes('data-testid')).toBe('home-recent-e1')
   })
 
+  it('strips the [auto] prefix from the snippet', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'listSessions').mockResolvedValue([])
+    store.sessions = [makeSession('e1', 'Big-O', true)]
+    apiAggregate.mockResolvedValue({
+      recent_topics: [
+        makeRecent('e1', 'Big-O', { ended: true, summary: '[auto] user: hi; assistant: yo' }),
+      ],
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    const text = wrapper.get('[data-testid="home-recent-e1"]').text()
+    expect(text).not.toContain('[auto]')
+    expect(text).toContain('user: hi')
+  })
+
+  it('Enter on Continue does not bubble to row navigation', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'listSessions').mockResolvedValue([])
+    vi.spyOn(store, 'reopenSession').mockResolvedValue({})
+    store.sessions = [makeSession('e1', 'Big-O', true)]
+    apiAggregate.mockResolvedValue({
+      recent_topics: [makeRecent('e1', 'Big-O', { ended: true, summary: 'done' })],
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-testid="home-continue-e1"]').trigger('keydown.enter')
+    await flushPromises()
+    expect(push).not.toHaveBeenCalled()
+  })
+
   it('shows summary snippet when present and fallback when null', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'listSessions').mockResolvedValue([])

@@ -84,6 +84,7 @@
                     class="recent-continue"
                     :data-testid="`home-continue-${s.id}`"
                     @click.stop="continueSession(s.id)"
+                    @keydown.enter.stop
                   >
                     Continue
                   </button>
@@ -92,7 +93,7 @@
                   class="recent-snippet"
                   :class="{ 'recent-snippet-muted': !s.last_session_summary }"
                 >
-                  {{ s.last_session_summary || 'In progress — pick up where you left off.' }}
+                  {{ snippetText(s) }}
                 </p>
               </div>
               <i class="pi pi-arrow-right recent-arrow" aria-hidden="true" />
@@ -196,6 +197,11 @@ const sortedRecent = computed(() =>
       new Date(b.created_at) - new Date(a.created_at),
   ),
 )
+
+function snippetText(s) {
+  const raw = (s.last_session_summary || '').replace(/^\[auto\]\s*/, '')
+  return raw || 'In progress — pick up where you left off.'
+}
 
 function openSession(id) {
   router.push({ name: 'session', params: { id } })
