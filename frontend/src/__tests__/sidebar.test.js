@@ -131,6 +131,32 @@ describe('Sidebar.vue — session list rendering', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="sidebar-search-empty"]').exists()).toBe(true)
   })
+
+  it('renders date-group headers for active sessions', async () => {
+    const store = useSessionStore()
+    const now = new Date()
+    const weekAgo = new Date(now.getTime() - 3 * 86400000)
+    store.sessions = [
+      { id: 'a1', topic: 'Today one', created_at: now.toISOString(), ended_at: null },
+      { id: 'a2', topic: 'Week one', created_at: weekAgo.toISOString(), ended_at: null },
+    ]
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sidebar-group-today"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sidebar-group-week"]').exists()).toBe(true)
+  })
+
+  it('renders the pinned mini-group when a session is pinned', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'p1', topic: 'Pinned', created_at: new Date().toISOString(), ended_at: null, pinned: true },
+      { id: 'a1', topic: 'Normal', created_at: new Date().toISOString(), ended_at: null },
+    ]
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sidebar-section-pinned"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sidebar-section-pinned"] [data-testid="sidebar-row-p1"]').exists()).toBe(true)
+  })
 })
 
 describe('Sidebar.vue — row interactions', () => {

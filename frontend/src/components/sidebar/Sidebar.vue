@@ -247,27 +247,38 @@ function onNewSession() {
           </p>
         </template>
         <template v-else>
-          <section class="sb-section sb-section--active" data-testid="sidebar-section-active">
+          <section
+            v-if="pinnedActive.length"
+            class="sb-section sb-section--pinned"
+            data-testid="sidebar-section-pinned"
+          >
             <h3 class="sb-section-label label">
-              Active
-              <span v-if="!showSkeleton" class="sb-section-count">({{ activeFlat.length }})</span>
+              <i class="pi pi-bookmark-fill" aria-hidden="true" /> Pinned
+              <span class="sb-section-count">({{ pinnedActive.length }})</span>
             </h3>
-            <SidebarSkeletonList v-if="showSkeleton" :count="3" />
-            <ul v-else-if="activeFlat.length" class="sb-session-list">
-              <SidebarSessionRow
-                v-for="s in activeFlat"
-                :key="s.id"
-                :session="s"
-                state="active"
-              />
+            <ul class="sb-session-list">
+              <SidebarSessionRow v-for="s in pinnedActive" :key="s.id" :session="s" state="active" />
             </ul>
-            <p
-              v-else-if="showEmptyHint"
-              class="sb-empty-hint"
-              data-testid="sidebar-empty-hint"
-            >
-              No sessions yet. Click + New session above.
-            </p>
+          </section>
+
+          <section class="sb-section sb-section--active" data-testid="sidebar-section-active">
+            <SidebarSkeletonList v-if="showSkeleton" :count="3" />
+            <template v-else>
+              <div
+                v-for="g in activeGroups"
+                :key="g.key"
+                class="sb-group"
+                :data-testid="`sidebar-group-${g.key}`"
+              >
+                <h3 class="sb-section-label label">{{ g.label }}</h3>
+                <ul class="sb-session-list">
+                  <SidebarSessionRow v-for="s in g.rows" :key="s.id" :session="s" state="active" />
+                </ul>
+              </div>
+              <p v-if="showEmptyHint" class="sb-empty-hint" data-testid="sidebar-empty-hint">
+                No sessions yet. Click + New session above.
+              </p>
+            </template>
           </section>
 
           <section
@@ -283,25 +294,11 @@ function onNewSession() {
               data-testid="sidebar-ended-toggle"
               @click="endedOpen = !endedOpen"
             >
-              <span>
-                Ended <span class="sb-section-count">({{ endedRows.length }})</span>
-              </span>
-              <i
-                :class="endedOpen ? 'pi pi-chevron-down' : 'pi pi-chevron-right'"
-                aria-hidden="true"
-              />
+              <span>Ended <span class="sb-section-count">({{ endedRows.length }})</span></span>
+              <i :class="endedOpen ? 'pi pi-chevron-down' : 'pi pi-chevron-right'" aria-hidden="true" />
             </button>
-            <ul
-              v-show="endedOpen"
-              id="sb-ended-list"
-              class="sb-session-list"
-            >
-              <SidebarSessionRow
-                v-for="s in endedRows"
-                :key="s.id"
-                :session="s"
-                state="ended"
-              />
+            <ul v-show="endedOpen" id="sb-ended-list" class="sb-session-list">
+              <SidebarSessionRow v-for="s in endedRows" :key="s.id" :session="s" state="ended" />
             </ul>
           </section>
         </template>
@@ -665,4 +662,7 @@ function onNewSession() {
   padding: 0.25rem 0.75rem;
   color: var(--color-text-muted);
 }
+
+.sb-group { margin-bottom: 0.5rem; }
+.sb-section--pinned .sb-section-label { color: var(--color-accent-text); }
 </style>
