@@ -120,7 +120,7 @@ function submit() {
   text-transform: uppercase;
   letter-spacing: var(--tracking-label);
   font-weight: 600;
-  color: var(--color-accent);
+  color: var(--color-accent-text);
 }
 
 .title {
@@ -231,14 +231,14 @@ function submit() {
 .select :deep(.p-togglebutton:hover),
 .select :deep(.p-selectbutton .p-button:hover) {
   background: var(--color-accent-soft);
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   border-color: var(--color-accent-soft);
   transform: translateY(-1px);
 }
 
 .select :deep(.p-togglebutton.p-togglebutton-checked),
 .select :deep(.p-selectbutton .p-button.p-highlight) {
-  background: var(--color-accent);
+  background: var(--color-accent-strong);
   color: #FFFFFF;
   border-color: var(--color-accent);
   box-shadow: var(--shadow-pop);
@@ -250,7 +250,7 @@ function submit() {
   gap: 0.5rem;
   padding: 0.9rem 1.75rem;
   border-radius: var(--radius-pill);
-  background: var(--color-accent);
+  background: var(--color-accent-strong);
   color: #FFFFFF;
   border: 0;
   font-family: var(--font-sans);

@@ -228,7 +228,7 @@ onMounted(load)
   text-transform: uppercase;
   letter-spacing: var(--tracking-label);
   font-weight: 600;
-  color: var(--color-accent);
+  color: var(--color-accent-text);
 }
 
 .title {
@@ -257,7 +257,7 @@ onMounted(load)
   gap: 0.5rem;
   padding: 0.75rem 1.375rem;
   border-radius: var(--radius-pill);
-  background: var(--color-accent);
+  background: var(--color-accent-strong);
   color: #FFFFFF;
   border: 0;
   font-family: var(--font-sans);
@@ -570,7 +570,7 @@ onMounted(load)
 }
 
 .recent-row:hover .recent-arrow {
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   transform: translateX(3px);
 }
 </style>

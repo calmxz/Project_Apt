@@ -171,7 +171,7 @@ async function submit() {
   text-transform: uppercase;
   letter-spacing: var(--tracking-label);
   font-weight: 600;
-  color: var(--color-accent);
+  color: var(--color-accent-text);
 }
 
 .hero-title {
@@ -356,7 +356,7 @@ async function submit() {
   gap: 0.5rem;
   padding: 0.9rem 1.625rem;
   border-radius: var(--radius-pill);
-  background: var(--color-accent);
+  background: var(--color-accent-strong);
   color: #FFFFFF;
   border: 0;
   font-family: var(--font-sans);

@@ -3,6 +3,11 @@ import { ApiError, apiGet } from './apiClient.js'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
 
+// Mirror of the backend cap (backend/routes/upload.py MAX_UPLOAD_BYTES). This is
+// a client-side pre-check for instant feedback only; the backend remains the
+// authoritative limit and still returns 413 FILE_TOO_LARGE if bypassed.
+export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024 // 25 MB
+
 function _authHeaders() {
   try {
     const store = useAuthStore()

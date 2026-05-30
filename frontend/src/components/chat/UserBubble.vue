@@ -62,12 +62,12 @@ defineProps({
 }
 
 .msg.user .role-tag {
-  color: var(--color-accent);
+  color: var(--color-accent-text);
 }
 
 .msg.user .content {
   display: inline-block;
-  background: var(--color-accent);
+  background: var(--color-accent-strong);
   color: #FFFFFF;
   padding: 0.875rem 1.125rem;
   border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-lg);

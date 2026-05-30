@@ -63,7 +63,7 @@ defineProps({
 
 .logo-mark {
   flex-shrink: 0;
-  color: var(--color-accent);
+  color: var(--color-accent-text);
 }
 
 .logo[data-size='sm'] .logo-mark {

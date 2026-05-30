@@ -121,7 +121,7 @@ async function onSignOut() {
 }
 
 .sb-strip-btn:hover {
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   background: var(--color-accent-soft);
   border-color: var(--color-accent-soft);
 }

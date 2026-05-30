@@ -4,6 +4,7 @@ import { defineStore } from 'pinia'
 import * as sessionsApi from '../services/sessionsApi.js'
 import { postChat } from '../services/chatApi.js'
 import { streamChat } from '../services/chatStreamService.js'
+import { reportCostWarning } from '../services/costBus.js'
 import { friendlyError } from '../lib/errors.js'
 import {
   ERR_DAILY_CAP_REACHED,
@@ -267,6 +268,7 @@ export const useSessionStore = defineStore('session', () => {
             case 'tool_call_done': recordToolCall({ kind: 'done', tool_call: data }); break
             case 'assistant_delta': appendAssistantDelta(data.text); break
             case 'citations': setCitations(data); break
+            case 'cost_warning': reportCostWarning(data); break
             case 'done': finalizeMessage(data.message_id); break
             case 'cancelled': handleCancelled(data.message_id, data.partial_content_chars, data.estimated_cost_usd); break
             case 'error':

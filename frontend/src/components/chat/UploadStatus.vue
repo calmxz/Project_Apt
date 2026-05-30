@@ -4,6 +4,9 @@
     class="upload-status"
     :class="`upload-status-${upload.kind}`"
     :data-testid="`upload-status-${upload.kind}`"
+    role="status"
+    aria-live="polite"
+    aria-atomic="true"
   >
     {{ upload.text }}
   </p>
@@ -26,7 +29,7 @@ defineProps({
   font-size: 0.8125rem;
   border-radius: var(--radius-pill);
   background: var(--color-accent-soft);
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   align-self: flex-start;
   display: inline-block;
 }

@@ -162,7 +162,7 @@ onMounted(load)
   text-transform: uppercase;
   letter-spacing: var(--tracking-label);
   font-weight: 600;
-  color: var(--color-accent);
+  color: var(--color-accent-text);
 }
 
 .title {
@@ -254,7 +254,7 @@ onMounted(load)
   width: 2.25rem;
   height: 2.25rem;
   border-radius: var(--radius-pill);
-  background: var(--color-accent);
+  background: var(--color-accent-strong);
   color: #FFFFFF;
   font-size: 1rem;
   flex-shrink: 0;

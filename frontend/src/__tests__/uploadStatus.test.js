@@ -36,4 +36,14 @@ describe('UploadStatus', () => {
     expect(el.classes()).toContain('upload-status-failed')
     expect(el.text()).toContain('too big')
   })
+
+  it('is a polite live region so screen readers hear ingestion status (WCAG 4.1.3)', () => {
+    const wrapper = mount(UploadStatus, {
+      props: { upload: { kind: 'ready', text: 'doc.pdf is ready.' } },
+    })
+    const el = wrapper.find('[data-testid="upload-status-ready"]')
+    expect(el.attributes('role')).toBe('status')
+    expect(el.attributes('aria-live')).toBe('polite')
+    expect(el.attributes('aria-atomic')).toBe('true')
+  })
 })

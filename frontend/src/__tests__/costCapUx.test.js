@@ -140,6 +140,7 @@ vi.mock('vue-router', () => ({
 vi.mock('@/services/uploadApi.js', () => ({
   uploadPdf: vi.fn(),
   getUploadStatus: vi.fn(),
+  MAX_UPLOAD_BYTES: 25 * 1024 * 1024,
 }))
 
 const showError = vi.fn()

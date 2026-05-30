@@ -32,6 +32,7 @@
         placeholder="Ask anything. Press Enter to send · Shift + Enter for a new line."
         :disabled="disabled"
         :maxlength="MAX_DRAFT_LEN"
+        :aria-describedby="describedby || undefined"
         @input="onInput"
         @keydown="onKeydown"
       />
@@ -86,6 +87,9 @@ const props = defineProps({
   uploading: { type: Boolean, default: false },
   sending: { type: Boolean, default: false },
   streamState: { type: String, default: 'idle' },
+  // id(s) of an element explaining why the composer is disabled (e.g. the active
+  // cap banner). Wired to aria-describedby so SR users hear the reason on focus.
+  describedby: { type: String, default: null },
 })
 
 const emit = defineEmits(['update:modelValue', 'send', 'stop', 'attach'])
@@ -286,7 +290,7 @@ defineExpose({ focus })
   grid-column: 3;
   align-self: end;
   margin-bottom: 0.1rem;
-  background: var(--color-accent);
+  background: var(--color-accent-strong);
   color: #FFFFFF;
   border: 0;
   box-shadow: var(--shadow-pop);
