@@ -119,6 +119,29 @@ paths:
                 $ref: "#/components/schemas/SessionDetail"
         "404":
           $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [sessions]
+      summary: Update a session's topic and/or pinned state.
+      operationId: updateSession
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionUpdateRequest"
+      responses:
+        "200":
+          description: Session updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /api/sessions/{session_id}/end:
     post:
@@ -470,6 +493,14 @@ components:
         seed_mode:         { $ref: "#/components/schemas/SeedMode" }
         prior_session_id:  { type: [string, "null"], default: null, maxLength: 64 }
 
+    SessionUpdateRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        topic:  { type: string, maxLength: 200 }
+        pinned: { type: boolean }
+
     SessionResponse:
       type: object
       additionalProperties: false
@@ -486,6 +517,7 @@ components:
             - $ref: "#/components/schemas/IngestionStatus"
             - type: "null"
           default: null
+        pinned:            { type: boolean, default: false }
 
     SessionListItem:
       type: object
@@ -496,6 +528,7 @@ components:
         topic:      { type: string }
         created_at: { type: string, format: date-time }
         ended_at:   { type: [string, "null"], format: date-time, default: null }
+        pinned:     { type: boolean, default: false }
 
     Message:
       type: object
@@ -529,6 +562,7 @@ components:
             - $ref: "#/components/schemas/IngestionStatus"
             - type: "null"
           default: null
+        pinned:            { type: boolean, default: false }
         messages:
           type: array
           items: { $ref: "#/components/schemas/Message" }
