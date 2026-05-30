@@ -260,7 +260,7 @@ async function cleanupDuplicates() {
   text-transform: uppercase;
   letter-spacing: var(--tracking-label);
   font-weight: 600;
-  color: var(--color-accent);
+  color: var(--color-accent-text);
 }
 
 .title {
@@ -286,7 +286,7 @@ async function cleanupDuplicates() {
   gap: 0.5rem;
   padding: 0.75rem 1.375rem;
   border-radius: var(--radius-pill);
-  background: var(--color-accent);
+  background: var(--color-accent-strong);
   color: #FFFFFF;
   border: 0;
   font-family: var(--font-sans);
@@ -483,7 +483,7 @@ async function cleanupDuplicates() {
   border-radius: var(--radius-pill);
   background: transparent;
   border: 1px solid var(--color-accent-soft);
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   font-family: var(--font-sans);
   font-weight: 600;
   font-size: 0.8125rem;
@@ -520,7 +520,7 @@ async function cleanupDuplicates() {
 }
 
 .recent-row:hover .recent-arrow {
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   transform: translateX(3px);
 }
 

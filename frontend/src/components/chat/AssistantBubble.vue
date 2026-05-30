@@ -55,7 +55,7 @@ defineProps({
   height: 2rem;
   border-radius: var(--radius-pill);
   background: var(--color-accent-soft);
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   margin-top: 0.125rem;
 }
 

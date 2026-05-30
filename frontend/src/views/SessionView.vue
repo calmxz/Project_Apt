@@ -73,6 +73,7 @@
         :uploading="uploading"
         :sending="sending"
         :stream-state="store.streamState"
+        :describedby="capDescribedby"
         @send="send"
         @stop="store.stopStream"
         @attach="onAttachFile"
@@ -119,7 +120,7 @@ import { friendlyError } from '../lib/errors.js'
 import { useSessionStore } from '../stores/session.js'
 import { useToast } from '../composables/useToast.js'
 import { costBus } from '../services/costBus.js'
-import { getUploadStatus, uploadPdf } from '../services/uploadApi.js'
+import { MAX_UPLOAD_BYTES, getUploadStatus, uploadPdf } from '../services/uploadApi.js'
 import { formatShortDateTime } from '../utils/formatDate.js'
 
 const props = defineProps({ id: { type: String, required: true } })
@@ -148,6 +149,16 @@ const lastError = ref(null)
 const isEnded = computed(() => Boolean(store.currentSession?.ended_at))
 const canEnd = computed(() => Boolean(store.currentSession && !store.currentSession.ended_at))
 const canSend = computed(() => canEnd.value && !store.dailyCapReached && !store.costCapReached)
+
+// When the composer is disabled because a daily/cost cap was hit, point its
+// aria-describedby at the matching cap banner so screen-reader users hear why
+// input is blocked. null when not cap-disabled (renders no attribute).
+const capDescribedby = computed(() => {
+  const ids = []
+  if (store.dailyCapReached) ids.push('cap-banner-daily')
+  if (store.costCapReached) ids.push('cap-banner-cost')
+  return ids.length ? ids.join(' ') : null
+})
 
 const { showError, showInfo } = useToast()
 watch(
@@ -292,6 +303,21 @@ watch(
 )
 
 async function onAttachFile(file) {
+  // Client-side pre-check for instant feedback. The backend still enforces both
+  // (PDF-only + 25 MB) and is authoritative; this just avoids a full upload that
+  // would only fail with a generic rejection.
+  if (file.type && file.type !== 'application/pdf') {
+    uploadStatus.value = { kind: 'failed', text: 'Only PDF files can be attached.' }
+    return
+  }
+  if (file.size > MAX_UPLOAD_BYTES) {
+    const maxMb = Math.round(MAX_UPLOAD_BYTES / (1024 * 1024))
+    uploadStatus.value = {
+      kind: 'failed',
+      text: `${file.name} is too large (max ${maxMb} MB). Choose a smaller PDF.`,
+    }
+    return
+  }
   uploading.value = true
   uploadStatus.value = { kind: 'pending', text: `Uploading ${file.name}…` }
   try {
@@ -387,7 +413,7 @@ function goHome() {
   text-transform: uppercase;
   letter-spacing: var(--tracking-label);
   font-weight: 600;
-  color: var(--color-accent);
+  color: var(--color-accent-text);
 }
 
 .topic {
@@ -521,7 +547,7 @@ function goHome() {
 }
 
 :global(.summary-dialog .p-dialog-footer .p-button) {
-  background: var(--accent-coral-500);
+  background: var(--color-accent-strong);
   color: #FFFFFF;
   border: 0;
   border-radius: var(--radius-pill);
@@ -559,7 +585,7 @@ function goHome() {
   font-family: var(--font-sans);
   font-size: 0.875rem;
   font-weight: 600;
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   text-decoration: none;
 }
 

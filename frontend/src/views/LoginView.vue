@@ -103,7 +103,7 @@ async function submit() {
   text-transform: uppercase;
   letter-spacing: var(--tracking-label);
   font-weight: 600;
-  color: var(--color-accent);
+  color: var(--color-accent-text);
 }
 
 .title {
@@ -168,7 +168,7 @@ async function submit() {
   gap: 0.5rem;
   padding: 0.75rem 1.5rem;
   border-radius: var(--radius-pill);
-  background: var(--color-accent);
+  background: var(--color-accent-strong);
   color: #fff;
   border: 0;
   font-family: var(--font-sans);

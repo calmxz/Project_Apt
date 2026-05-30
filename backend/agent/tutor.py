@@ -335,6 +335,21 @@ async def run_streaming(
 
             # No tool calls assembled -> the streamed content was the final answer.
             if not tool_frags:
+                # Soft-cap warning: the non-streaming /chat path sets an
+                # X-Cost-Warning header after metering, but SSE flushes its
+                # headers before the LLM runs, so the streaming path emits the
+                # 90%-of-cap signal as a dedicated event instead. Routed through
+                # the same costBus -> toast as the header path on the client.
+                post = cost_meter.check_cap(ctx.db, ctx.user_id)
+                if post.soft_breached:
+                    yield StreamEvent(
+                        "cost_warning",
+                        {
+                            "used_usd": str(post.used),
+                            "soft_cap_usd": str(post.soft_cap),
+                            "hard_cap_usd": str(post.hard_cap),
+                        },
+                    )
                 msg_id = _persist_assistant_message(
                     ctx,
                     accumulated_text,

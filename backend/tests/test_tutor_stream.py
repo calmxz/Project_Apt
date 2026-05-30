@@ -254,6 +254,73 @@ async def test_run_streaming_emits_error_on_cost_cap(db_session, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_run_streaming_emits_cost_warning_when_soft_breached(db_session, monkeypatch):
+    """When the cost soft cap (90%) is breached after the final iteration, the
+    stream emits a `cost_warning` event before `done` -- parity with the
+    non-streaming X-Cost-Warning header path (which SSE cannot use, since its
+    headers flush before the LLM runs and the spend is known).
+    """
+    _disable_stub(monkeypatch)
+
+    cap = CapStatus(
+        allowed=True,
+        used=Decimal("1.95"),
+        soft_breached=True,
+        soft_cap=Decimal("2.0"),
+        hard_cap=Decimal("3.0"),
+    )
+    monkeypatch.setattr("agent.tutor.cost_meter.check_cap", MagicMock(return_value=cap))
+
+    from agent import tutor
+
+    turn = _make_stream(_content_chunk("final answer"))
+    monkeypatch.setattr("agent.tutor.litellm.acompletion", AsyncMock(side_effect=[turn]))
+    monkeypatch.setattr(
+        "agent.tutor.litellm.stream_chunk_builder", MagicMock(return_value=SimpleNamespace())
+    )
+    monkeypatch.setattr("agent.tutor.litellm.completion_cost", MagicMock(return_value=0.01))
+    monkeypatch.setattr("agent.tutor.cost_meter.record_cost", MagicMock())
+
+    ctx = _ctx(db_session, session_id="s_softcap")
+    events = await _drain(
+        tutor.run_streaming([{"role": "user", "content": "hi"}], "sys", ctx)
+    )
+
+    types = [e.type for e in events]
+    assert "cost_warning" in types
+    assert types.index("cost_warning") < types.index("done")
+    assert types[-1] == "done"
+
+    cw = next(e for e in events if e.type == "cost_warning")
+    assert cw.data == {"used_usd": "1.95", "soft_cap_usd": "2.0", "hard_cap_usd": "3.0"}
+
+
+@pytest.mark.asyncio
+async def test_run_streaming_no_cost_warning_when_under_soft_cap(db_session, monkeypatch):
+    """No cost_warning when the soft cap is not breached (default happy path)."""
+    _disable_stub(monkeypatch)
+    _allow_cap(monkeypatch)
+
+    from agent import tutor
+
+    turn = _make_stream(_content_chunk("ok"))
+    monkeypatch.setattr("agent.tutor.litellm.acompletion", AsyncMock(side_effect=[turn]))
+    monkeypatch.setattr(
+        "agent.tutor.litellm.stream_chunk_builder", MagicMock(return_value=SimpleNamespace())
+    )
+    monkeypatch.setattr("agent.tutor.litellm.completion_cost", MagicMock(return_value=0.0))
+    monkeypatch.setattr("agent.tutor.cost_meter.record_cost", MagicMock())
+
+    ctx = _ctx(db_session, session_id="s_nosoft")
+    events = await _drain(
+        tutor.run_streaming([{"role": "user", "content": "hi"}], "sys", ctx)
+    )
+
+    assert "cost_warning" not in [e.type for e in events]
+    assert events[-1].type == "done"
+
+
+@pytest.mark.asyncio
 async def test_run_streaming_stub_mode_chunks(db_session, monkeypatch):
     from agent import tutor
     from agent._stub import stub_response

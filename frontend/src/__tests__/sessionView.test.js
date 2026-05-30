@@ -23,6 +23,7 @@ const getUploadStatus = vi.fn()
 vi.mock('@/services/uploadApi.js', () => ({
   uploadPdf: (...args) => uploadPdf(...args),
   getUploadStatus: (...args) => getUploadStatus(...args),
+  MAX_UPLOAD_BYTES: 25 * 1024 * 1024,
 }))
 
 const stubs = {
@@ -298,6 +299,53 @@ describe('SessionView', () => {
     expect(uploadPdf).toHaveBeenCalledWith({ sessionId: 's1', file })
     expect(getUploadStatus).toHaveBeenCalledWith('doc-1')
     expect(wrapper.find('[data-testid="upload-status-ready"]').exists()).toBe(true)
+  })
+
+  it('rejects an oversize PDF client-side without uploading (H5)', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession()
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    const file = new File(['x'], 'huge.pdf', { type: 'application/pdf' })
+    Object.defineProperty(file, 'size', { value: 25 * 1024 * 1024 + 1 })
+    const input = wrapper.get('[data-testid="session-upload-input"]')
+    Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
+    await input.trigger('change')
+    await flushPromises()
+    expect(uploadPdf).not.toHaveBeenCalled()
+    const failed = wrapper.find('[data-testid="upload-status-failed"]')
+    expect(failed.exists()).toBe(true)
+    expect(failed.text()).toContain('too large')
+  })
+
+  it('rejects a non-PDF client-side without uploading (H5)', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession()
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    const file = new File(['x'], 'notes.txt', { type: 'text/plain' })
+    const input = wrapper.get('[data-testid="session-upload-input"]')
+    Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
+    await input.trigger('change')
+    await flushPromises()
+    expect(uploadPdf).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="upload-status-failed"]').exists()).toBe(true)
+  })
+
+  it('describes the disabled composer with the cap banner via aria-describedby (WCAG 4.1.2)', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession({ dailyCap: { used: 10, cap: 10, resets_at: '2026-05-24T00:00:00Z' } })
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    const textarea = wrapper.get('[data-testid="session-input"]')
+    expect(textarea.attributes('aria-describedby')).toContain('cap-banner-daily')
+    expect(wrapper.find('#cap-banner-daily').exists()).toBe(true)
   })
 
   it('renders streaming bubble when store.streamingMessage is set', async () => {

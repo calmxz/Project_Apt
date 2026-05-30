@@ -466,7 +466,7 @@ function onNewSession() {
   gap: 0.5rem;
   width: 100%;
   padding: 0.5rem 0.875rem;
-  background: var(--color-accent);
+  background: var(--color-accent-strong);
   color: #fff;
   font-family: inherit;
   font-size: var(--fs-body, 0.9375rem);
@@ -601,7 +601,7 @@ function onNewSession() {
 }
 
 .sb-icon:hover {
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   border-color: var(--color-accent-soft);
   background: var(--color-accent-soft);
   transform: translateY(-1px);
