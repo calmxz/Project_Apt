@@ -620,7 +620,7 @@ function onNewSession() {
   padding: 0.75rem 0.25rem;
 }
 
-.sb-icon--row {
+.sb-icon.sb-icon--row {
   width: 100%;
   justify-content: flex-start;
   gap: 0.625rem;
