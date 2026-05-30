@@ -202,6 +202,7 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   async function renameSession(id, topic) {
+    error.value = null
     const idx = sessions.value.findIndex((s) => s.id === id)
     const prev = idx !== -1 ? sessions.value[idx].topic : null
     if (idx !== -1) sessions.value[idx].topic = topic
@@ -209,20 +210,21 @@ export const useSessionStore = defineStore('session', () => {
     try {
       return await sessionsApi.renameSession(id, topic)
     } catch (e) {
-      if (idx !== -1 && prev !== null) sessions.value[idx].topic = prev
-      if (currentSession.value?.id === id && prev !== null) currentSession.value.topic = prev
+      if (idx !== -1) sessions.value[idx].topic = prev
+      if (currentSession.value?.id === id) currentSession.value.topic = prev
       _setError(e)
     }
   }
 
   async function setPinned(id, pinned) {
+    error.value = null
     const idx = sessions.value.findIndex((s) => s.id === id)
     const prev = idx !== -1 ? sessions.value[idx].pinned : null
     if (idx !== -1) sessions.value[idx].pinned = pinned
     try {
       return await sessionsApi.setPinned(id, pinned)
     } catch (e) {
-      if (idx !== -1 && prev !== null) sessions.value[idx].pinned = prev
+      if (idx !== -1) sessions.value[idx].pinned = prev
       _setError(e)
     }
   }

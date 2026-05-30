@@ -344,12 +344,29 @@ describe('session store — rename + pin actions', () => {
     expect(api.renameSession).toHaveBeenCalledWith('a1', 'new')
   })
 
-  it('setPinned rolls back on API error', async () => {
+  it('setPinned applies optimistic update then rolls back on API error', async () => {
     const store = useSessionStore()
     store.sessions = [{ id: 'a1', topic: 'x', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false }]
     const api = await import('@/services/sessionsApi.js')
-    vi.spyOn(api, 'setPinned').mockRejectedValue(new Error('boom'))
-    await store.setPinned('a1', true).catch(() => {})
-    expect(store.sessions[0].pinned).toBe(false)
+    let reject
+    vi.spyOn(api, 'setPinned').mockReturnValue(new Promise((_, r) => { reject = r }))
+    const p = store.setPinned('a1', true).catch(() => {})
+    expect(store.sessions[0].pinned).toBe(true) // optimistic applied
+    reject(new Error('boom'))
+    await p
+    expect(store.sessions[0].pinned).toBe(false) // rolled back
+  })
+
+  it('renameSession rolls back topic on API error', async () => {
+    const store = useSessionStore()
+    store.sessions = [{ id: 'a1', topic: 'old', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false }]
+    const api = await import('@/services/sessionsApi.js')
+    let reject
+    vi.spyOn(api, 'renameSession').mockReturnValue(new Promise((_, r) => { reject = r }))
+    const p = store.renameSession('a1', 'new').catch(() => {})
+    expect(store.sessions[0].topic).toBe('new') // optimistic applied
+    reject(new Error('boom'))
+    await p
+    expect(store.sessions[0].topic).toBe('old') // rolled back
   })
 })
