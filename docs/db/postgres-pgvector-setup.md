@@ -22,10 +22,12 @@ This is idempotent. You should also see `vector` listed under
 
 ## 2. Apply the AdaptLearn baseline migration
 
-The Phase 7 Alembic baseline (`backend/alembic/versions/0001_phase7_baseline.py`)
+The Phase 7 Alembic baseline (`backend/db/alembic/versions/0001_phase7_baseline.py`)
 creates every application table — `users`, `sessions`, `chat_messages`,
-`topic_profiles`, `documents`, `daily_cost_ledger`, etc. — and the
-`chunk_embeddings` table that pgvector backs.
+`usage_counters`, `learning_events`, `documents`, `daily_cost_ledger`. The
+follow-up migration (`backend/db/alembic/versions/0002_chunk_embeddings.py`)
+enables the `vector` extension and creates the `chunk_embeddings` table that
+pgvector backs.
 
 From the `backend/` directory, with `DATABASE_URL` set:
 
@@ -44,19 +46,23 @@ psql "$DATABASE_URL" -c "\d chunk_embeddings"
 
 ```sql
 CREATE TABLE chunk_embeddings (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  session_id  TEXT NOT NULL,
-  document_id TEXT NOT NULL,
-  chunk_text  TEXT NOT NULL,
+  id          TEXT PRIMARY KEY,
+  session_id  TEXT NOT NULL REFERENCES sessions(id),
+  document_id INT  NOT NULL REFERENCES documents(id),
   chunk_index INT  NOT NULL,
-  embedding   vector(1536) NOT NULL,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+  page        INT,
+  chunk_text  TEXT NOT NULL,
+  embedding   vector(768) NOT NULL,
+  created_at  TIMESTAMPTZ
 );
 
-CREATE INDEX chunk_embeddings_session_idx
+CREATE INDEX ix_chunk_embeddings_session_id
   ON chunk_embeddings (session_id);
 
-CREATE INDEX chunk_embeddings_embedding_idx
+CREATE INDEX ix_chunk_embeddings_document_id
+  ON chunk_embeddings (document_id);
+
+CREATE INDEX ix_chunk_embeddings_embedding
   ON chunk_embeddings
   USING ivfflat (embedding vector_cosine_ops)
   WITH (lists = 100);
@@ -64,11 +70,13 @@ CREATE INDEX chunk_embeddings_embedding_idx
 
 Notes:
 
-- `vector(1536)` matches LiteLLM's default OpenAI-compatible embedding
-  dimension. If you swap to `text-embedding-004` (768-dim), update the
-  column type and re-embed all chunks — pgvector enforces dimensionality.
-- `ivfflat` (vs `hnsw`) was chosen because Supabase Postgres 15 ships with
-  pgvector 0.7+ which supports both, but `ivfflat` is well-tested, faster
+- `vector(768)` matches `EMBEDDING_DIM` (`config.py` `embedding_dim=768`),
+  the output dimension of the configured embedding model
+  `gemini/gemini-embedding-2`. If you change `EMBEDDING_DIM` or swap to a model
+  with a different output dimension, update the column type and re-embed all
+  chunks — pgvector enforces dimensionality.
+- `ivfflat` (vs `hnsw`) was chosen because Supabase Postgres 17 ships with
+  pgvector 0.8.x which supports both, but `ivfflat` is well-tested, faster
   to build, and adequate for the corpus sizes we expect (<100k chunks per
   user in v1). Revisit `hnsw` if recall/latency profile changes.
 - The session-scoped B-tree on `session_id` is what most retrieval queries
@@ -88,7 +96,7 @@ Notes:
   drop to 1-5 if latency becomes an issue, raise to 20-40 if retrieval
   misses obvious matches.
 - ivfflat indexes must be **rebuilt** if the data distribution changes a
-  lot (e.g. after bulk imports). `REINDEX INDEX chunk_embeddings_embedding_idx;`
+  lot (e.g. after bulk imports). `REINDEX INDEX ix_chunk_embeddings_embedding;`
   is the lever.
 
 ## 5. Daily cost ledger
@@ -97,10 +105,10 @@ Notes:
 
 ```sql
 CREATE TABLE daily_cost_ledger (
-  user_id        TEXT NOT NULL,
-  date_utc       DATE NOT NULL,
-  cost_usd_cents NUMERIC(10, 2) NOT NULL DEFAULT 0,
-  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  user_id    TEXT NOT NULL REFERENCES users(id),
+  date_utc   TEXT NOT NULL,
+  cost_usd   NUMERIC(10, 4) NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ NOT NULL,
   PRIMARY KEY (user_id, date_utc)
 );
 ```

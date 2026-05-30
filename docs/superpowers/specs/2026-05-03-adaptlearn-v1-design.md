@@ -6,6 +6,16 @@
 
 This document supersedes `AdaptLearn_Spec.md` and `AdaptLearn_DevPlan.md` for v1 scope. The originals remain as reference for v2 features.
 
+> **Infrastructure reconciled 2026-05-30 (factual, not design-intent):** the
+> shipped code diverges from this doc's original stack. Current truth: vector
+> store is **pgvector on Supabase-managed Postgres** (not ChromaDB/SQLite);
+> default LLM is **`gemini/gemini-3.1-flash-lite`** (not 2.5 Pro); embeddings are
+> **`gemini/gemini-embedding-2`** (not text-embedding-004); **SSE token streaming
+> is shipped** (not "None"). The §1 table and §2 architecture below are corrected;
+> deeper sections (e.g. §swap-path, §test plan) may retain as-authored
+> ChromaDB/SQLite references. Design intent (e.g. the §3.4 dropped mastery gate)
+> is **not** changed here. See `docs/review/2026-05-30-adversarial-code-review.md`.
+
 ---
 
 ## 1. Constraints (locked during brainstorm)
@@ -16,12 +26,12 @@ This document supersedes `AdaptLearn_Spec.md` and `AdaptLearn_DevPlan.md` for v1
 | Duration | 7 weeks, public deadline | Stall prevention; bumped from 6 to absorb full-pyramid test cost |
 | Profile depth | Mid (not full spec) | LLM tool-call reliability risk; user has no agent experience |
 | Agent framework | LiteLLM direct | Avoid ADK + agent-pattern double unknown |
-| LLM | Gemini 2.5 Pro via LiteLLM (free tier) | Cost; paid Claude as fallback if reliability issues |
-| Embeddings | Gemini text-embedding-004 (free, 768-dim) | Same |
-| Backend | FastAPI + SQLite + ChromaDB, dockerized | User said no Firebase; local-first reproducible |
+| LLM | `gemini/gemini-3.1-flash-lite` via LiteLLM (free tier) — was `Gemini 2.5 Pro` (reconciled 2026-05-30) | Cost; paid `claude-sonnet-4-6` as fallback if reliability issues |
+| Embeddings | `gemini/gemini-embedding-2` (768-dim) — was `text-embedding-004` (reconciled 2026-05-30) | Same |
+| Backend | FastAPI + Postgres (Supabase) + pgvector, dockerized — was `SQLite + ChromaDB` (reconciled 2026-05-30, Phase 7) | User said no Firebase; pgvector folds vectors into the relational store |
 | Frontend | Vue 3 + Vite + PrimeVue + Pinia | Portfolio recognizability |
 | Auth | Supabase magic-link (JWT) — was `None (localStorage userId)` pre-Phase 7 | Public-deploy retarget (Phase 7, 2026-05-23) |
-| Streaming | None | v1 scope |
+| Streaming | SSE token streaming (`/api/chat/stream`) — was `None` (reconciled 2026-05-30) | Demo UX; non-streaming `/api/chat` retained |
 | CI | Full pyramid: pytest + Vitest + Playwright + GitHub Actions | Portfolio bullet + regression safety |
 
 ---
@@ -29,26 +39,24 @@ This document supersedes `AdaptLearn_Spec.md` and `AdaptLearn_DevPlan.md` for v1
 ## 2. Architecture
 
 ```
-docker-compose.yml
+docker-compose.yml                  (reconciled 2026-05-30; was 3 services incl. chromadb)
 ├── frontend  : Vue 3 + Vite (dev) / nginx static (prod). Port 5173.
-├── backend   : FastAPI + Uvicorn. Port 8000.
-└── chromadb  : chromadb/chroma server. Port 8001.
+└── backend   : FastAPI + Uvicorn. Port 8000.
+
+External (Supabase-managed): Postgres 17 + pgvector, Supabase Auth (magic-link JWT).
 
 Volumes:
-  ./data/app.db       (SQLite, mounted in backend)
-  ./data/uploads/     (PDFs, mounted in backend)
-  ./data/chroma/      (ChromaDB persistence)
+  ./data/uploads/     (PDFs, mounted in backend; DB + vectors live in Supabase)
 ```
 
 **Why this shape:**
-- `docker-compose up` boots whole app — reproducibility + portfolio bullet
-- SQLite for relational, ChromaDB for vectors — zero-ops, single-file backups
-- ChromaDB server mode (not embedded) — clean separation, scales beyond v1
+- `docker-compose up` boots the app (DB managed by Supabase) — reproducibility + portfolio bullet
+- Postgres + pgvector — relational and vectors in one store; no separate vector service (was: SQLite + ChromaDB)
 - FastAPI = Pydantic native, async, OpenAPI auto-docs
 
 **Latency budget:**
 - Backend non-LLM response: <100ms
-- LLM call dominates wall time (Gemini 2.5 Pro: 3-8s typical)
+- LLM call dominates wall time (`gemini-3.1-flash-lite`: a few seconds typical; mitigated by SSE streaming)
 - No cold start (local docker)
 
 ---

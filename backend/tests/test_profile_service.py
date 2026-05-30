@@ -1,5 +1,6 @@
 """TDD: profile_service.apply_patch + focus-clear guard rail."""
 
+import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -179,3 +180,37 @@ def test_focus_clear_user_redirected_ok(session_row, ctx, db_session):
     assert result.ok is True
     profile = profile_service.load_profile(db_session, SESSION_ID)
     assert profile.focus_target_gap is None
+
+
+def test_load_profile_tolerates_legacy_fields(session_row, db_session):
+    """Regression (review #2): a topic_profile_json written under an older schema
+    (carrying since-removed fields) must not raise ValidationError -> 500 on load.
+    Unknown keys are dropped; known data is preserved. TopicProfile has
+    extra="forbid", and load_profile re-parses the stored column, so without the
+    tolerant parser this row would 500 every read (and the /profile aggregate)."""
+    row = db_session.get(SessionModel, SESSION_ID)
+    row.topic_profile_json = json.dumps(
+        {
+            "knowledge_level": "intermediate",
+            "mastered_concepts": ["joins"],
+            "mastered_candidates": ["legacy"],     # retired field
+            "interaction_preferences": {"hints": True},  # retired field
+        }
+    )
+    db_session.commit()
+
+    profile = profile_service.load_profile(db_session, SESSION_ID)
+    assert profile.knowledge_level == "intermediate"
+    assert profile.mastered_concepts == ["joins"]
+    assert not hasattr(profile, "mastered_candidates")
+
+
+def test_load_profile_falls_back_on_unparseable_blob(session_row, db_session):
+    """Regression (review #2): a non-JSON / corrupt blob degrades to an empty
+    profile rather than raising."""
+    row = db_session.get(SessionModel, SESSION_ID)
+    row.topic_profile_json = "not valid json {"
+    db_session.commit()
+
+    profile = profile_service.load_profile(db_session, SESSION_ID)
+    assert profile == TopicProfile()
