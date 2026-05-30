@@ -221,10 +221,12 @@ export const useSessionStore = defineStore('session', () => {
     const idx = sessions.value.findIndex((s) => s.id === id)
     const prev = idx !== -1 ? sessions.value[idx].pinned : null
     if (idx !== -1) sessions.value[idx].pinned = pinned
+    if (currentSession.value?.id === id) currentSession.value.pinned = pinned
     try {
       return await sessionsApi.setPinned(id, pinned)
     } catch (e) {
       if (idx !== -1) sessions.value[idx].pinned = prev
+      if (currentSession.value?.id === id) currentSession.value.pinned = prev
       _setError(e)
     }
   }

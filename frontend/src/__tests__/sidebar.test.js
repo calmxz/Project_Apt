@@ -357,6 +357,28 @@ describe('Sidebar.vue — row interactions', () => {
     expect(renameSpy).not.toHaveBeenCalled()
   })
 
+  it('does not show the pin glyph on an ended (but pinned) session', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'e1', topic: 'EndedPinned', created_at: '2026-05-20T10:00:00Z', ended_at: '2026-05-21T10:00:00Z', pinned: true },
+    ]
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    // ended section uses v-show so the row is in the DOM
+    expect(wrapper.find('[data-session-id="e1"]').exists()).toBe(true)
+    expect(wrapper.find('[data-session-id="e1"] .sb-row-pin').exists()).toBe(false)
+  })
+
+  it('shows the pin glyph on an active pinned session', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'a1', topic: 'ActivePinned', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: true },
+    ]
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(wrapper.find('[data-session-id="a1"] .sb-row-pin').exists()).toBe(true)
+  })
+
   it('Rename commits exactly once on Enter even though blur also fires', async () => {
     const store = useSessionStore()
     store.sessions = [{ id: 'a1', topic: 'Old', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false }]
@@ -473,6 +495,20 @@ describe('session store — rename + pin actions', () => {
     reject(new Error('boom'))
     await p
     expect(store.sessions[0].pinned).toBe(false) // rolled back
+  })
+
+  it('setPinned syncs currentSession.pinned and rolls it back on error', async () => {
+    const store = useSessionStore()
+    store.sessions = [{ id: 'a1', topic: 'X', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false }]
+    store.currentSession = { id: 'a1', topic: 'X', ended_at: null, pinned: false }
+    const api = await import('@/services/sessionsApi.js')
+    let reject
+    vi.spyOn(api, 'setPinned').mockReturnValue(new Promise((_, r) => { reject = r }))
+    const p = store.setPinned('a1', true).catch(() => {})
+    expect(store.currentSession.pinned).toBe(true)
+    reject(new Error('boom'))
+    await p
+    expect(store.currentSession.pinned).toBe(false)
   })
 
   it('renameSession rolls back topic on API error', async () => {

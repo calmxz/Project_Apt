@@ -154,7 +154,7 @@ function commitRenameFromKey() {
           @click.stop
         />
         <span v-else class="sb-row-topic">
-          <i v-if="session.pinned" class="pi pi-bookmark-fill sb-row-pin" aria-hidden="true" />
+          <i v-if="session.pinned && !session.ended_at" class="pi pi-bookmark-fill sb-row-pin" aria-hidden="true" />
           {{ session.topic || 'Untitled' }}
         </span>
         <span v-if="whenLabel && !renaming" class="sb-row-meta">{{ whenLabel }}</span>
