@@ -19,6 +19,10 @@ const { mode, closeDrawer } = useSidebar()
 
 const busy = ref(false)
 
+const renaming = ref(false)
+const draft = ref('')
+const inputEl = ref(null)
+
 const isCurrent = computed(() => route.params.id === props.session.id)
 const isCollapsed = computed(() => mode.value === 'collapsed')
 
@@ -84,8 +88,25 @@ function onUnpin() {
   refocusRowTrigger(id)
 }
 
-function onRename() {
-  /* Task 11 will implement inline rename */
+async function startRename() {
+  draft.value = props.session.topic || ''
+  renaming.value = true
+  await nextTick()
+  inputEl.value?.focus()
+  inputEl.value?.select()
+}
+
+function cancelRename() {
+  draft.value = props.session.topic || ''
+  renaming.value = false
+}
+
+async function commitRename() {
+  if (!renaming.value) return
+  const next = draft.value.trim()
+  renaming.value = false
+  if (!next || next === (props.session.topic || '')) return
+  try { await store.renameSession(props.session.id, next) } catch { /* store.error populated */ }
 }
 </script>
 
@@ -111,8 +132,24 @@ function onRename() {
     >
       <span class="sb-row-dot" :class="{ 'sb-row-dot--filled': isCurrent }" aria-hidden="true" />
       <span v-if="!isCollapsed" class="sb-row-body">
-        <span class="sb-row-topic">{{ session.topic || 'Untitled' }}</span>
-        <span v-if="whenLabel" class="sb-row-meta">{{ whenLabel }}</span>
+        <input
+          v-if="renaming"
+          ref="inputEl"
+          v-model="draft"
+          type="text"
+          class="sb-row-rename-input"
+          aria-label="Rename session"
+          data-testid="sidebar-row-rename-input"
+          @keydown.enter.prevent="commitRename"
+          @keydown.esc.prevent="cancelRename"
+          @blur="commitRename"
+          @click.stop
+        />
+        <span v-else class="sb-row-topic">
+          <i v-if="session.pinned" class="pi pi-bookmark-fill sb-row-pin" aria-hidden="true" />
+          {{ session.topic || 'Untitled' }}
+        </span>
+        <span v-if="whenLabel && !renaming" class="sb-row-meta">{{ whenLabel }}</span>
       </span>
     </button>
     <SidebarRowMenu
@@ -124,7 +161,7 @@ function onRename() {
       @resume="onResume"
       @pin="onPin"
       @unpin="onUnpin"
-      @rename="onRename"
+      @rename="startRename"
     />
   </li>
 </template>
@@ -242,5 +279,22 @@ function onRename() {
 .sb-row--collapsed .sb-row-button {
   padding: 0.5rem;
   justify-content: center;
+}
+
+.sb-row-rename-input {
+  width: 100%;
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: 0.875rem;
+  padding: 0.125rem 0.375rem;
+}
+
+.sb-row-pin {
+  font-size: 0.75rem;
+  color: var(--color-accent-text);
+  margin-right: 0.25rem;
 }
 </style>

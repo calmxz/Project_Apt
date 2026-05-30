@@ -298,6 +298,36 @@ describe('Sidebar.vue — row interactions', () => {
     const a1Trigger = wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]').element
     expect(active).toBe(a1Trigger)
   })
+
+  it('Rename enters inline edit and commits on Enter via store.renameSession', async () => {
+    const store = useSessionStore()
+    store.sessions = [{ id: 'a1', topic: 'Old', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false }]
+    const renameSpy = vi.spyOn(store, 'renameSession').mockResolvedValue({})
+    wrapper = mount(Sidebar, { attachTo: document.body })
+    await flushPromises()
+    await wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]').trigger('click')
+    await wrapper.find('[data-testid="sidebar-row-menu-rename"]').trigger('click')
+    const input = wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-rename-input"]')
+    expect(input.exists()).toBe(true)
+    await input.setValue('New name')
+    await input.trigger('keydown.enter')
+    expect(renameSpy).toHaveBeenCalledWith('a1', 'New name')
+  })
+
+  it('Rename cancels on Escape without calling the store', async () => {
+    const store = useSessionStore()
+    store.sessions = [{ id: 'a1', topic: 'Old', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false }]
+    const renameSpy = vi.spyOn(store, 'renameSession').mockResolvedValue({})
+    wrapper = mount(Sidebar, { attachTo: document.body })
+    await flushPromises()
+    await wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]').trigger('click')
+    await wrapper.find('[data-testid="sidebar-row-menu-rename"]').trigger('click')
+    const input = wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-rename-input"]')
+    await input.setValue('Discard me')
+    await input.trigger('keydown.esc')
+    expect(renameSpy).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-rename-input"]').exists()).toBe(false)
+  })
 })
 
 describe('Sidebar.vue — footer rail labels', () => {
