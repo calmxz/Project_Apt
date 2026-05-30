@@ -255,6 +255,27 @@ describe('Sidebar.vue — row interactions', () => {
     expect(wrapper.find('[data-testid="sidebar-row-menu-end"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="sidebar-row-menu-resume"]').exists()).toBe(true)
   })
+
+  it('active row menu offers Rename and Pin', async () => {
+    const store = useSessionStore()
+    store.sessions = [{ id: 'a1', topic: 'X', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false }]
+    wrapper = mount(Sidebar, { attachTo: document.body })
+    await flushPromises()
+    await wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]').trigger('click')
+    expect(wrapper.find('[data-testid="sidebar-row-menu-rename"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sidebar-row-menu-pin"]').exists()).toBe(true)
+  })
+
+  it('Pin menu item calls store.setPinned(true)', async () => {
+    const store = useSessionStore()
+    store.sessions = [{ id: 'a1', topic: 'X', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false }]
+    const pinSpy = vi.spyOn(store, 'setPinned').mockResolvedValue({})
+    wrapper = mount(Sidebar, { attachTo: document.body })
+    await flushPromises()
+    await wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]').trigger('click')
+    await wrapper.find('[data-testid="sidebar-row-menu-pin"]').trigger('click')
+    expect(pinSpy).toHaveBeenCalledWith('a1', true)
+  })
 })
 
 describe('Sidebar.vue — footer rail labels', () => {

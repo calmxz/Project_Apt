@@ -6,9 +6,11 @@ const props = defineProps({
   state: { type: String, required: true },
   /** Disable while async store action in flight */
   busy: { type: Boolean, default: false },
+  /** Whether this session is currently pinned */
+  pinned: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['end', 'resume'])
+const emit = defineEmits(['end', 'resume', 'rename', 'pin', 'unpin'])
 
 const open = ref(false)
 const triggerEl = ref(null)
@@ -27,6 +29,9 @@ function onAction(kind) {
   if (props.busy) return
   if (kind === 'end') emit('end')
   else if (kind === 'resume') emit('resume')
+  else if (kind === 'rename') emit('rename')
+  else if (kind === 'pin') emit('pin')
+  else if (kind === 'unpin') emit('unpin')
   close()
   triggerEl.value?.focus()
 }
@@ -80,6 +85,28 @@ onBeforeUnmount(() => {
       role="menu"
       data-testid="sidebar-row-menu-popover"
     >
+      <button
+        type="button"
+        role="menuitem"
+        class="sb-row-menu-item"
+        data-testid="sidebar-row-menu-rename"
+        :disabled="busy"
+        @click="onAction('rename')"
+      >
+        <i class="pi pi-pencil" aria-hidden="true" /><span>Rename</span>
+      </button>
+      <button
+        v-if="state === 'active'"
+        type="button"
+        role="menuitem"
+        class="sb-row-menu-item"
+        data-testid="sidebar-row-menu-pin"
+        :disabled="busy"
+        @click="onAction(pinned ? 'unpin' : 'pin')"
+      >
+        <i :class="pinned ? 'pi pi-bookmark-fill' : 'pi pi-bookmark'" aria-hidden="true" />
+        <span>{{ pinned ? 'Unpin' : 'Pin' }}</span>
+      </button>
       <button
         v-if="state === 'active'"
         type="button"

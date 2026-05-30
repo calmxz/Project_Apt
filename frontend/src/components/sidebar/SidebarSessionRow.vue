@@ -64,6 +64,18 @@ async function onResume() {
     busy.value = false
   }
 }
+
+function onPin() {
+  store.setPinned(props.session.id, true).catch(() => {})
+}
+
+function onUnpin() {
+  store.setPinned(props.session.id, false).catch(() => {})
+}
+
+function onRename() {
+  /* Task 11 will implement inline rename */
+}
 </script>
 
 <template>
@@ -96,8 +108,12 @@ async function onResume() {
       v-if="!isCollapsed"
       :state="state"
       :busy="busy"
+      :pinned="session.pinned ?? false"
       @end="onEnd"
       @resume="onResume"
+      @pin="onPin"
+      @unpin="onUnpin"
+      @rename="onRename"
     />
   </li>
 </template>
