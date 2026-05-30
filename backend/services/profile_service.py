@@ -10,8 +10,10 @@ Rules:
   current turn (created_at >= ctx.turn_started_at).
 """
 
+import json
 import logging
 
+from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -31,11 +33,47 @@ from db.models import LearningEvent, Session as SessionModel
 log = logging.getLogger(__name__)
 
 
+def _parse_profile(raw: str | None) -> TopicProfile:
+    """Tolerantly deserialize a stored topic_profile_json blob.
+
+    TopicProfile is codegen'd with extra="forbid" (correct for validating tool
+    args the model sends), but the same model deserializes persisted state that
+    may have been written under an older schema. During an iterative build the
+    profile shape sheds fields, and resume copies a prior session's raw JSON
+    forward (sessions.py / seed_from_prior); a retired field left in an old row
+    would otherwise raise ValidationError and 500 every read of that session
+    (and the whole /profile aggregate). So: try strict parse, then drop unknown
+    keys and re-validate, then fall back to an empty profile. Never raises.
+    """
+    raw = raw or "{}"
+    try:
+        return TopicProfile.model_validate_json(raw)
+    except ValidationError:
+        pass
+    try:
+        data = json.loads(raw)
+    except (ValueError, TypeError):
+        log.warning("unparseable topic_profile_json; using empty profile")
+        return TopicProfile()
+    if not isinstance(data, dict):
+        return TopicProfile()
+    known = {k: v for k, v in data.items() if k in TopicProfile.model_fields}
+    dropped = sorted(set(data) - set(known))
+    try:
+        profile = TopicProfile.model_validate(known)
+    except ValidationError:
+        log.warning("topic_profile failed strict reparse; using empty profile")
+        return TopicProfile()
+    if dropped:
+        log.warning("dropped legacy topic_profile fields on load: %s", dropped)
+    return profile
+
+
 def load_profile(db: Session, session_id: str) -> TopicProfile:
     row = db.get(SessionModel, session_id)
     if row is None:
         return TopicProfile()
-    return TopicProfile.model_validate_json(row.topic_profile_json or "{}")
+    return _parse_profile(row.topic_profile_json)
 
 
 def save_profile(db: Session, session_id: str, profile: TopicProfile) -> None:
@@ -139,7 +177,7 @@ def aggregate_for_user(db: Session, user_id: str) -> AggregateProfileResponse:
     last_active_at = None
 
     for s in sessions:
-        profile = TopicProfile.model_validate_json(s.topic_profile_json or "{}")
+        profile = _parse_profile(s.topic_profile_json)
 
         level_key = profile.knowledge_level or "unknown"
         level_dist[level_key] = level_dist.get(level_key, 0) + 1
@@ -193,8 +231,8 @@ def aggregate_for_user(db: Session, user_id: str) -> AggregateProfileResponse:
             topic=s.topic or "",
             created_at=s.created_at,
             ended_at=s.ended_at,
-            last_session_summary=TopicProfile.model_validate_json(
-                s.topic_profile_json or "{}"
+            last_session_summary=_parse_profile(
+                s.topic_profile_json
             ).last_session_summary,
         )
         for s in recent

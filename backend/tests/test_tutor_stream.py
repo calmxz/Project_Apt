@@ -278,3 +278,54 @@ async def test_run_streaming_stub_mode_chunks(db_session, monkeypatch):
     )
     assert msg.status == "complete"
     assert msg.content == stub_response(messages, "sys")
+
+
+@pytest.mark.asyncio
+async def test_run_streaming_records_cost_on_tool_iterations(db_session, monkeypatch):
+    """Regression (review #1): cost must be recorded on EVERY billed iteration,
+    including tool-dispatch iterations -- not only on the final text iteration.
+
+    A two-iteration turn (turn 1 assembles a tool call, turn 2 returns the final
+    answer) issues two billed acompletion calls, so record_cost must fire twice.
+    The pre-fix code recorded cost only inside the `not tool_frags` branch, so it
+    fired once and tool-heavy turns could evade the daily cost cap.
+    """
+    _disable_stub(monkeypatch)
+    _allow_cap(monkeypatch)
+
+    from agent import tutor
+
+    turn1 = _make_stream(
+        _tool_chunk(
+            _tool_fragment(0, id="tc_1", name="retrieve_chunks", arguments='{"query":"x"}')
+        ),
+    )
+    turn2 = _make_stream(_content_chunk("done"))
+    monkeypatch.setattr(
+        "agent.tutor.litellm.acompletion",
+        AsyncMock(side_effect=[turn1, turn2]),
+    )
+
+    monkeypatch.setattr(
+        "agent.tutor.tools.dispatch",
+        MagicMock(return_value=ToolResult(ok=True, status="ok", error=None, data={"chunks": []})),
+    )
+
+    # completion_cost / stream_chunk_builder would choke on the SimpleNamespace
+    # fakes, so pin them; we only care that record_cost is invoked per iteration.
+    monkeypatch.setattr(
+        "agent.tutor.litellm.stream_chunk_builder",
+        MagicMock(return_value=SimpleNamespace()),
+    )
+    monkeypatch.setattr(
+        "agent.tutor.litellm.completion_cost",
+        MagicMock(return_value=0.01),
+    )
+    record = MagicMock()
+    monkeypatch.setattr("agent.tutor.cost_meter.record_cost", record)
+
+    ctx = _ctx(db_session, session_id="s_cost_iter")
+    await _drain(tutor.run_streaming([{"role": "user", "content": "hi"}], "sys", ctx))
+
+    assert record.call_count == 2
+    assert [c.args[2] for c in record.call_args_list] == [0.01, 0.01]

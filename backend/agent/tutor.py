@@ -315,20 +315,26 @@ async def run_streaming(
                             if fn_args:
                                 slot["args"] += fn_args
 
+            # Record this iteration's cost BEFORE branching on tool_frags. Every
+            # acompletion above is billed, so tool-dispatch iterations must count
+            # toward the daily cap too (mirrors non-streaming run(), which records
+            # each iteration). Previously this block lived inside `if not
+            # tool_frags`, so multi-tool turns charged only their final text
+            # iteration and could evade the hard cost cap.
+            try:
+                built = litellm.stream_chunk_builder(chunks, messages=full)
+                cost = litellm.completion_cost(completion_response=built) or 0.0
+            except Exception as e:
+                log.warning("stream completion_cost failed: %s", e)
+                cost = 0.0
+            if cost > 0:
+                try:
+                    cost_meter.record_cost(ctx.db, ctx.user_id, cost)
+                except Exception as e:
+                    log.warning("cost_meter.record_cost failed: %s", e)
+
             # No tool calls assembled -> the streamed content was the final answer.
             if not tool_frags:
-                try:
-                    built = litellm.stream_chunk_builder(chunks, messages=full)
-                    cost = litellm.completion_cost(completion_response=built) or 0.0
-                except Exception as e:
-                    log.warning("stream completion_cost failed: %s", e)
-                    cost = 0.0
-                if cost > 0:
-                    try:
-                        cost_meter.record_cost(ctx.db, ctx.user_id, cost)
-                    except Exception as e:
-                        log.warning("cost_meter.record_cost failed: %s", e)
-
                 msg_id = _persist_assistant_message(
                     ctx,
                     accumulated_text,

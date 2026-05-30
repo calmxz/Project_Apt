@@ -90,8 +90,9 @@ fill in real values locally, never commit.
 - Every API call carries `Authorization: Bearer <access_token>`, injected by
   `frontend/src/services/apiClient.js` and `uploadApi.js` from the auth store.
 - Backend: `backend/services/auth.py` fetches and caches the Supabase JWKS
-  (`{SUPABASE_URL}/auth/v1/keys`), then verifies the JWT signature, `exp`,
-  `aud`, and issuer on every request. Returns the `sub` claim as `user_id`.
+  (`{SUPABASE_URL}/auth/v1/.well-known/jwks.json`), then verifies the JWT
+  signature, `exp`, and `aud` on every request. Returns the `sub` claim as
+  `user_id`.
   FastAPI dependency `current_user_id` raises `401` on any failure mode.
 - All routes in `backend/routes/*` take `user_id: str = Depends(current_user_id)`.
   No route accepts a client-provided `user_id` any longer; H-4 closed.
