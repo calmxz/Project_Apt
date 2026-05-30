@@ -235,6 +235,8 @@ def update_session(
     user_id: str = Depends(current_user_id),
     db: Session = Depends(get_db),
 ):
+    if req.topic is None and req.pinned is None:
+        raise HTTPException(status_code=400, detail="at least one field required")
     row = db.get(SessionModel, session_id)
     if row is None or row.user_id != user_id:
         raise HTTPException(status_code=404, detail="session not found")

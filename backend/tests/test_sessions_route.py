@@ -413,3 +413,9 @@ def test_list_and_detail_include_pinned(client, db_session, seeded_user):
     assert s_list_item is not None, "s_list not found in list response"
     assert s_list_item["pinned"] is True
     assert client.get(f"/api/sessions/s_list?user_id={USER_ID}").json()["pinned"] is True
+
+
+def test_patch_empty_body_400(client, db_session, seeded_user):
+    _make_session(db_session, "s_empty")
+    r = client.patch(f"/api/sessions/s_empty?user_id={USER_ID}", json={})
+    assert r.status_code == 400
