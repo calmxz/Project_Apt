@@ -104,6 +104,33 @@ describe('Sidebar.vue — session list rendering', () => {
     const btn = wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-open"]')
     expect(btn.attributes('aria-current')).toBe('page')
   })
+
+  it('filters sessions via the search input and shows a match count', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'a1', topic: 'Photosynthesis', created_at: new Date().toISOString(), ended_at: null },
+      { id: 'a2', topic: 'Big-O notation', created_at: new Date().toISOString(), ended_at: null },
+    ]
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    await wrapper.find('[data-testid="sidebar-search"]').setValue('photo')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sidebar-row-a1"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sidebar-row-a2"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="sidebar-search-count"]').text()).toContain('1')
+  })
+
+  it('shows a no-match hint when search matches nothing', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'a1', topic: 'Photosynthesis', created_at: new Date().toISOString(), ended_at: null },
+    ]
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    await wrapper.find('[data-testid="sidebar-search"]').setValue('zzz')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sidebar-search-empty"]').exists()).toBe(true)
+  })
 })
 
 describe('Sidebar.vue — row interactions', () => {
