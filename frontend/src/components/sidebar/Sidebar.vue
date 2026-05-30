@@ -110,8 +110,8 @@ onMounted(async () => {
 // Auto-collapse Ended section when there are many ended sessions, default open
 // when there are few. Per spec: collapsed if > 5, open if ≤ 5.
 watch(
-  endedRows,
-  (rows) => { endedOpen.value = rows.length <= 5 },
+  () => endedRows.value.length,
+  (count) => { endedOpen.value = count <= 5 },
   { immediate: true },
 )
 
@@ -131,6 +131,11 @@ watch(
 const isExpanded = computed(() => mode.value === 'expanded' || mode.value === 'drawer-open')
 const showCollapseToggle = computed(() => isDesktop.value)
 const showDrawerClose = computed(() => !isDesktop.value && mode.value === 'drawer-open')
+
+// Clear search when collapsing so the icon rail is never gated empty.
+watch(isExpanded, (expanded) => {
+  if (!expanded) searchQuery.value = ''
+})
 
 async function onSignOut() {
   try {

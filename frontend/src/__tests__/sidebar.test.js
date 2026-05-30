@@ -30,6 +30,7 @@ describe('Sidebar.vue — session list rendering', () => {
     routerPush.mockClear()
     localStorage.clear()
     setViewport(1400) // desktop expanded
+    sidebarTest._setExpanded(true)
     routeRef.params = {}
     routeRef.fullPath = '/'
   })
@@ -157,6 +158,24 @@ describe('Sidebar.vue — session list rendering', () => {
     expect(wrapper.find('[data-testid="sidebar-section-pinned"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="sidebar-section-pinned"] [data-testid="sidebar-row-p1"]').exists()).toBe(true)
   })
+
+  it('clears the search query when the sidebar collapses so the rail is not blank', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'a1', topic: 'Photosynthesis', created_at: new Date().toISOString(), ended_at: null },
+    ]
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    await wrapper.find('[data-testid="sidebar-search"]').setValue('photo')
+    await flushPromises()
+    // collapse the sidebar
+    await wrapper.find('[data-testid="sidebar-collapse-toggle"]').trigger('click')
+    await flushPromises()
+    // search input is gone (v-if on isExpanded)
+    expect(wrapper.find('[data-testid="sidebar-search"]').exists()).toBe(false)
+    // collapsed rail must show the session row — fails before Fix 1 because searching stays true
+    expect(wrapper.find('[data-testid="sidebar-row-a1"]').exists()).toBe(true)
+  })
 })
 
 describe('Sidebar.vue — row interactions', () => {
@@ -166,6 +185,7 @@ describe('Sidebar.vue — row interactions', () => {
     routerPush.mockClear()
     localStorage.clear()
     setViewport(1400)
+    sidebarTest._setExpanded(true)
     routeRef.params = {}
     routeRef.fullPath = '/'
   })
@@ -244,6 +264,7 @@ describe('Sidebar.vue — mount fetch', () => {
     routerPush.mockClear()
     localStorage.clear()
     setViewport(1400)
+    sidebarTest._setExpanded(true)
     routeRef.params = {}
   })
   afterEach(() => wrapper?.unmount())
