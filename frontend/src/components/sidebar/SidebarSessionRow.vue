@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { formatRelative } from '@/utils/formatDate.js'
 import { useSidebar } from '@/composables/useSidebar.js'
@@ -65,12 +65,23 @@ async function onResume() {
   }
 }
 
+function refocusRowTrigger(id) {
+  nextTick(() => {
+    const row = document.querySelector(`[data-session-id="${id}"]`)
+    row?.querySelector('[data-testid="sidebar-row-menu-trigger"]')?.focus()
+  })
+}
+
 function onPin() {
-  store.setPinned(props.session.id, true).catch(() => {})
+  const id = props.session.id
+  store.setPinned(id, true).catch(() => {})
+  refocusRowTrigger(id)
 }
 
 function onUnpin() {
-  store.setPinned(props.session.id, false).catch(() => {})
+  const id = props.session.id
+  store.setPinned(id, false).catch(() => {})
+  refocusRowTrigger(id)
 }
 
 function onRename() {

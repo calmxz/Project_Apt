@@ -276,6 +276,28 @@ describe('Sidebar.vue — row interactions', () => {
     await wrapper.find('[data-testid="sidebar-row-menu-pin"]').trigger('click')
     expect(pinSpy).toHaveBeenCalledWith('a1', true)
   })
+
+  it('Pin keeps focus on the row trigger after the row moves to the pinned section', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'a1', topic: 'X', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false },
+      { id: 'a2', topic: 'Y', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false },
+    ]
+    // spy flips real store state so the row relocates across sections
+    vi.spyOn(store, 'setPinned').mockImplementation(async (id, pinned) => {
+      const s = store.sessions.find((x) => x.id === id)
+      if (s) s.pinned = pinned
+      return {}
+    })
+    wrapper = mount(Sidebar, { attachTo: document.body })
+    await flushPromises()
+    await wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]').trigger('click')
+    await wrapper.find('[data-testid="sidebar-row-menu-pin"]').trigger('click')
+    await flushPromises()
+    const active = document.activeElement
+    const a1Trigger = wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]').element
+    expect(active).toBe(a1Trigger)
+  })
 })
 
 describe('Sidebar.vue — footer rail labels', () => {
