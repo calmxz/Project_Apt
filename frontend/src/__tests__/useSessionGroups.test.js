@@ -78,4 +78,28 @@ describe('useSessionGroups', () => {
     const { filteredFlat } = useSessionGroups(sessions, ref('untitled'), ref(NOW))
     expect(filteredFlat.value.map((r) => r.id)).toEqual(['u'])
   })
+
+  it('today boundary: a session at exactly the UTC day start is "today"', () => {
+    const todayStart = Date.UTC(2026, 4, 30) // 2026-05-30T00:00:00Z
+    const sessions = ref([
+      sess({ id: 't', created_at: iso(todayStart) }),
+      sess({ id: 'yest', created_at: iso(todayStart - 1) }), // one ms earlier => week
+    ])
+    const { activeGroups } = useSessionGroups(sessions, ref(''), ref(NOW))
+    const byKey = Object.fromEntries(activeGroups.value.map((g) => [g.key, g.rows.map((r) => r.id)]))
+    expect(byKey.today).toEqual(['t'])
+    expect(byKey.week).toEqual(['yest'])
+  })
+
+  it('week boundary: exactly 6 UTC days before today start is "week", one ms earlier is "older"', () => {
+    const weekStart = Date.UTC(2026, 4, 24) // 2026-05-24T00:00:00Z
+    const sessions = ref([
+      sess({ id: 'w', created_at: iso(weekStart) }),
+      sess({ id: 'o', created_at: iso(weekStart - 1) }),
+    ])
+    const { activeGroups } = useSessionGroups(sessions, ref(''), ref(NOW))
+    const byKey = Object.fromEntries(activeGroups.value.map((g) => [g.key, g.rows.map((r) => r.id)]))
+    expect(byKey.week).toEqual(['w'])
+    expect(byKey.older).toEqual(['o'])
+  })
 })

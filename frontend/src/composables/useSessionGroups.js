@@ -3,6 +3,7 @@ import { computed, unref } from 'vue'
 
 const DAY_MS = 86_400_000
 
+// Dates bucket by UTC calendar day so grouping is consistent across timezones.
 function startOfUtcDay(ms) {
   const d = new Date(ms)
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
@@ -27,6 +28,8 @@ function matchTopic(session, q) {
 export function useSessionGroups(sessions, searchQuery, now) {
   const rows = computed(() => unref(sessions) || [])
   const query = computed(() => (unref(searchQuery) || '').trim().toLowerCase())
+  // When `now` is null at runtime, Date.now() is captured at setup time; buckets
+  // refresh on next mount. No ticker needed at this data scale.
   const nowMs = computed(() => unref(now) ?? Date.now())
 
   const searching = computed(() => query.value.length > 0)
