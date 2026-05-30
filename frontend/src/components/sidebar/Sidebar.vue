@@ -90,6 +90,8 @@ const searchQuery = ref('')
 const { searching, filteredFlat, matchCount, pinnedActive, activeGroups, endedRows } =
   useSessionGroups(sessions, searchQuery, ref(null)) // null => Date.now() captured at setup time
 
+const activeFlat = computed(() => activeGroups.value.flatMap((g) => g.rows))
+
 const showSkeleton = computed(() => loading.value && !sessions.value.length)
 
 const showEmptyHint = computed(
@@ -229,7 +231,7 @@ function onNewSession() {
     <nav ref="listEl" class="sb-list-wrap" aria-label="Sessions">
       <template v-if="isExpanded">
         <template v-if="searching">
-          <p class="sb-search-count label" data-testid="sidebar-search-count">
+          <p class="sb-search-count label" data-testid="sidebar-search-count" aria-live="polite" aria-atomic="true">
             {{ matchCount }} {{ matchCount === 1 ? 'match' : 'matches' }}
           </p>
           <ul v-if="filteredFlat.length" class="sb-session-list">
@@ -240,7 +242,7 @@ function onNewSession() {
               :state="s.ended_at ? 'ended' : 'active'"
             />
           </ul>
-          <p v-else class="sb-empty-hint" data-testid="sidebar-search-empty">
+          <p v-else class="sb-empty-hint" data-testid="sidebar-search-empty" aria-live="polite" aria-atomic="true">
             No sessions match "{{ searchQuery }}".
           </p>
         </template>
@@ -248,12 +250,12 @@ function onNewSession() {
           <section class="sb-section sb-section--active" data-testid="sidebar-section-active">
             <h3 class="sb-section-label label">
               Active
-              <span v-if="!showSkeleton" class="sb-section-count">({{ activeGroups.flatMap((g) => g.rows).length }})</span>
+              <span v-if="!showSkeleton" class="sb-section-count">({{ activeFlat.length }})</span>
             </h3>
             <SidebarSkeletonList v-if="showSkeleton" :count="3" />
-            <ul v-else-if="activeGroups.flatMap((g) => g.rows).length" class="sb-session-list">
+            <ul v-else-if="activeFlat.length" class="sb-session-list">
               <SidebarSessionRow
-                v-for="s in activeGroups.flatMap((g) => g.rows)"
+                v-for="s in activeFlat"
                 :key="s.id"
                 :session="s"
                 state="active"
@@ -309,7 +311,7 @@ function onNewSession() {
       <template v-else>
         <ul v-if="sessions.length" class="sb-session-list sb-session-list--collapsed">
           <SidebarSessionRow
-            v-for="s in [...pinnedActive, ...activeGroups.flatMap((g) => g.rows), ...endedRows]"
+            v-for="s in [...pinnedActive, ...activeFlat, ...endedRows]"
             :key="s.id"
             :session="s"
             :state="s.ended_at ? 'ended' : 'active'"
