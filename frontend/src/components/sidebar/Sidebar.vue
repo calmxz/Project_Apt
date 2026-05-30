@@ -326,16 +326,19 @@ function onNewSession() {
       <RouterLink
         to="/profile"
         class="sb-icon"
+        :class="{ 'sb-icon--row': isExpanded }"
         aria-label="Combined profile"
         title="Combined profile"
         data-testid="sidebar-profile"
         @click="closeDrawer"
       >
         <i class="pi pi-user" />
+        <span v-if="isExpanded" class="sb-icon-label">Profile</span>
       </RouterLink>
       <button
         type="button"
         class="sb-icon"
+        :class="{ 'sb-icon--row': isExpanded }"
         role="switch"
         :aria-checked="isDark"
         :aria-label="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
@@ -344,27 +347,32 @@ function onNewSession() {
         @click="toggleTheme"
       >
         <i :class="isDark ? 'pi pi-sun' : 'pi pi-moon'" />
+        <span v-if="isExpanded" class="sb-icon-label">{{ isDark ? 'Light mode' : 'Dark mode' }}</span>
       </button>
       <RouterLink
         to="/settings"
         class="sb-icon"
+        :class="{ 'sb-icon--row': isExpanded }"
         aria-label="Settings"
         title="Settings"
         data-testid="sidebar-settings"
         @click="closeDrawer"
       >
         <i class="pi pi-cog" />
+        <span v-if="isExpanded" class="sb-icon-label">Settings</span>
       </RouterLink>
       <button
         v-if="isAuthenticated"
         type="button"
         class="sb-icon"
+        :class="{ 'sb-icon--row': isExpanded }"
         aria-label="Sign out"
         title="Sign out"
         data-testid="sidebar-sign-out"
         @click="onSignOut"
       >
         <i class="pi pi-sign-out" />
+        <span v-if="isExpanded" class="sb-icon-label">Sign out</span>
       </button>
     </footer>
   </aside>
@@ -599,17 +607,30 @@ function onNewSession() {
 
 .sb-rail {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.375rem;
-  padding: 0.75rem;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.125rem;
+  padding: 0.5rem;
   border-top: 1px solid var(--color-border);
 }
 
 .sb-rail--column {
-  flex-direction: column;
+  align-items: center;
   gap: 0.5rem;
   padding: 0.75rem 0.25rem;
+}
+
+.sb-icon--row {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 0.625rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-md);
+}
+
+.sb-icon-label {
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
 }
 
 .sb-icon {

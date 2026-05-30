@@ -257,6 +257,38 @@ describe('Sidebar.vue — row interactions', () => {
   })
 })
 
+describe('Sidebar.vue — footer rail labels', () => {
+  let wrapper
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    routerPush.mockClear()
+    localStorage.clear()
+    setViewport(1400)
+    sidebarTest._setExpanded(true)
+    routeRef.params = {}
+    routeRef.fullPath = '/'
+  })
+  afterEach(() => wrapper?.unmount())
+
+  it('footer shows text labels when expanded', async () => {
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    const footer = wrapper.find('[data-testid="sidebar-profile"]')
+    expect(footer.exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sidebar-profile"]').text()).toContain('Profile')
+  })
+
+  it('footer hides text labels when collapsed', async () => {
+    sidebarTest._setExpanded(false)
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    // collapsed: footer carries sb-rail--column class
+    expect(wrapper.find('footer.sb-rail').classes()).toContain('sb-rail--column')
+    // no label text visible
+    expect(wrapper.find('[data-testid="sidebar-profile"]').text()).not.toContain('Profile')
+  })
+})
+
 describe('Sidebar.vue — mount fetch', () => {
   let wrapper
   beforeEach(() => {
