@@ -328,6 +328,51 @@ describe('Sidebar.vue — row interactions', () => {
     expect(renameSpy).not.toHaveBeenCalled()
     expect(wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-rename-input"]').exists()).toBe(false)
   })
+
+  it('Rename Enter with unchanged topic does not call the store', async () => {
+    const store = useSessionStore()
+    store.sessions = [{ id: 'a1', topic: 'Same', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false }]
+    const renameSpy = vi.spyOn(store, 'renameSession').mockResolvedValue({})
+    wrapper = mount(Sidebar, { attachTo: document.body })
+    await flushPromises()
+    await wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]').trigger('click')
+    await wrapper.find('[data-testid="sidebar-row-menu-rename"]').trigger('click')
+    const input = wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-rename-input"]')
+    await input.setValue('Same')
+    await input.trigger('keydown.enter')
+    expect(renameSpy).not.toHaveBeenCalled()
+  })
+
+  it('Rename Enter with empty topic does not call the store', async () => {
+    const store = useSessionStore()
+    store.sessions = [{ id: 'a1', topic: 'Old', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false }]
+    const renameSpy = vi.spyOn(store, 'renameSession').mockResolvedValue({})
+    wrapper = mount(Sidebar, { attachTo: document.body })
+    await flushPromises()
+    await wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]').trigger('click')
+    await wrapper.find('[data-testid="sidebar-row-menu-rename"]').trigger('click')
+    const input = wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-rename-input"]')
+    await input.setValue('   ')
+    await input.trigger('keydown.enter')
+    expect(renameSpy).not.toHaveBeenCalled()
+  })
+
+  it('Rename commits exactly once on Enter even though blur also fires', async () => {
+    const store = useSessionStore()
+    store.sessions = [{ id: 'a1', topic: 'Old', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false }]
+    const renameSpy = vi.spyOn(store, 'renameSession').mockResolvedValue({})
+    wrapper = mount(Sidebar, { attachTo: document.body })
+    await flushPromises()
+    await wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]').trigger('click')
+    await wrapper.find('[data-testid="sidebar-row-menu-rename"]').trigger('click')
+    const input = wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-rename-input"]')
+    await input.setValue('New')
+    await input.trigger('keydown.enter')
+    try { await input.trigger('blur') } catch { /* input may be detached after rename exits */ }
+    await flushPromises()
+    expect(renameSpy).toHaveBeenCalledTimes(1)
+    expect(renameSpy).toHaveBeenCalledWith('a1', 'New')
+  })
 })
 
 describe('Sidebar.vue — footer rail labels', () => {

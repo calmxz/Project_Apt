@@ -97,8 +97,10 @@ async function startRename() {
 }
 
 function cancelRename() {
+  const id = props.session.id
   draft.value = props.session.topic || ''
   renaming.value = false
+  refocusRowTrigger(id)
 }
 
 async function commitRename() {
@@ -107,6 +109,12 @@ async function commitRename() {
   renaming.value = false
   if (!next || next === (props.session.topic || '')) return
   try { await store.renameSession(props.session.id, next) } catch { /* store.error populated */ }
+}
+
+function commitRenameFromKey() {
+  const id = props.session.id
+  commitRename()
+  refocusRowTrigger(id)
 }
 </script>
 
@@ -140,7 +148,7 @@ async function commitRename() {
           class="sb-row-rename-input"
           aria-label="Rename session"
           data-testid="sidebar-row-rename-input"
-          @keydown.enter.prevent="commitRename"
+          @keydown.enter.prevent="commitRenameFromKey"
           @keydown.esc.prevent="cancelRename"
           @blur="commitRename"
           @click.stop
