@@ -81,3 +81,4 @@ function safeJson(text) {
 
 export const apiGet = (path, params, opts = {}) => request('GET', path, { params, ...opts })
 export const apiPost = (path, body, opts = {}) => request('POST', path, { body, ...opts })
+export const apiPatch = (path, body, opts = {}) => request('PATCH', path, { body, ...opts })

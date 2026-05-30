@@ -330,3 +330,26 @@ describe('Sidebar.vue — mount fetch', () => {
     expect(listSpy).not.toHaveBeenCalled()
   })
 })
+
+describe('session store — rename + pin actions', () => {
+  beforeEach(() => { setActivePinia(createPinia()) })
+
+  it('renameSession optimistically updates the row and calls the API', async () => {
+    const store = useSessionStore()
+    store.sessions = [{ id: 'a1', topic: 'old', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false }]
+    const api = await import('@/services/sessionsApi.js')
+    vi.spyOn(api, 'renameSession').mockResolvedValue({ id: 'a1', topic: 'new', pinned: false })
+    await store.renameSession('a1', 'new')
+    expect(store.sessions[0].topic).toBe('new')
+    expect(api.renameSession).toHaveBeenCalledWith('a1', 'new')
+  })
+
+  it('setPinned rolls back on API error', async () => {
+    const store = useSessionStore()
+    store.sessions = [{ id: 'a1', topic: 'x', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false }]
+    const api = await import('@/services/sessionsApi.js')
+    vi.spyOn(api, 'setPinned').mockRejectedValue(new Error('boom'))
+    await store.setPinned('a1', true).catch(() => {})
+    expect(store.sessions[0].pinned).toBe(false)
+  })
+})
