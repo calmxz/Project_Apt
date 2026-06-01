@@ -114,6 +114,13 @@ export const useSessionStore = defineStore('session', () => {
         tool_calls: resp.tool_calls || [],
         citations: resp.citations || [],
       })
+      // Drive the check-question card from the chat response so the composer
+      // locks on an ask turn and clears once the next turn grades it. The
+      // verdict marker is streaming-only (no check_result on this path), so a
+      // freshly-set card stays at verdict:null until the grading turn nulls it.
+      pendingCheck.value = resp.pending_check
+        ? { gap: resp.pending_check.gap, question: resp.pending_check.question, verdict: null }
+        : null
       return resp
     } catch (e) {
       if (e?.status === 429 && e?.body?.detail?.code === ERR_DAILY_CAP_REACHED) {
@@ -244,9 +251,6 @@ export const useSessionStore = defineStore('session', () => {
   }
   function handleCheckResult({ correct }) {
     if (pendingCheck.value) pendingCheck.value = { ...pendingCheck.value, verdict: correct }
-  }
-  function clearPendingCheck() {
-    pendingCheck.value = null
   }
   async function skipCheck() {
     const id = currentSessionId.value
@@ -395,7 +399,6 @@ export const useSessionStore = defineStore('session', () => {
     clearCostCap,
     handleCheckQuestion,
     handleCheckResult,
-    clearPendingCheck,
     skipCheck,
     appendAssistantDelta,
     recordToolCall,
