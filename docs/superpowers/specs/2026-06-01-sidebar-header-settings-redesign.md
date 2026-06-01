@@ -74,7 +74,8 @@ Resulting strip: hamburger (open drawer) + logo (home) + Profile. The
      wording bug where the footer toggle read "Light mode" while in dark mode.
    - Wires `useTheme()` (`isDark`, `toggle`).
 
-2. **Account card** — a **Sign out** action.
+2. **Sign out** — placed near the Danger zone, low-key outlined treatment
+   (session-ending, not destructive — distinct from the dashed Danger card).
    - Button `data-testid="settings-sign-out"`, rendered only when authenticated.
    - On click: `authStore.signOut()`, then `router.push('/login')`; on error,
      `showError`. Mirrors the existing handler removed from the sidebar.
@@ -95,8 +96,8 @@ This is a deliberate decision, not an oversight.
   and the sidebar `onSignOut`/auth-signout wiring if no longer referenced.
 - `frontend/src/components/sidebar/SidebarMobileTopStrip.vue` — remove theme +
   sign-out controls and their wiring.
-- `frontend/src/views/SettingsView.vue` — add Appearance card + Account
-  sign-out; wire theme/auth/router/toast.
+- `frontend/src/views/SettingsView.vue` — add Appearance switch card + a
+  sign-out action near the Danger zone; wire theme/auth/router/toast.
 
 **Tests (in-scope, move with the testids — not cleanup-after)**
 - `frontend/src/__tests__/sidebar.test.js` — drop `sidebar-theme-toggle` /
