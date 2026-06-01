@@ -57,4 +57,14 @@ describe('ToolCallChip', () => {
     })
     expect(w.text()).toContain('mystery_tool')
   })
+
+  it('shows the error string as title on the error state', () => {
+    const wrapper = mount(ToolCallChip, {
+      props: {
+        tool_call: { name: 'update_topic_profile', error: 'evidence_type must be ...' },
+        state: 'error',
+      },
+    })
+    expect(wrapper.find('.tool-pill').attributes('title')).toContain('evidence_type')
+  })
 })

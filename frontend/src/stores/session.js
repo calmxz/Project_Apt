@@ -247,7 +247,7 @@ export const useSessionStore = defineStore('session', () => {
       streamState.value = 'tool_running'
     } else if (kind === 'done') {
       const tc = streamingMessage.value.tool_calls.find((t) => t.id === tool_call.id)
-      if (tc) { tc.state = tool_call.status === 'error' ? 'error' : 'done'; tc.summary = tool_call.summary }
+      if (tc) { tc.state = tool_call.status === 'error' ? 'error' : 'done'; tc.summary = tool_call.summary; tc.error = tool_call.error }
       streamState.value = 'streaming'
     }
   }

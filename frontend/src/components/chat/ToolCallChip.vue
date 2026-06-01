@@ -23,6 +23,7 @@ const display = computed(() => {
   <span
     class="tool-pill"
     :class="`tool-pill--${state}`"
+    :title="state === 'error' ? (tool_call.error || display) : undefined"
   >
     <span class="tool-pill-dot" aria-hidden="true"></span>
     <span class="tool-pill-text">{{ display }}</span>
