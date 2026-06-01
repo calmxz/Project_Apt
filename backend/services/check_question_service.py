@@ -8,12 +8,19 @@ graded in a LATER turn than the one that asked it, and only for the gap that
 was actually asked. This makes "ask and self-grade in one turn" impossible.
 """
 
+from __future__ import annotations
+
 import json
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy.orm import Session
 
+from contracts import AskCheckQuestionArgs, ToolResult
 from db.models import Session as SessionModel
+
+if TYPE_CHECKING:
+    from agent.types import ToolContext
 
 
 def get_pending_check(db: Session, session_id: str) -> dict | None:
@@ -59,3 +66,23 @@ def is_gradable(
     if pc is None or pc.get("gap") != gap:
         return False
     return parse_asked_at(pc) < current_turn
+
+
+def register(db: Session, ctx: ToolContext, args: AskCheckQuestionArgs) -> ToolResult:
+    if args.session_id != ctx.session_id:
+        return ToolResult(
+            ok=False,
+            status="failed",
+            error=f"session_id mismatch: args={args.session_id} ctx={ctx.session_id}",
+        )
+    if get_pending_check(db, ctx.session_id) is not None:
+        return ToolResult(
+            ok=False,
+            status="failed",
+            error="a check-question is already open; grade or skip it first",
+        )
+    set_pending_check(
+        db, ctx.session_id, gap=args.gap, question=args.question,
+        asked_at=ctx.turn_started_at,
+    )
+    return ToolResult(ok=True, status="ok", data={"gap": args.gap, "question": args.question})

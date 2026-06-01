@@ -11,12 +11,13 @@ from typing import Any
 
 from agent.types import ToolContext
 from contracts import (
+    AskCheckQuestionArgs,
     RecordLearningEventArgs,
     RetrieveChunksArgs,
     ToolResult,
     UpdateTopicProfileArgs,
 )
-from services import learning_event_service, profile_service, retrieval_service
+from services import check_question_service, learning_event_service, profile_service, retrieval_service
 
 log = logging.getLogger(__name__)
 
@@ -66,6 +67,19 @@ TOOLS = [
             "parameters": _schema(RetrieveChunksArgs),
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "ask_check_question",
+            "description": (
+                "Pose ONE check-question to the learner and end your turn. Also"
+                " write the question text in your normal reply. Do NOT call"
+                " record_learning_event in the same turn -- you will grade the"
+                " learner's answer on the NEXT turn."
+            ),
+            "parameters": _schema(AskCheckQuestionArgs),
+        },
+    },
 ]
 
 
@@ -82,6 +96,10 @@ def dispatch(name: str, args: dict[str, Any], ctx: ToolContext) -> ToolResult:
         if name == "retrieve_chunks":
             return retrieval_service.retrieve(
                 ctx.db, ctx, RetrieveChunksArgs.model_validate(args)
+            )
+        if name == "ask_check_question":
+            return check_question_service.register(
+                ctx.db, ctx, AskCheckQuestionArgs.model_validate(args)
             )
         return ToolResult(ok=False, status="failed", error=f"unknown tool: {name}")
     except Exception as e:
