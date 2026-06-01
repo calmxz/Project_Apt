@@ -114,9 +114,19 @@ def apply_patch(
     if args.add_confirmed_gap and args.add_confirmed_gap not in confirmed:
         confirmed.append(args.add_confirmed_gap)
 
-    if args.add_mastered_concept and args.evidence_type in ("declared", "tested"):
-        if args.add_mastered_concept not in mastered:
-            mastered.append(args.add_mastered_concept)
+    if args.add_mastered_concept:
+        if args.evidence_type is None:
+            return ToolResult(
+                ok=False,
+                status="failed",
+                error=(
+                    "evidence_type must be 'declared' or 'tested' when "
+                    "add_mastered_concept is set"
+                ),
+            )
+        if args.evidence_type in ("declared", "tested"):
+            if args.add_mastered_concept not in mastered:
+                mastered.append(args.add_mastered_concept)
 
     # focus_target_gap handling
     clearing = prior_focus is not None and args.focus_target_gap is None

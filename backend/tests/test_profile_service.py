@@ -205,6 +205,39 @@ def test_load_profile_tolerates_legacy_fields(session_row, db_session):
     assert not hasattr(profile, "mastered_candidates")
 
 
+def test_focus_only_patch_without_evidence_type_succeeds(session_row, ctx, db_session):
+    args = UpdateTopicProfileArgs(
+        session_id=SESSION_ID,
+        focus_target_gap="calvin_cycle",
+        evidence_type=None,
+    )
+    result = profile_service.apply_patch(db_session, ctx, args)
+    assert result.ok is True
+    assert profile_service.load_profile(db_session, SESSION_ID).focus_target_gap == "calvin_cycle"
+
+
+def test_mastered_concept_requires_evidence_type(session_row, ctx, db_session):
+    args = UpdateTopicProfileArgs(
+        session_id=SESSION_ID,
+        add_mastered_concept="light_reactions",
+        evidence_type=None,
+    )
+    result = profile_service.apply_patch(db_session, ctx, args)
+    assert result.ok is False
+    assert "evidence_type" in (result.error or "")
+
+
+def test_mastered_concept_with_declared_promotes(session_row, ctx, db_session):
+    args = UpdateTopicProfileArgs(
+        session_id=SESSION_ID,
+        add_mastered_concept="light_reactions",
+        evidence_type="declared",
+    )
+    result = profile_service.apply_patch(db_session, ctx, args)
+    assert result.ok is True
+    assert "light_reactions" in profile_service.load_profile(db_session, SESSION_ID).mastered_concepts
+
+
 def test_load_profile_falls_back_on_unparseable_blob(session_row, db_session):
     """Regression (review #2): a non-JSON / corrupt blob degrades to an empty
     profile rather than raising."""
