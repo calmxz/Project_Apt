@@ -176,12 +176,13 @@ function onNewSession() {
   >
     <div class="sb-header">
       <RouterLink
+        v-if="isExpanded"
         to="/"
         class="sb-brand"
         aria-label="AdaptLearn home"
         @click="closeDrawer"
       >
-        <Logo size="md" :variant="isExpanded ? 'full' : 'mark-only'" />
+        <Logo size="md" variant="full" />
       </RouterLink>
       <button
         v-if="showCollapseToggle"
@@ -197,7 +198,7 @@ function onNewSession() {
       <button
         v-if="showDrawerClose"
         type="button"
-        class="sb-toggle"
+        class="sb-toggle sb-toggle--end"
         aria-label="Close sessions sidebar"
         title="Close"
         data-testid="sidebar-drawer-close"
@@ -439,7 +440,6 @@ function onNewSession() {
 .sb-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 0.5rem;
   padding: 0.75rem;
   min-height: 3.25rem;
@@ -448,6 +448,10 @@ function onNewSession() {
 .sidebar--collapsed .sb-header {
   justify-content: center;
   padding: 0.75rem 0.25rem;
+}
+
+.sb-toggle--end {
+  margin-left: auto;
 }
 
 .sb-brand {

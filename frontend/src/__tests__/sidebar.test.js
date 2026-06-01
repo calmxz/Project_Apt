@@ -16,7 +16,7 @@ vi.mock('@/composables/useToast.js', () => ({
 import Sidebar from '@/components/sidebar/Sidebar.vue'
 import { useSessionStore } from '@/stores/session.js'
 import { useAuthStore } from '@/stores/auth.js'
-import { __test__ as sidebarTest } from '@/composables/useSidebar.js'
+import { useSidebar, __test__ as sidebarTest } from '@/composables/useSidebar.js'
 
 function setViewport(w) {
   Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: w })
@@ -522,5 +522,51 @@ describe('session store — rename + pin actions', () => {
     reject(new Error('boom'))
     await p
     expect(store.sessions[0].topic).toBe('old') // rolled back
+  })
+})
+
+describe('Sidebar.vue — header states', () => {
+  let wrapper
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    routerPush.mockClear()
+    localStorage.clear()
+    setViewport(1400)
+    sidebarTest._setExpanded(true)
+    routeRef.params = {}
+    routeRef.fullPath = '/'
+  })
+  afterEach(() => wrapper?.unmount())
+
+  it('expanded desktop header shows the logo and a collapse toggle', async () => {
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(wrapper.find('.sb-brand').exists()).toBe(true)
+    const toggle = wrapper.find('[data-testid="sidebar-collapse-toggle"]')
+    expect(toggle.exists()).toBe(true)
+    expect(toggle.attributes('aria-label')).toBe('Collapse sidebar')
+  })
+
+  it('collapsed desktop header shows only the expand toggle, no logo', async () => {
+    sidebarTest._setExpanded(false)
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(wrapper.find('.sb-brand').exists()).toBe(false)
+    const toggle = wrapper.find('[data-testid="sidebar-collapse-toggle"]')
+    expect(toggle.exists()).toBe(true)
+    expect(toggle.attributes('aria-label')).toBe('Expand sidebar')
+  })
+
+  it('mobile drawer header shows the logo and a right-aligned close button', async () => {
+    setViewport(600)
+    const { openDrawer, closeDrawer } = useSidebar()
+    openDrawer()
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(wrapper.find('.sb-brand').exists()).toBe(true)
+    const close = wrapper.find('[data-testid="sidebar-drawer-close"]')
+    expect(close.exists()).toBe(true)
+    expect(close.classes()).toContain('sb-toggle--end')
+    closeDrawer()
   })
 })
