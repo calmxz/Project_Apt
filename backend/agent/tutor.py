@@ -488,6 +488,8 @@ async def run_streaming(
                 # stop. Grading happens on the next turn, not this one.
                 # Cost for this LLM call was already recorded above (before the
                 # tool-dispatch section), so no extra metering needed here.
+                # Soft-cap warning is intentionally skipped here: the check-question
+                # is the active UI element; the next regular reply surfaces the warning.
                 msg_id = _persist_assistant_message(
                     ctx,
                     accumulated_text,

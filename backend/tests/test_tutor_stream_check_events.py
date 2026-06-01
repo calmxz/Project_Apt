@@ -5,7 +5,7 @@ module so this file is self-contained.
 """
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -17,6 +17,7 @@ from agent.types import ToolContext
 from config import settings
 from contracts import ToolResult
 from db.models import ChatMessage, Session as SessionModel, User as UserModel
+from services import check_question_service as cq
 from services.cost_meter import CapStatus
 
 
@@ -225,3 +226,80 @@ async def test_stream_check_question_event_shape(monkeypatch, db_session):
     done = next((e for e in events if e.type == "done"), None)
     assert done is not None, "done event not emitted"
     assert "message_id" in done.data
+
+
+@pytest.mark.asyncio
+async def test_stream_emits_check_result_on_grade(monkeypatch, db_session):
+    """record_learning_event dispatch -> check_result event emitted with gap from args and correct from result.
+
+    Verifies the non-tautological path: gap comes from the tool INPUT args
+    (gap_tested), correct comes from result.data — not just echoing input.
+
+    Setup: seed a pending check from a prior turn (asked_at strictly earlier
+    than ctx.turn_started_at) so is_gradable returns True.
+
+    turn1: LLM calls record_learning_event with correct=True.
+    turn2: plain content chunk to complete the loop normally.
+    """
+    GAP = "integration_by_parts"
+    sid = "sc3"
+
+    _disable_stub(monkeypatch)
+    _allow_cap(monkeypatch)
+
+    _insert_session(db_session, session_id=sid)
+    ctx = _ctx(db_session, session_id=sid)
+
+    # Seed a pending check from a prior turn: asked_at must be strictly earlier
+    # than ctx.turn_started_at so that is_gradable passes.
+    cq.set_pending_check(
+        db_session,
+        sid,
+        gap=GAP,
+        question="What substitution applies here?",
+        asked_at=ctx.turn_started_at - timedelta(seconds=5),
+    )
+
+    turn1 = _make_stream(
+        _tool_chunk(
+            _tool_fragment(
+                index=0,
+                id="tc_3",
+                name="record_learning_event",
+                arguments=json.dumps(
+                    {
+                        "session_id": sid,
+                        "gap_tested": GAP,
+                        "question": "What substitution applies here?",
+                        "correct": True,
+                    }
+                ),
+            )
+        ),
+    )
+    turn2 = _make_stream(_content_chunk("done"))
+
+    monkeypatch.setattr(
+        "agent.tutor.litellm.acompletion",
+        AsyncMock(side_effect=[turn1, turn2]),
+    )
+
+    events = await _drain(
+        tutor.run_streaming(
+            [{"role": "user", "content": "grade my answer"}],
+            "sys",
+            ctx,
+        )
+    )
+
+    types = [e.type for e in events]
+
+    cr = next((e for e in events if e.type == "check_result"), None)
+    assert cr is not None, f"check_result missing from events: {types}"
+    assert cr.data["gap"] == GAP, f"expected gap={GAP!r}, got {cr.data['gap']!r}"
+    assert cr.data["correct"] is True, (
+        "correct should be True — False here means is_gradable failed and "
+        "record_learning_event returned ok=False (no check_result emitted on failure)"
+    )
+
+    assert "done" in types, f"done missing from events: {types}"
