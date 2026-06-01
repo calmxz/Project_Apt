@@ -7,6 +7,7 @@ vi.mock('vue-router', () => ({
 }))
 
 import SidebarMobileTopStrip from '@/components/sidebar/SidebarMobileTopStrip.vue'
+import { useSidebar } from '@/composables/useSidebar.js'
 
 describe('SidebarMobileTopStrip', () => {
   let wrapper
@@ -26,5 +27,15 @@ describe('SidebarMobileTopStrip', () => {
     wrapper = mount(SidebarMobileTopStrip)
     expect(wrapper.find('[data-testid="strip-theme-toggle"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="strip-sign-out"]').exists()).toBe(false)
+  })
+
+  it('clicking the hamburger opens the drawer', async () => {
+    const { drawerOpen, closeDrawer } = useSidebar()
+    closeDrawer()
+    wrapper = mount(SidebarMobileTopStrip)
+    expect(drawerOpen.value).toBe(false)
+    await wrapper.find('[data-testid="sidebar-mobile-hamburger"]').trigger('click')
+    expect(drawerOpen.value).toBe(true)
+    closeDrawer()
   })
 })
