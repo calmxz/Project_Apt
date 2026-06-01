@@ -103,6 +103,7 @@ async def run(
         if not msg_tool_calls:
             return (msg.content or "", tool_calls_record, citations)
 
+        asked_check = False
         for tc in msg_tool_calls:
             try:
                 args = json.loads(tc.function.arguments)
@@ -119,6 +120,9 @@ async def run(
                     error=result.error,
                 )
             )
+
+            if tc.function.name == "ask_check_question" and result.ok:
+                asked_check = True
 
             if tc.function.name == "retrieve_chunks" and result.ok:
                 raw_chunks = (result.data or {}).get("chunks", [])
@@ -157,6 +161,11 @@ async def run(
                     "content": tool_content,
                 }
             )
+
+        if asked_check:
+            # Turn-terminating: the check question has been handed to the learner.
+            # Grading happens on the next turn, not this one.
+            return (msg.content or "", tool_calls_record, citations)
 
     return (FALLBACK_TEXT, tool_calls_record, citations)
 

@@ -15,7 +15,7 @@ from db.database import get_db
 from db.models import ChatMessage, Document, Session as SessionModel, User
 from lib import keyword_index
 from lib.error_codes import DAILY_CAP_REACHED, DAILY_COST_CAP_REACHED
-from services import cost_meter, profile_service, rate_limit
+from services import check_question_service, cost_meter, profile_service, rate_limit
 from services.auth import current_user_id
 
 
@@ -145,11 +145,15 @@ async def chat(
             f"hard_cap_usd={post.hard_cap}"
         )
 
+    pc = check_question_service.get_pending_check(db, req.session_id)
+    pending_check = {"gap": pc["gap"], "question": pc["question"]} if pc else None
+
     return ChatResponse(
         assistant_message=reply,
         message_id=assistant_msg.id,
         tool_calls=tool_calls,
         citations=citations,
+        pending_check=pending_check,
     )
 
 
