@@ -536,7 +536,10 @@ describe('Sidebar.vue — header states', () => {
     routeRef.params = {}
     routeRef.fullPath = '/'
   })
-  afterEach(() => wrapper?.unmount())
+  afterEach(() => {
+    wrapper?.unmount()
+    useSidebar().closeDrawer()
+  })
 
   it('expanded desktop header shows the logo and a collapse toggle', async () => {
     wrapper = mount(Sidebar)
@@ -559,7 +562,7 @@ describe('Sidebar.vue — header states', () => {
 
   it('mobile drawer header shows the logo and a right-aligned close button', async () => {
     setViewport(600)
-    const { openDrawer, closeDrawer } = useSidebar()
+    const { openDrawer } = useSidebar()
     openDrawer()
     wrapper = mount(Sidebar)
     await flushPromises()
@@ -567,6 +570,5 @@ describe('Sidebar.vue — header states', () => {
     const close = wrapper.find('[data-testid="sidebar-drawer-close"]')
     expect(close.exists()).toBe(true)
     expect(close.classes()).toContain('sb-toggle--end')
-    closeDrawer()
   })
 })
