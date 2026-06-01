@@ -427,6 +427,17 @@ describe('Sidebar.vue — footer rail labels', () => {
     // no label text visible
     expect(wrapper.find('[data-testid="sidebar-profile"]').text()).not.toContain('Profile')
   })
+
+  it('footer rail no longer renders theme or sign-out controls', async () => {
+    const auth = useAuthStore()
+    auth.session = { user: { id: 'u-1' }, access_token: 't' }
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sidebar-theme-toggle"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="sidebar-sign-out"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="sidebar-profile"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sidebar-settings"]').exists()).toBe(true)
+  })
 })
 
 describe('Sidebar.vue — mount fetch', () => {

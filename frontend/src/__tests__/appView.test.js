@@ -19,7 +19,6 @@ vi.mock('primevue/toast', () => ({
 
 import App from '@/App.vue'
 import { reportApiError } from '@/services/errorBus.js'
-import { useAuthStore } from '@/stores/auth.js'
 
 describe('App.vue error listener', () => {
   let wrapper
@@ -72,47 +71,5 @@ describe('App.vue error listener', () => {
     reportApiError({ status: 500, body: { detail: { code: 'x' } } })
     await flushPromises()
     expect(showError).toHaveBeenCalledWith(JSON.stringify({ code: 'x' }))
-  })
-})
-
-describe('App.vue sign-out button', () => {
-  let wrapper
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    showError.mockClear()
-    routerPush.mockClear()
-  })
-  afterEach(() => wrapper?.unmount())
-
-  it('hidden when unauthenticated', () => {
-    wrapper = mount(App)
-    expect(wrapper.find('[data-testid="sidebar-sign-out"]').exists()).toBe(false)
-  })
-
-  it('visible when authenticated; click signs out and redirects to /login', async () => {
-    wrapper = mount(App)
-    const auth = useAuthStore()
-    auth.session = { user: { id: 'u-1' }, access_token: 't' }
-    await flushPromises()
-    const btn = wrapper.find('[data-testid="sidebar-sign-out"]')
-    expect(btn.exists()).toBe(true)
-    await btn.trigger('click')
-    await flushPromises()
-    expect(globalThis.__supabaseAuthStub.signOut).toHaveBeenCalled()
-    expect(routerPush).toHaveBeenCalledWith('/login')
-  })
-
-  it('surfaces error toast when signOut throws', async () => {
-    globalThis.__supabaseAuthStub.signOut.mockResolvedValueOnce({
-      error: new Error('network down'),
-    })
-    wrapper = mount(App)
-    const auth = useAuthStore()
-    auth.session = { user: { id: 'u-1' }, access_token: 't' }
-    await flushPromises()
-    await wrapper.find('[data-testid="sidebar-sign-out"]').trigger('click')
-    await flushPromises()
-    expect(showError).toHaveBeenCalledWith('network down')
-    expect(routerPush).not.toHaveBeenCalled()
   })
 })

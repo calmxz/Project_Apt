@@ -5,24 +5,20 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useSidebar } from '@/composables/useSidebar.js'
-import { useTheme } from '@/composables/useTheme.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useSessionStore } from '@/stores/session.js'
-import { useToast } from '@/composables/useToast.js'
 import { useSessionGroups } from '@/composables/useSessionGroups.js'
 import Logo from '@/components/Logo.vue'
 import SidebarSessionRow from './SidebarSessionRow.vue'
 import SidebarSkeletonList from './SidebarSkeletonList.vue'
 
 const { mode, isDesktop, drawerOpen, toggleDesktop, closeDrawer } = useSidebar()
-const { isDark, toggle: toggleTheme } = useTheme()
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 const { isAuthenticated } = storeToRefs(authStore)
 const sessionStore = useSessionStore()
 const { sessions, loading } = storeToRefs(sessionStore)
-const { showError } = useToast()
 
 const listEl = ref(null)
 const asideEl = ref(null)
@@ -136,16 +132,6 @@ const showDrawerClose = computed(() => !isDesktop.value && mode.value === 'drawe
 watch(isExpanded, (expanded) => {
   if (!expanded) searchQuery.value = ''
 })
-
-async function onSignOut() {
-  try {
-    await authStore.signOut()
-  } catch (err) {
-    showError(err?.message || 'Sign out failed')
-    return
-  }
-  router.push('/login')
-}
 
 function onNewSession() {
   closeDrawer()
@@ -336,20 +322,6 @@ function onNewSession() {
         <i class="pi pi-user" />
         <span v-if="isExpanded" class="sb-icon-label">Profile</span>
       </RouterLink>
-      <button
-        type="button"
-        class="sb-icon"
-        :class="{ 'sb-icon--row': isExpanded }"
-        role="switch"
-        :aria-checked="isDark"
-        :aria-label="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
-        :title="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
-        data-testid="sidebar-theme-toggle"
-        @click="toggleTheme"
-      >
-        <i :class="isDark ? 'pi pi-sun' : 'pi pi-moon'" />
-        <span v-if="isExpanded" class="sb-icon-label">{{ isDark ? 'Light mode' : 'Dark mode' }}</span>
-      </button>
       <RouterLink
         to="/settings"
         class="sb-icon"
@@ -362,19 +334,6 @@ function onNewSession() {
         <i class="pi pi-cog" />
         <span v-if="isExpanded" class="sb-icon-label">Settings</span>
       </RouterLink>
-      <button
-        v-if="isAuthenticated"
-        type="button"
-        class="sb-icon"
-        :class="{ 'sb-icon--row': isExpanded }"
-        aria-label="Sign out"
-        title="Sign out"
-        data-testid="sidebar-sign-out"
-        @click="onSignOut"
-      >
-        <i class="pi pi-sign-out" />
-        <span v-if="isExpanded" class="sb-icon-label">Sign out</span>
-      </button>
     </footer>
   </aside>
 </template>
