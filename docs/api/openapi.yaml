@@ -398,11 +398,12 @@ components:
     UpdateTopicProfileArgs:
       type: object
       additionalProperties: false
-      required: [session_id, evidence_type]
+      required: [session_id]
       description: |
         Patch operation for a session's TopicProfile. Sending
         `focus_target_gap: null` explicitly clears focus and requires
-        `focus_clear_reason` (server-side guard rail).
+        `focus_clear_reason` (server-side guard rail). `evidence_type` is
+        required only when `add_mastered_concept` is present.
       properties:
         session_id:           { type: string, maxLength: 64 }
         knowledge_level:
@@ -418,7 +419,11 @@ components:
             - $ref: "#/components/schemas/FocusClearReason"
             - type: "null"
           default: null
-        evidence_type:        { $ref: "#/components/schemas/EvidenceType" }
+        evidence_type:
+          oneOf:
+            - $ref: "#/components/schemas/EvidenceType"
+            - type: "null"
+          default: null
 
     RetrieveChunksArgs:
       type: object
@@ -438,6 +443,28 @@ components:
         gap_tested: { type: string, maxLength: 200 }
         question:   { type: string, maxLength: 1000 }
         correct:    { type: boolean }
+
+    AskCheckQuestionArgs:
+      type: object
+      additionalProperties: false
+      required: [session_id, gap, question]
+      description: |
+        Register an open check-question and end the turn. The question text is
+        also streamed to the learner as normal assistant text; gap+question
+        here drive the server-side pending-check state and the grading guard.
+      properties:
+        session_id: { type: string, maxLength: 64 }
+        gap:        { type: string, maxLength: 200 }
+        question:   { type: string, maxLength: 1000 }
+
+    PendingCheck:
+      type: object
+      additionalProperties: false
+      required: [gap, question]
+      description: An open check-question awaiting a learner answer.
+      properties:
+        gap:      { type: string }
+        question: { type: string }
 
     ToolResult:
       type: object
@@ -483,6 +510,11 @@ components:
           type: array
           items: { $ref: "#/components/schemas/Citation" }
           default: []
+        pending_check:
+          oneOf:
+            - $ref: "#/components/schemas/PendingCheck"
+            - type: "null"
+          default: null
 
     SessionCreateRequest:
       type: object
@@ -544,6 +576,10 @@ components:
           type: array
           items: { $ref: "#/components/schemas/Citation" }
           default: []
+        tool_calls:
+          type: array
+          items: { $ref: "#/components/schemas/ToolCallRecord" }
+          default: []
 
     SessionDetail:
       type: object
@@ -563,6 +599,11 @@ components:
             - type: "null"
           default: null
         pinned:            { type: boolean, default: false }
+        pending_check:
+          oneOf:
+            - $ref: "#/components/schemas/PendingCheck"
+            - type: "null"
+          default: null
         messages:
           type: array
           items: { $ref: "#/components/schemas/Message" }
