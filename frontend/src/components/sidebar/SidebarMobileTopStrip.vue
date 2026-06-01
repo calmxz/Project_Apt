@@ -1,28 +1,9 @@
 <script setup>
-import { RouterLink, useRouter } from 'vue-router'
-import { storeToRefs } from 'pinia'
+import { RouterLink } from 'vue-router'
 import { useSidebar } from '@/composables/useSidebar.js'
-import { useTheme } from '@/composables/useTheme.js'
-import { useAuthStore } from '@/stores/auth.js'
-import { useToast } from '@/composables/useToast.js'
 import Logo from '@/components/Logo.vue'
 
 const { openDrawer } = useSidebar()
-const { isDark, toggle: toggleTheme } = useTheme()
-const router = useRouter()
-const authStore = useAuthStore()
-const { isAuthenticated } = storeToRefs(authStore)
-const { showError } = useToast()
-
-async function onSignOut() {
-  try {
-    await authStore.signOut()
-  } catch (err) {
-    showError(err?.message || 'Sign out failed')
-    return
-  }
-  router.push('/login')
-}
 </script>
 
 <template>
@@ -50,29 +31,6 @@ async function onSignOut() {
       >
         <i class="pi pi-user" />
       </RouterLink>
-      <button
-        type="button"
-        class="sb-strip-btn"
-        role="switch"
-        :aria-checked="isDark"
-        :aria-label="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
-        :title="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
-        data-testid="strip-theme-toggle"
-        @click="toggleTheme"
-      >
-        <i :class="isDark ? 'pi pi-sun' : 'pi pi-moon'" />
-      </button>
-      <button
-        v-if="isAuthenticated"
-        type="button"
-        class="sb-strip-btn"
-        aria-label="Sign out"
-        title="Sign out"
-        data-testid="strip-sign-out"
-        @click="onSignOut"
-      >
-        <i class="pi pi-sign-out" />
-      </button>
     </div>
   </div>
 </template>
