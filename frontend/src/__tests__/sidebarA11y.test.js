@@ -143,3 +143,31 @@ describe('Mobile drawer a11y — focus trap', () => {
     expect(aside.contains(document.activeElement)).toBe(true)
   })
 })
+
+describe('Sidebar a11y — rename focus management', () => {
+  let wrapper
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    localStorage.clear()
+    setViewport(1400)
+    sidebarTest._setExpanded(true)
+    routeRef.meta = {}
+    routeRef.params = {}
+  })
+  afterEach(() => wrapper?.unmount())
+
+  it('rename input receives focus and Escape returns to a stable state', async () => {
+    const store = useSessionStore()
+    store.sessions = [{ id: 'a1', topic: 'X', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false }]
+    wrapper = mount(Sidebar, { attachTo: document.body })
+    await flushPromises()
+    await wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]').trigger('click')
+    await wrapper.find('[data-testid="sidebar-row-menu-rename"]').trigger('click')
+    await flushPromises()
+    const input = wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-rename-input"]')
+    expect(document.activeElement).toBe(input.element)
+    await input.trigger('keydown.esc')
+    expect(wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-rename-input"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+})

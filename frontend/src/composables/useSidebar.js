@@ -81,4 +81,7 @@ export const __test__ = {
   _setViewport(v) {
     viewport.value = v
   },
+  _setExpanded(v) {
+    desktopExpanded.value = v
+  },
 }

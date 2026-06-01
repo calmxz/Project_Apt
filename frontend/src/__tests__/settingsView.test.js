@@ -4,10 +4,18 @@ import { createPinia, setActivePinia } from 'pinia'
 
 import SettingsView from '@/views/SettingsView.vue'
 import { useUserStore } from '@/stores/user.js'
+import { useAuthStore } from '@/stores/auth.js'
+import { useTheme } from '@/composables/useTheme.js'
 
 const showSuccess = vi.fn()
+const showError = vi.fn()
 vi.mock('@/composables/useToast.js', () => ({
-  useToast: () => ({ showSuccess, showError: vi.fn(), showWarn: vi.fn() }),
+  useToast: () => ({ showSuccess, showError, showWarn: vi.fn() }),
+}))
+const routerPush = vi.fn()
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ push: routerPush }),
+  RouterLink: { template: '<a><slot /></a>', props: ['to'] },
 }))
 
 const stubs = {
@@ -24,6 +32,9 @@ describe('SettingsView', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     showSuccess.mockClear()
+    showError.mockClear()
+    routerPush.mockClear()
+    useTheme().setTheme('light')
     const user = useUserStore()
     user.userId = 'u_test'
     user.name = 'Eddy'
@@ -52,5 +63,44 @@ describe('SettingsView', () => {
     expect(user.interactionPreferences.feedback).toBe('direct_answers')
     expect(showSuccess).toHaveBeenCalledOnce()
     expect(wrapper.find('[data-testid="settings-saved"]').exists()).toBe(true)
+  })
+
+  it('appearance switch reflects and toggles dark mode', async () => {
+    const wrapper = mount(SettingsView, { global: { stubs } })
+    const sw = wrapper.get('[data-testid="settings-theme-toggle"]')
+    expect(sw.attributes('role')).toBe('switch')
+    expect(sw.attributes('aria-checked')).toBe('false')
+    await sw.trigger('click')
+    expect(sw.attributes('aria-checked')).toBe('true')
+  })
+
+  it('sign-out button is hidden when unauthenticated', () => {
+    const wrapper = mount(SettingsView, { global: { stubs } })
+    expect(wrapper.find('[data-testid="settings-sign-out"]').exists()).toBe(false)
+  })
+
+  it('sign-out signs out and redirects to /login', async () => {
+    const auth = useAuthStore()
+    auth.session = { user: { id: 'u-1' }, access_token: 't' }
+    const wrapper = mount(SettingsView, { global: { stubs } })
+    await flushPromises()
+    await wrapper.get('[data-testid="settings-sign-out"]').trigger('click')
+    await flushPromises()
+    expect(globalThis.__supabaseAuthStub.signOut).toHaveBeenCalled()
+    expect(routerPush).toHaveBeenCalledWith('/login')
+  })
+
+  it('sign-out surfaces an error toast and does not redirect on failure', async () => {
+    globalThis.__supabaseAuthStub.signOut.mockResolvedValueOnce({
+      error: new Error('network down'),
+    })
+    const auth = useAuthStore()
+    auth.session = { user: { id: 'u-1' }, access_token: 't' }
+    const wrapper = mount(SettingsView, { global: { stubs } })
+    await flushPromises()
+    await wrapper.get('[data-testid="settings-sign-out"]').trigger('click')
+    await flushPromises()
+    expect(showError).toHaveBeenCalledWith('network down')
+    expect(routerPush).not.toHaveBeenCalled()
   })
 })

@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { formatRelative } from '@/utils/formatDate.js'
 import { useSidebar } from '@/composables/useSidebar.js'
@@ -18,6 +18,10 @@ const store = useSessionStore()
 const { mode, closeDrawer } = useSidebar()
 
 const busy = ref(false)
+
+const renaming = ref(false)
+const draft = ref('')
+const inputEl = ref(null)
 
 const isCurrent = computed(() => route.params.id === props.session.id)
 const isCollapsed = computed(() => mode.value === 'collapsed')
@@ -64,6 +68,54 @@ async function onResume() {
     busy.value = false
   }
 }
+
+function refocusRowTrigger(id) {
+  nextTick(() => {
+    const row = document.querySelector(`[data-session-id="${id}"]`)
+    row?.querySelector('[data-testid="sidebar-row-menu-trigger"]')?.focus()
+  })
+}
+
+function onPin() {
+  const id = props.session.id
+  store.setPinned(id, true).catch(() => {})
+  refocusRowTrigger(id)
+}
+
+function onUnpin() {
+  const id = props.session.id
+  store.setPinned(id, false).catch(() => {})
+  refocusRowTrigger(id)
+}
+
+async function startRename() {
+  draft.value = props.session.topic || ''
+  renaming.value = true
+  await nextTick()
+  inputEl.value?.focus()
+  inputEl.value?.select()
+}
+
+function cancelRename() {
+  const id = props.session.id
+  draft.value = props.session.topic || ''
+  renaming.value = false
+  refocusRowTrigger(id)
+}
+
+async function commitRename() {
+  if (!renaming.value) return
+  const next = draft.value.trim()
+  renaming.value = false
+  if (!next || next === (props.session.topic || '')) return
+  try { await store.renameSession(props.session.id, next) } catch { /* store.error populated */ }
+}
+
+function commitRenameFromKey() {
+  const id = props.session.id
+  commitRename()
+  refocusRowTrigger(id)
+}
 </script>
 
 <template>
@@ -88,16 +140,36 @@ async function onResume() {
     >
       <span class="sb-row-dot" :class="{ 'sb-row-dot--filled': isCurrent }" aria-hidden="true" />
       <span v-if="!isCollapsed" class="sb-row-body">
-        <span class="sb-row-topic">{{ session.topic || 'Untitled' }}</span>
-        <span v-if="whenLabel" class="sb-row-meta">{{ whenLabel }}</span>
+        <input
+          v-if="renaming"
+          ref="inputEl"
+          v-model="draft"
+          type="text"
+          class="sb-row-rename-input"
+          aria-label="Rename session"
+          data-testid="sidebar-row-rename-input"
+          @keydown.enter.prevent="commitRenameFromKey"
+          @keydown.esc.prevent="cancelRename"
+          @blur="commitRename"
+          @click.stop
+        />
+        <span v-else class="sb-row-topic">
+          <i v-if="session.pinned && !session.ended_at" class="pi pi-bookmark-fill sb-row-pin" aria-hidden="true" />
+          {{ session.topic || 'Untitled' }}
+        </span>
+        <span v-if="whenLabel && !renaming" class="sb-row-meta">{{ whenLabel }}</span>
       </span>
     </button>
     <SidebarRowMenu
       v-if="!isCollapsed"
       :state="state"
       :busy="busy"
+      :pinned="session.pinned ?? false"
       @end="onEnd"
       @resume="onResume"
+      @pin="onPin"
+      @unpin="onUnpin"
+      @rename="startRename"
     />
   </li>
 </template>
@@ -215,5 +287,22 @@ async function onResume() {
 .sb-row--collapsed .sb-row-button {
   padding: 0.5rem;
   justify-content: center;
+}
+
+.sb-row-rename-input {
+  width: 100%;
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: 0.875rem;
+  padding: 0.125rem 0.375rem;
+}
+
+.sb-row-pin {
+  font-size: 0.75rem;
+  color: var(--color-accent-text);
+  margin-right: 0.25rem;
 }
 </style>

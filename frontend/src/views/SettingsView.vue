@@ -80,6 +80,47 @@
       </div>
     </form>
 
+    <section class="card" data-testid="settings-appearance">
+      <h2 class="card-title">
+        <i class="pi pi-moon card-icon" aria-hidden="true" />
+        Appearance
+      </h2>
+      <div class="switch-row">
+        <span class="switch-body">
+          <span class="switch-label">Dark mode</span>
+          <span class="switch-sub">Use a dark theme across the app.</span>
+        </span>
+        <button
+          type="button"
+          class="switch"
+          :class="{ 'switch--on': isDark }"
+          role="switch"
+          :aria-checked="isDark"
+          aria-label="Dark mode"
+          data-testid="settings-theme-toggle"
+          @click="toggleTheme"
+        >
+          <span class="switch-knob" aria-hidden="true" />
+        </button>
+      </div>
+    </section>
+
+    <section
+      v-if="authStore.isAuthenticated"
+      class="signout"
+      data-testid="settings-signout-section"
+    >
+      <button
+        type="button"
+        class="signout-btn"
+        data-testid="settings-sign-out"
+        @click="signOut"
+      >
+        <i class="pi pi-sign-out" aria-hidden="true" />
+        <span>Sign out</span>
+      </button>
+    </section>
+
     <section class="danger" data-testid="settings-danger">
       <h2 class="card-title danger-title">
         <i class="pi pi-exclamation-triangle card-icon" aria-hidden="true" />
@@ -102,13 +143,19 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 
 import BackButton from '../components/BackButton.vue'
 import { useUserStore } from '../stores/user.js'
+import { useAuthStore } from '../stores/auth.js'
+import { useTheme } from '../composables/useTheme.js'
 import { useToast } from '../composables/useToast.js'
 
 const user = useUserStore()
-const { showSuccess } = useToast()
+const authStore = useAuthStore()
+const router = useRouter()
+const { isDark, toggle: toggleTheme } = useTheme()
+const { showSuccess, showError } = useToast()
 
 const feedbackOptions = [
   { value: 'hints', label: 'Hints', sub: 'Nudge me toward the answer.' },
@@ -138,6 +185,16 @@ function save() {
   user.updateProfile({ name: displayName.value, feedback: feedback.value })
   savedFlash.value = true
   showSuccess('Preferences saved.')
+}
+
+async function signOut() {
+  try {
+    await authStore.signOut()
+  } catch (err) {
+    showError(err?.message || 'Sign out failed')
+    return
+  }
+  router.push('/login')
 }
 </script>
 
@@ -457,5 +514,105 @@ function save() {
   background: var(--signal-error);
   color: #FFFFFF;
   transform: translateY(-1px);
+}
+
+/* Appearance switch */
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.switch-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.switch-label {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--color-heading);
+  letter-spacing: var(--tracking-tight);
+}
+
+.switch-sub {
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+.switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 2.75rem;
+  height: 1.5rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface-soft);
+  cursor: pointer;
+  transition: background var(--motion-fast) ease, border-color var(--motion-fast) ease;
+}
+
+.switch--on {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.switch:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+}
+
+.switch-knob {
+  position: absolute;
+  top: 50%;
+  left: 0.1875rem;
+  width: 1.125rem;
+  height: 1.125rem;
+  transform: translateY(-50%);
+  border-radius: var(--radius-pill);
+  background: #FFFFFF;
+  box-shadow: var(--shadow-pop);
+  transition: left var(--motion-fast) var(--motion-bounce);
+}
+
+.switch--on .switch-knob {
+  left: calc(100% - 1.3125rem);
+}
+
+/* Sign out */
+.signout {
+  display: flex;
+}
+
+.signout-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border-strong);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: background var(--motion-fast) ease, color var(--motion-fast) ease, border-color var(--motion-fast) ease, transform var(--motion-fast) var(--motion-bounce);
+}
+
+.signout-btn:hover {
+  color: var(--color-heading);
+  border-color: var(--color-text-muted);
+  transform: translateY(-1px);
+}
+
+.signout-btn:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 </style>

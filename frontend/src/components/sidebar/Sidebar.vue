@@ -5,23 +5,20 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useSidebar } from '@/composables/useSidebar.js'
-import { useTheme } from '@/composables/useTheme.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useSessionStore } from '@/stores/session.js'
-import { useToast } from '@/composables/useToast.js'
+import { useSessionGroups } from '@/composables/useSessionGroups.js'
 import Logo from '@/components/Logo.vue'
 import SidebarSessionRow from './SidebarSessionRow.vue'
 import SidebarSkeletonList from './SidebarSkeletonList.vue'
 
 const { mode, isDesktop, drawerOpen, toggleDesktop, closeDrawer } = useSidebar()
-const { isDark, toggle: toggleTheme } = useTheme()
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 const { isAuthenticated } = storeToRefs(authStore)
 const sessionStore = useSessionStore()
 const { sessions, loading } = storeToRefs(sessionStore)
-const { showError } = useToast()
 
 const listEl = ref(null)
 const asideEl = ref(null)
@@ -85,18 +82,16 @@ onBeforeUnmount(() => {
   }
 })
 
-const activeSessions = computed(() =>
-  sessions.value.filter((s) => !s.ended_at),
-)
+const searchQuery = ref('')
+const { searching, filteredFlat, matchCount, pinnedActive, activeGroups, endedRows } =
+  useSessionGroups(sessions, searchQuery, ref(null)) // null => Date.now() captured at setup time
 
-const endedSessions = computed(() =>
-  sessions.value.filter((s) => Boolean(s.ended_at)),
-)
+const activeFlat = computed(() => activeGroups.value.flatMap((g) => g.rows))
 
 const showSkeleton = computed(() => loading.value && !sessions.value.length)
 
 const showEmptyHint = computed(
-  () => !loading.value && !activeSessions.value.length && !endedSessions.value.length,
+  () => !loading.value && !searching.value && !sessions.value.length,
 )
 
 // Fetch only if we haven't loaded yet. HomeView also calls listSessions on mount;
@@ -111,11 +106,8 @@ onMounted(async () => {
 // Auto-collapse Ended section when there are many ended sessions, default open
 // when there are few. Per spec: collapsed if > 5, open if ≤ 5.
 watch(
-  endedSessions,
-  (rows) => {
-    if (rows.length > 5) endedOpen.value = false
-    else endedOpen.value = true
-  },
+  () => endedRows.value.length,
+  (count) => { endedOpen.value = count <= 5 },
   { immediate: true },
 )
 
@@ -136,15 +128,10 @@ const isExpanded = computed(() => mode.value === 'expanded' || mode.value === 'd
 const showCollapseToggle = computed(() => isDesktop.value)
 const showDrawerClose = computed(() => !isDesktop.value && mode.value === 'drawer-open')
 
-async function onSignOut() {
-  try {
-    await authStore.signOut()
-  } catch (err) {
-    showError(err?.message || 'Sign out failed')
-    return
-  }
-  router.push('/login')
-}
+// Clear search when collapsing so the icon rail is never gated empty.
+watch(isExpanded, (expanded) => {
+  if (!expanded) searchQuery.value = ''
+})
 
 function onNewSession() {
   closeDrawer()
@@ -175,12 +162,13 @@ function onNewSession() {
   >
     <div class="sb-header">
       <RouterLink
+        v-if="isExpanded"
         to="/"
         class="sb-brand"
         aria-label="AdaptLearn home"
         @click="closeDrawer"
       >
-        <Logo size="md" :variant="isExpanded ? 'full' : 'mark-only'" />
+        <Logo size="md" variant="full" />
       </RouterLink>
       <button
         v-if="showCollapseToggle"
@@ -196,7 +184,7 @@ function onNewSession() {
       <button
         v-if="showDrawerClose"
         type="button"
-        class="sb-toggle"
+        class="sb-toggle sb-toggle--end"
         aria-label="Close sessions sidebar"
         title="Close"
         data-testid="sidebar-drawer-close"
@@ -220,72 +208,99 @@ function onNewSession() {
       </button>
     </div>
 
+    <div v-if="isExpanded" class="sb-search">
+      <i class="pi pi-search" aria-hidden="true" />
+      <input
+        v-model="searchQuery"
+        type="search"
+        class="sb-search-input"
+        placeholder="Search sessions"
+        aria-label="Search sessions"
+        data-testid="sidebar-search"
+      />
+    </div>
+
     <nav ref="listEl" class="sb-list-wrap" aria-label="Sessions">
       <template v-if="isExpanded">
-        <section class="sb-section sb-section--active" data-testid="sidebar-section-active">
-          <h3 class="sb-section-label label">
-            Active
-            <span v-if="!showSkeleton" class="sb-section-count">({{ activeSessions.length }})</span>
-          </h3>
-          <SidebarSkeletonList v-if="showSkeleton" :count="3" />
-          <ul v-else-if="activeSessions.length" class="sb-session-list">
-            <SidebarSessionRow
-              v-for="s in activeSessions"
-              :key="s.id"
-              :session="s"
-              state="active"
-            />
-          </ul>
-          <p
-            v-else-if="showEmptyHint"
-            class="sb-empty-hint"
-            data-testid="sidebar-empty-hint"
-          >
-            No sessions yet. Click + New session above.
+        <template v-if="searching">
+          <p class="sb-search-count label" data-testid="sidebar-search-count" aria-live="polite" aria-atomic="true">
+            {{ matchCount }} {{ matchCount === 1 ? 'match' : 'matches' }}
           </p>
-        </section>
-
-        <section
-          v-if="endedSessions.length"
-          class="sb-section sb-section--ended"
-          data-testid="sidebar-section-ended"
-        >
-          <button
-            type="button"
-            class="sb-section-toggle label"
-            :aria-expanded="endedOpen"
-            aria-controls="sb-ended-list"
-            data-testid="sidebar-ended-toggle"
-            @click="endedOpen = !endedOpen"
-          >
-            <span>
-              Ended <span class="sb-section-count">({{ endedSessions.length }})</span>
-            </span>
-            <i
-              :class="endedOpen ? 'pi pi-chevron-down' : 'pi pi-chevron-right'"
-              aria-hidden="true"
-            />
-          </button>
-          <ul
-            v-show="endedOpen"
-            id="sb-ended-list"
-            class="sb-session-list"
-          >
+          <ul v-if="filteredFlat.length" class="sb-session-list">
             <SidebarSessionRow
-              v-for="s in endedSessions"
+              v-for="s in filteredFlat"
               :key="s.id"
               :session="s"
-              state="ended"
+              :state="s.ended_at ? 'ended' : 'active'"
             />
           </ul>
-        </section>
+          <p v-else class="sb-empty-hint" data-testid="sidebar-search-empty" aria-live="polite" aria-atomic="true">
+            No sessions match "{{ searchQuery }}".
+          </p>
+        </template>
+        <template v-else>
+          <section
+            v-if="pinnedActive.length"
+            class="sb-section sb-section--pinned"
+            data-testid="sidebar-section-pinned"
+          >
+            <h3 class="sb-section-label label">
+              <i class="pi pi-bookmark-fill" aria-hidden="true" /> Pinned
+              <span class="sb-section-count">({{ pinnedActive.length }})</span>
+            </h3>
+            <ul class="sb-session-list">
+              <SidebarSessionRow v-for="s in pinnedActive" :key="s.id" :session="s" state="active" />
+            </ul>
+          </section>
+
+          <section class="sb-section sb-section--active" data-testid="sidebar-section-active">
+            <SidebarSkeletonList v-if="showSkeleton" :count="3" />
+            <template v-else>
+              <div
+                v-for="g in activeGroups"
+                :key="g.key"
+                class="sb-group"
+                :data-testid="`sidebar-group-${g.key}`"
+              >
+                <h3 class="sb-section-label label">{{ g.label }}</h3>
+                <ul class="sb-session-list">
+                  <SidebarSessionRow v-for="s in g.rows" :key="s.id" :session="s" state="active" />
+                </ul>
+              </div>
+              <p v-if="showEmptyHint" class="sb-empty-hint" data-testid="sidebar-empty-hint">
+                No sessions yet. Click + New session above.
+              </p>
+            </template>
+          </section>
+
+          <section
+            v-if="endedRows.length"
+            class="sb-section sb-section--ended"
+            data-testid="sidebar-section-ended"
+          >
+            <button
+              type="button"
+              class="sb-section-toggle label"
+              :aria-expanded="endedOpen"
+              aria-controls="sb-ended-list"
+              data-testid="sidebar-ended-toggle"
+              @click="endedOpen = !endedOpen"
+            >
+              <span>Ended <span class="sb-section-count">({{ endedRows.length }})</span></span>
+              <i :class="endedOpen ? 'pi pi-chevron-down' : 'pi pi-chevron-right'" aria-hidden="true" />
+            </button>
+            <ul v-show="endedOpen" id="sb-ended-list" class="sb-session-list">
+              <SidebarSessionRow v-for="s in endedRows" :key="s.id" :session="s" state="ended" />
+            </ul>
+          </section>
+        </template>
       </template>
 
       <!-- Collapsed icon rail: compact row markers without sections -->
       <template v-else>
         <ul v-if="sessions.length" class="sb-session-list sb-session-list--collapsed">
           <SidebarSessionRow
-            v-for="s in [...activeSessions, ...endedSessions]"
+            v-for="s in [...pinnedActive, ...activeFlat, ...endedRows]"
             :key="s.id"
             :session="s"
             :state="s.ended_at ? 'ended' : 'active'"
@@ -298,46 +313,27 @@ function onNewSession() {
       <RouterLink
         to="/profile"
         class="sb-icon"
+        :class="{ 'sb-icon--row': isExpanded }"
         aria-label="Combined profile"
         title="Combined profile"
         data-testid="sidebar-profile"
         @click="closeDrawer"
       >
         <i class="pi pi-user" />
+        <span v-if="isExpanded" class="sb-icon-label">Profile</span>
       </RouterLink>
-      <button
-        type="button"
-        class="sb-icon"
-        role="switch"
-        :aria-checked="isDark"
-        :aria-label="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
-        :title="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
-        data-testid="sidebar-theme-toggle"
-        @click="toggleTheme"
-      >
-        <i :class="isDark ? 'pi pi-sun' : 'pi pi-moon'" />
-      </button>
       <RouterLink
         to="/settings"
         class="sb-icon"
+        :class="{ 'sb-icon--row': isExpanded }"
         aria-label="Settings"
         title="Settings"
         data-testid="sidebar-settings"
         @click="closeDrawer"
       >
         <i class="pi pi-cog" />
+        <span v-if="isExpanded" class="sb-icon-label">Settings</span>
       </RouterLink>
-      <button
-        v-if="isAuthenticated"
-        type="button"
-        class="sb-icon"
-        aria-label="Sign out"
-        title="Sign out"
-        data-testid="sidebar-sign-out"
-        @click="onSignOut"
-      >
-        <i class="pi pi-sign-out" />
-      </button>
     </footer>
   </aside>
 </template>
@@ -403,7 +399,6 @@ function onNewSession() {
 .sb-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 0.5rem;
   padding: 0.75rem;
   min-height: 3.25rem;
@@ -412,6 +407,10 @@ function onNewSession() {
 .sidebar--collapsed .sb-header {
   justify-content: center;
   padding: 0.75rem 0.25rem;
+}
+
+.sb-toggle--end {
+  margin-left: auto;
 }
 
 .sb-brand {
@@ -571,17 +570,30 @@ function onNewSession() {
 
 .sb-rail {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.375rem;
-  padding: 0.75rem;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.125rem;
+  padding: 0.5rem;
   border-top: 1px solid var(--color-border);
 }
 
 .sb-rail--column {
-  flex-direction: column;
+  align-items: center;
   gap: 0.5rem;
   padding: 0.75rem 0.25rem;
+}
+
+.sb-icon.sb-icon--row {
+  width: 100%;
+  justify-content: flex-start;
+  gap: 0.625rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-md);
+}
+
+.sb-icon-label {
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
 }
 
 .sb-icon {
@@ -611,4 +623,35 @@ function onNewSession() {
   outline: 2px solid var(--color-accent-ring);
   outline-offset: 2px;
 }
+
+.sb-search {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0.75rem 0.5rem;
+  padding: 0.375rem 0.625rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  color: var(--color-text-muted);
+}
+.sb-search:focus-within {
+  border-color: var(--color-accent);
+}
+.sb-search-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--fs-body, 0.9375rem);
+  outline: none;
+}
+.sb-search-count {
+  padding: 0.25rem 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.sb-group { margin-bottom: 0.5rem; }
+.sb-section--pinned .sb-section-label { color: var(--color-accent-text); }
 </style>

@@ -201,6 +201,36 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
+  async function renameSession(id, topic) {
+    error.value = null
+    const idx = sessions.value.findIndex((s) => s.id === id)
+    const prev = idx !== -1 ? sessions.value[idx].topic : null
+    if (idx !== -1) sessions.value[idx].topic = topic
+    if (currentSession.value?.id === id) currentSession.value.topic = topic
+    try {
+      return await sessionsApi.renameSession(id, topic)
+    } catch (e) {
+      if (idx !== -1) sessions.value[idx].topic = prev
+      if (currentSession.value?.id === id) currentSession.value.topic = prev
+      _setError(e)
+    }
+  }
+
+  async function setPinned(id, pinned) {
+    error.value = null
+    const idx = sessions.value.findIndex((s) => s.id === id)
+    const prev = idx !== -1 ? sessions.value[idx].pinned : null
+    if (idx !== -1) sessions.value[idx].pinned = pinned
+    if (currentSession.value?.id === id) currentSession.value.pinned = pinned
+    try {
+      return await sessionsApi.setPinned(id, pinned)
+    } catch (e) {
+      if (idx !== -1) sessions.value[idx].pinned = prev
+      if (currentSession.value?.id === id) currentSession.value.pinned = prev
+      _setError(e)
+    }
+  }
+
   const streamingMessage = ref(null)
   const streamState = ref('idle') // 'idle' | 'streaming' | 'tool_running' | 'stopping'
   const abortController = ref(null)
@@ -328,6 +358,8 @@ export const useSessionStore = defineStore('session', () => {
     sendMessage,
     endSession,
     reopenSession,
+    renameSession,
+    setPinned,
     setError,
     clearDailyCap,
     clearCostCap,

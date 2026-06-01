@@ -345,3 +345,77 @@ def test_post_end_generates_summary(
     body = r.json()
     assert body["summary"] == {"kind": "summary", "text": "learner covered joins"}
     assert body["ended_at"] is not None
+
+
+# ---------------------------------------------------------------------------
+# PATCH /sessions/{session_id} — rename + pin (Task 8)
+# ---------------------------------------------------------------------------
+
+
+def _make_session(db_session, sid, pinned=False, ended=False):
+    s = SessionModel(
+        id=sid,
+        user_id=USER_ID,
+        topic="orig",
+        topic_profile_json=TopicProfile().model_dump_json(),
+        pinned=pinned,
+        ended_at=datetime.now(timezone.utc) if ended else None,
+    )
+    db_session.add(s)
+    db_session.commit()
+    return s
+
+
+def test_patch_renames_session(client, db_session, seeded_user):
+    _make_session(db_session, "s_rename")
+    r = client.patch(f"/api/sessions/s_rename?user_id={USER_ID}", json={"topic": "new name"})
+    assert r.status_code == 200, r.text
+    assert r.json()["topic"] == "new name"
+
+
+def test_patch_pins_active_session(client, db_session, seeded_user):
+    _make_session(db_session, "s_pin")
+    r = client.patch(f"/api/sessions/s_pin?user_id={USER_ID}", json={"pinned": True})
+    assert r.status_code == 200, r.text
+    assert r.json()["pinned"] is True
+
+
+def test_patch_pin_on_ended_session_400(client, db_session, seeded_user):
+    _make_session(db_session, "s_ended", ended=True)
+    r = client.patch(f"/api/sessions/s_ended?user_id={USER_ID}", json={"pinned": True})
+    assert r.status_code == 400
+
+
+def test_patch_rename_allowed_on_ended_session(client, db_session, seeded_user):
+    _make_session(db_session, "s_ended2", ended=True)
+    r = client.patch(f"/api/sessions/s_ended2?user_id={USER_ID}", json={"topic": "renamed ended"})
+    assert r.status_code == 200, r.text
+    assert r.json()["topic"] == "renamed ended"
+
+
+def test_patch_404_for_other_user(client, db_session, seeded_user):
+    other = SessionModel(
+        id="s_other_patch",
+        user_id="someone_else",
+        topic="x",
+        topic_profile_json=TopicProfile().model_dump_json(),
+    )
+    db_session.add(other)
+    db_session.commit()
+    r = client.patch(f"/api/sessions/s_other_patch?user_id={USER_ID}", json={"topic": "hijack"})
+    assert r.status_code == 404
+
+
+def test_list_and_detail_include_pinned(client, db_session, seeded_user):
+    _make_session(db_session, "s_list", pinned=True)
+    list_items = client.get(f"/api/sessions?user_id={USER_ID}").json()
+    s_list_item = next((item for item in list_items if item["id"] == "s_list"), None)
+    assert s_list_item is not None, "s_list not found in list response"
+    assert s_list_item["pinned"] is True
+    assert client.get(f"/api/sessions/s_list?user_id={USER_ID}").json()["pinned"] is True
+
+
+def test_patch_empty_body_400(client, db_session, seeded_user):
+    _make_session(db_session, "s_empty")
+    r = client.patch(f"/api/sessions/s_empty?user_id={USER_ID}", json={})
+    assert r.status_code == 400

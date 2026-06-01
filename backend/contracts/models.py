@@ -137,6 +137,14 @@ class SessionCreateRequest(BaseModel):
     prior_session_id: constr(max_length=64) | None = None
 
 
+class SessionUpdateRequest(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    topic: constr(max_length=200) | None = None
+    pinned: bool | None = None
+
+
 class SessionResponse(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -148,6 +156,7 @@ class SessionResponse(BaseModel):
     created_at: datetime
     ended_at: datetime | None = None
     ingestion_status: Literal["pending", "ready", "failed"] | None = None
+    pinned: bool | None = False
 
 
 class SessionListItem(BaseModel):
@@ -158,6 +167,7 @@ class SessionListItem(BaseModel):
     topic: str
     created_at: datetime
     ended_at: datetime | None = None
+    pinned: bool | None = False
 
 
 class Message(BaseModel):
@@ -190,6 +200,7 @@ class SessionDetail(BaseModel):
     created_at: datetime
     ended_at: datetime | None = None
     ingestion_status: Literal["pending", "ready", "failed"] | None = None
+    pinned: bool | None = False
     messages: list[Message]
 
 

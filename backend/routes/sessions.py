@@ -15,6 +15,7 @@ from contracts import (
     SessionEndSummary,
     SessionListItem,
     SessionResponse,
+    SessionUpdateRequest,
     TopicProfile,
 )
 from db.database import get_db
@@ -58,6 +59,7 @@ def _to_response(db: Session, row: SessionModel) -> SessionResponse:
         created_at=_aware_utc(row.created_at),
         ended_at=_aware_utc(row.ended_at),
         ingestion_status=_latest_ingestion_status(db, row.id),
+        pinned=row.pinned,
     )
 
 
@@ -124,6 +126,7 @@ def list_sessions(
             topic=r.topic,
             created_at=_aware_utc(r.created_at),
             ended_at=_aware_utc(r.ended_at),
+            pinned=r.pinned,
         )
         for r in rows
     ]
@@ -178,6 +181,7 @@ def get_session(
         ended_at=_aware_utc(row.ended_at),
         ingestion_status=_latest_ingestion_status(db, row.id),
         messages=_load_messages(db, row.id),
+        pinned=row.pinned,
     )
 
 
@@ -221,4 +225,27 @@ def reopen_session(
         row.ended_at = None
         db.commit()
         db.refresh(row)
+    return _to_response(db, row)
+
+
+@router.patch("/sessions/{session_id}", response_model=SessionResponse)
+def update_session(
+    session_id: str,
+    req: SessionUpdateRequest,
+    user_id: str = Depends(current_user_id),
+    db: Session = Depends(get_db),
+):
+    if req.topic is None and req.pinned is None:
+        raise HTTPException(status_code=400, detail="at least one field required")
+    row = db.get(SessionModel, session_id)
+    if row is None or row.user_id != user_id:
+        raise HTTPException(status_code=404, detail="session not found")
+    if req.pinned is True and row.ended_at is not None:
+        raise HTTPException(status_code=400, detail="cannot pin an ended session")
+    if req.topic is not None:
+        row.topic = req.topic
+    if req.pinned is not None:
+        row.pinned = req.pinned
+    db.commit()
+    db.refresh(row)
     return _to_response(db, row)
