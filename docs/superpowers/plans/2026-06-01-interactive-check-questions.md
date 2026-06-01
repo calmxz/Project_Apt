@@ -17,6 +17,33 @@
 - No emojis in code/comments. Secrets stay in `.env` (never read/commit).
 - Run backend tests from `backend/`: `pytest`. Frontend from `frontend/`: `npm run test:unit -- --run`.
 
+**Test harness reference (REAL fixtures — use these, do not invent):**
+Verified in `backend/tests/conftest.py`, `test_tutor_loop.py`, `test_tutor_stream.py`:
+- DB fixture is **`db_session`** (NOT `db`). No `make_session` / `auth_headers` fixtures exist.
+- Per-file fixtures `session_row` + `ctx` are defined inline in `test_tutor_loop.py` (constants
+  `SESSION_ID = "sess_1"`, `USER_ID = "u1"`). COPY that `session_row`/`ctx` pair into each new
+  backend test file that needs a session + ToolContext.
+- Non-streaming LLM mocking: fixtures **`mock_litellm`** (a list you `.append(...)` to),
+  **`llm_text(content)`**, **`llm_tool_call(name, args, tool_call_id=...)`**. A `llm_tool_call`
+  response has `content=None` — the tool arg carries the data.
+- Route tests use the **`client`** fixture. Auth is injected by a shim: pass `json={"user_id": "u1", ...}`
+  (POST) or `params={"user_id": "u1"}` (GET) and the shim sets `Authorization: Bearer test-u1`.
+  Build the Session row with `user_id="u1"` so the ownership check passes. (See `test_sessions_route.py`.)
+- Streaming tests: `test_tutor_stream.py` defines module-level helpers `_content_chunk(token)`,
+  `_tool_fragment(index, id=, name=, arguments=)`, `_tool_chunk(*frags)`, `_make_stream(*chunks)`,
+  `_ctx(db_session, session_id=)`, `_disable_stub(monkeypatch)`, `_allow_cap(monkeypatch)`,
+  `_drain(agen)`. `litellm.acompletion` is patched via
+  `monkeypatch.setattr("agent.tutor.litellm.acompletion", AsyncMock(side_effect=[turn1, turn2]))`.
+  COPY these helpers into the new streaming test file. Insert a Session row (id matching
+  `_ctx`, `user_id="u1"`) into `db_session` so `ask_check_question` can persist `pending_check`,
+  and do NOT monkeypatch `tools.dispatch` (you want the real dispatch to set state).
+
+Wherever the task code below says `db`, `make_session`, `auth_headers`, `fake_completion`, or
+`fake_stream`, substitute the real fixtures above: `db` -> `db_session`; `make_session()` -> a
+local `session_row` fixture (+ reference `SESSION_ID`); `auth_headers` -> the `user_id` shim;
+`fake_completion` -> `mock_litellm`/`llm_text`/`llm_tool_call`; `fake_stream` -> the copied
+streaming helpers + `AsyncMock(side_effect=[...])`.
+
 ---
 
 ## File Structure
@@ -1925,9 +1952,11 @@ git commit -m "test(check): focus-clear tested_correct holds in grading turn"
 - Contracts/migration → Tasks 1, 2. Resume support → Tasks 6 (SessionDetail.pending_check) + 14 (loadSession).
 
 **Placeholder scan:** No "TBD"/"handle errors"/"similar to". Test code and impl code are inline.
-Two fixtures (`make_session`, `fake_completion`/`fake_stream`) are introduced in Task 3 / Tasks 10-11
-with explicit shape requirements rather than full bodies — the engineer mirrors existing tutor/route
-tests; this is a known, bounded dependency, not a hidden placeholder.
+The test fixtures were verified against the real harness (`conftest.py`, `test_tutor_loop.py`,
+`test_tutor_stream.py`) and are documented in the Test Harness Reference at the top — the invented
+`make_session`/`auth_headers`/`fake_completion`/`fake_stream` names in task bodies are explicitly
+remapped there to `db_session`/`session_row`/the `user_id` auth shim/`mock_litellm`+`llm_text`+
+`llm_tool_call`/the copied streaming helpers. No hidden fixture dependency remains.
 
 **Type consistency:** `pending_check` JSON shape `{gap, question, asked_at_turn}` is consistent
 across `check_question_service`, the guard, the route mappers (which strip to `{gap, question}` for
