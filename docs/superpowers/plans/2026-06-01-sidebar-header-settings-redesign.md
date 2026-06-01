@@ -1,5 +1,7 @@
 # Sidebar Header + Settings Redesign Implementation Plan
 
+> **STATUS: COMPLETE (2026-06-01).** All 5 tasks executed via subagent-driven-development on `feat/sidebar-redesign` (head `ba316ae`). Full FE unit suite green at 359/359, lint clean. Per-task spec + quality reviews passed; final holistic review = ready to merge. Live /chrome smoke confirmed desktop three-state header, trimmed footer rail, Settings Appearance instant-toggle, and sign-out placement; mobile strip covered by unit tests (capture viewport pinned ≥1280 so not exercised live). Non-blocking follow-ups: dead `.muted` CSS in SettingsView.vue, stale `user.userId` test assignment.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make the sidebar header read as one unit in every state, slim the footer rail and mobile strip to primary navigation, and relocate theme + sign-out into the Settings page.
