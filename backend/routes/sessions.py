@@ -257,3 +257,16 @@ def update_session(
     db.commit()
     db.refresh(row)
     return _to_response(db, row)
+
+
+@router.post("/sessions/{session_id}/check/skip")
+def skip_check(
+    session_id: str,
+    user_id: str = Depends(current_user_id),
+    db: Session = Depends(get_db),
+):
+    row = db.get(SessionModel, session_id)
+    if row is None or row.user_id != user_id:
+        raise HTTPException(status_code=404, detail="session not found")
+    check_question_service.clear_pending_check(db, session_id)
+    return {"ok": True}
