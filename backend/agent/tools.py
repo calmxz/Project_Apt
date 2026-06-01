@@ -6,6 +6,7 @@ routing to the corresponding service. Any exception is converted to a
 ToolResult(ok=False) so the agent loop can surface it back to the LLM.
 """
 
+import logging
 from typing import Any
 
 from agent.types import ToolContext
@@ -16,6 +17,8 @@ from contracts import (
     UpdateTopicProfileArgs,
 )
 from services import learning_event_service, profile_service, retrieval_service
+
+log = logging.getLogger(__name__)
 
 
 def _schema(model) -> dict:
@@ -82,4 +85,5 @@ def dispatch(name: str, args: dict[str, Any], ctx: ToolContext) -> ToolResult:
             )
         return ToolResult(ok=False, status="failed", error=f"unknown tool: {name}")
     except Exception as e:
+        log.warning("tool dispatch failed name=%s error=%s", name, e)
         return ToolResult(ok=False, status="failed", error=str(e))
