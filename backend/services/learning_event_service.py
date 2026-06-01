@@ -55,7 +55,7 @@ def record(
             ]
             profile_service.save_profile(db, ctx.session_id, profile)
 
+    check_question_service.clear_pending_check(db, ctx.session_id, commit=False)
     db.commit()
     db.refresh(event)
-    check_question_service.clear_pending_check(db, ctx.session_id)
     return ToolResult(ok=True, status="ok", data={"event_id": event.id, "correct": args.correct})

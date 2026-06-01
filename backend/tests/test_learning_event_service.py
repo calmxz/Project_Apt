@@ -100,6 +100,7 @@ def test_incorrect_on_mastered_demotes(session_row, ctx, db_session):
     assert result.ok is True
     profile = profile_service.load_profile(db_session, SESSION_ID)
     assert "joins" not in profile.mastered_concepts
+    assert cq.get_pending_check(db_session, SESSION_ID) is None
 
 
 # --- Grading guard tests (Task 8) ---
@@ -123,6 +124,7 @@ def test_grade_rejected_when_asked_this_turn(session_row, ctx, db_session):
     )
     result = learning_event_service.record(db_session, ctx, args)
     assert result.ok is False
+    assert cq.get_pending_check(db_session, SESSION_ID) is not None
 
 
 def test_grade_accepted_from_prior_turn_and_clears(session_row, ctx, db_session):

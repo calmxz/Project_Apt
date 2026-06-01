@@ -43,12 +43,13 @@ def set_pending_check(
     db.commit()
 
 
-def clear_pending_check(db: Session, session_id: str) -> None:
+def clear_pending_check(db: Session, session_id: str, commit: bool = True) -> None:
     row = db.get(SessionModel, session_id)
     if row is None:
         return
     row.pending_check_json = None
-    db.commit()
+    if commit:
+        db.commit()
 
 
 def is_gradable(
