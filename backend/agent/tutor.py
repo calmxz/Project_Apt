@@ -206,6 +206,8 @@ def _summarize(name: str, result) -> str:
         return "Profile updated"
     if name == "record_learning_event":
         return "Answer recorded"
+    if name == "ask_check_question":
+        return "Question asked"
     return "ok"
 
 
@@ -389,6 +391,7 @@ async def run_streaming(
                 }
             )
 
+            asked_check = False
             for slot in ordered:
                 name = slot["name"]
                 call_id = slot["id"]
@@ -420,6 +423,21 @@ async def run_streaming(
                     yield StreamEvent(
                         "tool_call_done",
                         {"id": call_id, "status": "error", "error": result.error},
+                    )
+
+                if name == "ask_check_question" and result.ok:
+                    data = result.data or {}
+                    yield StreamEvent(
+                        "check_question",
+                        {"gap": data.get("gap"), "question": data.get("question")},
+                    )
+                    asked_check = True
+
+                if name == "record_learning_event" and result.ok:
+                    data = result.data or {}
+                    yield StreamEvent(
+                        "check_result",
+                        {"gap": args.get("gap_tested"), "correct": data.get("correct")},
                     )
 
                 if name == "retrieve_chunks" and result.ok:
@@ -464,6 +482,21 @@ async def run_streaming(
                         "content": tool_content,
                     }
                 )
+
+            if asked_check:
+                # Turn-terminating: check question handed to learner. Persist and
+                # stop. Grading happens on the next turn, not this one.
+                # Cost for this LLM call was already recorded above (before the
+                # tool-dispatch section), so no extra metering needed here.
+                msg_id = _persist_assistant_message(
+                    ctx,
+                    accumulated_text,
+                    "complete",
+                    tool_calls=tool_calls_record,
+                    citations=citations,
+                )
+                yield StreamEvent("done", {"message_id": str(msg_id)})
+                return
 
         # max_iters exhausted without a final answer.
         yield StreamEvent("error", {"code": "max_iters_reached"})
