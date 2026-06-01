@@ -103,6 +103,7 @@ async def _prepare_turn(
         "retrieval_required": retrieval_required,
         "seed_mode": None,
         "last_session_summary": profile.last_session_summary,
+        "pending_check": check_question_service.get_pending_check(db, req.session_id),
     }
     system_prompt = prompts.build_system_prompt(prompt_state)
 

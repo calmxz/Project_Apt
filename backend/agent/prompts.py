@@ -41,21 +41,27 @@ EVIDENCE TYPING:
 
 FOCUS PROTOCOL:
 - When concentrating on a specific gap, set focus_target_gap via
-  update_topic_profile.
-- Clear focus_target_gap (set it to null) when one of these happens, and you
-  MUST supply focus_clear_reason:
-  - "demonstrated": the learner gave a clean explanation or correct application
-    without a check-question.
-  - "tested_correct": a record_learning_event for that gap returned
-    correct=true this turn. Log the event BEFORE you clear focus, or the
-    server will reject the clear.
+  update_topic_profile (evidence_type is optional for a focus-only patch).
+- Clear focus_target_gap (set it to null) only when one of these happens, and
+  you MUST supply focus_clear_reason:
+  - "demonstrated": the learner gave a clean explanation without a check-question.
+  - "tested_correct": a record_learning_event for that gap returned correct=true
+    this turn. Log the event BEFORE you clear focus, or the server rejects the clear.
   - "user_redirected": the learner explicitly redirected the conversation.
 - Do NOT clear focus just because turns passed.
 
-END-OF-FOCUS-AREA PROTOCOL:
-When clearing focus_target_gap (or when the learner asks to be quizzed),
-generate 2-3 check-questions that probe the gap, and call
-record_learning_event for each answer.
+CHECK-QUESTION PROTOCOL (interactive, one question per turn):
+- To test understanding, call ask_check_question(gap, question) with ONE question,
+  AND write that same question as your normal reply. This ENDS your turn -- you are
+  handing the question to the learner and waiting for their answer.
+- NEVER call record_learning_event in the same turn you asked the question. You have
+  not seen an answer yet. The server will reject it.
+- If CHECK-QUESTION CONTEXT shows PENDING_CHECK is set, the learner's next message is
+  their answer. Grade it by calling record_learning_event(gap, question, correct) for
+  that gap. The server then clears the pending check.
+- To cover a focus area, ask up to 2-3 such questions, ONE PER TURN (ask, wait, grade,
+  then optionally ask the next). Do not batch them.
+- Only one check-question can be open at a time.
 
 RETRIEVAL POLICY:
 - If RETRIEVAL is REQUIRED and INGESTION_STATUS is ready: call retrieve_chunks
@@ -91,13 +97,23 @@ def build_dynamic_context(state: dict) -> str:
     last_session_summary = state.get("last_session_summary") or "none"
     retrieval_label = "REQUIRED" if retrieval_required else "OPTIONAL"
 
+    pending_check = state.get("pending_check")
+    if pending_check:
+        pc_label = (
+            f'{{"gap": {json.dumps(pending_check.get("gap"))}, '
+            f'"question": {json.dumps(pending_check.get("question"))}}}'
+        )
+    else:
+        pc_label = "none"
+
     return (
         f"TOPIC: {topic}\n"
         f"CURRENT TOPIC PROFILE: {json.dumps(profile_dict)}\n"
         f"INGESTION_STATUS: {ingestion_status}\n"
         f"RETRIEVAL: {retrieval_label}\n"
         f"SEED_MODE: {seed_mode}\n"
-        f"LAST_SESSION_SUMMARY: {last_session_summary}"
+        f"LAST_SESSION_SUMMARY: {last_session_summary}\n"
+        f"PENDING_CHECK: {pc_label}"
     )
 
 
