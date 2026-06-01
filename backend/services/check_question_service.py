@@ -1,0 +1,60 @@
+"""Pending check-question state machine (Spec workstream A1, Layer B).
+
+A pending_check lives on the Session row as JSON:
+    {"gap": str, "question": str, "asked_at_turn": iso8601}
+
+The grading guard (is_gradable) enforces that a check-question can only be
+graded in a LATER turn than the one that asked it, and only for the gap that
+was actually asked. This makes "ask and self-grade in one turn" impossible.
+"""
+
+import json
+from datetime import datetime
+
+from sqlalchemy.orm import Session
+
+from db.models import Session as SessionModel
+
+
+def get_pending_check(db: Session, session_id: str) -> dict | None:
+    row = db.get(SessionModel, session_id)
+    if row is None or not row.pending_check_json:
+        return None
+    try:
+        data = json.loads(row.pending_check_json)
+    except (ValueError, TypeError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def parse_asked_at(pc: dict) -> datetime:
+    return datetime.fromisoformat(pc["asked_at_turn"])
+
+
+def set_pending_check(
+    db: Session, session_id: str, gap: str, question: str, asked_at: datetime
+) -> None:
+    row = db.get(SessionModel, session_id)
+    if row is None:
+        raise ValueError(f"session not found: {session_id}")
+    row.pending_check_json = json.dumps(
+        {"gap": gap, "question": question, "asked_at_turn": asked_at.isoformat()}
+    )
+    db.commit()
+
+
+def clear_pending_check(db: Session, session_id: str) -> None:
+    row = db.get(SessionModel, session_id)
+    if row is None:
+        return
+    row.pending_check_json = None
+    db.commit()
+
+
+def is_gradable(
+    db: Session, session_id: str, gap: str, current_turn: datetime
+) -> bool:
+    pc = get_pending_check(db, session_id)
+    if pc is None or pc.get("gap") != gap:
+        return False
+    return parse_asked_at(pc) < current_turn
