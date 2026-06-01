@@ -145,8 +145,9 @@ async def chat(
             f"hard_cap_usd={post.hard_cap}"
         )
 
-    pc = check_question_service.get_pending_check(db, req.session_id)
-    pending_check = {"gap": pc["gap"], "question": pc["question"]} if pc else None
+    pending_check = check_question_service.public_view(
+        check_question_service.get_pending_check(db, req.session_id)
+    )
 
     return ChatResponse(
         assistant_message=reply,

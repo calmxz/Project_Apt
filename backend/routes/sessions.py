@@ -189,11 +189,7 @@ def get_session(
         ingestion_status=_latest_ingestion_status(db, row.id),
         messages=_load_messages(db, row.id),
         pinned=row.pinned,
-        pending_check=(
-            {"gap": pc["gap"], "question": pc["question"]}
-            if pc is not None
-            else None
-        ),
+        pending_check=check_question_service.public_view(pc),
     )
 
 

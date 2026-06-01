@@ -38,6 +38,17 @@ def parse_asked_at(pc: dict) -> datetime:
     return datetime.fromisoformat(pc["asked_at_turn"])
 
 
+def public_view(pc: dict | None) -> dict | None:
+    """Project a stored pending_check to the PendingCheck contract shape.
+
+    The stored dict carries an extra asked_at_turn key; PendingCheck is
+    extra=forbid, so callers must strip to gap+question before returning it.
+    """
+    if not pc:
+        return None
+    return {"gap": pc["gap"], "question": pc["question"]}
+
+
 def set_pending_check(
     db: Session, session_id: str, gap: str, question: str, asked_at: datetime
 ) -> None:
