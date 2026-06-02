@@ -77,14 +77,13 @@ async def test_tool_call_then_text(mock_litellm, llm_text, llm_tool_call, sessio
 async def test_failed_tool_dispatch_surfaces_in_records(
     mock_litellm, llm_text, llm_tool_call, session_row, ctx
 ):
-    # session_id mismatch -> profile_service rejects
+    # add_mastered_concept without evidence_type -> profile_service rejects
     mock_litellm.append(
         llm_tool_call(
             "update_topic_profile",
             {
-                "session_id": "wrong",
-                "evidence_type": "declared",
-                "add_confirmed_gap": "joins",
+                "session_id": ctx.session_id,
+                "add_mastered_concept": "joins",
             },
         )
     )
@@ -96,7 +95,7 @@ async def test_failed_tool_dispatch_surfaces_in_records(
     )
     assert text == "sorry, retrying differently"
     assert tool_calls[0].status == "failed"
-    assert "mismatch" in (tool_calls[0].error or "")
+    assert "evidence_type" in (tool_calls[0].error or "")
 
 
 async def test_max_iters_exhausted_returns_fallback(

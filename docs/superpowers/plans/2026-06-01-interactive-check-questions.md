@@ -1935,6 +1935,98 @@ git commit -m "test(check): focus-clear tested_correct holds in grading turn"
 - [ ] **Step 7:** Reload the page mid-open-question. Verify the card + lock survive (resumed from
   `SessionDetail.pending_check`).
 
+### Task 18 Results (2026-06-02, live smoke, gemini-3.1-flash-lite, new session "Cellular respiration")
+
+**BLOCKED — feature non-functional live. Root cause found.**
+
+- **Step 2/3 FAIL:** "Quiz me on cellular respiration" -> tutor wrote the question as a plain
+  text bubble, NO `CheckQuestion` card, composer NOT locked (`read_page` confirms a normal
+  `Ask anything` textbox + Send, no Answer/Skip). The model did not invoke `ask_check_question`
+  at all (failure mode 1: no tool call).
+- **Retry:** "Ask me a check question about glycolysis" -> tutor DID call `ask_check_question`,
+  but it errored. Error chip "Could not ask question" rendered; hover title (populated, per
+  Tasks 6/7) read exactly:
+  `session_id mismatch: args=session_001 ctx=44043617317742f5934ee3e4123e665e`
+  (failure mode 2: tool called with a hallucinated `session_id`).
+- **Step 6 (Profile update) FAIL — and this is the headline:** "Let's focus on the electron
+  transport chain" -> `update_topic_profile` produced a **"Profile update failed"** chip with the
+  IDENTICAL title `session_id mismatch: args=session_001 ctx=...`. The "Profile update failed"
+  symptom that PR #51 was created to fix is caused by the session_id mismatch guard, NOT by
+  `evidence_type`. Workstream B (error surfacing) made the true cause visible; it did not fix it.
+
+**Root cause:** Every tool's Args requires `session_id` (`contracts/models.py`; required, no
+default). Every service rejects `args.session_id != ctx.session_id` (`check_question_service.py:83`,
+`learning_event_service.py:26`, `profile_service.py:103`, `retrieval_service.py:38`). But the system
+prompt NEVER tells the model the real session id — neither `IMMUTABLE_RULES` nor
+`build_dynamic_context` (`agent/prompts.py`) emit it (`git log -S session_id -- agent/prompts.py`
+is empty). The model invents `session_001` and the guard kills every tool call. The guard predates
+this branch (phase-2 `eac5b91`); it surfaced loudly now only because `ask_check_question` is a hard
+turn-terminating tool whose failure is user-visible.
+
+**Recommended fix (server-side, deterministic, all four tools at once):** inject the authoritative
+route-derived `ctx.session_id` into the args dict BEFORE `model_validate` in `agent/tools.py`
+`dispatch()`:
+```python
+def dispatch(name, args, ctx):
+    args = {**args, "session_id": ctx.session_id}
+    ...
+```
+Handles both the wrong-value and omitted-value cases (post-validation override would miss the
+omitted case, since `model_validate` raises on the missing required field first). The per-service
+guards remain as dead-code defense-in-depth. Dropping `session_id` from the LLM-facing schema is
+cleaner long-term but touches codegen (`openapi.yaml` + `gen_contracts.py`) — note as follow-up.
+Warrants a TDD test (dispatch overrides a wrong/omitted session_id), not an inline patch.
+
+**Still untested (blocked by the above):** Step 4 (answer -> verdict + unlock), Step 5 (skip),
+Step 7 (reload mid-question). Failure mode 1 (model not calling `ask_check_question` at all) is a
+separate prompt/reliability concern the session_id fix will NOT address — re-verify after the fix.
+
+### Task 18 — FIX APPLIED + RE-VERIFIED (2026-06-02, same live session)
+
+**Fix 1 (session_id, TDD):** `agent/tools.py` `dispatch()` now injects `ctx.session_id` into the
+args dict before `model_validate` (`args = {**args, "session_id": ctx.session_id}`). New tests
+`tests/test_dispatch_session_id_injection.py` (wrong value + omitted value). Updated
+`test_failed_tool_dispatch_surfaces_in_records` (its `session_id="wrong"` trigger is now impossible;
+switched to `add_mastered_concept` without `evidence_type`). Backend: **232 passed, 4 skipped.**
+
+**Fix 2 (mode 1, prompt):** strengthened the CHECK-QUESTION PROTOCOL in `agent/prompts.py` and the
+`ask_check_question` description in `agent/tools.py` to state the tool call is the ONLY sanctioned
+way to quiz and that posing a question as plain prose is a protocol violation.
+
+**Live re-verification (gemini-3.1-flash-lite):**
+- A/B proof: the identical "focus on the electron transport chain" turn that produced
+  "Profile update failed / session_001 mismatch" PRE-fix produced "Profile updated" + "Question
+  asked" + a rendered CHECK QUESTION card + locked composer POST-fix.
+- Step 4 PASS: answered correctly -> "Answer recorded", card verdict "Correct", composer unlocked,
+  explanation streamed.
+- Step 5 PASS: Skip cleared the card + unlocked the composer, no event logged.
+- Step 6 PASS (the headline): focus change -> "Profile updated" (no more session_001 failure).
+- Step 7 PASS: full page reload mid-open-question -> card + lock survived (`SessionDetail.pending_check`).
+- Mode 1 PASS: "Quiz me ... on glycolysis" and "Give me one check question about ATP synthase" both
+  triggered `ask_check_question` (card + lock), no more plain-prose questions.
+- CORE INVARIANT CONFIRMED: when the model tried to grade a question in the SAME turn it asked one,
+  the Layer B guard rejected it ("Recording failed: no open check-question for this gap from a prior
+  turn") -- the original self-grading bug is structurally blocked, live.
+
+**Follow-up issues filed (user decides scope vs #51):**
+1. Focus-clear `tested_correct` STILL shows "Profile update failed" on a CORRECT answer — this is the
+   SAME symptom PR #51 targets (smoke step 6), now on the focus-CLEAR path rather than the set path.
+   session_id was the dominant cause and is fixed; this second path remains. Part server-side: the
+   guard does an exact `gap_tested == prior_focus` string match (`profile_service.py:140-154`), but
+   `ask_check_question`'s `gap` and `focus_target_gap` are chosen independently by the model, so the
+   labels routinely differ and the guard rejects. NOT purely model behavior — the matching criterion
+   is too strict for how the tools are designed to interact. Fix on either side: align the ask `gap`
+   to the active focus, or relax the guard's gap match. Arguably in-scope for #51 — user's call.
+   (Left UNFIXED: only session_id + mode 1 were authorized this session.)
+2. Model fires record_learning_event in the SAME turn it asks (violating the prompt's "NEVER call
+   record_learning_event in the same turn"), and update_topic_profile with mismatched labels, on most
+   turns. Guards reject correctly (the safety net working — original self-grading bug stays blocked),
+   but it produces red "Recording failed"/"Profile update failed" chips. This is gemini-3.1-flash-lite
+   protocol-adherence; relevant to CLAUDE.md's reliability-checkpoint rule (focus clearing >=85%, else
+   2-3 prompt iterations then swap to `anthropic/claude-sonnet-4-6`). Fix 2 above is one such prompt
+   iteration; a model swap is the documented next lever if adherence stays low. Plus a UX-polish angle:
+   down-rank guard-rejection chips visually.
+
 ---
 
 ## Self-Review

@@ -72,10 +72,12 @@ TOOLS = [
         "function": {
             "name": "ask_check_question",
             "description": (
-                "Pose ONE check-question to the learner and end your turn. Also"
-                " write the question text in your normal reply. Do NOT call"
-                " record_learning_event in the same turn -- you will grade the"
-                " learner's answer on the NEXT turn."
+                "The ONLY way to quiz, test, or check the learner's understanding."
+                " Call this to pose ONE check-question and end your turn; then also"
+                " write the question text in your normal reply. Posing a test question"
+                " as plain text without this tool does not register and cannot be"
+                " answered. Do NOT call record_learning_event in the same turn -- you"
+                " will grade the learner's answer on the NEXT turn."
             ),
             "parameters": _schema(AskCheckQuestionArgs),
         },
@@ -84,6 +86,11 @@ TOOLS = [
 
 
 def dispatch(name: str, args: dict[str, Any], ctx: ToolContext) -> ToolResult:
+    # The LLM is never told the real session id, so it hallucinates one (e.g.
+    # "session_001"). ctx.session_id is route-derived and authoritative; inject
+    # it before validation so a wrong or omitted model value can never reach the
+    # per-service mismatch guards.
+    args = {**args, "session_id": ctx.session_id}
     try:
         if name == "update_topic_profile":
             return profile_service.apply_patch(
