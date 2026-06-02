@@ -45,8 +45,8 @@ FOCUS PROTOCOL:
 - Clear focus_target_gap (set it to null) only when one of these happens, and
   you MUST supply focus_clear_reason:
   - "demonstrated": the learner gave a clean explanation without a check-question.
-  - "tested_correct": a record_learning_event for that gap returned correct=true
-    this turn. Log the event BEFORE you clear focus, or the server rejects the clear.
+  - "tested_correct": a record_learning_event returned correct=true this turn.
+    Log the event BEFORE you clear focus, or the server rejects the clear.
   - "user_redirected": the learner explicitly redirected the conversation.
 - Do NOT clear focus just because turns passed.
 

@@ -105,3 +105,53 @@ def test_grade_then_clear_focus_tested_correct_same_turn(session_row, ctx, db_se
     )
     assert clr.ok is True
     assert profile_service.load_profile(db_session, ctx.session_id).focus_target_gap is None
+
+
+def test_clear_focus_tested_correct_with_divergent_gap_label(session_row, ctx, db_session):
+    """A correct grade clears focus even when the check-question gap label differs
+    from focus_target_gap.
+
+    The model picks the check-question `gap` independently of `focus_target_gap`,
+    so the two labels routinely diverge (e.g. focus "electron transport chain" vs
+    check "electron transport chain location"). The tested_correct guard is temporal
+    per CLAUDE.md ("a correct LearningEvent was logged that turn"), not gap-exact, so
+    a correct event this turn satisfies the clear.
+    """
+    focus_gap = "electron transport chain"
+    check_gap = "electron transport chain location"
+
+    profile_service.apply_patch(
+        db_session,
+        ctx,
+        UpdateTopicProfileArgs(session_id=ctx.session_id, focus_target_gap=focus_gap),
+    )
+    cq.set_pending_check(
+        db_session,
+        ctx.session_id,
+        gap=check_gap,
+        question="Where does the ETC occur?",
+        asked_at=ctx.turn_started_at - timedelta(seconds=5),
+    )
+    rec = learning_event_service.record(
+        db_session,
+        ctx,
+        RecordLearningEventArgs(
+            session_id=ctx.session_id,
+            gap_tested=check_gap,
+            question="Where does the ETC occur?",
+            correct=True,
+        ),
+    )
+    assert rec.ok is True
+
+    clr = profile_service.apply_patch(
+        db_session,
+        ctx,
+        UpdateTopicProfileArgs(
+            session_id=ctx.session_id,
+            focus_target_gap=None,
+            focus_clear_reason="tested_correct",
+        ),
+    )
+    assert clr.ok is True, clr.error
+    assert profile_service.load_profile(db_session, ctx.session_id).focus_target_gap is None
