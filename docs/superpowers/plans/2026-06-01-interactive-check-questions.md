@@ -2008,7 +2008,24 @@ way to quiz and that posing a question as plain prose is a protocol violation.
   the Layer B guard rejected it ("Recording failed: no open check-question for this gap from a prior
   turn") -- the original self-grading bug is structurally blocked, live.
 
-**Follow-up issues filed (user decides scope vs #51):**
+### Both follow-ups FIXED + RE-VERIFIED (2026-06-02)
+
+- **#1 fixed** (`profile_service.py`, commit after session_id): the `tested_correct` focus-clear guard
+  is now temporal-only (drop `gap_tested == prior_focus`), matching CLAUDE.md's "a correct
+  LearningEvent was logged that turn." `prompts.py` aligned (dropped "for that gap"). Test:
+  divergent gap-label clear succeeds; aligned A5 test still passes.
+- **#2 fixed** (`tutor.py`, both `run` + `run_streaming`): when `ask_check_question` is in a
+  response's tool calls, only it is dispatched; bundled siblings (premature grades / focus-clears)
+  are dropped before the assistant message is built. Tests in `test_tutor_loop.py` +
+  `test_tutor_stream.py`. (Symptom-level: does not change model behaviour; standalone spurious grade
+  with no ask in the same response would still chip — documented cure is the `claude-sonnet-4-6` swap.)
+- **Live re-verify (gemini-3.1-flash-lite, fresh "Glycolysis pathway" session):** set focus "ATP
+  yield" -> "Profile updated" + "Question asked", card + lock, NO error chips. Answer correctly
+  (check gap "ATP consumed/produced" diverges from focus label) -> "Answer recorded" + "Profile
+  updated" (focus cleared), verdict "Correct", unlocked. DOM scan: **zero error chips** across the
+  whole session. Backend 235 passed / 4 skipped; frontend 368 passed.
+
+**Original follow-up writeup (now resolved, kept for context):**
 1. Focus-clear `tested_correct` STILL shows "Profile update failed" on a CORRECT answer — this is the
    SAME symptom PR #51 targets (smoke step 6), now on the focus-CLEAR path rather than the set path.
    session_id was the dominant cause and is fixed; this second path remains. Part server-side: the
