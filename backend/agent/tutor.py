@@ -92,6 +92,18 @@ async def run(
         msg = resp.choices[0].message
         msg_tool_calls = getattr(msg, "tool_calls", None)
 
+        # ask_check_question is turn-terminating. If the model bundles other tool
+        # calls in the same response (e.g. prematurely grading the question it is
+        # asking), drop them: only the ask is dispatched. Reduce BEFORE building the
+        # assistant message so `full` stays protocol-consistent (one tool response
+        # per tool_call) even if the ask itself fails.
+        if msg_tool_calls:
+            ask_calls = [
+                tc for tc in msg_tool_calls if tc.function.name == "ask_check_question"
+            ]
+            if ask_calls:
+                msg_tool_calls = ask_calls[:1]
+
         full.append(
             {
                 "role": "assistant",
@@ -373,6 +385,14 @@ async def run_streaming(
 
             # Tool calls present: append the assistant turn, then dispatch each.
             ordered = [tool_frags[k] for k in sorted(tool_frags)]
+            # ask_check_question is turn-terminating. If the model bundles other tool
+            # calls in the same response (e.g. prematurely grading the question it is
+            # asking), drop them: only the ask is dispatched. Reduce BEFORE building the
+            # assistant message so the turn's persisted tool calls and `full` stay
+            # consistent.
+            ask_slots = [s for s in ordered if s["name"] == "ask_check_question"]
+            if ask_slots:
+                ordered = ask_slots[:1]
             full.append(
                 {
                     "role": "assistant",

@@ -396,3 +396,57 @@ async def test_run_streaming_records_cost_on_tool_iterations(db_session, monkeyp
 
     assert record.call_count == 2
     assert [c.args[2] for c in record.call_args_list] == [0.01, 0.01]
+
+
+@pytest.mark.asyncio
+async def test_run_streaming_ask_check_question_skips_siblings(db_session, monkeypatch):
+    """ask_check_question is turn-terminating: a sibling tool call streamed in the
+    same response (e.g. a premature self-grade) must NOT be dispatched, so no
+    spurious 'Recording failed' chip is emitted."""
+    _disable_stub(monkeypatch)
+    _allow_cap(monkeypatch)
+
+    from agent import tutor
+
+    turn1 = _make_stream(
+        _tool_chunk(
+            _tool_fragment(
+                0,
+                id="tc_0",
+                name="record_learning_event",
+                arguments='{"session_id":"s1","gap_tested":"x","question":"q?","correct":true}',
+            ),
+            _tool_fragment(
+                1,
+                id="tc_1",
+                name="ask_check_question",
+                arguments='{"session_id":"s1","gap":"x","question":"What is x?"}',
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        "agent.tutor.litellm.acompletion", AsyncMock(side_effect=[turn1])
+    )
+    monkeypatch.setattr(
+        "agent.tutor.litellm.stream_chunk_builder", MagicMock(return_value=SimpleNamespace())
+    )
+    monkeypatch.setattr("agent.tutor.litellm.completion_cost", MagicMock(return_value=0.0))
+    dispatch = MagicMock(
+        return_value=ToolResult(
+            ok=True, status="ok", error=None, data={"gap": "x", "question": "What is x?"}
+        )
+    )
+    monkeypatch.setattr("agent.tutor.tools.dispatch", dispatch)
+
+    ctx = _ctx(db_session, session_id="s_ask_skip")
+    events = await _drain(
+        tutor.run_streaming([{"role": "user", "content": "quiz me"}], "sys", ctx)
+    )
+
+    # Only ask_check_question reached dispatch; the premature grade was dropped.
+    dispatched = [c.args[0] for c in dispatch.call_args_list]
+    assert dispatched == ["ask_check_question"]
+
+    types = [e.type for e in events]
+    assert "check_question" in types
+    assert types[-1] == "done"
