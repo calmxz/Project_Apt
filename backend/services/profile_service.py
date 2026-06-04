@@ -5,9 +5,9 @@ Rules:
 - Inferred mastery -> ignored (no-op, ok=True).
 - Duplicate gap or concept additions -> no-op.
 - knowledge_level overwrites.
-- focus_target_gap clearing requires focus_clear_reason. If reason is
-  "tested_correct", a matching correct LearningEvent must exist within the
-  current turn (created_at >= ctx.turn_started_at).
+- focus_target_gap clearing requires focus_clear_reason (any non-None value).
+  The tested_correct in-turn-event guard is removed: record_learning_event is
+  now a human click, not an LLM tool, so server-side event evidence is moot.
 """
 
 import json
@@ -137,27 +137,11 @@ def apply_patch(
                 status="failed",
                 error="focus_clear_reason required when clearing focus",
             )
-        if args.focus_clear_reason == "tested_correct":
-            # Temporal guard only (per CLAUDE.md: "a correct LearningEvent was
-            # logged that turn"). We deliberately do NOT match LearningEvent.gap_tested
-            # against prior_focus: the model picks the check-question `gap` independently
-            # of focus_target_gap, so the labels routinely diverge and an exact match
-            # rejected legitimate clears after a correct answer. Layer B already limits a
-            # turn to one gradeable check (one open at a time, prior-turn, gap matches the
-            # pending check), so any correct event this turn is the evidence we need.
-            ev = db.execute(
-                select(LearningEvent).where(
-                    LearningEvent.session_id == ctx.session_id,
-                    LearningEvent.correct.is_(True),
-                    LearningEvent.created_at >= ctx.turn_started_at,
-                )
-            ).scalars().first()
-            if ev is None:
-                return ToolResult(
-                    ok=False,
-                    status="failed",
-                    error="tested_correct requires a correct LearningEvent logged this turn",
-                )
+        # The tested_correct evidence guard was removed: record_learning_event is
+        # no longer a tool, so the LLM cannot fabricate a LearningEvent, and the
+        # ask-and-self-grade exploit the guard prevented is impossible. Mastery is
+        # now server-authoritative (record_from_answer), so the agent clears focus
+        # by judgment from the profile it reads, not from in-turn event evidence.
         log.info(
             "focus_clear session=%s gap=%s reason=%s",
             ctx.session_id,
