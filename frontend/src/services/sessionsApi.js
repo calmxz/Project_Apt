@@ -25,3 +25,6 @@ export const setPinned = (sessionId, pinned) =>
   apiPatch(`/sessions/${sessionId}`, { pinned })
 
 export const skipCheck = (sessionId) => apiPost(`/sessions/${sessionId}/check/skip`, {})
+
+export const answerCheck = (sessionId, selectedIndex) =>
+  apiPost(`/sessions/${sessionId}/check/answer`, { selected_index: selectedIndex })

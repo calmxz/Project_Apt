@@ -84,7 +84,12 @@ export const useSessionStore = defineStore('session', () => {
         created_at: m.created_at,
       }))
       pendingCheck.value = s.pending_check
-        ? { gap: s.pending_check.gap, question: s.pending_check.question, verdict: null }
+        ? {
+            gap: s.pending_check.gap,
+            question: s.pending_check.question,
+            options: s.pending_check.options || [],
+            verdict: null,
+          }
         : null
       return s
     } catch (e) {
@@ -119,7 +124,12 @@ export const useSessionStore = defineStore('session', () => {
       // verdict marker is streaming-only (no check_result on this path), so a
       // freshly-set card stays at verdict:null until the grading turn nulls it.
       pendingCheck.value = resp.pending_check
-        ? { gap: resp.pending_check.gap, question: resp.pending_check.question, verdict: null }
+        ? {
+            gap: resp.pending_check.gap,
+            question: resp.pending_check.question,
+            options: resp.pending_check.options || [],
+            verdict: null,
+          }
         : null
       return resp
     } catch (e) {
@@ -246,11 +256,20 @@ export const useSessionStore = defineStore('session', () => {
     () => pendingCheck.value !== null && pendingCheck.value.verdict === null,
   )
 
-  function handleCheckQuestion({ gap, question }) {
-    pendingCheck.value = { gap, question, verdict: null }
+  function handleCheckQuestion({ gap, question, options }) {
+    pendingCheck.value = { gap, question, options: options || [], verdict: null }
   }
-  function handleCheckResult({ correct }) {
-    if (pendingCheck.value) pendingCheck.value = { ...pendingCheck.value, verdict: correct }
+  async function answerCheck(index) {
+    const id = currentSessionId.value
+    if (!id || !pendingCheck.value) return
+    const resp = await sessionsApi.answerCheck(id, index)
+    pendingCheck.value = {
+      ...pendingCheck.value,
+      verdict: resp.correct,
+      selectedIndex: index,
+      explanation: resp.explanation,
+      correctIndex: resp.correct_index,
+    }
   }
   async function skipCheck() {
     const id = currentSessionId.value
@@ -329,7 +348,6 @@ export const useSessionStore = defineStore('session', () => {
             case 'citations': setCitations(data); break
             case 'cost_warning': reportCostWarning(data); break
             case 'check_question': handleCheckQuestion(data); break
-            case 'check_result': handleCheckResult(data); break
             case 'done': finalizeMessage(data.message_id); break
             case 'cancelled': handleCancelled(data.message_id, data.partial_content_chars, data.estimated_cost_usd); break
             case 'error':
@@ -398,7 +416,7 @@ export const useSessionStore = defineStore('session', () => {
     clearDailyCap,
     clearCostCap,
     handleCheckQuestion,
-    handleCheckResult,
+    answerCheck,
     skipCheck,
     appendAssistantDelta,
     recordToolCall,
