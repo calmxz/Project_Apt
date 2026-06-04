@@ -449,16 +449,13 @@ async def run_streaming(
                     data = result.data or {}
                     yield StreamEvent(
                         "check_question",
-                        {"gap": data.get("gap"), "question": data.get("question")},
+                        {
+                            "gap": data.get("gap"),
+                            "question": data.get("question"),
+                            "options": data.get("options", []),
+                        },
                     )
                     asked_check = True
-
-                if name == "record_learning_event" and result.ok:
-                    data = result.data or {}
-                    yield StreamEvent(
-                        "check_result",
-                        {"gap": args.get("gap_tested"), "correct": data.get("correct")},
-                    )
 
                 if name == "retrieve_chunks" and result.ok:
                     raw_chunks = (result.data or {}).get("chunks", [])

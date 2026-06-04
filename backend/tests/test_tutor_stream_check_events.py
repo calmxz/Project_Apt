@@ -171,6 +171,8 @@ async def test_stream_emits_check_question_and_breaks(monkeypatch, db_session):
     cq_event = next(e for e in events if e.type == "check_question")
     assert cq_event.data["question"] == "Inputs?"
     assert cq_event.data["gap"] == "linear_algebra"
+    assert cq_event.data["options"] == ["vectors", "scalars"]
+    assert "check_result" not in {e.type for e in events}
 
     # turn must have terminated before turn2 — SHOULD-NOT-APPEAR never streamed
     for e in events:
@@ -236,6 +238,8 @@ async def test_stream_check_question_event_shape(monkeypatch, db_session):
     assert cq is not None, "check_question event not emitted"
     assert cq.data["gap"] == "derivatives"
     assert cq.data["question"] == "What is d/dx x^2?"
+    assert cq.data["options"] == ["2x", "x^2"]
+    assert "check_result" not in {e.type for e in events}
 
     done = next((e for e in events if e.type == "done"), None)
     assert done is not None, "done event not emitted"
