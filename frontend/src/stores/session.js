@@ -259,16 +259,26 @@ export const useSessionStore = defineStore('session', () => {
   function handleCheckQuestion({ gap, question, options }) {
     pendingCheck.value = { gap, question, options: options || [], verdict: null }
   }
+  const checkAnswering = ref(false)
   async function answerCheck(index) {
     const id = currentSessionId.value
-    if (!id || !pendingCheck.value) return
-    const resp = await sessionsApi.answerCheck(id, index)
-    pendingCheck.value = {
-      ...pendingCheck.value,
-      verdict: resp.correct,
-      selectedIndex: index,
-      explanation: resp.explanation,
-      correctIndex: resp.correct_index,
+    // Guard against re-answering (verdict already set) and concurrent
+    // double-clicks: without this, two clicks fired before the first response
+    // both POST and write two LearningEvents server-side.
+    if (!id || !pendingCheck.value || pendingCheck.value.verdict !== null) return
+    if (checkAnswering.value) return
+    checkAnswering.value = true
+    try {
+      const resp = await sessionsApi.answerCheck(id, index)
+      pendingCheck.value = {
+        ...pendingCheck.value,
+        verdict: resp.correct,
+        selectedIndex: index,
+        explanation: resp.explanation,
+        correctIndex: resp.correct_index,
+      }
+    } finally {
+      checkAnswering.value = false
     }
   }
   async function skipCheck() {
