@@ -1201,7 +1201,7 @@ Driven against the running stack (frontend :5173, backend :8000), session topic 
 - **Profile channel:** the aggregate Learning Profile then showed "Glycolysis net ATP yield" in Mastered concepts (MASTERED 3, EVENTS 6) — i.e. the correctly-answered gap was promoted server-side via record_from_answer.
 - **Skip path:** opened a third question, clicked "Skip this question" -> card cleared, composer unlocked.
 
-No defects found. Feature is live-verified end to end.
+No defects found. Feature is live-verified end to end. (Smoke session: topic "Glycolysis", session 7da17332.)
 
 ---
 
