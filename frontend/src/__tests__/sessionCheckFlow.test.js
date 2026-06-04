@@ -57,4 +57,30 @@ describe('check-question flow', () => {
     expect(store.pendingCheck.correctIndex).toBe(1)
     expect(store.checkLocked).toBe(false)
   })
+
+  it('answerCheck ignores a concurrent second click (one POST only)', async () => {
+    const store = useSessionStore()
+    store.currentSessionId = 's1'
+    store.pendingCheck = { gap: 'g', question: 'q', options: ['a', 'b'], verdict: null }
+    let resolve
+    sessionsApi.answerCheck.mockReturnValueOnce(
+      new Promise((r) => {
+        resolve = r
+      }),
+    )
+    const first = store.answerCheck(0)
+    const second = store.answerCheck(1) // fired before the first resolves
+    resolve({ correct: false, explanation: 'e', correct_index: 0 })
+    await Promise.all([first, second])
+    expect(sessionsApi.answerCheck).toHaveBeenCalledTimes(1)
+    expect(sessionsApi.answerCheck).toHaveBeenCalledWith('s1', 0)
+  })
+
+  it('answerCheck ignores a click after the question is answered', async () => {
+    const store = useSessionStore()
+    store.currentSessionId = 's1'
+    store.pendingCheck = { gap: 'g', question: 'q', options: ['a', 'b'], verdict: true }
+    await store.answerCheck(1)
+    expect(sessionsApi.answerCheck).not.toHaveBeenCalled()
+  })
 })
