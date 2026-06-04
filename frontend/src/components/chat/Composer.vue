@@ -118,7 +118,7 @@ const nearCharLimit = computed(() => props.modelValue.length >= MAX_DRAFT_LEN * 
 
 const placeholder = computed(() =>
   props.locked
-    ? 'Answer the question, or Skip…'
+    ? 'Pick an answer above, or Skip...'
     : 'Ask anything. Press Enter to send · Shift + Enter for a new line.',
 )
 
