@@ -148,3 +148,47 @@ def test_grade_accepted_from_prior_turn_and_clears(session_row, ctx, db_session)
     assert result.ok is True
     assert result.data["correct"] is True
     assert cq.get_pending_check(db_session, SESSION_ID) is None
+
+
+# --- record_from_answer tests (Task 3: deterministic click path) ---
+
+
+def test_record_from_answer_correct_adds_mastered_and_clears(session_row, db_session):
+    cq.set_pending_check(
+        db_session, SESSION_ID, gap="atp", question="q?", options=["a", "b"],
+        correct_index=0, explanation="e", asked_at=datetime(2026, 1, 1),
+    )
+    event = learning_event_service.record_from_answer(
+        db_session, SESSION_ID, gap="atp", question="q?", correct=True,
+    )
+    assert event.correct is True
+    profile = profile_service.load_profile(db_session, SESSION_ID)
+    assert "atp" in profile.mastered_concepts
+    assert cq.get_pending_check(db_session, SESSION_ID) is None
+
+
+def test_record_from_answer_incorrect_demotes_mastered(session_row, db_session):
+    profile = profile_service.load_profile(db_session, SESSION_ID)
+    profile.mastered_concepts = ["atp"]
+    profile_service.save_profile(db_session, SESSION_ID, profile)
+    cq.set_pending_check(
+        db_session, SESSION_ID, gap="atp", question="q?", options=["a", "b"],
+        correct_index=0, explanation="e", asked_at=datetime(2026, 1, 1),
+    )
+    learning_event_service.record_from_answer(
+        db_session, SESSION_ID, gap="atp", question="q?", correct=False,
+    )
+    profile = profile_service.load_profile(db_session, SESSION_ID)
+    assert "atp" not in profile.mastered_concepts
+
+
+def test_record_from_answer_incorrect_non_mastered_is_noop_on_profile(session_row, db_session):
+    cq.set_pending_check(
+        db_session, SESSION_ID, gap="krebs", question="q?", options=["a", "b"],
+        correct_index=0, explanation="e", asked_at=datetime(2026, 1, 1),
+    )
+    learning_event_service.record_from_answer(
+        db_session, SESSION_ID, gap="krebs", question="q?", correct=False,
+    )
+    profile = profile_service.load_profile(db_session, SESSION_ID)
+    assert "krebs" not in (profile.mastered_concepts or [])

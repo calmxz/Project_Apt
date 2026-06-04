@@ -59,3 +59,45 @@ def record(
     db.commit()
     db.refresh(event)
     return ToolResult(ok=True, status="ok", data={"event_id": event.id, "correct": args.correct})
+
+
+def record_from_answer(
+    db: Session, session_id: str, gap: str, question: str, correct: bool
+) -> LearningEvent:
+    """Record a learner's clicked check-question answer (deterministic path).
+
+    Unlike record(), this bypasses the is_gradable turn-barrier: a human click
+    is not the LLM, and record_learning_event is no longer a tool, so the
+    ask-and-self-grade exploit the barrier guarded against is impossible.
+
+    Applies the deterministic profile effects, because the click is silent and
+    the agent's only next-turn signal is the profile state:
+    - correct  -> add gap to mastered_concepts (tested mastery)
+    - incorrect-> remove gap from mastered_concepts if present (demotion)
+    Then clears the pending check, all in one transaction.
+    """
+    event = LearningEvent(
+        session_id=session_id,
+        gap_tested=gap,
+        question=question,
+        correct=correct,
+    )
+    db.add(event)
+    db.flush()
+
+    profile = profile_service.load_profile(db, session_id)
+    mastered = list(profile.mastered_concepts or [])
+    if correct:
+        if gap not in mastered:
+            mastered.append(gap)
+            profile.mastered_concepts = mastered
+            profile_service.save_profile(db, session_id, profile)
+    else:
+        if gap in mastered:
+            profile.mastered_concepts = [c for c in mastered if c != gap]
+            profile_service.save_profile(db, session_id, profile)
+
+    check_question_service.clear_pending_check(db, session_id, commit=False)
+    db.commit()
+    db.refresh(event)
+    return event
