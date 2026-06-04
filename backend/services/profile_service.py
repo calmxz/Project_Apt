@@ -76,12 +76,15 @@ def load_profile(db: Session, session_id: str) -> TopicProfile:
     return _parse_profile(row.topic_profile_json)
 
 
-def save_profile(db: Session, session_id: str, profile: TopicProfile) -> None:
+def save_profile(
+    db: Session, session_id: str, profile: TopicProfile, commit: bool = True
+) -> None:
     row = db.get(SessionModel, session_id)
     if row is None:
         raise ValueError(f"session not found: {session_id}")
     row.topic_profile_json = profile.model_dump_json()
-    db.commit()
+    if commit:
+        db.commit()
 
 
 def seed_from_prior(db: Session, new_session: SessionModel, prior: SessionModel) -> None:

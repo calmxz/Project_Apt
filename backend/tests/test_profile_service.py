@@ -241,3 +241,22 @@ def test_load_profile_falls_back_on_unparseable_blob(session_row, db_session):
 
     profile = profile_service.load_profile(db_session, SESSION_ID)
     assert profile == TopicProfile()
+
+
+def test_save_profile_commit_false_defers_write(session_row, db_session):
+    """commit=False leaves the write in the open transaction so a caller can
+    batch it into one atomic commit (used by record_from_answer to close the
+    double-grade window). A rollback before commit must revert it."""
+    profile = profile_service.load_profile(db_session, SESSION_ID)
+    profile.mastered_concepts = ["deferred_gap"]
+    profile_service.save_profile(db_session, SESSION_ID, profile, commit=False)
+
+    # Visible within the same uncommitted transaction...
+    assert "deferred_gap" in profile_service.load_profile(
+        db_session, SESSION_ID
+    ).mastered_concepts
+    # ...but not yet committed: a rollback drops it.
+    db_session.rollback()
+    assert "deferred_gap" not in (
+        profile_service.load_profile(db_session, SESSION_ID).mastered_concepts or []
+    )
