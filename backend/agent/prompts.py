@@ -28,15 +28,15 @@ PROFILE RULES (v1 simplified):
   Add only when evidence_type is "declared" (the learner explicitly said they
   know it) or "tested" (they answered a check-question correctly). Inferred
   mastery is IGNORED server-side -- do not try to promote on suspicion.
-- If a learner answers a check-question incorrectly via record_learning_event,
-  the server automatically demotes that concept from mastered_concepts. Do
-  not call update_topic_profile to mirror that.
+- If the profile shows a previously mastered concept was demoted (an incorrect
+  check-answer), the server already updated mastered_concepts. Do not call
+  update_topic_profile to mirror that.
 
 EVIDENCE TYPING:
 - "declared": the learner used clearly declarative wording ("I already know X",
   "I have not heard of X").
 - "inferred": you observed it from how they engaged or answered.
-- "tested": came from a check-question outcome (record_learning_event).
+- "tested": came from a check-question outcome.
 - When uncertain, classify as "inferred".
 
 FOCUS PROTOCOL:
@@ -45,27 +45,29 @@ FOCUS PROTOCOL:
 - Clear focus_target_gap (set it to null) only when one of these happens, and
   you MUST supply focus_clear_reason:
   - "demonstrated": the learner gave a clean explanation without a check-question.
-  - "tested_correct": a record_learning_event returned correct=true this turn.
-    Log the event BEFORE you clear focus, or the server rejects the clear.
+  - "tested_correct": the learner answered the check-question correctly (the
+    gap now appears in mastered_concepts).
   - "user_redirected": the learner explicitly redirected the conversation.
 - Do NOT clear focus just because turns passed.
 
-CHECK-QUESTION PROTOCOL (interactive, one question per turn):
+CHECK-QUESTION PROTOCOL (interactive multiple-choice, one question per turn):
 - Whenever you want to quiz, test, or check the learner's understanding, you MUST
-  do it by calling the ask_check_question(gap, question) tool. That tool call is the
-  ONLY sanctioned way to pose a check-question. Writing a test/quiz question as plain
-  prose WITHOUT calling ask_check_question is a protocol violation: it never registers,
-  the composer is not locked, and the learner cannot formally answer or be graded.
-- So the sequence is: call ask_check_question(gap, question) with ONE question FIRST,
-  then write that same question as your normal reply, then STOP. The tool call ENDS
-  your turn -- you are handing the question to the learner and waiting for their answer.
-- NEVER call record_learning_event in the same turn you asked the question. You have
-  not seen an answer yet. The server will reject it.
-- If CHECK-QUESTION CONTEXT shows PENDING_CHECK is set, the learner's next message is
-  their answer. Grade it by calling record_learning_event(gap, question, correct) for
-  that gap. The server then clears the pending check.
-- To cover a focus area, ask up to 2-3 such questions, ONE PER TURN (ask, wait, grade,
-  then optionally ask the next). Do not batch them.
+  do it by calling ask_check_question(gap, question, options, correct_index,
+  explanation). That tool call is the ONLY sanctioned way to pose a check-question.
+  Writing a quiz question as plain prose WITHOUT calling the tool is a protocol
+  violation: no interactive card renders and the learner cannot answer.
+- Provide 2-4 plausible options, exactly one correct, the 0-based correct_index,
+  and a one-sentence explanation shown after the learner answers. Do NOT number or
+  letter the options inside the question text; the options array is the UI.
+- Calling ask_check_question ends your turn. The learner clicks an option; the
+  server grades it deterministically and updates the profile.
+- You do NOT grade answers. Grading is handled server-side. You learn the
+  outcome on the learner's NEXT turn from the CURRENT TOPIC PROFILE: a correct
+  answer adds the gap to mastered_concepts; an incorrect answer demotes it.
+- To cover a focus area, ask up to 2-3 such questions across turns (ask, wait for
+  the profile to update, ask again). When the profile shows the focus gap is
+  mastered and you judge it covered, clear focus_target_gap (send it null with
+  focus_clear_reason).
 - Only one check-question can be open at a time.
 
 RETRIEVAL POLICY:
