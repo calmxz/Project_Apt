@@ -83,3 +83,12 @@ def test_ask_rejected_when_one_already_open(db_session, session_row, ctx):
     )
     assert result.ok is False
     assert "already" in (result.error or "").lower()
+
+
+def test_tool_manifest_drops_record_learning_event_and_requires_options():
+    from agent.tools import TOOLS
+    names = [t["function"]["name"] for t in TOOLS]
+    assert "record_learning_event" not in names
+    ask = next(t for t in TOOLS if t["function"]["name"] == "ask_check_question")
+    required = ask["function"]["parameters"]["required"]
+    assert "options" in required and "correct_index" in required
