@@ -52,7 +52,14 @@ async def test_ask_check_question_terminates_turn(
     mock_litellm.append(
         llm_tool_call(
             "ask_check_question",
-            {"session_id": SESSION_ID, "gap": "indexes", "question": "What is an index?"},
+            {
+                "session_id": SESSION_ID,
+                "gap": "indexes",
+                "question": "What is an index?",
+                "options": ["a B-tree structure", "a foreign key"],
+                "correct_index": 0,
+                "explanation": "An index is typically a B-tree structure.",
+            },
         )
     )
     # Turn 2: would only be reached if the loop did NOT break — must never be consumed.

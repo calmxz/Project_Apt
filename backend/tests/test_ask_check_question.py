@@ -41,7 +41,14 @@ def ctx(db_session):
 
 
 def test_ask_sets_pending_check(db_session, session_row, ctx):
-    args = {"session_id": ctx.session_id, "gap": "calvin_cycle", "question": "Inputs?"}
+    args = {
+        "session_id": ctx.session_id,
+        "gap": "calvin_cycle",
+        "question": "Inputs?",
+        "options": ["CO2 and H2O", "O2 and glucose"],
+        "correct_index": 0,
+        "explanation": "CO2 is fixed in the Calvin cycle.",
+    }
     result = tools.dispatch("ask_check_question", args, ctx)
     assert result.ok is True
     pc = cq.get_pending_check(db_session, ctx.session_id)
@@ -52,12 +59,26 @@ def test_ask_sets_pending_check(db_session, session_row, ctx):
 def test_ask_rejected_when_one_already_open(db_session, session_row, ctx):
     tools.dispatch(
         "ask_check_question",
-        {"session_id": ctx.session_id, "gap": "g1", "question": "q1?"},
+        {
+            "session_id": ctx.session_id,
+            "gap": "g1",
+            "question": "q1?",
+            "options": ["a", "b"],
+            "correct_index": 0,
+            "explanation": "a.",
+        },
         ctx,
     )
     result = tools.dispatch(
         "ask_check_question",
-        {"session_id": ctx.session_id, "gap": "g2", "question": "q2?"},
+        {
+            "session_id": ctx.session_id,
+            "gap": "g2",
+            "question": "q2?",
+            "options": ["a", "b"],
+            "correct_index": 0,
+            "explanation": "a.",
+        },
         ctx,
     )
     assert result.ok is False

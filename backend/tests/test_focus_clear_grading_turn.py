@@ -76,6 +76,7 @@ def test_grade_then_clear_focus_tested_correct_same_turn(session_row, ctx, db_se
         ctx.session_id,
         gap="g",
         question="q?",
+        options=["a", "b"], correct_index=0, explanation="a.",
         asked_at=ctx.turn_started_at - timedelta(seconds=5),
     )
 
@@ -130,6 +131,7 @@ def test_clear_focus_tested_correct_with_divergent_gap_label(session_row, ctx, d
         ctx.session_id,
         gap=check_gap,
         question="Where does the ETC occur?",
+        options=["mitochondria", "cytoplasm"], correct_index=0, explanation="mitochondria.",
         asked_at=ctx.turn_started_at - timedelta(seconds=5),
     )
     rec = learning_event_service.record(

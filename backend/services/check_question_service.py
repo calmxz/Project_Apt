@@ -1,11 +1,21 @@
 """Pending check-question state machine (Spec workstream A1, Layer B).
 
 A pending_check lives on the Session row as JSON:
-    {"gap": str, "question": str, "asked_at_turn": iso8601}
+    {
+        "gap": str,
+        "question": str,
+        "options": list[str],
+        "correct_index": int,
+        "explanation": str,
+        "asked_at_turn": iso8601,
+    }
 
 The grading guard (is_gradable) enforces that a check-question can only be
 graded in a LATER turn than the one that asked it, and only for the gap that
 was actually asked. This makes "ask and self-grade in one turn" impossible.
+
+Anti-cheat: public_view() MUST NOT emit correct_index or explanation. Those
+fields are server-only and used only at grade time.
 """
 
 from __future__ import annotations
@@ -41,22 +51,40 @@ def parse_asked_at(pc: dict) -> datetime:
 def public_view(pc: dict | None) -> dict | None:
     """Project a stored pending_check to the PendingCheck contract shape.
 
-    The stored dict carries an extra asked_at_turn key; PendingCheck is
-    extra=forbid, so callers must strip to gap+question before returning it.
+    PUBLIC: returns gap + question + options only. correct_index and explanation
+    are server-only and MUST NOT be emitted here.
     """
     if not pc:
         return None
-    return {"gap": pc["gap"], "question": pc["question"]}
+    return {
+        "gap": pc["gap"],
+        "question": pc["question"],
+        "options": pc.get("options", []),
+    }
 
 
 def set_pending_check(
-    db: Session, session_id: str, gap: str, question: str, asked_at: datetime
+    db: Session,
+    session_id: str,
+    gap: str,
+    question: str,
+    options: list[str],
+    correct_index: int,
+    explanation: str,
+    asked_at: datetime,
 ) -> None:
     row = db.get(SessionModel, session_id)
     if row is None:
         raise ValueError(f"session not found: {session_id}")
     row.pending_check_json = json.dumps(
-        {"gap": gap, "question": question, "asked_at_turn": asked_at.isoformat()}
+        {
+            "gap": gap,
+            "question": question,
+            "options": options,
+            "correct_index": correct_index,
+            "explanation": explanation,
+            "asked_at_turn": asked_at.isoformat(),
+        }
     )
     db.commit()
 
@@ -86,6 +114,15 @@ def register(db: Session, ctx: ToolContext, args: AskCheckQuestionArgs) -> ToolR
             status="failed",
             error=f"session_id mismatch: args={args.session_id} ctx={ctx.session_id}",
         )
+    if not (0 <= args.correct_index < len(args.options)):
+        return ToolResult(
+            ok=False,
+            status="failed",
+            error=(
+                f"correct_index {args.correct_index} out of range for "
+                f"{len(args.options)} options"
+            ),
+        )
     if get_pending_check(db, ctx.session_id) is not None:
         return ToolResult(
             ok=False,
@@ -93,7 +130,17 @@ def register(db: Session, ctx: ToolContext, args: AskCheckQuestionArgs) -> ToolR
             error="a check-question is already open; grade or skip it first",
         )
     set_pending_check(
-        db, ctx.session_id, gap=args.gap, question=args.question,
+        db,
+        ctx.session_id,
+        gap=args.gap,
+        question=args.question,
+        options=args.options,
+        correct_index=args.correct_index,
+        explanation=args.explanation,
         asked_at=ctx.turn_started_at,
     )
-    return ToolResult(ok=True, status="ok", data={"gap": args.gap, "question": args.question})
+    return ToolResult(
+        ok=True,
+        status="ok",
+        data={"gap": args.gap, "question": args.question, "options": args.options},
+    )
