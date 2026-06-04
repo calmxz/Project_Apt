@@ -21,3 +21,11 @@ def test_dynamic_context_pending_check_none():
 
 def test_immutable_rules_mention_ask_check_question():
     assert "ask_check_question" in prompts.IMMUTABLE_RULES
+
+
+def test_prompt_describes_mc_and_drops_self_grading():
+    from agent.prompts import IMMUTABLE_RULES
+    assert "record_learning_event" not in IMMUTABLE_RULES
+    assert "options" in IMMUTABLE_RULES
+    # no instruction to grade the learner's typed answer next turn
+    assert "Grade it by calling" not in IMMUTABLE_RULES
