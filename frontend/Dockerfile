@@ -1,5 +1,5 @@
 # Build stage: compile Vite bundle.
-FROM node:20.20.2-alpine AS build
+FROM node:24-alpine AS build
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
@@ -10,9 +10,9 @@ ENV VITE_API_BASE_URL=/api
 RUN npm run build
 
 # Serve stage: lean nginx with SPA fallback + /api proxy.
-FROM nginx:1.27.5-alpine
-# Pull latest alpine patches (closes CVE-2026-31789 in libssl3/libcrypto3 that
-# ships in 1.27.5-alpine baseline). Trivy scan gates merges on CRITICAL CVEs.
+FROM nginx:1.31.1-alpine
+# Pull latest alpine patches over the pinned baseline so any CVEs fixed after the
+# image was published are applied. Trivy scan gates merges on CRITICAL CVEs.
 RUN apk --no-cache upgrade
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
