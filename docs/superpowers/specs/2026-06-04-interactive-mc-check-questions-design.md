@@ -42,8 +42,11 @@ inline prose.
    A click is graded server-side by index comparison — no LLM call.
 2. **Silent record.** The card flips to a verdict + one-sentence explanation
    inline. The LearningEvent is written and the profile updated server-side
-   (demotion on incorrect mastered concept). No automatic follow-up LLM turn;
-   the tutor sees the result on the learner's next message.
+   (add-to-mastered on correct, demotion on incorrect mastered concept). No
+   automatic follow-up LLM turn. The tutor learns the outcome on the learner's
+   next turn **via the updated TopicProfile** injected into its context (the gap
+   now sits in `mastered_concepts`, or has been demoted) — NOT via the
+   LearningEvent or the chat transcript, neither of which reaches the prompt.
 3. **Always multiple-choice.** `ask_check_question` always requires options.
    The old free-text typing path and its LLM grading turn are removed.
 
@@ -103,12 +106,19 @@ tested to never emit `correct_index` or `explanation`.
 
 ### `services/learning_event_service.py`
 - Add `record_from_answer(db, session_id, gap, question, correct)`:
-  writes the `LearningEvent`, demotes the gap from `mastered_concepts` when
-  `correct is False`, clears the pending check — all in one transaction,
-  mirroring `record()`. **Bypasses the `is_gradable` turn-barrier guard.**
-  Rationale: the turn-barrier exists to stop the *LLM* from asking and
-  self-grading in one turn. A human click is not the LLM, so the barrier does
-  not apply. The existing `record()` and its barrier remain for any LLM path.
+  writes the `LearningEvent`, applies the deterministic profile effects, and
+  clears the pending check — all in one transaction. **Bypasses the
+  `is_gradable` turn-barrier guard.** Rationale: the turn-barrier exists to stop
+  the *LLM* from asking and self-grading in one turn. A human click is not the
+  LLM, so the barrier does not apply. (With `record_learning_event` removed as a
+  tool, the LLM can no longer write events at all — see below.)
+- **Both profile effects are applied server-side here**, because the click is
+  silent: the agent's only next-turn signal is the profile state.
+  - `correct is True`: add `gap` to `mastered_concepts` (tested mastery; CLAUDE.md
+    "Declared/tested mastery -> directly into mastered_concepts"). No-op if
+    already present.
+  - `correct is False`: if `gap` is in `mastered_concepts`, remove it (demotion).
+  Reuse `profile_service.load_profile` / `save_profile` for the mutation.
 
 ### `routes/sessions.py`
 - New `POST /sessions/{session_id}/check/answer` taking `CheckAnswerRequest`.
@@ -129,14 +139,28 @@ tested to never emit `correct_index` or `explanation`.
   one-sentence `explanation`. Remove self-grading / "wait for typed answer"
   instructions.
 
-### Focus-clear integration
+### Focus-clear integration (drop the moot guard)
 
-The `focus_clear_reason="tested_correct"` guard verifies that a correct
-`LearningEvent` was logged "that turn". Click-grading writes the event outside
-an LLM turn, so the guard must accept a correct click-recorded event from a
-prior turn for the focused gap. The implementation plan will specify the exact
-relaxation (e.g. "a correct LearningEvent for this gap exists since it was last
-focused") and its test. This is the one cross-cutting integration point.
+`profile_service.apply_patch` guards `focus_clear_reason="tested_correct"` by
+requiring a correct `LearningEvent` with `created_at >= ctx.turn_started_at` —
+i.e. logged *this* LLM turn. That guard existed for exactly one reason: to stop
+the LLM from asking and self-grading a check-question in a single turn.
+
+Once `record_learning_event` is removed as a tool (locked decision), the LLM can
+no longer write `LearningEvent`s at all — the self-grade exploit becomes
+impossible. The guard is now simultaneously **unsatisfiable** (a human click
+writes the event *between* turns, so it predates `turn_started_at` and the agent
+could never clear focus again) and **unnecessary** (its threat model is gone).
+
+Resolution: **drop the `tested_correct` evidence check.** Keep the rule that
+`focus_clear_reason` is still required when clearing focus (auditability). Focus
+clearing stays **agent-driven** — the tutor reads the updated profile (the gap
+now in `mastered_concepts`), applies its own pedagogical judgment (it may ask
+2-3 questions before considering a focus area covered, per the prompt), and
+clears `focus_target_gap` by sending it null with a reason. The server does NOT
+auto-clear focus: the check-question `gap` and `focus_target_gap` routinely
+diverge (see the comment at `profile_service.py:142-147`), so matching them
+server-side would clear focus wrongly.
 
 ## Frontend changes
 
@@ -165,8 +189,14 @@ focused") and its test. This is the one cross-cutting integration point.
 Backend:
 - Contract drift test passes after codegen.
 - `public_view` never emits `correct_index` / `explanation` (anti-cheat).
-- `record_from_answer`: correct path, incorrect path, demotion of a mastered
-  gap, clears pending, no-op when no pending check.
+- `record_from_answer`: correct path adds the gap to `mastered_concepts`
+  (and is a no-op when already present); incorrect path demotes a mastered gap
+  and leaves a non-mastered gap untouched; both write the `LearningEvent` and
+  clear the pending check; bypasses the turn-barrier (records even when no prior
+  turn).
+- `profile_service` `tested_correct` clear no longer requires an in-turn event
+  (regression test: clearing focus with reason `tested_correct` succeeds with no
+  matching `LearningEvent`).
 - Answer endpoint: 404 (not found / not owner), no-pending, out-of-range index
   (422), correct and incorrect happy paths return the right verdict.
 
