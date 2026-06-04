@@ -216,8 +216,6 @@ def _summarize(name: str, result) -> str:
         return f"Found {len((result.data or {}).get('chunks', []))} passages"
     if name == "update_topic_profile":
         return "Profile updated"
-    if name == "record_learning_event":
-        return "Answer recorded"
     if name == "ask_check_question":
         return "Question asked"
     return "ok"

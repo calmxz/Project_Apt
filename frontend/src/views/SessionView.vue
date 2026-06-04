@@ -384,7 +384,11 @@ async function resume() {
 }
 
 async function onAnswerCheck(index) {
-  await store.answerCheck(index)
+  try {
+    await store.answerCheck(index)
+  } catch (e) {
+    lastError.value = e
+  }
 }
 
 async function onSkipCheck() {
