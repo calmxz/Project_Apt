@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, RootModel, conint, constr
+from pydantic import BaseModel, ConfigDict, Field, RootModel, conint, constr
 
 
 class TopicProfile(BaseModel):
@@ -96,9 +96,11 @@ class RecordLearningEventArgs(BaseModel):
 
 class AskCheckQuestionArgs(BaseModel):
     """
-    Register an open check-question and end the turn. The question text is
-    also streamed to the learner as normal assistant text; gap+question
-    here drive the server-side pending-check state and the grading guard.
+    Register an open multiple-choice check-question and end the turn. The
+    question text is also streamed to the learner as normal assistant text.
+    options/correct_index/explanation drive the interactive card and the
+    server-side deterministic grade. correct_index must be < len(options);
+    this cross-field rule is enforced in check_question_service, not here.
 
     """
 
@@ -108,11 +110,16 @@ class AskCheckQuestionArgs(BaseModel):
     session_id: constr(max_length=64)
     gap: constr(max_length=200)
     question: constr(max_length=1000)
+    options: list[constr(max_length=200)] = Field(..., max_length=4, min_length=2)
+    correct_index: conint(ge=0)
+    explanation: constr(max_length=500)
 
 
 class PendingCheck(BaseModel):
     """
-    An open check-question awaiting a learner answer.
+    An open check-question awaiting a learner answer. PUBLIC projection:
+    never carries correct_index or explanation.
+
     """
 
     model_config = ConfigDict(
@@ -120,6 +127,31 @@ class PendingCheck(BaseModel):
     )
     gap: str
     question: str
+    options: list[str]
+
+
+class CheckAnswerRequest(BaseModel):
+    """
+    A learner's clicked answer to the open check-question.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    selected_index: conint(ge=0)
+
+
+class CheckAnswerResponse(BaseModel):
+    """
+    Deterministic grade of a clicked check-question answer.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    correct: bool
+    explanation: str
+    correct_index: int
 
 
 class ToolResult(BaseModel):
