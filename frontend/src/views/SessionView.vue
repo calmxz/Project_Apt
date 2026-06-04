@@ -67,6 +67,7 @@
       <CheckQuestion
         v-if="store.pendingCheck"
         :check="store.pendingCheck"
+        @answer="onAnswerCheck"
         @skip="onSkipCheck"
       />
 
@@ -380,6 +381,10 @@ async function resume() {
   } finally {
     resuming.value = false
   }
+}
+
+async function onAnswerCheck(index) {
+  await store.answerCheck(index)
 }
 
 async function onSkipCheck() {
