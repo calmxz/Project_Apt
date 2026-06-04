@@ -58,6 +58,7 @@ def test_correct_event_recorded(session_row, ctx, db_session):
         SESSION_ID,
         gap="indexes",
         question="what is a btree?",
+        options=["a", "b"], correct_index=0, explanation="a.",
         asked_at=ctx.turn_started_at - timedelta(seconds=5),
     )
     result = learning_event_service.record(db_session, ctx, _args(correct=True))
@@ -75,6 +76,7 @@ def test_incorrect_on_non_mastered_does_not_demote(session_row, ctx, db_session)
         SESSION_ID,
         gap="indexes",
         question="what is a btree?",
+        options=["a", "b"], correct_index=0, explanation="a.",
         asked_at=ctx.turn_started_at - timedelta(seconds=5),
     )
     result = learning_event_service.record(
@@ -92,6 +94,7 @@ def test_incorrect_on_mastered_demotes(session_row, ctx, db_session):
         SESSION_ID,
         gap="joins",
         question="what is a join?",
+        options=["a", "b"], correct_index=0, explanation="a.",
         asked_at=ctx.turn_started_at - timedelta(seconds=5),
     )
     result = learning_event_service.record(
@@ -117,7 +120,9 @@ def test_grade_rejected_without_pending_check(session_row, ctx, db_session):
 
 def test_grade_rejected_when_asked_this_turn(session_row, ctx, db_session):
     cq.set_pending_check(
-        db_session, SESSION_ID, gap="g", question="q?", asked_at=ctx.turn_started_at
+        db_session, SESSION_ID, gap="g", question="q?",
+        options=["a", "b"], correct_index=0, explanation="a.",
+        asked_at=ctx.turn_started_at,
     )
     args = RecordLearningEventArgs(
         session_id=SESSION_ID, gap_tested="g", question="q?", correct=True
@@ -133,6 +138,7 @@ def test_grade_accepted_from_prior_turn_and_clears(session_row, ctx, db_session)
         SESSION_ID,
         gap="g",
         question="q?",
+        options=["a", "b"], correct_index=0, explanation="a.",
         asked_at=ctx.turn_started_at - timedelta(seconds=5),
     )
     args = RecordLearningEventArgs(

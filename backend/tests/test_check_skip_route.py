@@ -30,6 +30,7 @@ def test_skip_clears_pending_check(client, db_session, seeded_session):
     sid = seeded_session.id
     cq.set_pending_check(
         db_session, sid, gap="g", question="q?",
+        options=["a", "b"], correct_index=0, explanation="a.",
         asked_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
     )
     resp = client.post(f"/api/sessions/{sid}/check/skip", json={"user_id": USER_ID})

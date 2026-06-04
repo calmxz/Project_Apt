@@ -244,7 +244,14 @@ async def test_ask_check_question_skips_sibling_tool_calls(mock_litellm, session
                 ),
                 (
                     "ask_check_question",
-                    {"session_id": SESSION_ID, "gap": "x", "question": "What is x?"},
+                    {
+                        "session_id": SESSION_ID,
+                        "gap": "x",
+                        "question": "What is x?",
+                        "options": ["a", "b"],
+                        "correct_index": 0,
+                        "explanation": "a.",
+                    },
                 ),
             ]
         )

@@ -136,7 +136,14 @@ async def test_stream_emits_check_question_and_breaks(monkeypatch, db_session):
                 id="tc_1",
                 name="ask_check_question",
                 arguments=json.dumps(
-                    {"session_id": SESSION_ID, "gap": "linear_algebra", "question": "Inputs?"}
+                    {
+                        "session_id": SESSION_ID,
+                        "gap": "linear_algebra",
+                        "question": "Inputs?",
+                        "options": ["vectors", "scalars"],
+                        "correct_index": 0,
+                        "explanation": "Vectors are inputs.",
+                    }
                 ),
             )
         ),
@@ -199,7 +206,14 @@ async def test_stream_check_question_event_shape(monkeypatch, db_session):
                 id="tc_2",
                 name="ask_check_question",
                 arguments=json.dumps(
-                    {"session_id": sid, "gap": "derivatives", "question": "What is d/dx x^2?"}
+                    {
+                        "session_id": sid,
+                        "gap": "derivatives",
+                        "question": "What is d/dx x^2?",
+                        "options": ["2x", "x^2"],
+                        "correct_index": 0,
+                        "explanation": "d/dx x^2 = 2x.",
+                    }
                 ),
             )
         ),
@@ -257,6 +271,7 @@ async def test_stream_emits_check_result_on_grade(monkeypatch, db_session):
         sid,
         gap=GAP,
         question="What substitution applies here?",
+        options=["a", "b"], correct_index=0, explanation="a.",
         asked_at=ctx.turn_started_at - timedelta(seconds=5),
     )
 
