@@ -64,6 +64,12 @@
 
       <UploadStatus :upload="uploadStatus" />
 
+      <CheckQuestion
+        v-if="store.pendingCheck"
+        :check="store.pendingCheck"
+        @skip="onSkipCheck"
+      />
+
       <Composer
         v-if="!isEnded"
         ref="composerRef"
@@ -74,9 +80,11 @@
         :sending="sending"
         :stream-state="store.streamState"
         :describedby="capDescribedby"
+        :locked="store.checkLocked"
         @send="send"
         @stop="store.stopStream"
         @attach="onAttachFile"
+        @skip="onSkipCheck"
       />
 
       <Dialog
@@ -111,6 +119,7 @@ import Dialog from 'primevue/dialog'
 import BackButton from '../components/BackButton.vue'
 import CapBanners from '../components/chat/CapBanners.vue'
 import ChatEmptyState from '../components/chat/EmptyState.vue'
+import CheckQuestion from '../components/chat/CheckQuestion.vue'
 import Composer from '../components/chat/Composer.vue'
 import MessageList from '../components/chat/MessageList.vue'
 import SessionHeader from '../components/chat/SessionHeader.vue'
@@ -370,6 +379,14 @@ async function resume() {
     // store.error already populated
   } finally {
     resuming.value = false
+  }
+}
+
+async function onSkipCheck() {
+  try {
+    await store.skipCheck()
+  } catch (e) {
+    lastError.value = e
   }
 }
 

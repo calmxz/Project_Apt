@@ -23,3 +23,5 @@ export const renameSession = (sessionId, topic) =>
 
 export const setPinned = (sessionId, pinned) =>
   apiPatch(`/sessions/${sessionId}`, { pinned })
+
+export const skipCheck = (sessionId) => apiPost(`/sessions/${sessionId}/check/skip`, {})

@@ -114,9 +114,19 @@ def apply_patch(
     if args.add_confirmed_gap and args.add_confirmed_gap not in confirmed:
         confirmed.append(args.add_confirmed_gap)
 
-    if args.add_mastered_concept and args.evidence_type in ("declared", "tested"):
-        if args.add_mastered_concept not in mastered:
-            mastered.append(args.add_mastered_concept)
+    if args.add_mastered_concept:
+        if args.evidence_type is None:
+            return ToolResult(
+                ok=False,
+                status="failed",
+                error=(
+                    "evidence_type must be 'declared' or 'tested' when "
+                    "add_mastered_concept is set"
+                ),
+            )
+        if args.evidence_type in ("declared", "tested"):
+            if args.add_mastered_concept not in mastered:
+                mastered.append(args.add_mastered_concept)
 
     # focus_target_gap handling
     clearing = prior_focus is not None and args.focus_target_gap is None
@@ -128,10 +138,16 @@ def apply_patch(
                 error="focus_clear_reason required when clearing focus",
             )
         if args.focus_clear_reason == "tested_correct":
+            # Temporal guard only (per CLAUDE.md: "a correct LearningEvent was
+            # logged that turn"). We deliberately do NOT match LearningEvent.gap_tested
+            # against prior_focus: the model picks the check-question `gap` independently
+            # of focus_target_gap, so the labels routinely diverge and an exact match
+            # rejected legitimate clears after a correct answer. Layer B already limits a
+            # turn to one gradeable check (one open at a time, prior-turn, gap matches the
+            # pending check), so any correct event this turn is the evidence we need.
             ev = db.execute(
                 select(LearningEvent).where(
                     LearningEvent.session_id == ctx.session_id,
-                    LearningEvent.gap_tested == prior_focus,
                     LearningEvent.correct.is_(True),
                     LearningEvent.created_at >= ctx.turn_started_at,
                 )

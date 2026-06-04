@@ -2,10 +2,12 @@ import pytest
 from pydantic import ValidationError
 
 from contracts import (
+    AskCheckQuestionArgs,
     ChatRequest,
     ChatResponse,
     Citation,
     HealthResponse,
+    PendingCheck,
     ProfileResponse,
     RecordLearningEventArgs,
     RetrieveChunksArgs,
@@ -42,9 +44,12 @@ def test_update_topic_profile_args_minimal_ok():
     assert args.focus_clear_reason is None
 
 
-def test_update_topic_profile_args_missing_evidence_type_rejected():
-    with pytest.raises(ValidationError):
-        UpdateTopicProfileArgs(session_id="s1")
+def test_update_topic_profile_args_evidence_type_optional():
+    # evidence_type is now optional (required only when add_mastered_concept present
+    # — enforced at the service layer, not the schema layer)
+    args = UpdateTopicProfileArgs(session_id="s1")
+    assert args.session_id == "s1"
+    assert args.evidence_type is None
 
 
 def test_update_topic_profile_args_invalid_focus_clear_reason_rejected():
@@ -89,6 +94,41 @@ def test_record_learning_event_args_required():
         RecordLearningEventArgs(session_id="s1", gap_tested="g1", question="?")
 
 
+def test_ask_check_question_args_required_fields():
+    args = AskCheckQuestionArgs(session_id="s1", gap="recursion", question="What is the base case?")
+    assert args.session_id == "s1"
+    assert args.gap == "recursion"
+    assert args.question == "What is the base case?"
+
+
+def test_ask_check_question_args_missing_gap_rejected():
+    with pytest.raises(ValidationError):
+        AskCheckQuestionArgs(session_id="s1", question="?")
+
+
+def test_ask_check_question_args_missing_question_rejected():
+    with pytest.raises(ValidationError):
+        AskCheckQuestionArgs(session_id="s1", gap="recursion")
+
+
+def test_ask_check_question_args_extra_fields_rejected():
+    with pytest.raises(ValidationError):
+        AskCheckQuestionArgs(session_id="s1", gap="g", question="?", surprise="x")
+
+
+def test_pending_check_required_fields():
+    pc = PendingCheck(gap="recursion", question="What is the base case?")
+    assert pc.gap == "recursion"
+    assert pc.question == "What is the base case?"
+
+
+def test_pending_check_missing_fields_rejected():
+    with pytest.raises(ValidationError):
+        PendingCheck(gap="recursion")
+    with pytest.raises(ValidationError):
+        PendingCheck(question="?")
+
+
 def test_tool_result_minimal():
     r = ToolResult(ok=True, status="ok")
     assert r.error is None
@@ -104,6 +144,17 @@ def test_chat_response_defaults():
     r = ChatResponse(assistant_message="hi", message_id=1)
     assert r.tool_calls == []
     assert r.citations == []
+    assert r.pending_check is None
+
+
+def test_chat_response_with_pending_check():
+    r = ChatResponse(
+        assistant_message="Here is a question.",
+        message_id=3,
+        pending_check=PendingCheck(gap="recursion", question="What is the base case?"),
+    )
+    assert r.pending_check is not None
+    assert r.pending_check.gap == "recursion"
 
 
 def test_chat_response_with_tool_calls():

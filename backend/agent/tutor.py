@@ -92,6 +92,18 @@ async def run(
         msg = resp.choices[0].message
         msg_tool_calls = getattr(msg, "tool_calls", None)
 
+        # ask_check_question is turn-terminating. If the model bundles other tool
+        # calls in the same response (e.g. prematurely grading the question it is
+        # asking), drop them: only the ask is dispatched. Reduce BEFORE building the
+        # assistant message so `full` stays protocol-consistent (one tool response
+        # per tool_call) even if the ask itself fails.
+        if msg_tool_calls:
+            ask_calls = [
+                tc for tc in msg_tool_calls if tc.function.name == "ask_check_question"
+            ]
+            if ask_calls:
+                msg_tool_calls = ask_calls[:1]
+
         full.append(
             {
                 "role": "assistant",
@@ -103,6 +115,7 @@ async def run(
         if not msg_tool_calls:
             return (msg.content or "", tool_calls_record, citations)
 
+        asked_check = False
         for tc in msg_tool_calls:
             try:
                 args = json.loads(tc.function.arguments)
@@ -119,6 +132,9 @@ async def run(
                     error=result.error,
                 )
             )
+
+            if tc.function.name == "ask_check_question" and result.ok:
+                asked_check = True
 
             if tc.function.name == "retrieve_chunks" and result.ok:
                 raw_chunks = (result.data or {}).get("chunks", [])
@@ -157,6 +173,11 @@ async def run(
                     "content": tool_content,
                 }
             )
+
+        if asked_check:
+            # Turn-terminating: the check question has been handed to the learner.
+            # Grading happens on the next turn, not this one.
+            return (msg.content or "", tool_calls_record, citations)
 
     return (FALLBACK_TEXT, tool_calls_record, citations)
 
@@ -197,6 +218,8 @@ def _summarize(name: str, result) -> str:
         return "Profile updated"
     if name == "record_learning_event":
         return "Answer recorded"
+    if name == "ask_check_question":
+        return "Question asked"
     return "ok"
 
 
@@ -362,6 +385,14 @@ async def run_streaming(
 
             # Tool calls present: append the assistant turn, then dispatch each.
             ordered = [tool_frags[k] for k in sorted(tool_frags)]
+            # ask_check_question is turn-terminating. If the model bundles other tool
+            # calls in the same response (e.g. prematurely grading the question it is
+            # asking), drop them: only the ask is dispatched. Reduce BEFORE building the
+            # assistant message so the turn's persisted tool calls and `full` stay
+            # consistent.
+            ask_slots = [s for s in ordered if s["name"] == "ask_check_question"]
+            if ask_slots:
+                ordered = ask_slots[:1]
             full.append(
                 {
                     "role": "assistant",
@@ -380,6 +411,7 @@ async def run_streaming(
                 }
             )
 
+            asked_check = False
             for slot in ordered:
                 name = slot["name"]
                 call_id = slot["id"]
@@ -411,6 +443,21 @@ async def run_streaming(
                     yield StreamEvent(
                         "tool_call_done",
                         {"id": call_id, "status": "error", "error": result.error},
+                    )
+
+                if name == "ask_check_question" and result.ok:
+                    data = result.data or {}
+                    yield StreamEvent(
+                        "check_question",
+                        {"gap": data.get("gap"), "question": data.get("question")},
+                    )
+                    asked_check = True
+
+                if name == "record_learning_event" and result.ok:
+                    data = result.data or {}
+                    yield StreamEvent(
+                        "check_result",
+                        {"gap": args.get("gap_tested"), "correct": data.get("correct")},
                     )
 
                 if name == "retrieve_chunks" and result.ok:
@@ -455,6 +502,23 @@ async def run_streaming(
                         "content": tool_content,
                     }
                 )
+
+            if asked_check:
+                # Turn-terminating: check question handed to learner. Persist and
+                # stop. Grading happens on the next turn, not this one.
+                # Cost for this LLM call was already recorded above (before the
+                # tool-dispatch section), so no extra metering needed here.
+                # Soft-cap warning is intentionally skipped here: the check-question
+                # is the active UI element; the next regular reply surfaces the warning.
+                msg_id = _persist_assistant_message(
+                    ctx,
+                    accumulated_text,
+                    "complete",
+                    tool_calls=tool_calls_record,
+                    citations=citations,
+                )
+                yield StreamEvent("done", {"message_id": str(msg_id)})
+                return
 
         # max_iters exhausted without a final answer.
         yield StreamEvent("error", {"code": "max_iters_reached"})

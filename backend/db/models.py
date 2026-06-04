@@ -34,6 +34,7 @@ class Session(Base):
     topic: Mapped[str] = mapped_column(String, default="")
     topic_profile_json: Mapped[str] = mapped_column(Text, default="{}")
     kw_index_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+    pending_check_json: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     pinned: Mapped[bool] = mapped_column(

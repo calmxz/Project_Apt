@@ -16,11 +16,12 @@ from contracts import (
     SessionListItem,
     SessionResponse,
     SessionUpdateRequest,
+    ToolCallRecord,
     TopicProfile,
 )
 from db.database import get_db
 from db.models import ChatMessage, Document, Session as SessionModel, User
-from services import profile_service, summary_service
+from services import check_question_service, profile_service, summary_service
 from services.auth import current_user_id
 
 NO_EXCHANGES_TEXT = (
@@ -144,6 +145,10 @@ def _load_messages(db: Session, session_id: str) -> list[Message]:
             citations = [Citation(**c) for c in json.loads(m.citations_json or "[]")]
         except (ValueError, TypeError):
             citations = []
+        try:
+            tool_calls = [ToolCallRecord(**t) for t in json.loads(m.tool_calls_json or "[]")]
+        except (ValueError, TypeError):
+            tool_calls = []
         out.append(
             Message(
                 id=m.id,
@@ -151,6 +156,7 @@ def _load_messages(db: Session, session_id: str) -> list[Message]:
                 content=m.content,
                 created_at=_aware_utc(m.created_at),
                 citations=citations,
+                tool_calls=tool_calls,
             )
         )
     return out
@@ -172,6 +178,7 @@ def get_session(
     row = db.get(SessionModel, session_id)
     if row is None or row.user_id != user_id:
         raise HTTPException(status_code=404, detail="session not found")
+    pc = check_question_service.get_pending_check(db, row.id)
     return SessionDetail(
         id=row.id,
         user_id=row.user_id,
@@ -182,6 +189,7 @@ def get_session(
         ingestion_status=_latest_ingestion_status(db, row.id),
         messages=_load_messages(db, row.id),
         pinned=row.pinned,
+        pending_check=check_question_service.public_view(pc),
     )
 
 
@@ -249,3 +257,16 @@ def update_session(
     db.commit()
     db.refresh(row)
     return _to_response(db, row)
+
+
+@router.post("/sessions/{session_id}/check/skip")
+def skip_check(
+    session_id: str,
+    user_id: str = Depends(current_user_id),
+    db: Session = Depends(get_db),
+):
+    row = db.get(SessionModel, session_id)
+    if row is None or row.user_id != user_id:
+        raise HTTPException(status_code=404, detail="session not found")
+    check_question_service.clear_pending_check(db, session_id)
+    return {"ok": True}

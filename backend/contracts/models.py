@@ -56,7 +56,8 @@ class UpdateTopicProfileArgs(BaseModel):
     """
     Patch operation for a session's TopicProfile. Sending
     `focus_target_gap: null` explicitly clears focus and requires
-    `focus_clear_reason` (server-side guard rail).
+    `focus_clear_reason` (server-side guard rail). `evidence_type` is
+    required only when `add_mastered_concept` is present.
 
     """
 
@@ -71,7 +72,7 @@ class UpdateTopicProfileArgs(BaseModel):
     focus_clear_reason: (
         Literal["demonstrated", "tested_correct", "user_redirected"] | None
     ) = None
-    evidence_type: Literal["declared", "inferred", "tested"]
+    evidence_type: Literal["declared", "inferred", "tested"] | None = None
 
 
 class RetrieveChunksArgs(BaseModel):
@@ -91,6 +92,34 @@ class RecordLearningEventArgs(BaseModel):
     gap_tested: constr(max_length=200)
     question: constr(max_length=1000)
     correct: bool
+
+
+class AskCheckQuestionArgs(BaseModel):
+    """
+    Register an open check-question and end the turn. The question text is
+    also streamed to the learner as normal assistant text; gap+question
+    here drive the server-side pending-check state and the grading guard.
+
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    session_id: constr(max_length=64)
+    gap: constr(max_length=200)
+    question: constr(max_length=1000)
+
+
+class PendingCheck(BaseModel):
+    """
+    An open check-question awaiting a learner answer.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    gap: str
+    question: str
 
 
 class ToolResult(BaseModel):
@@ -126,6 +155,7 @@ class ChatResponse(BaseModel):
     message_id: int
     tool_calls: list[ToolCallRecord] | None = []
     citations: list[Citation] | None = []
+    pending_check: PendingCheck | None = None
 
 
 class SessionCreateRequest(BaseModel):
@@ -183,6 +213,7 @@ class Message(BaseModel):
     content: str
     created_at: datetime
     citations: list[Citation] | None = []
+    tool_calls: list[ToolCallRecord] | None = []
 
 
 class SessionDetail(BaseModel):
@@ -201,6 +232,7 @@ class SessionDetail(BaseModel):
     ended_at: datetime | None = None
     ingestion_status: Literal["pending", "ready", "failed"] | None = None
     pinned: bool | None = False
+    pending_check: PendingCheck | None = None
     messages: list[Message]
 
 

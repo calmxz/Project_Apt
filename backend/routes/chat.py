@@ -15,7 +15,7 @@ from db.database import get_db
 from db.models import ChatMessage, Document, Session as SessionModel, User
 from lib import keyword_index
 from lib.error_codes import DAILY_CAP_REACHED, DAILY_COST_CAP_REACHED
-from services import cost_meter, profile_service, rate_limit
+from services import check_question_service, cost_meter, profile_service, rate_limit
 from services.auth import current_user_id
 
 
@@ -103,6 +103,7 @@ async def _prepare_turn(
         "retrieval_required": retrieval_required,
         "seed_mode": None,
         "last_session_summary": profile.last_session_summary,
+        "pending_check": check_question_service.get_pending_check(db, req.session_id),
     }
     system_prompt = prompts.build_system_prompt(prompt_state)
 
@@ -145,11 +146,16 @@ async def chat(
             f"hard_cap_usd={post.hard_cap}"
         )
 
+    pending_check = check_question_service.public_view(
+        check_question_service.get_pending_check(db, req.session_id)
+    )
+
     return ChatResponse(
         assistant_message=reply,
         message_id=assistant_msg.id,
         tool_calls=tool_calls,
         citations=citations,
+        pending_check=pending_check,
     )
 
 

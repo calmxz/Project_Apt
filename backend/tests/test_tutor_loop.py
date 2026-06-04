@@ -1,6 +1,8 @@
 """TDD: tutor.run multi-iteration loop, tool dispatch, citations, max_iters."""
 
+import json
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 import pytest
 
@@ -77,14 +79,13 @@ async def test_tool_call_then_text(mock_litellm, llm_text, llm_tool_call, sessio
 async def test_failed_tool_dispatch_surfaces_in_records(
     mock_litellm, llm_text, llm_tool_call, session_row, ctx
 ):
-    # session_id mismatch -> profile_service rejects
+    # add_mastered_concept without evidence_type -> profile_service rejects
     mock_litellm.append(
         llm_tool_call(
             "update_topic_profile",
             {
-                "session_id": "wrong",
-                "evidence_type": "declared",
-                "add_confirmed_gap": "joins",
+                "session_id": ctx.session_id,
+                "add_mastered_concept": "joins",
             },
         )
     )
@@ -96,7 +97,7 @@ async def test_failed_tool_dispatch_surfaces_in_records(
     )
     assert text == "sorry, retrying differently"
     assert tool_calls[0].status == "failed"
-    assert "mismatch" in (tool_calls[0].error or "")
+    assert "evidence_type" in (tool_calls[0].error or "")
 
 
 async def test_max_iters_exhausted_returns_fallback(
@@ -205,6 +206,56 @@ async def test_retrieved_chunks_wrapped_as_untrusted_in_tool_message(
     assert wrapped_text.startswith("<document_excerpt")
     assert wrapped_text.endswith("</document_excerpt>")
     assert malicious in wrapped_text  # original payload preserved inside
+
+
+def _multi_tool_response(calls: list[tuple[str, dict]], content: str = "Here is a question."):
+    """A single LLM response carrying several tool calls in one assistant message."""
+    return SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                message=SimpleNamespace(
+                    content=content,
+                    tool_calls=[
+                        SimpleNamespace(
+                            id=f"tc_{i}",
+                            type="function",
+                            function=SimpleNamespace(name=name, arguments=json.dumps(args)),
+                        )
+                        for i, (name, args) in enumerate(calls)
+                    ],
+                )
+            )
+        ]
+    )
+
+
+async def test_ask_check_question_skips_sibling_tool_calls(mock_litellm, session_row, ctx):
+    """Asking a check-question is turn-terminating: any sibling tool call bundled in
+    the same response is a protocol violation (e.g. grading a question you just asked).
+    Only ask_check_question is dispatched; the premature record_learning_event is
+    skipped entirely, so no spurious 'Recording failed' chip appears."""
+    mock_litellm.append(
+        _multi_tool_response(
+            [
+                # premature self-grade bundled before the ask -- must be skipped
+                (
+                    "record_learning_event",
+                    {"session_id": SESSION_ID, "gap_tested": "x", "question": "q?", "correct": True},
+                ),
+                (
+                    "ask_check_question",
+                    {"session_id": SESSION_ID, "gap": "x", "question": "What is x?"},
+                ),
+            ]
+        )
+    )
+    text, tool_calls, _ = await tutor.run(
+        messages=[{"role": "user", "content": "quiz me"}],
+        system_prompt="sys",
+        ctx=ctx,
+    )
+    assert [tc.name for tc in tool_calls] == ["ask_check_question"]
+    assert tool_calls[0].status == "ok"
 
 
 def test_immutable_rules_warn_about_document_excerpt_tags():

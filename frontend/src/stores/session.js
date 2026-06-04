@@ -83,6 +83,9 @@ export const useSessionStore = defineStore('session', () => {
         citations: m.citations || [],
         created_at: m.created_at,
       }))
+      pendingCheck.value = s.pending_check
+        ? { gap: s.pending_check.gap, question: s.pending_check.question, verdict: null }
+        : null
       return s
     } catch (e) {
       _setError(e)
@@ -111,6 +114,13 @@ export const useSessionStore = defineStore('session', () => {
         tool_calls: resp.tool_calls || [],
         citations: resp.citations || [],
       })
+      // Drive the check-question card from the chat response so the composer
+      // locks on an ask turn and clears once the next turn grades it. The
+      // verdict marker is streaming-only (no check_result on this path), so a
+      // freshly-set card stays at verdict:null until the grading turn nulls it.
+      pendingCheck.value = resp.pending_check
+        ? { gap: resp.pending_check.gap, question: resp.pending_check.question, verdict: null }
+        : null
       return resp
     } catch (e) {
       if (e?.status === 429 && e?.body?.detail?.code === ERR_DAILY_CAP_REACHED) {
@@ -231,6 +241,24 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
+  const pendingCheck = ref(null) // { gap, question, verdict: boolean|null } | null
+  const checkLocked = computed(
+    () => pendingCheck.value !== null && pendingCheck.value.verdict === null,
+  )
+
+  function handleCheckQuestion({ gap, question }) {
+    pendingCheck.value = { gap, question, verdict: null }
+  }
+  function handleCheckResult({ correct }) {
+    if (pendingCheck.value) pendingCheck.value = { ...pendingCheck.value, verdict: correct }
+  }
+  async function skipCheck() {
+    const id = currentSessionId.value
+    if (!id) return
+    await sessionsApi.skipCheck(id)
+    pendingCheck.value = null
+  }
+
   const streamingMessage = ref(null)
   const streamState = ref('idle') // 'idle' | 'streaming' | 'tool_running' | 'stopping'
   const abortController = ref(null)
@@ -247,7 +275,7 @@ export const useSessionStore = defineStore('session', () => {
       streamState.value = 'tool_running'
     } else if (kind === 'done') {
       const tc = streamingMessage.value.tool_calls.find((t) => t.id === tool_call.id)
-      if (tc) { tc.state = tool_call.status === 'error' ? 'error' : 'done'; tc.summary = tool_call.summary }
+      if (tc) { tc.state = tool_call.status === 'error' ? 'error' : 'done'; tc.summary = tool_call.summary; tc.error = tool_call.error }
       streamState.value = 'streaming'
     }
   }
@@ -281,6 +309,7 @@ export const useSessionStore = defineStore('session', () => {
     if (!currentSessionId.value) throw new Error('no active session')
     const trimmed = (text || '').trim()
     if (!trimmed) return null
+    if (pendingCheck.value && pendingCheck.value.verdict !== null) pendingCheck.value = null
     messages.value.push({ role: 'user', content: trimmed })
     streamingMessage.value = { role: 'assistant', content: '', tool_calls: [], citations: [] }
     streamState.value = 'streaming'
@@ -299,6 +328,8 @@ export const useSessionStore = defineStore('session', () => {
             case 'assistant_delta': appendAssistantDelta(data.text); break
             case 'citations': setCitations(data); break
             case 'cost_warning': reportCostWarning(data); break
+            case 'check_question': handleCheckQuestion(data); break
+            case 'check_result': handleCheckResult(data); break
             case 'done': finalizeMessage(data.message_id); break
             case 'cancelled': handleCancelled(data.message_id, data.partial_content_chars, data.estimated_cost_usd); break
             case 'error':
@@ -331,6 +362,7 @@ export const useSessionStore = defineStore('session', () => {
     dailyCapInfo.value = null
     costCapInfo.value = null
     pendingSummary.value = null
+    pendingCheck.value = null
     streamingMessage.value = null
     streamState.value = 'idle'
     abortController.value = null
@@ -349,6 +381,8 @@ export const useSessionStore = defineStore('session', () => {
     costCapInfo,
     pendingSummary,
     consumePendingSummary,
+    pendingCheck,
+    checkLocked,
     streamingMessage,
     streamState,
     abortController,
@@ -363,6 +397,9 @@ export const useSessionStore = defineStore('session', () => {
     setError,
     clearDailyCap,
     clearCostCap,
+    handleCheckQuestion,
+    handleCheckResult,
+    skipCheck,
     appendAssistantDelta,
     recordToolCall,
     setCitations,

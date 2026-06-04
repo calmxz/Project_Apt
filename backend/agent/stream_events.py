@@ -13,6 +13,7 @@ import json
 class StreamEvent:
     # one of: 'tool_call_start' | 'tool_call_done' | 'assistant_delta'
     #         | 'citations' | 'cost_warning' | 'done' | 'error' | 'cancelled'
+    #         | 'check_question' | 'check_result'
     type: str
     data: Any
 
