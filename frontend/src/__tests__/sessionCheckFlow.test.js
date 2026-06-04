@@ -10,6 +10,7 @@ vi.mock('@/services/sessionsApi.js', () => ({
   renameSession: vi.fn(),
   setPinned: vi.fn(),
   skipCheck: vi.fn(),
+  answerCheck: vi.fn(),
 }))
 vi.mock('@/services/chatApi.js', () => ({ postChat: vi.fn() }))
 vi.mock('@/services/chatStreamService.js', () => ({ streamChat: vi.fn() }))
@@ -24,15 +25,11 @@ describe('check-question flow', () => {
     vi.clearAllMocks()
   })
 
-  it('sets pendingCheck on check_question and locks; clears verdict on check_result', () => {
+  it('sets pendingCheck on check_question and locks', () => {
     const store = useSessionStore()
-    store.handleCheckQuestion({ gap: 'g', question: 'Inputs?' })
-    expect(store.pendingCheck).toEqual({ gap: 'g', question: 'Inputs?', verdict: null })
+    store.handleCheckQuestion({ gap: 'g', question: 'Inputs?', options: ['A', 'B'] })
+    expect(store.pendingCheck).toEqual({ gap: 'g', question: 'Inputs?', options: ['A', 'B'], verdict: null })
     expect(store.checkLocked).toBe(true)
-
-    store.handleCheckResult({ gap: 'g', correct: true })
-    expect(store.pendingCheck.verdict).toBe(true)
-    expect(store.checkLocked).toBe(false) // answered -> unlocked
   })
 
   it('skipCheck calls API and clears pendingCheck', async () => {
@@ -43,5 +40,21 @@ describe('check-question flow', () => {
     await store.skipCheck()
     expect(sessionsApi.skipCheck).toHaveBeenCalledWith('s1')
     expect(store.pendingCheck).toBe(null)
+  })
+
+  it('answerCheck sets verdict, selectedIndex, explanation, correctIndex and unlocks', async () => {
+    const store = useSessionStore()
+    store.currentSessionId = 's1'
+    store.pendingCheck = { gap: 'g', question: 'q', options: ['a', 'b'], verdict: null }
+    vi.spyOn(sessionsApi, 'answerCheck').mockResolvedValue({
+      correct: true, explanation: 'x', correct_index: 1,
+    })
+    await store.answerCheck(1)
+    expect(sessionsApi.answerCheck).toHaveBeenCalledWith('s1', 1)
+    expect(store.pendingCheck.verdict).toBe(true)
+    expect(store.pendingCheck.selectedIndex).toBe(1)
+    expect(store.pendingCheck.explanation).toBe('x')
+    expect(store.pendingCheck.correctIndex).toBe(1)
+    expect(store.checkLocked).toBe(false)
   })
 })
