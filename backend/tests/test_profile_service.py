@@ -1,13 +1,13 @@
 """TDD: profile_service.apply_patch + focus-clear guard rail."""
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import pytest
 
 from agent.types import ToolContext
 from contracts import TopicProfile, UpdateTopicProfileArgs
-from db.models import LearningEvent, Session as SessionModel, User
+from db.models import Session as SessionModel, User
 from services import profile_service
 
 
@@ -124,7 +124,9 @@ def test_focus_clear_without_reason_fails(session_row, ctx, db_session):
     assert profile.focus_target_gap == "joins"
 
 
-def test_focus_clear_tested_correct_without_event_fails(session_row, ctx, db_session):
+def test_focus_clear_tested_correct_no_event_succeeds(session_row, ctx, db_session):
+    # Guard removed: tested_correct clears focus even with no in-turn LearningEvent.
+    # Previously this asserted ok=False; inverted because the guard is gone.
     _set_focus(db_session, ctx, "joins")
     result = profile_service.apply_patch(
         db_session,
@@ -135,23 +137,15 @@ def test_focus_clear_tested_correct_without_event_fails(session_row, ctx, db_ses
             evidence_type="tested",
         ),
     )
-    assert result.ok is False
-    assert result.status == "failed"
-    assert "tested_correct" in (result.error or "")
+    assert result.ok is True
+    profile = profile_service.load_profile(db_session, SESSION_ID)
+    assert profile.focus_target_gap is None
 
 
-def test_focus_clear_tested_correct_with_event_ok(session_row, ctx, db_session):
+def test_focus_clear_tested_correct_ok(session_row, ctx, db_session):
+    # Guard removed: event setup was only needed to satisfy the old in-turn evidence
+    # check, which no longer exists. Clear still succeeds; focus is cleared.
     _set_focus(db_session, ctx, "joins")
-    db_session.add(
-        LearningEvent(
-            session_id=SESSION_ID,
-            gap_tested="joins",
-            question="what is an inner join?",
-            correct=True,
-            created_at=ctx.turn_started_at + timedelta(seconds=1),
-        )
-    )
-    db_session.commit()
     result = profile_service.apply_patch(
         db_session,
         ctx,
