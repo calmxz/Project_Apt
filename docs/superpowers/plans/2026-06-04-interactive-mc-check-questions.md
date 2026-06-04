@@ -1190,7 +1190,18 @@ git commit -m "chore: composer copy for MC checks; full suites green"
 
 - [ ] **Step 6: Skip path.** Open another check, click Skip; confirm the card clears and the composer unlocks.
 
-- [ ] **Step 7: Record the smoke result** in the plan (check the boxes) and note any defects as follow-up tasks.
+- [x] **Step 7: Record the smoke result** in the plan (check the boxes) and note any defects as follow-up tasks.
+
+### Live smoke result (2026-06-04, Chrome, real LLM — PASS)
+
+Driven against the running stack (frontend :5173, backend :8000), session topic "Glycolysis":
+- **Card renders:** prompting "Quiz me with one multiple-choice check question" produced a CHECK QUESTION card with 4 clickable option buttons (0/1/2/4 ATP), NOT inline "A)... B)..." text. Composer locked with the new placeholder "Pick an answer above, or Skip..." + Skip button.
+- **Correct click:** clicked "2 ATP" -> option highlighted green, verdict "Correct", explanation rendered inline, composer unlocked. Grade was instant (deterministic; no ~10s LLM grading turn).
+- **Incorrect click:** new question ("net products of glycolysis"); clicked the wrong option ("6 CO2 and 6 H2O") -> wrong pick amber, correct option ("2 pyruvate, 2 ATP, and 2 NADH") green, verdict "Not quite" + explanation.
+- **Profile channel:** the aggregate Learning Profile then showed "Glycolysis net ATP yield" in Mastered concepts (MASTERED 3, EVENTS 6) — i.e. the correctly-answered gap was promoted server-side via record_from_answer.
+- **Skip path:** opened a third question, clicked "Skip this question" -> card cleared, composer unlocked.
+
+No defects found. Feature is live-verified end to end.
 
 ---
 
