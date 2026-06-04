@@ -17,6 +17,25 @@ Make check-questions interactive multiple-choice cards: the tutor supplies the
 options and the correct one; the learner clicks; the server grades instantly
 (no LLM) and silently records the result into the adaptive profile.
 
+## Current behavior (verified live in Chrome, 2026-06-04)
+
+Captured against the running app (session "Glycolysis pathway") before any change:
+
+- The tutor renders a coral-bordered card: a "CHECK QUESTION" eyebrow, the
+  question text, and a "Skip this question" pill.
+- The composer placeholder switches to "Answer the question, or Skip..." with a
+  Skip button; the learner must **type** the answer.
+- Grading happens on the next LLM turn.
+
+Telling detail: prompted for a multiple-choice question, the LLM already jams
+the options into the question string as plain text —
+`"...A) Acetyl-CoA, B) Pyruvate, C) Lactate, D) Ethanol. Please select the
+correct option."` — but there is **no UI to select them**. The model wants
+multiple-choice; the surface can't express it. This redesign gives those options
+a real clickable home and replaces the typed-answer + LLM-grading turn with a
+click + instant server-side grade. `options` becomes structured data, never
+inline prose.
+
 ## Decisions (locked during brainstorming)
 
 1. **Deterministic grading.** The agent supplies `options` + `correct_index`.
