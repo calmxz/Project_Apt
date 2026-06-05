@@ -11,7 +11,7 @@ from typing import Any
 
 from agent.types import ToolContext
 from contracts import (
-    AskCheckQuestionArgs,
+    AskCheckQuestionsArgs,
     RetrieveChunksArgs,
     ToolResult,
     UpdateTopicProfileArgs,
@@ -58,16 +58,16 @@ TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "ask_check_question",
+            "name": "ask_check_questions",
             "description": (
                 "The ONLY way to quiz, test, or check the learner's understanding."
-                " Pose ONE multiple-choice question: provide 2-4 plausible options,"
-                " the 0-based correct_index, and a one-sentence explanation shown"
-                " after the learner answers. This ends your turn. The learner clicks"
-                " an option; the server grades it and updates the profile. You do NOT"
-                " grade answers yourself."
+                " Pose a BATCH of 1-5 multiple-choice questions probing one focus"
+                " gap via items[]. Each item: 2-4 plausible options, the 0-based"
+                " correct_index, and a one-sentence explanation shown after answering."
+                " This ends your turn. The learner answers each; the server grades"
+                " deterministically and updates the profile. You do NOT grade."
             ),
-            "parameters": _schema(AskCheckQuestionArgs),
+            "parameters": _schema(AskCheckQuestionsArgs),
         },
     },
 ]
@@ -88,9 +88,9 @@ def dispatch(name: str, args: dict[str, Any], ctx: ToolContext) -> ToolResult:
             return retrieval_service.retrieve(
                 ctx.db, ctx, RetrieveChunksArgs.model_validate(args)
             )
-        if name == "ask_check_question":
+        if name == "ask_check_questions":
             return check_question_service.register(
-                ctx.db, ctx, AskCheckQuestionArgs.model_validate(args)
+                ctx.db, ctx, AskCheckQuestionsArgs.model_validate(args)
             )
         return ToolResult(ok=False, status="failed", error=f"unknown tool: {name}")
     except Exception as e:

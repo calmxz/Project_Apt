@@ -400,7 +400,7 @@ async def test_run_streaming_records_cost_on_tool_iterations(db_session, monkeyp
 
 @pytest.mark.asyncio
 async def test_run_streaming_ask_check_question_skips_siblings(db_session, monkeypatch):
-    """ask_check_question is turn-terminating: a sibling tool call streamed in the
+    """ask_check_questions is turn-terminating: a sibling tool call streamed in the
     same response (e.g. a premature self-grade) must NOT be dispatched, so no
     spurious 'Recording failed' chip is emitted."""
     _disable_stub(monkeypatch)
@@ -419,8 +419,12 @@ async def test_run_streaming_ask_check_question_skips_siblings(db_session, monke
             _tool_fragment(
                 1,
                 id="tc_1",
-                name="ask_check_question",
-                arguments='{"session_id":"s1","gap":"x","question":"What is x?"}',
+                name="ask_check_questions",
+                arguments=json.dumps({
+                    "session_id": "s1", "gap": "x",
+                    "items": [{"question": "What is x?", "options": ["yes", "no"],
+                               "correct_index": 0, "explanation": "Yes."}],
+                }),
             ),
         ),
     )
@@ -433,7 +437,8 @@ async def test_run_streaming_ask_check_question_skips_siblings(db_session, monke
     monkeypatch.setattr("agent.tutor.litellm.completion_cost", MagicMock(return_value=0.0))
     dispatch = MagicMock(
         return_value=ToolResult(
-            ok=True, status="ok", error=None, data={"gap": "x", "question": "What is x?"}
+            ok=True, status="ok", error=None,
+            data={"gap": "x", "total": 1, "items": [{"question": "What is x?", "options": ["yes", "no"]}]},
         )
     )
     monkeypatch.setattr("agent.tutor.tools.dispatch", dispatch)
@@ -443,9 +448,9 @@ async def test_run_streaming_ask_check_question_skips_siblings(db_session, monke
         tutor.run_streaming([{"role": "user", "content": "quiz me"}], "sys", ctx)
     )
 
-    # Only ask_check_question reached dispatch; the premature grade was dropped.
+    # Only ask_check_questions reached dispatch; the premature grade was dropped.
     dispatched = [c.args[0] for c in dispatch.call_args_list]
-    assert dispatched == ["ask_check_question"]
+    assert dispatched == ["ask_check_questions"]
 
     types = [e.type for e in events]
     assert "check_question" in types

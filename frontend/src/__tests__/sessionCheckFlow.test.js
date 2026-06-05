@@ -1,86 +1,106 @@
 import { setActivePinia, createPinia } from 'pinia'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-
-vi.mock('@/services/sessionsApi.js', () => ({
-  listSessions: vi.fn(),
-  createSession: vi.fn(),
-  getSession: vi.fn(),
-  endSession: vi.fn(),
-  reopenSession: vi.fn(),
-  renameSession: vi.fn(),
-  setPinned: vi.fn(),
-  skipCheck: vi.fn(),
-  answerCheck: vi.fn(),
-}))
-vi.mock('@/services/chatApi.js', () => ({ postChat: vi.fn() }))
-vi.mock('@/services/chatStreamService.js', () => ({ streamChat: vi.fn() }))
-vi.mock('@/services/costBus.js', () => ({ reportCostWarning: vi.fn() }))
-
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { useSessionStore } from '@/stores/session.js'
 import * as sessionsApi from '@/services/sessionsApi.js'
+import * as streamSvc from '@/services/chatStreamService.js'
 
-describe('check-question flow', () => {
+vi.mock('@/services/sessionsApi.js')
+vi.mock('@/services/chatStreamService.js')
+vi.mock('@/services/chatApi.js', () => ({ postChat: vi.fn() }))
+vi.mock('@/services/costBus.js', () => ({ reportCostWarning: vi.fn() }))
+
+function batchEvent() {
+  return {
+    gap: 'atp',
+    total: 2,
+    items: [
+      { question: 'Q1', options: ['a', 'b'] },
+      { question: 'Q2', options: ['a', 'b'] },
+    ],
+  }
+}
+
+describe('multi-check store', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
   })
 
-  it('sets pendingCheck on check_question and locks', () => {
-    const store = useSessionStore()
-    store.handleCheckQuestion({ gap: 'g', question: 'Inputs?', options: ['A', 'B'] })
-    expect(store.pendingCheck).toEqual({ gap: 'g', question: 'Inputs?', options: ['A', 'B'], verdict: null })
-    expect(store.checkLocked).toBe(true)
-  })
-
-  it('skipCheck calls API and clears pendingCheck', async () => {
-    const store = useSessionStore()
-    store.currentSessionId = 's1'
-    store.handleCheckQuestion({ gap: 'g', question: 'q?' })
-    sessionsApi.skipCheck.mockResolvedValueOnce({ ok: true })
-    await store.skipCheck()
-    expect(sessionsApi.skipCheck).toHaveBeenCalledWith('s1')
-    expect(store.pendingCheck).toBe(null)
-  })
-
-  it('answerCheck sets verdict, selectedIndex, explanation, correctIndex and unlocks', async () => {
-    const store = useSessionStore()
-    store.currentSessionId = 's1'
-    store.pendingCheck = { gap: 'g', question: 'q', options: ['a', 'b'], verdict: null }
-    vi.spyOn(sessionsApi, 'answerCheck').mockResolvedValue({
-      correct: true, explanation: 'x', correct_index: 1,
+  it('answer advances currentIndex but keeps viewIndex (verdict visible)', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 'sid'
+    s.handleCheckQuestion(batchEvent())
+    expect(s.pendingCheck.viewIndex).toBe(0)
+    sessionsApi.answerCheck.mockResolvedValue({
+      correct: true, explanation: 'a.', correct_index: 0,
+      current_index: 1, total: 2, has_next: true, done: false,
     })
-    await store.answerCheck(1)
-    expect(sessionsApi.answerCheck).toHaveBeenCalledWith('s1', 1)
-    expect(store.pendingCheck.verdict).toBe(true)
-    expect(store.pendingCheck.selectedIndex).toBe(1)
-    expect(store.pendingCheck.explanation).toBe('x')
-    expect(store.pendingCheck.correctIndex).toBe(1)
-    expect(store.checkLocked).toBe(false)
+    await s.answerCheck(0)
+    expect(s.pendingCheck.currentIndex).toBe(1)
+    expect(s.pendingCheck.viewIndex).toBe(0)
+    expect(s.pendingCheck.items[0].status).toBe('answered')
+    expect(s.pendingCheck.items[0].correct).toBe(true)
   })
 
-  it('answerCheck ignores a concurrent second click (one POST only)', async () => {
-    const store = useSessionStore()
-    store.currentSessionId = 's1'
-    store.pendingCheck = { gap: 'g', question: 'q', options: ['a', 'b'], verdict: null }
-    let resolve
-    sessionsApi.answerCheck.mockReturnValueOnce(
-      new Promise((r) => {
-        resolve = r
-      }),
-    )
-    const first = store.answerCheck(0)
-    const second = store.answerCheck(1) // fired before the first resolves
-    resolve({ correct: false, explanation: 'e', correct_index: 0 })
-    await Promise.all([first, second])
-    expect(sessionsApi.answerCheck).toHaveBeenCalledTimes(1)
-    expect(sessionsApi.answerCheck).toHaveBeenCalledWith('s1', 0)
+  it('nextCheck moves view to the next unanswered item', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 'sid'
+    s.handleCheckQuestion(batchEvent())
+    sessionsApi.answerCheck.mockResolvedValue({
+      correct: true, explanation: 'a.', correct_index: 0,
+      current_index: 1, total: 2, has_next: true, done: false,
+    })
+    await s.answerCheck(0)
+    s.nextCheck()
+    expect(s.pendingCheck.viewIndex).toBe(1)
   })
 
-  it('answerCheck ignores a click after the question is answered', async () => {
-    const store = useSessionStore()
-    store.currentSessionId = 's1'
-    store.pendingCheck = { gap: 'g', question: 'q', options: ['a', 'b'], verdict: true }
-    await store.answerCheck(1)
-    expect(sessionsApi.answerCheck).not.toHaveBeenCalled()
+  it('answering the last item marks done; completeCheck fires once', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 'sid'
+    s.handleCheckQuestion(batchEvent())
+    sessionsApi.answerCheck
+      .mockResolvedValueOnce({ correct: true, explanation: 'a.', correct_index: 0, current_index: 1, total: 2, has_next: true, done: false })
+      .mockResolvedValueOnce({ correct: true, explanation: 'a.', correct_index: 0, current_index: 2, total: 2, has_next: false, done: true })
+    streamSvc.streamCheckComplete.mockResolvedValue(undefined)
+    await s.answerCheck(0)
+    s.nextCheck()
+    await s.answerCheck(0)
+    expect(s.pendingCheck.items[1].status).toBe('answered')
+    await s.completeCheck()
+    await s.completeCheck()
+    expect(streamSvc.streamCheckComplete).toHaveBeenCalledTimes(1)
+    expect(s.pendingCheck).toBeNull()
+  })
+
+  it('per-item skip that resolves the batch fires completeCheck', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 'sid'
+    s.handleCheckQuestion({ gap: 'atp', total: 1, items: [{ question: 'Q1', options: ['a', 'b'] }] })
+    sessionsApi.skipCheck.mockResolvedValue({ current_index: 1, total: 1, has_next: false, done: true })
+    streamSvc.streamCheckComplete.mockResolvedValue(undefined)
+    await s.skipCheck()
+    expect(streamSvc.streamCheckComplete).toHaveBeenCalledTimes(1)
+    expect(s.pendingCheck).toBeNull()
+  })
+
+  it('loadSession rebuilds batch at current_index with prior verdicts', async () => {
+    const s = useSessionStore()
+    sessionsApi.getSession.mockResolvedValue({
+      id: 'sid', messages: [],
+      pending_check: {
+        gap: 'atp', current_index: 1, total: 2,
+        items: [
+          { question: 'Q1', options: ['a', 'b'], status: 'answered',
+            selected_index: 0, correct_index: 0, correct: true, explanation: 'a.' },
+          { question: 'Q2', options: ['a', 'b'], status: 'pending',
+            selected_index: null, correct_index: null, correct: null, explanation: null },
+        ],
+      },
+    })
+    await s.loadSession('sid')
+    expect(s.pendingCheck.currentIndex).toBe(1)
+    expect(s.pendingCheck.viewIndex).toBe(1)
+    expect(s.pendingCheck.items[0].correct).toBe(true)
   })
 })

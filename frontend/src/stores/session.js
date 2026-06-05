@@ -3,7 +3,7 @@ import { defineStore } from 'pinia'
 
 import * as sessionsApi from '../services/sessionsApi.js'
 import { postChat } from '../services/chatApi.js'
-import { streamChat } from '../services/chatStreamService.js'
+import { streamChat, streamCheckComplete } from '../services/chatStreamService.js'
 import { reportCostWarning } from '../services/costBus.js'
 import { friendlyError } from '../lib/errors.js'
 import {
@@ -86,9 +86,18 @@ export const useSessionStore = defineStore('session', () => {
       pendingCheck.value = s.pending_check
         ? {
             gap: s.pending_check.gap,
-            question: s.pending_check.question,
-            options: s.pending_check.options || [],
-            verdict: null,
+            total: s.pending_check.total,
+            currentIndex: s.pending_check.current_index,
+            viewIndex: s.pending_check.current_index,
+            items: (s.pending_check.items || []).map((it) => ({
+              question: it.question,
+              options: it.options || [],
+              status: it.status,
+              selectedIndex: it.selected_index,
+              correctIndex: it.correct_index,
+              correct: it.correct,
+              explanation: it.explanation,
+            })),
           }
         : null
       return s
@@ -119,16 +128,24 @@ export const useSessionStore = defineStore('session', () => {
         tool_calls: resp.tool_calls || [],
         citations: resp.citations || [],
       })
-      // Drive the check-question card from the chat response so the composer
-      // locks on an ask turn and clears once the next turn grades it. The
-      // verdict marker is streaming-only (no check_result on this path), so a
-      // freshly-set card stays at verdict:null until the grading turn nulls it.
+      // Non-streaming fallback: rebuild the batch check card from the chat
+      // response's pending_check public_view (same batch shape as loadSession).
+      // Per-item grading happens later via POST /check/answer, not on this turn.
       pendingCheck.value = resp.pending_check
         ? {
             gap: resp.pending_check.gap,
-            question: resp.pending_check.question,
-            options: resp.pending_check.options || [],
-            verdict: null,
+            total: resp.pending_check.total,
+            currentIndex: resp.pending_check.current_index,
+            viewIndex: resp.pending_check.current_index,
+            items: (resp.pending_check.items || []).map((it) => ({
+              question: it.question,
+              options: it.options || [],
+              status: it.status,
+              selectedIndex: it.selected_index,
+              correctIndex: it.correct_index,
+              correct: it.correct,
+              explanation: it.explanation,
+            })),
           }
         : null
       return resp
@@ -251,41 +268,133 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  const pendingCheck = ref(null) // { gap, question, verdict: boolean|null } | null
-  const checkLocked = computed(
-    () => pendingCheck.value !== null && pendingCheck.value.verdict === null,
-  )
-
-  function handleCheckQuestion({ gap, question, options }) {
-    pendingCheck.value = { gap, question, options: options || [], verdict: null }
-  }
+  // Batch shape: { gap, total, currentIndex, viewIndex, items: [
+  //   { question, options, status, selectedIndex, correctIndex, correct, explanation } ] }
+  const pendingCheck = ref(null)
+  // Typing mid-batch is allowed (spec section 3), so the composer never locks on
+  // an open check. Kept as a computed for the SessionView/Composer binding.
+  const checkLocked = computed(() => false)
   const checkAnswering = ref(false)
-  async function answerCheck(index) {
+  const checkCompleting = ref(false)
+
+  function handleCheckQuestion({ gap, items, total }) {
+    pendingCheck.value = {
+      gap,
+      total: total ?? (items || []).length,
+      currentIndex: 0,
+      viewIndex: 0,
+      items: (items || []).map((it) => ({
+        question: it.question,
+        options: it.options || [],
+        status: 'pending',
+        selectedIndex: null,
+        correctIndex: null,
+        correct: null,
+        explanation: null,
+      })),
+    }
+  }
+
+  async function answerCheck(selectedIndex) {
     const id = currentSessionId.value
-    // Guard against re-answering (verdict already set) and concurrent
-    // double-clicks: without this, two clicks fired before the first response
-    // both POST and write two LearningEvents server-side.
-    if (!id || !pendingCheck.value || pendingCheck.value.verdict !== null) return
+    const pc = pendingCheck.value
+    if (!id || !pc) return
+    const i = pc.currentIndex
+    const item = pc.items[i]
+    if (!item || item.status !== 'pending') return
     if (checkAnswering.value) return
     checkAnswering.value = true
     try {
-      const resp = await sessionsApi.answerCheck(id, index)
-      pendingCheck.value = {
-        ...pendingCheck.value,
-        verdict: resp.correct,
-        selectedIndex: index,
-        explanation: resp.explanation,
-        correctIndex: resp.correct_index,
-      }
+      const resp = await sessionsApi.answerCheck(id, i, selectedIndex)
+      item.status = 'answered'
+      item.selectedIndex = selectedIndex
+      item.correct = resp.correct
+      item.correctIndex = resp.correct_index
+      item.explanation = resp.explanation
+      pc.currentIndex = resp.current_index
     } finally {
       checkAnswering.value = false
     }
   }
+
+  function nextCheck() {
+    const pc = pendingCheck.value
+    if (pc) pc.viewIndex = pc.currentIndex
+  }
+
   async function skipCheck() {
     const id = currentSessionId.value
-    if (!id) return
-    await sessionsApi.skipCheck(id)
+    const pc = pendingCheck.value
+    if (!id || !pc) return
+    const i = pc.currentIndex
+    const item = pc.items[i]
+    if (!item || item.status !== 'pending') return
+    // Same in-flight guard as answerCheck: a rapid double-skip would otherwise
+    // double-POST, and the second hits a 409 (out-of-order) since currentIndex
+    // already advanced.
+    if (checkAnswering.value) return
+    checkAnswering.value = true
+    let resp
+    try {
+      resp = await sessionsApi.skipCheck(id, i)
+      item.status = 'skipped'
+      pc.currentIndex = resp.current_index
+    } finally {
+      checkAnswering.value = false
+    }
+    if (resp.done) {
+      await completeCheck()
+    } else {
+      pc.viewIndex = pc.currentIndex
+    }
+  }
+
+  async function completeCheck() {
+    const id = currentSessionId.value
+    if (!id || !pendingCheck.value) return
+    if (checkCompleting.value) return
+    checkCompleting.value = true
     pendingCheck.value = null
+    streamingMessage.value = { role: 'assistant', content: '', tool_calls: [], citations: [] }
+    streamState.value = 'streaming'
+    const ctrl = new AbortController()
+    abortController.value = ctrl
+    error.value = null
+    try {
+      await streamCheckComplete({
+        sessionId: id,
+        signal: ctrl.signal,
+        onEvent: ({ event, data }) => {
+          switch (event) {
+            case 'tool_call_start': recordToolCall({ kind: 'start', tool_call: data }); break
+            case 'tool_call_done': recordToolCall({ kind: 'done', tool_call: data }); break
+            case 'assistant_delta': appendAssistantDelta(data.text); break
+            case 'citations': setCitations(data); break
+            case 'cost_warning': reportCostWarning(data); break
+            case 'check_question': handleCheckQuestion(data); break
+            case 'done': finalizeMessage(data.message_id); break
+            case 'cancelled': handleCancelled(data.message_id, data.partial_content_chars, data.estimated_cost_usd); break
+            case 'error':
+              error.value = data.message || data.code
+              streamingMessage.value = null
+              streamState.value = 'idle'
+              abortController.value = null
+              break
+          }
+        },
+      })
+    } catch (e) {
+      if (e?.name === 'AbortError') {
+        if (streamingMessage.value) handleCancelled('pending', streamingMessage.value.content.length, '0')
+        return
+      }
+      streamingMessage.value = null
+      streamState.value = 'idle'
+      abortController.value = null
+      _setError(e)
+    } finally {
+      checkCompleting.value = false
+    }
   }
 
   const streamingMessage = ref(null)
@@ -338,7 +447,6 @@ export const useSessionStore = defineStore('session', () => {
     if (!currentSessionId.value) throw new Error('no active session')
     const trimmed = (text || '').trim()
     if (!trimmed) return null
-    if (pendingCheck.value && pendingCheck.value.verdict !== null) pendingCheck.value = null
     messages.value.push({ role: 'user', content: trimmed })
     streamingMessage.value = { role: 'assistant', content: '', tool_calls: [], citations: [] }
     streamState.value = 'streaming'
@@ -427,7 +535,9 @@ export const useSessionStore = defineStore('session', () => {
     clearCostCap,
     handleCheckQuestion,
     answerCheck,
+    nextCheck,
     skipCheck,
+    completeCheck,
     appendAssistantDelta,
     recordToolCall,
     setCitations,

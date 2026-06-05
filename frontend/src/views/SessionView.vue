@@ -69,6 +69,8 @@
         :check="store.pendingCheck"
         @answer="onAnswerCheck"
         @skip="onSkipCheck"
+        @next="store.nextCheck"
+        @done="onDoneCheck"
       />
 
       <Composer
@@ -394,6 +396,14 @@ async function onAnswerCheck(index) {
 async function onSkipCheck() {
   try {
     await store.skipCheck()
+  } catch (e) {
+    lastError.value = e
+  }
+}
+
+async function onDoneCheck() {
+  try {
+    await store.completeCheck()
   } catch (e) {
     lastError.value = e
   }

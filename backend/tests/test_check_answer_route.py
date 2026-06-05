@@ -1,10 +1,11 @@
-"""TDD: POST /sessions/{id}/check/answer deterministic grade (Task 5)."""
+"""TDD: POST /sessions/{id}/check/answer over a batch."""
 
 from datetime import datetime, timezone
 
 import pytest
 
-from contracts import TopicProfile
+from contracts import AskCheckQuestionsArgs, TopicProfile
+from agent.types import ToolContext
 from db.models import Session as SessionModel, User
 from services import check_question_service, profile_service
 
@@ -16,9 +17,7 @@ USER_ID = "u_ans_1"
 def seeded_session(db_session):
     db_session.add(User(id=USER_ID))
     session = SessionModel(
-        id="s_ans_1",
-        user_id=USER_ID,
-        topic="biology",
+        id="s_ans_1", user_id=USER_ID, topic="biology",
         topic_profile_json=TopicProfile().model_dump_json(),
     )
     db_session.add(session)
@@ -26,66 +25,62 @@ def seeded_session(db_session):
     return session
 
 
-def _open_check(db, session_id):
-    check_question_service.set_pending_check(
-        db, session_id, gap="atp", question="What nets per glucose?",
-        options=["2 ATP", "36 ATP", "0 ATP"], correct_index=0,
-        explanation="Net 2 ATP per glucose.",
-        asked_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
-    )
+def _open_batch(db, session_id):
+    ctx = ToolContext(db=db, session_id=session_id, user_id=USER_ID,
+                      turn_started_at=datetime(2026, 1, 1, tzinfo=timezone.utc))
+    check_question_service.register(db, ctx, AskCheckQuestionsArgs(
+        session_id=session_id, gap="atp",
+        items=[
+            {"question": "Q1?", "options": ["2 ATP", "36 ATP"],
+             "correct_index": 0, "explanation": "Net 2 ATP."},
+            {"question": "Q2?", "options": ["a", "b"],
+             "correct_index": 1, "explanation": "b."},
+        ]))
 
 
-def test_answer_correct_returns_verdict_and_masters(client, db_session, seeded_session):
+def test_answer_first_item_advances(client, db_session, seeded_session):
     sid = seeded_session.id
-    _open_check(db_session, sid)
-    r = client.post(
-        f"/api/sessions/{sid}/check/answer",
-        json={"selected_index": 0, "user_id": USER_ID},
-    )
+    _open_batch(db_session, sid)
+    r = client.post(f"/api/sessions/{sid}/check/answer",
+                    json={"index": 0, "selected_index": 0, "user_id": USER_ID})
     assert r.status_code == 200
     body = r.json()
     assert body["correct"] is True
-    assert body["correct_index"] == 0
-    assert body["explanation"] == "Net 2 ATP per glucose."
-    assert check_question_service.get_pending_check(db_session, sid) is None
+    assert body["current_index"] == 1
+    assert body["has_next"] is True
+    assert body["done"] is False
+    assert check_question_service.get_pending_check(db_session, sid) is not None
     assert "atp" in profile_service.load_profile(db_session, sid).mastered_concepts
 
 
-def test_answer_incorrect_returns_false(client, db_session, seeded_session):
+def test_answer_last_item_done(client, db_session, seeded_session):
     sid = seeded_session.id
-    _open_check(db_session, sid)
-    r = client.post(
-        f"/api/sessions/{sid}/check/answer",
-        json={"selected_index": 1, "user_id": USER_ID},
-    )
-    assert r.status_code == 200
-    assert r.json()["correct"] is False
+    _open_batch(db_session, sid)
+    client.post(f"/api/sessions/{sid}/check/answer",
+                json={"index": 0, "selected_index": 0, "user_id": USER_ID})
+    r = client.post(f"/api/sessions/{sid}/check/answer",
+                    json={"index": 1, "selected_index": 1, "user_id": USER_ID})
+    assert r.json()["done"] is True
 
 
-def test_answer_out_of_range_is_422(client, db_session, seeded_session):
+def test_answer_out_of_order_is_409(client, db_session, seeded_session):
     sid = seeded_session.id
-    _open_check(db_session, sid)
-    r = client.post(
-        f"/api/sessions/{sid}/check/answer",
-        json={"selected_index": 9, "user_id": USER_ID},
-    )
-    assert r.status_code == 422
+    _open_batch(db_session, sid)
+    r = client.post(f"/api/sessions/{sid}/check/answer",
+                    json={"index": 1, "selected_index": 0, "user_id": USER_ID})
+    assert r.status_code == 409
 
 
-def test_answer_no_pending_is_409(client, db_session, seeded_session):
+def test_answer_no_batch_is_409(client, db_session, seeded_session):
     sid = seeded_session.id
-    r = client.post(
-        f"/api/sessions/{sid}/check/answer",
-        json={"selected_index": 0, "user_id": USER_ID},
-    )
+    r = client.post(f"/api/sessions/{sid}/check/answer",
+                    json={"index": 0, "selected_index": 0, "user_id": USER_ID})
     assert r.status_code == 409
 
 
 def test_answer_foreign_session_is_404(client, db_session):
     db_session.add(User(id=USER_ID))
     db_session.commit()
-    r = client.post(
-        "/api/sessions/does-not-exist/check/answer",
-        json={"selected_index": 0, "user_id": USER_ID},
-    )
+    r = client.post("/api/sessions/nope/check/answer",
+                    json={"index": 0, "selected_index": 0, "user_id": USER_ID})
     assert r.status_code == 404

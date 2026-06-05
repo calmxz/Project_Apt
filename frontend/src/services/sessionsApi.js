@@ -24,7 +24,11 @@ export const renameSession = (sessionId, topic) =>
 export const setPinned = (sessionId, pinned) =>
   apiPatch(`/sessions/${sessionId}`, { pinned })
 
-export const skipCheck = (sessionId) => apiPost(`/sessions/${sessionId}/check/skip`, {})
+export const skipCheck = (sessionId, index) =>
+  apiPost(`/sessions/${sessionId}/check/skip`, { index })
 
-export const answerCheck = (sessionId, selectedIndex) =>
-  apiPost(`/sessions/${sessionId}/check/answer`, { selected_index: selectedIndex })
+export const answerCheck = (sessionId, index, selectedIndex) =>
+  apiPost(`/sessions/${sessionId}/check/answer`, {
+    index,
+    selected_index: selectedIndex,
+  })

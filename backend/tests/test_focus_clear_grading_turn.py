@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from agent.types import ToolContext
-from contracts import RecordLearningEventArgs, TopicProfile, UpdateTopicProfileArgs
+from contracts import AskCheckQuestionsArgs, RecordLearningEventArgs, TopicProfile, UpdateTopicProfileArgs
 from db.models import Session as SessionModel, User
 from services import check_question_service as cq
 from services import learning_event_service, profile_service
@@ -95,15 +95,18 @@ def test_grade_then_clear_focus_tested_correct_same_turn(session_row, ctx, db_se
     assert set_result.ok is True
     assert profile_service.load_profile(db_session, ctx.session_id).focus_target_gap == "g"
 
-    # Question asked in prior turn (asked_at is before turn_started_at)
-    cq.set_pending_check(
-        db_session,
-        ctx.session_id,
-        gap="g",
-        question="q?",
-        options=["a", "b"], correct_index=0, explanation="a.",
-        asked_at=ctx.turn_started_at - timedelta(seconds=5),
+    # Question asked in prior turn (asked_at_turn is before turn_started_at)
+    prior_ctx = ToolContext(
+        db=db_session,
+        session_id=SESSION_ID,
+        user_id=USER_ID,
+        turn_started_at=ctx.turn_started_at - timedelta(seconds=5),
     )
+    cq.register(db_session, prior_ctx, AskCheckQuestionsArgs(
+        session_id=SESSION_ID,
+        gap="g",
+        items=[{"question": "q?", "options": ["a", "b"], "correct_index": 0, "explanation": "a."}],
+    ))
 
     # Grading turn: log a correct LearningEvent (now via human click / record_from_answer)
     rec = learning_event_service.record(
@@ -148,14 +151,22 @@ def test_clear_focus_tested_correct_with_divergent_gap_label(session_row, ctx, d
         ctx,
         UpdateTopicProfileArgs(session_id=ctx.session_id, focus_target_gap=focus_gap),
     )
-    cq.set_pending_check(
-        db_session,
-        ctx.session_id,
-        gap=check_gap,
-        question="Where does the ETC occur?",
-        options=["mitochondria", "cytoplasm"], correct_index=0, explanation="mitochondria.",
-        asked_at=ctx.turn_started_at - timedelta(seconds=5),
+    prior_ctx = ToolContext(
+        db=db_session,
+        session_id=SESSION_ID,
+        user_id=USER_ID,
+        turn_started_at=ctx.turn_started_at - timedelta(seconds=5),
     )
+    cq.register(db_session, prior_ctx, AskCheckQuestionsArgs(
+        session_id=SESSION_ID,
+        gap=check_gap,
+        items=[{
+            "question": "Where does the ETC occur?",
+            "options": ["mitochondria", "cytoplasm"],
+            "correct_index": 0,
+            "explanation": "mitochondria.",
+        }],
+    ))
     rec = learning_event_service.record(
         db_session,
         ctx,

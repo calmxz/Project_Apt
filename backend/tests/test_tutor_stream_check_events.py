@@ -1,4 +1,4 @@
-"""TDD: run_streaming emits check_question event and terminates turn on ask_check_question.
+"""TDD: run_streaming emits check_question event and terminates turn on ask_check_questions.
 
 Mirrors test_tutor_stream.py harness exactly. Helpers are copied from that
 module so this file is self-contained.
@@ -101,7 +101,7 @@ USER_ID = "u1"
 
 
 def _insert_session(db_session, session_id=SESSION_ID, user_id=USER_ID):
-    """Insert a minimal User + Session row so set_pending_check can find the row."""
+    """Insert a minimal User + Session row so check_question_service can find the row."""
     # SQLite in-memory: ForeignKey enforcement depends on pragma; insert user first.
     user = UserModel(id=user_id)
     db_session.add(user)
@@ -117,9 +117,9 @@ def _insert_session(db_session, session_id=SESSION_ID, user_id=USER_ID):
 
 @pytest.mark.asyncio
 async def test_stream_emits_check_question_and_breaks(monkeypatch, db_session):
-    """ask_check_question dispatch -> check_question event emitted, turn terminates.
+    """ask_check_questions dispatch -> check_question event emitted, turn terminates.
 
-    turn1: LLM calls ask_check_question tool.
+    turn1: LLM calls ask_check_questions tool.
     turn2: supplied but must NEVER be consumed (loop terminates after ask).
     """
     _disable_stub(monkeypatch)
@@ -134,15 +134,19 @@ async def test_stream_emits_check_question_and_breaks(monkeypatch, db_session):
             _tool_fragment(
                 index=0,
                 id="tc_1",
-                name="ask_check_question",
+                name="ask_check_questions",
                 arguments=json.dumps(
                     {
                         "session_id": SESSION_ID,
                         "gap": "linear_algebra",
-                        "question": "Inputs?",
-                        "options": ["vectors", "scalars"],
-                        "correct_index": 0,
-                        "explanation": "Vectors are inputs.",
+                        "items": [
+                            {
+                                "question": "Inputs?",
+                                "options": ["vectors", "scalars"],
+                                "correct_index": 0,
+                                "explanation": "Vectors are inputs.",
+                            }
+                        ],
                     }
                 ),
             )
@@ -169,9 +173,12 @@ async def test_stream_emits_check_question_and_breaks(monkeypatch, db_session):
     assert "done" in types, f"done missing from events: {types}"
 
     cq_event = next(e for e in events if e.type == "check_question")
-    assert cq_event.data["question"] == "Inputs?"
     assert cq_event.data["gap"] == "linear_algebra"
-    assert cq_event.data["options"] == ["vectors", "scalars"]
+    assert isinstance(cq_event.data["items"], list)
+    assert len(cq_event.data["items"]) == 1
+    assert cq_event.data["items"][0]["question"] == "Inputs?"
+    assert cq_event.data["items"][0]["options"] == ["vectors", "scalars"]
+    assert cq_event.data["total"] == 1
     assert "check_result" not in {e.type for e in events}
 
     # turn must have terminated before turn2 — SHOULD-NOT-APPEAR never streamed
@@ -193,7 +200,7 @@ async def test_stream_emits_check_question_and_breaks(monkeypatch, db_session):
 
 @pytest.mark.asyncio
 async def test_stream_check_question_event_shape(monkeypatch, db_session):
-    """check_question event carries gap and question keys."""
+    """check_question event carries gap, items, and total keys."""
     _disable_stub(monkeypatch)
     _allow_cap(monkeypatch)
 
@@ -206,15 +213,19 @@ async def test_stream_check_question_event_shape(monkeypatch, db_session):
             _tool_fragment(
                 index=0,
                 id="tc_2",
-                name="ask_check_question",
+                name="ask_check_questions",
                 arguments=json.dumps(
                     {
                         "session_id": sid,
                         "gap": "derivatives",
-                        "question": "What is d/dx x^2?",
-                        "options": ["2x", "x^2"],
-                        "correct_index": 0,
-                        "explanation": "d/dx x^2 = 2x.",
+                        "items": [
+                            {
+                                "question": "What is d/dx x^2?",
+                                "options": ["2x", "x^2"],
+                                "correct_index": 0,
+                                "explanation": "d/dx x^2 = 2x.",
+                            }
+                        ],
                     }
                 ),
             )
@@ -237,8 +248,11 @@ async def test_stream_check_question_event_shape(monkeypatch, db_session):
     cq = next((e for e in events if e.type == "check_question"), None)
     assert cq is not None, "check_question event not emitted"
     assert cq.data["gap"] == "derivatives"
-    assert cq.data["question"] == "What is d/dx x^2?"
-    assert cq.data["options"] == ["2x", "x^2"]
+    assert isinstance(cq.data["items"], list)
+    assert len(cq.data["items"]) == 1
+    assert cq.data["items"][0]["question"] == "What is d/dx x^2?"
+    assert cq.data["items"][0]["options"] == ["2x", "x^2"]
+    assert cq.data["total"] == 1
     assert "check_result" not in {e.type for e in events}
 
     done = next((e for e in events if e.type == "done"), None)

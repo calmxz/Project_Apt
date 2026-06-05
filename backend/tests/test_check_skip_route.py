@@ -1,24 +1,23 @@
-"""TDD: POST /sessions/{id}/check/skip clears pending check (Task 12)."""
+"""TDD: POST /sessions/{id}/check/skip over a batch."""
 
 from datetime import datetime, timezone
 
 import pytest
 
-from contracts import TopicProfile
+from contracts import AskCheckQuestionsArgs, TopicProfile
+from agent.types import ToolContext
 from db.models import Session as SessionModel, User
-from services import check_question_service as cq
+from services import check_question_service
 
 
-USER_ID = "u1"
+USER_ID = "u_skip_1"
 
 
 @pytest.fixture
 def seeded_session(db_session):
     db_session.add(User(id=USER_ID))
     session = SessionModel(
-        id="s_skip_1",
-        user_id=USER_ID,
-        topic="algebra",
+        id="s_skip_1", user_id=USER_ID, topic="bio",
         topic_profile_json=TopicProfile().model_dump_json(),
     )
     db_session.add(session)
@@ -26,36 +25,46 @@ def seeded_session(db_session):
     return session
 
 
-def test_skip_clears_pending_check(client, db_session, seeded_session):
+def _open_batch(db, session_id):
+    ctx = ToolContext(db=db, session_id=session_id, user_id=USER_ID,
+                      turn_started_at=datetime(2026, 1, 1, tzinfo=timezone.utc))
+    check_question_service.register(db, ctx, AskCheckQuestionsArgs(
+        session_id=session_id, gap="g",
+        items=[{"question": "Q1?", "options": ["a", "b"],
+                "correct_index": 0, "explanation": "a."},
+               {"question": "Q2?", "options": ["a", "b"],
+                "correct_index": 0, "explanation": "a."}]))
+
+
+def test_skip_advances(client, db_session, seeded_session):
     sid = seeded_session.id
-    cq.set_pending_check(
-        db_session, sid, gap="g", question="q?",
-        options=["a", "b"], correct_index=0, explanation="a.",
-        asked_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
-    )
-    resp = client.post(f"/api/sessions/{sid}/check/skip", json={"user_id": USER_ID})
-    assert resp.status_code == 200
-    assert resp.json()["ok"] is True
-    assert cq.get_pending_check(db_session, sid) is None
+    _open_batch(db_session, sid)
+    r = client.post(f"/api/sessions/{sid}/check/skip",
+                    json={"index": 0, "user_id": USER_ID})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["current_index"] == 1
+    assert body["done"] is False
 
 
-def test_skip_idempotent_when_none(client, db_session, seeded_session):
+def test_skip_out_of_order_is_409(client, db_session, seeded_session):
     sid = seeded_session.id
-    resp = client.post(f"/api/sessions/{sid}/check/skip", json={"user_id": USER_ID})
-    assert resp.status_code == 200
-    assert resp.json()["ok"] is True
+    _open_batch(db_session, sid)
+    r = client.post(f"/api/sessions/{sid}/check/skip",
+                    json={"index": 1, "user_id": USER_ID})
+    assert r.status_code == 409
 
 
-def test_skip_404_for_unknown_session(client, db_session):
+def test_skip_no_batch_is_409(client, db_session, seeded_session):
+    sid = seeded_session.id
+    r = client.post(f"/api/sessions/{sid}/check/skip",
+                    json={"index": 0, "user_id": USER_ID})
+    assert r.status_code == 409
+
+
+def test_skip_foreign_session_is_404(client, db_session):
     db_session.add(User(id=USER_ID))
     db_session.commit()
-    resp = client.post("/api/sessions/nonexistent/check/skip", json={"user_id": USER_ID})
-    assert resp.status_code == 404
-
-
-def test_skip_404_for_wrong_user(client, db_session, seeded_session):
-    db_session.add(User(id="other"))
-    db_session.commit()
-    sid = seeded_session.id
-    resp = client.post(f"/api/sessions/{sid}/check/skip", json={"user_id": "other"})
-    assert resp.status_code == 404
+    r = client.post("/api/sessions/nope/check/skip",
+                    json={"index": 0, "user_id": USER_ID})
+    assert r.status_code == 404

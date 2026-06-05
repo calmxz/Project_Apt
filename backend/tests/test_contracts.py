@@ -2,9 +2,11 @@ import pytest
 from pydantic import ValidationError
 
 from contracts import (
-    AskCheckQuestionArgs,
+    AskCheckQuestionsArgs,
     CheckAnswerRequest,
     CheckAnswerResponse,
+    CheckSkipRequest,
+    CheckSkipResponse,
     ChatRequest,
     ChatResponse,
     Citation,
@@ -96,50 +98,62 @@ def test_record_learning_event_args_required():
         RecordLearningEventArgs(session_id="s1", gap_tested="g1", question="?")
 
 
-def test_ask_check_question_args_required_fields():
-    args = AskCheckQuestionArgs(
-        session_id="s1",
-        gap="recursion",
-        question="What is the base case?",
-        options=["Option A", "Option B"],
-        correct_index=0,
-        explanation="Because option A is correct.",
-    )
-    assert args.session_id == "s1"
-    assert args.gap == "recursion"
-    assert args.question == "What is the base case?"
-    assert args.options == ["Option A", "Option B"]
-    assert args.correct_index == 0
-    assert args.explanation == "Because option A is correct."
+def _one_item():
+    return {
+        "question": "What nets per glucose?",
+        "options": ["2 ATP", "36 ATP"],
+        "correct_index": 0,
+        "explanation": "Net 2 ATP.",
+    }
 
 
-def test_ask_check_question_args_missing_gap_rejected():
+def test_ask_check_questions_args_required_fields():
+    args = AskCheckQuestionsArgs(session_id="s1", gap="atp", items=[_one_item()])
+    assert args.gap == "atp"
+    assert len(args.items) == 1
+
+
+def test_ask_check_questions_args_rejects_empty_items():
     with pytest.raises(ValidationError):
-        AskCheckQuestionArgs(session_id="s1", question="?")
+        AskCheckQuestionsArgs(session_id="s1", gap="atp", items=[])
 
 
-def test_ask_check_question_args_missing_question_rejected():
+def test_ask_check_questions_args_rejects_over_five_items():
     with pytest.raises(ValidationError):
-        AskCheckQuestionArgs(session_id="s1", gap="recursion")
+        AskCheckQuestionsArgs(session_id="s1", gap="atp", items=[_one_item()] * 6)
 
 
-def test_ask_check_question_args_extra_fields_rejected():
+def test_ask_check_questions_args_extra_fields_rejected():
     with pytest.raises(ValidationError):
-        AskCheckQuestionArgs(session_id="s1", gap="g", question="?", surprise="x")
+        AskCheckQuestionsArgs(session_id="s1", gap="g", items=[_one_item()], surprise="x")
+
+
+def _one_pending_item():
+    return {
+        "question": "What is the base case?",
+        "options": ["A", "B"],
+        "status": "pending",
+    }
 
 
 def test_pending_check_required_fields():
-    pc = PendingCheck(gap="recursion", question="What is the base case?", options=["A", "B"])
+    pc = PendingCheck(
+        gap="recursion",
+        current_index=0,
+        total=1,
+        items=[_one_pending_item()],
+    )
     assert pc.gap == "recursion"
-    assert pc.question == "What is the base case?"
-    assert pc.options == ["A", "B"]
+    assert pc.current_index == 0
+    assert pc.total == 1
+    assert len(pc.items) == 1
 
 
 def test_pending_check_missing_fields_rejected():
     with pytest.raises(ValidationError):
-        PendingCheck(gap="recursion")
+        PendingCheck(gap="recursion", current_index=0, total=1)  # missing items
     with pytest.raises(ValidationError):
-        PendingCheck(question="?")
+        PendingCheck(current_index=0, total=1, items=[_one_pending_item()])  # missing gap
 
 
 def test_tool_result_minimal():
@@ -166,13 +180,14 @@ def test_chat_response_with_pending_check():
         message_id=3,
         pending_check=PendingCheck(
             gap="recursion",
-            question="What is the base case?",
-            options=["A", "B"],
+            current_index=0,
+            total=1,
+            items=[_one_pending_item()],
         ),
     )
     assert r.pending_check is not None
     assert r.pending_check.gap == "recursion"
-    assert r.pending_check.options == ["A", "B"]
+    assert r.pending_check.total == 1
 
 
 def test_chat_response_with_tool_calls():
@@ -241,35 +256,73 @@ def test_citation_extra_fields_rejected():
 
 
 def test_check_answer_request_required_fields():
-    req = CheckAnswerRequest(selected_index=2)
+    req = CheckAnswerRequest(index=0, selected_index=2)
+    assert req.index == 0
     assert req.selected_index == 2
 
 
 def test_check_answer_request_missing_field_rejected():
     with pytest.raises(ValidationError):
         CheckAnswerRequest()
+    with pytest.raises(ValidationError):
+        CheckAnswerRequest(selected_index=2)  # missing index
 
 
 def test_check_answer_request_extra_fields_rejected():
     with pytest.raises(ValidationError):
-        CheckAnswerRequest(selected_index=0, surprise="x")
+        CheckAnswerRequest(index=0, selected_index=0, surprise="x")
 
 
 def test_check_answer_response_required_fields():
-    resp = CheckAnswerResponse(correct=True, explanation="Option A is the base case.", correct_index=0)
+    resp = CheckAnswerResponse(
+        correct=True,
+        explanation="Option A is the base case.",
+        correct_index=0,
+        current_index=0,
+        total=2,
+        has_next=True,
+        done=False,
+    )
     assert resp.correct is True
     assert resp.explanation == "Option A is the base case."
     assert resp.correct_index == 0
+    assert resp.has_next is True
+    assert resp.done is False
 
 
 def test_check_answer_response_missing_field_rejected():
     with pytest.raises(ValidationError):
-        CheckAnswerResponse(correct=True, explanation="ok")  # missing correct_index
+        CheckAnswerResponse(correct=True, explanation="ok", correct_index=0)  # missing current_index/total/has_next/done
 
 
 def test_check_answer_response_extra_fields_rejected():
     with pytest.raises(ValidationError):
-        CheckAnswerResponse(correct=False, explanation="no", correct_index=1, surprise="x")
+        CheckAnswerResponse(
+            correct=False, explanation="no", correct_index=1,
+            current_index=0, total=1, has_next=False, done=True,
+            surprise="x",
+        )
+
+
+def test_check_skip_request_required_fields():
+    req = CheckSkipRequest(index=1)
+    assert req.index == 1
+
+
+def test_check_skip_request_missing_field_rejected():
+    with pytest.raises(ValidationError):
+        CheckSkipRequest()
+
+
+def test_check_skip_response_required_fields():
+    resp = CheckSkipResponse(current_index=1, total=3, has_next=True, done=False)
+    assert resp.current_index == 1
+    assert resp.has_next is True
+
+
+def test_check_skip_response_missing_field_rejected():
+    with pytest.raises(ValidationError):
+        CheckSkipResponse(current_index=1, total=3)  # missing has_next, done
 
 
 def test_array_fields_accept_none_quirk():
