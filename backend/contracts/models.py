@@ -94,13 +94,22 @@ class RecordLearningEventArgs(BaseModel):
     correct: bool
 
 
-class AskCheckQuestionArgs(BaseModel):
+class Item(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    question: constr(max_length=1000)
+    options: list[constr(max_length=200)] = Field(..., max_length=4, min_length=2)
+    correct_index: conint(ge=0)
+    explanation: constr(max_length=500)
+
+
+class AskCheckQuestionsArgs(BaseModel):
     """
-    Register an open multiple-choice check-question and end the turn. The
-    question text is also streamed to the learner as normal assistant text.
-    options/correct_index/explanation drive the interactive card and the
-    server-side deterministic grade. correct_index must be < len(options);
-    this cross-field rule is enforced in check_question_service, not here.
+    Register an ordered batch of 1..5 multiple-choice check-questions and end
+    the turn. The first question's text is also streamed as assistant text.
+    Per-item correct_index must be < len(options); that cross-field rule is
+    enforced in check_question_service, not here.
 
     """
 
@@ -109,16 +118,28 @@ class AskCheckQuestionArgs(BaseModel):
     )
     session_id: constr(max_length=64)
     gap: constr(max_length=200)
-    question: constr(max_length=1000)
-    options: list[constr(max_length=200)] = Field(..., max_length=4, min_length=2)
-    correct_index: conint(ge=0)
-    explanation: constr(max_length=500)
+    items: list[Item] = Field(..., max_length=5, min_length=1)
+
+
+class Item1(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    question: str
+    options: list[str]
+    status: Literal["pending", "answered", "skipped"]
+    selected_index: int | None = None
+    correct_index: int | None = None
+    correct: bool | None = None
+    explanation: str | None = None
 
 
 class PendingCheck(BaseModel):
     """
-    An open check-question awaiting a learner answer. PUBLIC projection:
-    never carries correct_index or explanation.
+    An open check-question BATCH awaiting learner answers. PUBLIC projection.
+    Per item: question + options always present. correct_index, explanation,
+    selected_index, correct are present ONLY for already-answered or skipped
+    items - never leaked for pending ones.
 
     """
 
@@ -126,24 +147,26 @@ class PendingCheck(BaseModel):
         extra="forbid",
     )
     gap: str
-    question: str
-    options: list[str]
+    current_index: int
+    total: int
+    items: list[Item1]
 
 
 class CheckAnswerRequest(BaseModel):
     """
-    A learner's clicked answer to the open check-question.
+    A learner's clicked answer to item `index` of the open batch.
     """
 
     model_config = ConfigDict(
         extra="forbid",
     )
+    index: conint(ge=0)
     selected_index: conint(ge=0)
 
 
 class CheckAnswerResponse(BaseModel):
     """
-    Deterministic grade of a clicked check-question answer.
+    Deterministic grade of a clicked answer plus batch progress.
     """
 
     model_config = ConfigDict(
@@ -152,6 +175,35 @@ class CheckAnswerResponse(BaseModel):
     correct: bool
     explanation: str
     correct_index: int
+    current_index: int
+    total: int
+    has_next: bool
+    done: bool
+
+
+class CheckSkipRequest(BaseModel):
+    """
+    Skip item `index` of the open batch (no LearningEvent).
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    index: conint(ge=0)
+
+
+class CheckSkipResponse(BaseModel):
+    """
+    Batch progress state after a skipped item.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    current_index: int
+    total: int
+    has_next: bool
+    done: bool
 
 
 class ToolResult(BaseModel):

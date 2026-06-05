@@ -444,59 +444,105 @@ components:
         question:   { type: string, maxLength: 1000 }
         correct:    { type: boolean }
 
-    AskCheckQuestionArgs:
+    AskCheckQuestionsArgs:
       type: object
       additionalProperties: false
-      required: [session_id, gap, question, options, correct_index, explanation]
+      required: [session_id, gap, items]
       description: |
-        Register an open multiple-choice check-question and end the turn. The
-        question text is also streamed to the learner as normal assistant text.
-        options/correct_index/explanation drive the interactive card and the
-        server-side deterministic grade. correct_index must be < len(options);
-        this cross-field rule is enforced in check_question_service, not here.
+        Register an ordered batch of 1..5 multiple-choice check-questions and end
+        the turn. The first question's text is also streamed as assistant text.
+        Per-item correct_index must be < len(options); that cross-field rule is
+        enforced in check_question_service, not here.
       properties:
-        session_id:    { type: string, maxLength: 64 }
-        gap:           { type: string, maxLength: 200 }
-        question:      { type: string, maxLength: 1000 }
-        options:
+        session_id: { type: string, maxLength: 64 }
+        gap:        { type: string, maxLength: 200 }
+        items:
           type: array
-          minItems: 2
-          maxItems: 4
-          items: { type: string, maxLength: 200 }
-        correct_index: { type: integer, minimum: 0 }
-        explanation:   { type: string, maxLength: 500 }
+          minItems: 1
+          maxItems: 5
+          items:
+            type: object
+            additionalProperties: false
+            required: [question, options, correct_index, explanation]
+            properties:
+              question:      { type: string, maxLength: 1000 }
+              options:
+                type: array
+                minItems: 2
+                maxItems: 4
+                items: { type: string, maxLength: 200 }
+              correct_index: { type: integer, minimum: 0 }
+              explanation:   { type: string, maxLength: 500 }
 
     PendingCheck:
       type: object
       additionalProperties: false
-      required: [gap, question, options]
+      required: [gap, current_index, total, items]
       description: |
-        An open check-question awaiting a learner answer. PUBLIC projection:
-        never carries correct_index or explanation.
+        An open check-question BATCH awaiting learner answers. PUBLIC projection.
+        Per item: question + options always present. correct_index, explanation,
+        selected_index, correct are present ONLY for already-answered or skipped
+        items - never leaked for pending ones.
       properties:
-        gap:      { type: string }
-        question: { type: string }
-        options:
+        gap:           { type: string }
+        current_index: { type: integer }
+        total:         { type: integer }
+        items:
           type: array
-          items: { type: string }
+          items:
+            type: object
+            additionalProperties: false
+            required: [question, options, status]
+            properties:
+              question: { type: string }
+              options:  { type: array, items: { type: string } }
+              status:   { type: string, enum: [pending, answered, skipped] }
+              selected_index: { type: [integer, "null"], default: null }
+              correct_index:  { type: [integer, "null"], default: null }
+              correct:        { type: [boolean, "null"], default: null }
+              explanation:    { type: [string, "null"],  default: null }
 
     CheckAnswerRequest:
       type: object
       additionalProperties: false
-      required: [selected_index]
-      description: A learner's clicked answer to the open check-question.
+      required: [index, selected_index]
+      description: A learner's clicked answer to item `index` of the open batch.
       properties:
+        index:          { type: integer, minimum: 0 }
         selected_index: { type: integer, minimum: 0 }
 
     CheckAnswerResponse:
       type: object
       additionalProperties: false
-      required: [correct, explanation, correct_index]
-      description: Deterministic grade of a clicked check-question answer.
+      required: [correct, explanation, correct_index, current_index, total, has_next, done]
+      description: Deterministic grade of a clicked answer plus batch progress.
       properties:
         correct:       { type: boolean }
         explanation:   { type: string }
         correct_index: { type: integer }
+        current_index: { type: integer }
+        total:         { type: integer }
+        has_next:      { type: boolean }
+        done:          { type: boolean }
+
+    CheckSkipRequest:
+      type: object
+      additionalProperties: false
+      required: [index]
+      description: Skip item `index` of the open batch (no LearningEvent).
+      properties:
+        index: { type: integer, minimum: 0 }
+
+    CheckSkipResponse:
+      type: object
+      additionalProperties: false
+      required: [current_index, total, has_next, done]
+      description: Batch progress state after a skipped item.
+      properties:
+        current_index: { type: integer }
+        total:         { type: integer }
+        has_next:      { type: boolean }
+        done:          { type: boolean }
 
     ToolResult:
       type: object

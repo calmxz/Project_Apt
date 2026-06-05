@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy.orm import Session
 
-from contracts import AskCheckQuestionArgs, ToolResult
+from contracts import AskCheckQuestionsArgs, ToolResult
 from db.models import Session as SessionModel
 
 if TYPE_CHECKING:
@@ -107,7 +107,7 @@ def is_gradable(
     return parse_asked_at(pc) < current_turn
 
 
-def register(db: Session, ctx: ToolContext, args: AskCheckQuestionArgs) -> ToolResult:
+def register(db: Session, ctx: ToolContext, args: AskCheckQuestionsArgs) -> ToolResult:
     if args.session_id != ctx.session_id:
         return ToolResult(
             ok=False,

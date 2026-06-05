@@ -11,7 +11,7 @@ from typing import Any
 
 from agent.types import ToolContext
 from contracts import (
-    AskCheckQuestionArgs,
+    AskCheckQuestionsArgs,
     RetrieveChunksArgs,
     ToolResult,
     UpdateTopicProfileArgs,
@@ -67,7 +67,7 @@ TOOLS = [
                 " an option; the server grades it and updates the profile. You do NOT"
                 " grade answers yourself."
             ),
-            "parameters": _schema(AskCheckQuestionArgs),
+            "parameters": _schema(AskCheckQuestionsArgs),
         },
     },
 ]
@@ -90,7 +90,7 @@ def dispatch(name: str, args: dict[str, Any], ctx: ToolContext) -> ToolResult:
             )
         if name == "ask_check_question":
             return check_question_service.register(
-                ctx.db, ctx, AskCheckQuestionArgs.model_validate(args)
+                ctx.db, ctx, AskCheckQuestionsArgs.model_validate(args)
             )
         return ToolResult(ok=False, status="failed", error=f"unknown tool: {name}")
     except Exception as e:
