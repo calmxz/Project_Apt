@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from contracts import TopicProfile
-from db.models import Document, Session as SessionModel, User
+from db.models import Session as SessionModel, User
 
 
 USER_ID = "u1"
