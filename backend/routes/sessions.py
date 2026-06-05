@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 from contracts import (
     CheckAnswerRequest,
     CheckAnswerResponse,
+    CheckSkipRequest,
+    CheckSkipResponse,
     Citation,
     Message,
     SessionCreateRequest,
@@ -23,7 +25,7 @@ from contracts import (
 )
 from db.database import get_db
 from db.models import ChatMessage, Document, Session as SessionModel, User
-from services import check_question_service, learning_event_service, profile_service, summary_service
+from services import check_question_service, profile_service, summary_service
 from services.auth import current_user_id
 
 NO_EXCHANGES_TEXT = (
@@ -261,17 +263,21 @@ def update_session(
     return _to_response(db, row)
 
 
-@router.post("/sessions/{session_id}/check/skip")
+@router.post("/sessions/{session_id}/check/skip", response_model=CheckSkipResponse)
 def skip_check(
     session_id: str,
+    req: CheckSkipRequest,
     user_id: str = Depends(current_user_id),
     db: Session = Depends(get_db),
 ):
     row = db.get(SessionModel, session_id)
     if row is None or row.user_id != user_id:
         raise HTTPException(status_code=404, detail="session not found")
-    check_question_service.clear_pending_check(db, session_id)
-    return {"ok": True}
+    try:
+        prog = check_question_service.skip(db, session_id, req.index)
+    except check_question_service.CheckStateError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    return CheckSkipResponse(**prog)
 
 
 @router.post("/sessions/{session_id}/check/answer", response_model=CheckAnswerResponse)
@@ -284,18 +290,8 @@ def answer_check(
     row = db.get(SessionModel, session_id)
     if row is None or row.user_id != user_id:
         raise HTTPException(status_code=404, detail="session not found")
-    pc = check_question_service.get_pending_check(db, session_id)
-    if pc is None:
-        raise HTTPException(status_code=409, detail="no open check-question")
-    options = pc.get("options") or []
-    if not (0 <= req.selected_index < len(options)):
-        raise HTTPException(status_code=422, detail="selected_index out of range")
-    correct = req.selected_index == pc.get("correct_index")
-    learning_event_service.record_from_answer(
-        db, session_id, gap=pc["gap"], question=pc["question"], correct=correct,
-    )
-    return CheckAnswerResponse(
-        correct=correct,
-        explanation=pc.get("explanation") or "",
-        correct_index=pc.get("correct_index"),
-    )
+    try:
+        result = check_question_service.answer(db, session_id, req.index, req.selected_index)
+    except check_question_service.CheckStateError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    return CheckAnswerResponse(**result)
