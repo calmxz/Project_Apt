@@ -101,7 +101,7 @@ USER_ID = "u1"
 
 
 def _insert_session(db_session, session_id=SESSION_ID, user_id=USER_ID):
-    """Insert a minimal User + Session row so set_pending_check can find the row."""
+    """Insert a minimal User + Session row so check_question_service can find the row."""
     # SQLite in-memory: ForeignKey enforcement depends on pragma; insert user first.
     user = UserModel(id=user_id)
     db_session.add(user)

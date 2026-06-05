@@ -128,10 +128,9 @@ export const useSessionStore = defineStore('session', () => {
         tool_calls: resp.tool_calls || [],
         citations: resp.citations || [],
       })
-      // Drive the check-question card from the chat response so the composer
-      // locks on an ask turn and clears once the next turn grades it. The
-      // verdict marker is streaming-only (no check_result on this path), so a
-      // freshly-set card stays at verdict:null until the grading turn nulls it.
+      // Non-streaming fallback: rebuild the batch check card from the chat
+      // response's pending_check public_view (same batch shape as loadSession).
+      // Per-item grading happens later via POST /check/answer, not on this turn.
       pendingCheck.value = resp.pending_check
         ? {
             gap: resp.pending_check.gap,
