@@ -101,12 +101,40 @@ A helper in `check_question_service` owns set/get/clear of `quiz_cooldown`,
 mirroring the existing `pending_check` helpers, and derives the cooldown shape
 from a resolved batch (`gap`, `last_score`, `missed`).
 
+### Hard floor on the synthetic follow-up turn
+
+The prompt rules above are a soft nudge: on a normal `/messages` turn the tutor
+can quiz whenever it judges fit, and the learner can always insist. There is
+exactly one place where a deterministic floor is both safe and valuable — the
+synthetic `complete_check` follow-up turn.
+
+That turn is server-injected: the learner has said nothing on it (the user
+content is the `[check results]` summary the server built). So there is no
+learner intent to honor, and an immediate re-quiz there is the pure-loop failure
+the user reported. We block it deterministically:
+
+- `complete_check` constructs its `ToolContext` with a flag, e.g.
+  `suppress_check=True`.
+- The `ask_check_questions` tool checks that flag. When set, it returns
+  `ok=false` with a short reason ("address the results before quizzing again")
+  instead of opening a batch.
+- The tutor already handles `ok=false` gracefully (acknowledge briefly and
+  continue, per the TOOL FAILURES rule), so it re-teaches or acknowledges
+  mastery instead of re-quizzing.
+
+This rides the existing `ok=false` path — no new tool, no new agent-visible
+surface. The flag defaults to absent/false everywhere else, so real turns are
+unaffected and the insist-overrides-nudge path stays intact. The floor blocks
+only the one turn where the learner could not have asked for a quiz.
+
 ## Out of scope
 
 - No new agent tool. No change to `update_topic_profile`, `ask_check_questions`,
   `record_learning_event`, or `retrieve_chunks` signatures.
-- No hard server-side block on back-to-back quizzes. The gate is a soft nudge;
-  the learner can always insist.
+- No hard server-side block on quizzing during normal `/messages` turns. The
+  only deterministic block is on the synthetic `complete_check` follow-up turn
+  (see "Hard floor"), where the learner has no intent to honor. On real turns
+  the gate is a soft nudge and the learner can always insist.
 - No frontend change. The cooldown is server state surfaced only into the
   system prompt.
 
@@ -122,12 +150,17 @@ from a resolved batch (`gap`, `last_score`, `missed`).
 - Route test (`complete_check`): after a batch with misses, the cooldown
   persists into the follow-up `prompt_state` so the hint reaches the first
   re-teach turn.
+- Hard-floor test: when `ask_check_questions` runs with `suppress_check=True` on
+  its `ToolContext`, it returns `ok=false` and opens no batch; with the flag
+  absent/false it opens a batch normally.
 
 ## Open compliance note
 
-Because nothing hard-blocks re-quizzing, correctness depends on the tutor
-respecting the prompt rules — the same reliability surface as the existing
-check-question and focus-clear protocols (Phase 2/3 ~85% checkpoints). If live
-testing shows the tutor still re-quizzes through the nudge, the fallback is a
-prompt iteration, then escalation per the CLAUDE.md reliability-checkpoint rule,
-not a server-side hard block (which would break the insist-overrides path).
+On normal turns nothing hard-blocks re-quizzing, so correctness there depends on
+the tutor respecting the prompt rules — the same reliability surface as the
+existing check-question and focus-clear protocols (Phase 2/3 ~85% checkpoints).
+The hard floor removes the single worst case (instant re-quiz on the synthetic
+follow-up turn) deterministically. If live testing shows the tutor still
+re-quizzes through the nudge on real turns, the fallback is a prompt iteration,
+then escalation per the CLAUDE.md reliability-checkpoint rule — not a broader
+server-side block, which would break the insist-overrides path.
