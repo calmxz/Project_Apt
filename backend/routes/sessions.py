@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import uuid
 from datetime import datetime, timezone
 
@@ -36,6 +37,7 @@ NO_EXCHANGES_TEXT = (
     "This session ended without any exchanges. Start a new session to continue."
 )
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api")
 
@@ -394,8 +396,12 @@ async def complete_check(
                 task.cancel()
                 try:
                     await task
-                except (asyncio.CancelledError, Exception):
-                    pass
+                except asyncio.CancelledError:
+                    pass  # expected: we just cancelled the producer task
+                except Exception:
+                    logger.exception(
+                        "Unexpected error while cancelling follow-up streaming task"
+                    )
 
     return StreamingResponse(
         event_stream(),
