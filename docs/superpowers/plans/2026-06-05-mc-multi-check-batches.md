@@ -2069,6 +2069,13 @@ git commit -m "chore(mc-multi-check): final verification cleanup"
 
 Document in the plan that a live-LLM smoke remains: start the stack, ask the tutor to quiz on a topic, verify a multi-question batch renders with `1/N`, Next/Done advance, a per-item skip advances, and the hidden follow-up reacts to results with NO visible user bubble. This is a manual paid step, run after merge per the project's MC-smoke convention; it is NOT a code task.
 
+> **Execution status (2026-06-05):** All 11 tasks coded + reviewed (spec + quality + final integration) on `feat/mc-multi-check`, commits `a698a43`..`cc44449`. Backend `pytest -q` = 274 passed / 4 skipped (92% cov); frontend `test:unit` = 373 passed; lint clean; contract drift zero. **Outstanding: this paid live-LLM smoke only.**
+>
+> Known accepted divergences surfaced in review (NOT bugs, deliberate plan decisions):
+> - On resume mid-batch, `viewIndex = current_index` jumps to the next pending item; prior answered verdicts are not re-shown (no Prev nav). Spec §8 implies prior verdicts visible — accepted per plan (Task 9 test pins this).
+> - `CheckAnswerResponse.has_next`/`total` and `CheckSkipResponse.has_next`/`total` are sent by the server but unused by the store (the component recomputes is-last from local `total`). Harmless redundancy.
+> - Pre-existing doc drift (out of scope): `CLAUDE.md` §Agent Architecture still describes a focus-clear `LearningEvent`-verification guard that an earlier feature removed. Fix in a follow-up.
+
 ---
 
 ## Self-review notes (resolved before handoff)
