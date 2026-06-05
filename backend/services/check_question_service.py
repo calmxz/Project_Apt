@@ -1,21 +1,23 @@
-"""Pending check-question state machine (Spec workstream A1, Layer B).
+"""Pending check-question BATCH state machine.
 
 A pending_check lives on the Session row as JSON:
     {
         "gap": str,
-        "question": str,
-        "options": list[str],
-        "correct_index": int,
-        "explanation": str,
+        "current_index": int,          # next unanswered item
         "asked_at_turn": iso8601,
+        "items": [
+            {"question": str, "options": [str], "correct_index": int,
+             "explanation": str, "status": "pending"|"answered"|"skipped",
+             "selected_index": int|None, "correct": bool|None},
+            ...
+        ],
     }
 
-The grading guard (is_gradable) enforces that a check-question can only be
-graded in a LATER turn than the one that asked it, and only for the gap that
-was actually asked. This makes "ask and self-grade in one turn" impossible.
+Anti-cheat: public_view() reveals correct_index / explanation / selected_index /
+correct ONLY for items whose status != "pending". Pending items leak only
+question + options.
 
-Anti-cheat: public_view() MUST NOT emit correct_index or explanation. Those
-fields are server-only and used only at grade time.
+State machine is linear: answer()/skip() require index == current_index.
 """
 
 from __future__ import annotations
@@ -33,6 +35,10 @@ if TYPE_CHECKING:
     from agent.types import ToolContext
 
 
+class CheckStateError(Exception):
+    """Raised on an out-of-order or no-batch answer/skip."""
+
+
 def get_pending_check(db: Session, session_id: str) -> dict | None:
     row = db.get(SessionModel, session_id)
     if row is None or not row.pending_check_json:
@@ -48,45 +54,47 @@ def parse_asked_at(pc: dict) -> datetime:
     return datetime.fromisoformat(pc["asked_at_turn"])
 
 
-def public_view(pc: dict | None) -> dict | None:
-    """Project a stored pending_check to the PendingCheck contract shape.
+def is_gradable(db: Session, session_id: str, gap: str, current_turn: datetime) -> bool:
+    """Legacy guard kept for learning_event_service.record() (the LLM tool path).
+    Batch gap stays top-level so this still resolves."""
+    pc = get_pending_check(db, session_id)
+    if pc is None or pc.get("gap") != gap:
+        return False
+    return parse_asked_at(pc) < current_turn
 
-    PUBLIC: returns gap + question + options only. correct_index and explanation
-    are server-only and MUST NOT be emitted here.
-    """
+
+def public_view(pc: dict | None) -> dict | None:
     if not pc:
         return None
+    items = []
+    for it in pc.get("items", []):
+        revealed = it.get("status") != "pending"
+        items.append(
+            {
+                "question": it["question"],
+                "options": it.get("options", []),
+                "status": it.get("status", "pending"),
+                "selected_index": it.get("selected_index") if revealed else None,
+                "correct_index": it.get("correct_index") if revealed else None,
+                "correct": it.get("correct") if revealed else None,
+                "explanation": it.get("explanation") if revealed else None,
+            }
+        )
     return {
         "gap": pc["gap"],
-        "question": pc["question"],
-        "options": pc.get("options", []),
+        "current_index": pc.get("current_index", 0),
+        "total": len(items),
+        "items": items,
     }
 
 
-def set_pending_check(
-    db: Session,
-    session_id: str,
-    gap: str,
-    question: str,
-    options: list[str],
-    correct_index: int,
-    explanation: str,
-    asked_at: datetime,
-) -> None:
+def _save(db: Session, session_id: str, pc: dict, commit: bool = True) -> None:
     row = db.get(SessionModel, session_id)
     if row is None:
         raise ValueError(f"session not found: {session_id}")
-    row.pending_check_json = json.dumps(
-        {
-            "gap": gap,
-            "question": question,
-            "options": options,
-            "correct_index": correct_index,
-            "explanation": explanation,
-            "asked_at_turn": asked_at.isoformat(),
-        }
-    )
-    db.commit()
+    row.pending_check_json = json.dumps(pc)
+    if commit:
+        db.commit()
 
 
 def clear_pending_check(db: Session, session_id: str, commit: bool = True) -> None:
@@ -98,49 +106,140 @@ def clear_pending_check(db: Session, session_id: str, commit: bool = True) -> No
         db.commit()
 
 
-def is_gradable(
-    db: Session, session_id: str, gap: str, current_turn: datetime
-) -> bool:
-    pc = get_pending_check(db, session_id)
-    if pc is None or pc.get("gap") != gap:
+def is_done(pc: dict | None) -> bool:
+    if not pc:
         return False
-    return parse_asked_at(pc) < current_turn
+    return pc.get("current_index", 0) >= len(pc.get("items", []))
 
 
-def register(db: Session, ctx: ToolContext, args: AskCheckQuestionsArgs) -> ToolResult:
+def register(db: Session, ctx: "ToolContext", args: AskCheckQuestionsArgs) -> ToolResult:
     if args.session_id != ctx.session_id:
         return ToolResult(
-            ok=False,
-            status="failed",
+            ok=False, status="failed",
             error=f"session_id mismatch: args={args.session_id} ctx={ctx.session_id}",
         )
-    if not (0 <= args.correct_index < len(args.options)):
+    if not (1 <= len(args.items) <= 5):
         return ToolResult(
-            ok=False,
-            status="failed",
-            error=(
-                f"correct_index {args.correct_index} out of range for "
-                f"{len(args.options)} options"
-            ),
+            ok=False, status="failed",
+            error=f"items count {len(args.items)} out of range 1..5",
         )
+    for n, it in enumerate(args.items):
+        if not (0 <= it.correct_index < len(it.options)):
+            return ToolResult(
+                ok=False, status="failed",
+                error=(
+                    f"item {n}: correct_index {it.correct_index} out of range "
+                    f"for {len(it.options)} options"
+                ),
+            )
     if get_pending_check(db, ctx.session_id) is not None:
         return ToolResult(
-            ok=False,
-            status="failed",
-            error="a check-question is already open; grade or skip it first",
+            ok=False, status="failed",
+            error="a check-question batch is already open; resolve it first",
         )
-    set_pending_check(
-        db,
-        ctx.session_id,
-        gap=args.gap,
-        question=args.question,
-        options=args.options,
-        correct_index=args.correct_index,
-        explanation=args.explanation,
-        asked_at=ctx.turn_started_at,
-    )
+
+    pc = {
+        "gap": args.gap,
+        "current_index": 0,
+        "asked_at_turn": ctx.turn_started_at.isoformat(),
+        "items": [
+            {
+                "question": it.question,
+                "options": list(it.options),
+                "correct_index": it.correct_index,
+                "explanation": it.explanation,
+                "status": "pending",
+                "selected_index": None,
+                "correct": None,
+            }
+            for it in args.items
+        ],
+    }
+    _save(db, ctx.session_id, pc)
     return ToolResult(
-        ok=True,
-        status="ok",
-        data={"gap": args.gap, "question": args.question, "options": args.options},
+        ok=True, status="ok",
+        data={
+            "gap": args.gap,
+            "total": len(args.items),
+            "items": [{"question": it.question, "options": list(it.options)} for it in args.items],
+        },
     )
+
+
+def _progress(pc: dict) -> dict:
+    ci = pc["current_index"]
+    total = len(pc["items"])
+    done = ci >= total
+    return {"current_index": ci, "total": total, "has_next": not done, "done": done}
+
+
+def answer(db: Session, session_id: str, index: int, selected_index: int) -> dict:
+    """Grade item `index` (must equal current_index), record the LearningEvent
+    + profile effect, mark the item answered, advance current_index, persist -
+    all in ONE commit. Does NOT clear the batch."""
+    from services import learning_event_service  # local import avoids circular
+
+    pc = get_pending_check(db, session_id)
+    if pc is None:
+        raise CheckStateError("no open check-question batch")
+    ci = pc["current_index"]
+    if index != ci:
+        raise CheckStateError(f"out-of-order answer: index={index} current_index={ci}")
+    if ci >= len(pc["items"]):
+        raise CheckStateError("batch already resolved")
+    item = pc["items"][ci]
+    if not (0 <= selected_index < len(item["options"])):
+        raise CheckStateError("selected_index out of range")
+
+    correct = selected_index == item["correct_index"]
+    # Profile effect + LearningEvent, deferred into our single commit; does not clear.
+    learning_event_service.record_from_answer(
+        db, session_id, gap=pc["gap"], question=item["question"],
+        correct=correct, clear_pending=False, commit=False,
+    )
+    item["status"] = "answered"
+    item["selected_index"] = selected_index
+    item["correct"] = correct
+    pc["current_index"] = ci + 1
+    _save(db, session_id, pc, commit=False)
+    db.commit()
+
+    prog = _progress(pc)
+    return {
+        "correct": correct,
+        "explanation": item["explanation"],
+        "correct_index": item["correct_index"],
+        **prog,
+    }
+
+
+def skip(db: Session, session_id: str, index: int) -> dict:
+    pc = get_pending_check(db, session_id)
+    if pc is None:
+        raise CheckStateError("no open check-question batch")
+    ci = pc["current_index"]
+    if index != ci:
+        raise CheckStateError(f"out-of-order skip: index={index} current_index={ci}")
+    if ci >= len(pc["items"]):
+        raise CheckStateError("batch already resolved")
+    pc["items"][ci]["status"] = "skipped"
+    pc["current_index"] = ci + 1
+    _save(db, session_id, pc)
+    return _progress(pc)
+
+
+def build_results_summary(pc: dict) -> str:
+    """Server-built summary injected as a synthetic user turn for the follow-up.
+    Reflects post-answer profile state (demotions already applied per-answer)."""
+    items = pc.get("items", [])
+    graded = [it for it in items if it["status"] == "answered"]
+    n_correct = sum(1 for it in graded if it.get("correct"))
+    lines = [f"[check results] gap={pc['gap']}: {n_correct}/{len(graded)} correct."]
+    for n, it in enumerate(items):
+        if it["status"] == "skipped":
+            lines.append(f"  Q{n + 1} skipped.")
+        elif it["status"] == "answered" and not it.get("correct"):
+            chose = it["options"][it["selected_index"]]
+            right = it["options"][it["correct_index"]]
+            lines.append(f'  Q{n + 1} missed: learner chose "{chose}", correct "{right}".')
+    return "\n".join(lines)

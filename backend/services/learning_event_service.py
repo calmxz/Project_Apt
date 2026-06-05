@@ -62,9 +62,18 @@ def record(
 
 
 def record_from_answer(
-    db: Session, session_id: str, gap: str, question: str, correct: bool
+    db: Session,
+    session_id: str,
+    gap: str,
+    question: str,
+    correct: bool,
+    clear_pending: bool = True,
+    commit: bool = True,
 ) -> LearningEvent:
     """Record a learner's clicked check-question answer (deterministic path).
+
+    clear_pending=False / commit=False let the batch caller (check_question_service.
+    answer) keep the rest of the batch open and fold this into one commit.
 
     Unlike record(), this bypasses the is_gradable turn-barrier: a human click
     is not the LLM, and record_learning_event is no longer a tool, so the
@@ -74,11 +83,6 @@ def record_from_answer(
     the agent's only next-turn signal is the profile state:
     - correct  -> add gap to mastered_concepts (tested mastery)
     - incorrect-> remove gap from mastered_concepts if present (demotion)
-    Then clears the pending check, all in one transaction: every write below
-    is deferred (save_profile/clear_pending_check with commit=False) and lands
-    in the single db.commit() at the end. This closes the double-grade window a
-    crash between commits would otherwise open (a still-open pending check could
-    be re-answered, writing a duplicate event and re-applying the effect).
     """
     event = LearningEvent(
         session_id=session_id,
@@ -101,7 +105,9 @@ def record_from_answer(
             profile.mastered_concepts = [c for c in mastered if c != gap]
             profile_service.save_profile(db, session_id, profile, commit=False)
 
-    check_question_service.clear_pending_check(db, session_id, commit=False)
-    db.commit()
-    db.refresh(event)
+    if clear_pending:
+        check_question_service.clear_pending_check(db, session_id, commit=False)
+    if commit:
+        db.commit()
+        db.refresh(event)
     return event
