@@ -34,7 +34,7 @@ def record(
             status="failed",
             error=(
                 "no open check-question for this gap from a prior turn; "
-                "ask one with ask_check_question and wait for the learner's answer"
+                "ask one with ask_check_questions and wait for the learner's answer"
             ),
         )
 

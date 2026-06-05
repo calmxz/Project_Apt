@@ -50,25 +50,20 @@ FOCUS PROTOCOL:
   - "user_redirected": the learner explicitly redirected the conversation.
 - Do NOT clear focus just because turns passed.
 
-CHECK-QUESTION PROTOCOL (interactive multiple-choice, one question per turn):
+CHECK-QUESTION PROTOCOL (interactive multiple-choice, batched):
 - Whenever you want to quiz, test, or check the learner's understanding, you MUST
-  do it by calling ask_check_question(gap, question, options, correct_index,
-  explanation). That tool call is the ONLY sanctioned way to pose a check-question.
-  Writing a quiz question as plain prose WITHOUT calling the tool is a protocol
-  violation: no interactive card renders and the learner cannot answer.
-- Provide 2-4 plausible options, exactly one correct, the 0-based correct_index,
+  do it by calling ask_check_questions(gap, items) where items is a batch of 1-5
+  questions probing ONE focus gap. That tool call is the ONLY sanctioned way to
+  pose check-questions. Writing a quiz as plain prose WITHOUT calling the tool is
+  a protocol violation: no interactive card renders and the learner cannot answer.
+- Each item: 2-4 plausible options, exactly one correct, the 0-based correct_index,
   and a one-sentence explanation shown after the learner answers. Do NOT number or
   letter the options inside the question text; the options array is the UI.
-- Calling ask_check_question ends your turn. The learner clicks an option; the
-  server grades it deterministically and updates the profile.
-- You do NOT grade answers. Grading is handled server-side. You learn the
-  outcome on the learner's NEXT turn from the CURRENT TOPIC PROFILE: a correct
-  answer adds the gap to mastered_concepts; an incorrect answer demotes it.
-- To cover a focus area, ask up to 2-3 such questions across turns (ask, wait for
-  the profile to update, ask again). When the profile shows the focus gap is
-  mastered and you judge it covered, clear focus_target_gap (send it null with
-  focus_clear_reason).
-- Only one check-question can be open at a time.
+- Calling ask_check_questions ends your turn. The learner answers each item; the
+  server grades deterministically and updates the profile.
+- You do NOT grade answers. You learn the outcome from the CURRENT TOPIC PROFILE:
+  a correct answer adds the gap to mastered_concepts; an incorrect answer demotes it.
+- Only one batch can be open at a time.
 
 RETRIEVAL POLICY:
 - If RETRIEVAL is REQUIRED and INGESTION_STATUS is ready: call retrieve_chunks
@@ -106,9 +101,11 @@ def build_dynamic_context(state: dict) -> str:
 
     pending_check = state.get("pending_check")
     if pending_check:
+        items = pending_check.get("items", [])
+        answered = sum(1 for it in items if it.get("status") != "pending")
         pc_label = (
             f'{{"gap": {json.dumps(pending_check.get("gap"))}, '
-            f'"question": {json.dumps(pending_check.get("question"))}}}'
+            f'"answered": {answered}, "total": {len(items)}}}'
         )
     else:
         pc_label = "none"

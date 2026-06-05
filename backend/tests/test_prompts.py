@@ -7,7 +7,13 @@ def test_dynamic_context_includes_pending_check():
     state = {
         "topic": "Photosynthesis",
         "profile": {},
-        "pending_check": {"gap": "calvin_cycle", "question": "Inputs?"},
+        "pending_check": {
+            "gap": "calvin_cycle",
+            "current_index": 0,
+            "items": [
+                {"question": "Inputs?", "options": ["a", "b"], "status": "pending"},
+            ],
+        },
     }
     out = prompts.build_dynamic_context(state)
     assert "PENDING_CHECK" in out
@@ -19,8 +25,34 @@ def test_dynamic_context_pending_check_none():
     assert "PENDING_CHECK: none" in out
 
 
-def test_immutable_rules_mention_ask_check_question():
-    assert "ask_check_question" in prompts.IMMUTABLE_RULES
+def test_immutable_rules_mention_ask_check_questions():
+    assert "ask_check_questions" in prompts.IMMUTABLE_RULES
+
+
+def test_immutable_rules_no_singular_ask_check_question():
+    # The singular (no-s) name must not appear in IMMUTABLE_RULES
+    import re
+    # Match "ask_check_question" not followed by "s"
+    assert not re.search(r"ask_check_question(?!s)", prompts.IMMUTABLE_RULES)
+
+
+def test_pending_check_render_is_batch_aware():
+    state = {
+        "pending_check": {
+            "gap": "atp",
+            "current_index": 1,
+            "items": [
+                {"question": "Q1", "options": ["a", "b"], "status": "answered"},
+                {"question": "Q2", "options": ["a", "b"], "status": "pending"},
+            ],
+        }
+    }
+    ctx = prompts.build_dynamic_context(state)
+    assert '"gap": "atp"' in ctx
+    assert '"answered": 1' in ctx
+    assert '"total": 2' in ctx
+    # must NOT crash on missing top-level "question" and must not render null
+    assert "null" not in ctx.split("PENDING_CHECK:")[1]
 
 
 def test_prompt_describes_mc_and_drops_self_grading():
