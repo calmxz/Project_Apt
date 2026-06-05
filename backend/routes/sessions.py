@@ -1,11 +1,15 @@
+import asyncio
 import json
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from agent import prompts, tutor
+from agent.types import ToolContext
 from contracts import (
     CheckAnswerRequest,
     CheckAnswerResponse,
@@ -295,3 +299,106 @@ def answer_check(
     except check_question_service.CheckStateError as e:
         raise HTTPException(status_code=409, detail=str(e))
     return CheckAnswerResponse(**result)
+
+
+def _recent_history(db: Session, session_id: str) -> list[dict]:
+    rows = db.execute(
+        select(ChatMessage)
+        .where(ChatMessage.session_id == session_id)
+        .order_by(ChatMessage.created_at.desc())
+        .limit(20)
+    ).scalars().all()
+    return [{"role": m.role, "content": m.content} for m in reversed(rows)]
+
+
+@router.post("/sessions/{session_id}/check/complete")
+async def complete_check(
+    session_id: str,
+    request: Request,
+    user_id: str = Depends(current_user_id),
+    db: Session = Depends(get_db),
+):
+    """Hidden reactive follow-up after a batch fully resolves.
+
+    Builds a server-side results summary, injects it as a NON-persisted synthetic
+    user turn, clears the batch, and streams the tutor's reaction. Only the
+    assistant reply is persisted (inside run_streaming). Does NOT increment the
+    daily rate limit; cost is still metered inside run_streaming.
+    """
+    row = db.get(SessionModel, session_id)
+    if row is None or row.user_id != user_id:
+        raise HTTPException(status_code=404, detail="session not found")
+
+    pc = check_question_service.get_pending_check(db, session_id)
+    if pc is None or not check_question_service.is_done(pc):
+        raise HTTPException(status_code=409, detail="no resolved batch to complete")
+
+    summary = check_question_service.build_results_summary(pc)
+    check_question_service.clear_pending_check(db, session_id)
+
+    profile = profile_service.load_profile(db, session_id)
+    latest_doc = db.execute(
+        select(Document)
+        .where(Document.session_id == session_id)
+        .order_by(Document.created_at.desc())
+        .limit(1)
+    ).scalars().first()
+    ingestion_status = latest_doc.status if latest_doc else None
+
+    messages = _recent_history(db, session_id)
+    messages.append({"role": "user", "content": summary})
+
+    prompt_state = {
+        "topic": row.topic,
+        "profile": profile,
+        "ingestion_status": ingestion_status,
+        "retrieval_required": False,
+        "seed_mode": None,
+        "last_session_summary": profile.last_session_summary,
+        "pending_check": None,
+    }
+    system_prompt = prompts.build_system_prompt(prompt_state)
+    ctx = ToolContext(
+        db=db,
+        session_id=session_id,
+        user_id=user_id,
+        turn_started_at=datetime.now(timezone.utc),
+    )
+
+    async def event_stream():
+        queue: asyncio.Queue = asyncio.Queue()
+
+        async def produce():
+            try:
+                async for event in tutor.run_streaming(messages, system_prompt, ctx):
+                    await queue.put(event)
+            finally:
+                await queue.put(None)  # sentinel
+
+        task = asyncio.create_task(produce())
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=0.25)
+                except asyncio.TimeoutError:
+                    continue
+                if event is None:
+                    break
+                yield event.to_sse()
+                if event.type in ("done", "error", "cancelled"):
+                    break
+        finally:
+            if not task.done():
+                task.cancel()
+                try:
+                    await task
+                except (asyncio.CancelledError, Exception):
+                    pass
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
