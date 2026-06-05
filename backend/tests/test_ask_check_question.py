@@ -1,4 +1,4 @@
-"""TDD: ask_check_question tool registers a pending check-question."""
+"""TDD: ask_check_questions tool registers a pending check-question batch."""
 
 from datetime import datetime, timezone
 
@@ -6,7 +6,7 @@ import pytest
 
 from agent import tools
 from agent.types import ToolContext
-from contracts import AskCheckQuestionArgs, TopicProfile
+from contracts import TopicProfile
 from db.models import Session as SessionModel, User
 from services import check_question_service as cq
 
@@ -44,12 +44,16 @@ def test_ask_sets_pending_check(db_session, session_row, ctx):
     args = {
         "session_id": ctx.session_id,
         "gap": "calvin_cycle",
-        "question": "Inputs?",
-        "options": ["CO2 and H2O", "O2 and glucose"],
-        "correct_index": 0,
-        "explanation": "CO2 is fixed in the Calvin cycle.",
+        "items": [
+            {
+                "question": "Inputs?",
+                "options": ["CO2 and H2O", "O2 and glucose"],
+                "correct_index": 0,
+                "explanation": "CO2 is fixed in the Calvin cycle.",
+            }
+        ],
     }
-    result = tools.dispatch("ask_check_question", args, ctx)
+    result = tools.dispatch("ask_check_questions", args, ctx)
     assert result.ok is True
     pc = cq.get_pending_check(db_session, ctx.session_id)
     assert pc["gap"] == "calvin_cycle"
@@ -58,26 +62,24 @@ def test_ask_sets_pending_check(db_session, session_row, ctx):
 
 def test_ask_rejected_when_one_already_open(db_session, session_row, ctx):
     tools.dispatch(
-        "ask_check_question",
+        "ask_check_questions",
         {
             "session_id": ctx.session_id,
             "gap": "g1",
-            "question": "q1?",
-            "options": ["a", "b"],
-            "correct_index": 0,
-            "explanation": "a.",
+            "items": [
+                {"question": "q1?", "options": ["a", "b"], "correct_index": 0, "explanation": "a."}
+            ],
         },
         ctx,
     )
     result = tools.dispatch(
-        "ask_check_question",
+        "ask_check_questions",
         {
             "session_id": ctx.session_id,
             "gap": "g2",
-            "question": "q2?",
-            "options": ["a", "b"],
-            "correct_index": 0,
-            "explanation": "a.",
+            "items": [
+                {"question": "q2?", "options": ["a", "b"], "correct_index": 0, "explanation": "a."}
+            ],
         },
         ctx,
     )
@@ -89,6 +91,13 @@ def test_tool_manifest_drops_record_learning_event_and_requires_options():
     from agent.tools import TOOLS
     names = [t["function"]["name"] for t in TOOLS]
     assert "record_learning_event" not in names
-    ask = next(t for t in TOOLS if t["function"]["name"] == "ask_check_question")
+    ask = next(t for t in TOOLS if t["function"]["name"] == "ask_check_questions")
+    # In the batch schema, options/correct_index are nested inside items[].
+    # Verify the items array is required at top level.
     required = ask["function"]["parameters"]["required"]
-    assert "options" in required and "correct_index" in required
+    assert "items" in required
+    # Verify item sub-schema requires options and correct_index.
+    defs = ask["function"]["parameters"].get("$defs", {})
+    item_schema = defs.get("Item", {})
+    item_required = item_schema.get("required", [])
+    assert "options" in item_required and "correct_index" in item_required

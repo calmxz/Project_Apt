@@ -1,6 +1,6 @@
-"""TDD: ask_check_question terminates the agent loop (turn-breaking behaviour).
+"""TDD: ask_check_questions terminates the agent loop (turn-breaking behaviour).
 
-When the model calls ask_check_question and dispatch succeeds, run() must
+When the model calls ask_check_questions and dispatch succeeds, run() must
 return immediately without consuming any further LLM responses in that turn.
 """
 
@@ -48,17 +48,21 @@ def ctx(db_session):
 async def test_ask_check_question_terminates_turn(
     db_session, ctx, session_row, mock_litellm, llm_tool_call, llm_text
 ):
-    # Turn 1: model calls ask_check_question.
+    # Turn 1: model calls ask_check_questions.
     mock_litellm.append(
         llm_tool_call(
-            "ask_check_question",
+            "ask_check_questions",
             {
                 "session_id": SESSION_ID,
                 "gap": "indexes",
-                "question": "What is an index?",
-                "options": ["a B-tree structure", "a foreign key"],
-                "correct_index": 0,
-                "explanation": "An index is typically a B-tree structure.",
+                "items": [
+                    {
+                        "question": "What is an index?",
+                        "options": ["a B-tree structure", "a foreign key"],
+                        "correct_index": 0,
+                        "explanation": "An index is typically a B-tree structure.",
+                    }
+                ],
             },
         )
     )
@@ -74,13 +78,13 @@ async def test_ask_check_question_terminates_turn(
     # The "SHOULD-NOT-APPEAR" text must not have leaked into the reply.
     assert "SHOULD-NOT-APPEAR" not in (reply or "")
 
-    # ask_check_question must appear in tool_calls_record.
+    # ask_check_questions must appear in tool_calls_record.
     assert any(
-        getattr(t, "name", None) == "ask_check_question" for t in tool_calls
-    ), "ask_check_question not found in tool_calls_record"
+        getattr(t, "name", None) == "ask_check_questions" for t in tool_calls
+    ), "ask_check_questions not found in tool_calls_record"
 
     # The pending check must have been persisted.
     pc = cq.get_pending_check(db_session, SESSION_ID)
-    assert pc is not None, "pending_check was not set after ask_check_question"
+    assert pc is not None, "pending_check was not set after ask_check_questions"
     assert pc["gap"] == "indexes"
-    assert pc["question"] == "What is an index?"
+    assert pc["items"][0]["question"] == "What is an index?"

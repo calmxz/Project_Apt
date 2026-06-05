@@ -41,9 +41,9 @@ def ctx(db_session):
 
 
 def test_dispatch_logs_validation_error(caplog, db_session, session_row, ctx):
-    # Missing required gap/question/options/correct_index -> ValidationError caught in dispatch.
+    # Missing required gap/items -> ValidationError caught in dispatch.
     bad_args = {"session_id": ctx.session_id}
     with caplog.at_level(logging.WARNING, logger="agent.tools"):
-        result = tools.dispatch("ask_check_question", bad_args, ctx)
+        result = tools.dispatch("ask_check_questions", bad_args, ctx)
     assert result.ok is False
-    assert any("ask_check_question" in r.message for r in caplog.records)
+    assert any("ask_check_questions" in r.message for r in caplog.records)

@@ -232,7 +232,7 @@ def _multi_tool_response(calls: list[tuple[str, dict]], content: str = "Here is 
 async def test_ask_check_question_skips_sibling_tool_calls(mock_litellm, session_row, ctx):
     """Asking a check-question is turn-terminating: any sibling tool call bundled in
     the same response is a protocol violation (e.g. grading a question you just asked).
-    Only ask_check_question is dispatched; the premature record_learning_event is
+    Only ask_check_questions is dispatched; the premature record_learning_event is
     skipped entirely, so no spurious 'Recording failed' chip appears."""
     mock_litellm.append(
         _multi_tool_response(
@@ -243,14 +243,18 @@ async def test_ask_check_question_skips_sibling_tool_calls(mock_litellm, session
                     {"session_id": SESSION_ID, "gap_tested": "x", "question": "q?", "correct": True},
                 ),
                 (
-                    "ask_check_question",
+                    "ask_check_questions",
                     {
                         "session_id": SESSION_ID,
                         "gap": "x",
-                        "question": "What is x?",
-                        "options": ["a", "b"],
-                        "correct_index": 0,
-                        "explanation": "a.",
+                        "items": [
+                            {
+                                "question": "What is x?",
+                                "options": ["a", "b"],
+                                "correct_index": 0,
+                                "explanation": "a.",
+                            }
+                        ],
                     },
                 ),
             ]
@@ -261,7 +265,7 @@ async def test_ask_check_question_skips_sibling_tool_calls(mock_litellm, session
         system_prompt="sys",
         ctx=ctx,
     )
-    assert [tc.name for tc in tool_calls] == ["ask_check_question"]
+    assert [tc.name for tc in tool_calls] == ["ask_check_questions"]
     assert tool_calls[0].status == "ok"
 
 
