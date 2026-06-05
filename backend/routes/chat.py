@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from agent import prompts, tutor
 from agent.types import ToolContext
 from config import settings
-from contracts import ChatRequest, ChatResponse, ToolCallRecord, Citation
+from contracts import ChatRequest, ChatResponse
 from db.database import get_db
 from db.models import ChatMessage, Document, Session as SessionModel, User
 from lib import keyword_index

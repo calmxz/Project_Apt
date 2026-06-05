@@ -22,7 +22,7 @@ from sqlalchemy.orm import sessionmaker
 
 from config import settings
 from db.database import _normalized_url
-from db.models import ChunkEmbedding, Document, Session as SessionModel, User
+from db.models import Document, Session as SessionModel, User
 from services import pgvector_store
 
 

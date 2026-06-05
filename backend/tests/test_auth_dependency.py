@@ -183,10 +183,6 @@ def test_auth_not_configured_when_jwks_url_missing(monkeypatch, app, rsa_keys):
     must raise 500 `auth_not_configured` rather than crash with a None."""
     auth_module._JWKS_CACHE["client"] = None
 
-    real_get = auth_module._get_jwks_client.__wrapped__ if hasattr(
-        auth_module._get_jwks_client, "__wrapped__"
-    ) else None
-
     # Re-import the original function (the autouse fixture patched it; undo here).
     import importlib
     fresh = importlib.reload(auth_module)

@@ -2,8 +2,6 @@
 
 import json
 
-import pytest
-
 from contracts import TopicProfile
 from db.models import Session as SessionModel, User
 from lib import keyword_index
