@@ -34,3 +34,30 @@ export async function streamChat({ sessionId, message, onEvent, signal }) {
 
   await parseSSEStream(resp.body, onEvent, { signal })
 }
+
+export async function streamCheckComplete({ sessionId, onEvent, signal }) {
+  const headers = { 'content-type': 'application/json' }
+  const token = _authToken()
+  if (token) headers['authorization'] = `Bearer ${token}`
+
+  let resp
+  try {
+    resp = await fetch(`${BASE_URL}/sessions/${sessionId}/check/complete`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({}),
+      signal,
+    })
+  } catch (e) {
+    throw new ApiError(0, { detail: e.message }, '/check/complete')
+  }
+
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '')
+    let body
+    try { body = text ? JSON.parse(text) : null } catch { body = text }
+    throw new ApiError(resp.status, body, '/check/complete')
+  }
+
+  await parseSSEStream(resp.body, onEvent, { signal })
+}
