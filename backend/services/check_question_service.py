@@ -113,6 +113,11 @@ def is_done(pc: dict | None) -> bool:
 
 
 def register(db: Session, ctx: "ToolContext", args: AskCheckQuestionsArgs) -> ToolResult:
+    if getattr(ctx, "suppress_check", False):
+        return ToolResult(
+            ok=False, status="failed",
+            error="address the check results before quizzing again",
+        )
     if args.session_id != ctx.session_id:
         return ToolResult(
             ok=False, status="failed",

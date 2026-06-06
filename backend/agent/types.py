@@ -10,3 +10,4 @@ class ToolContext:
     session_id: str
     user_id: str
     turn_started_at: datetime
+    suppress_check: bool = False

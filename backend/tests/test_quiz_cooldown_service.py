@@ -79,3 +79,46 @@ def test_set_get_clear_quiz_cooldown_roundtrip():
     assert cqs.get_quiz_cooldown(db, "s1") == {"gap": "g", "last_score": "0/1", "missed": ["q0"]}
     cqs.set_quiz_cooldown(db, "s1", None)
     assert cqs.get_quiz_cooldown(db, "s1") is None
+
+
+from datetime import datetime, timezone
+
+from agent.types import ToolContext
+from contracts import AskCheckQuestionsArgs
+
+
+def _one_item_args(sid="s1"):
+    return AskCheckQuestionsArgs(
+        session_id=sid,
+        gap="derivatives",
+        items=[{
+            "question": "q0",
+            "options": ["a", "b"],
+            "correct_index": 0,
+            "explanation": "e",
+        }],
+    )
+
+
+def test_register_blocked_when_suppress_check():
+    db = _make_session()
+    _seed_session(db)
+    ctx = ToolContext(
+        db=db, session_id="s1", user_id="u1",
+        turn_started_at=datetime.now(timezone.utc), suppress_check=True,
+    )
+    res = cqs.register(db, ctx, _one_item_args())
+    assert res.ok is False
+    assert cqs.get_pending_check(db, "s1") is None  # no batch opened
+
+
+def test_register_allowed_when_not_suppressed():
+    db = _make_session()
+    _seed_session(db)
+    ctx = ToolContext(
+        db=db, session_id="s1", user_id="u1",
+        turn_started_at=datetime.now(timezone.utc),
+    )
+    res = cqs.register(db, ctx, _one_item_args())
+    assert res.ok is True
+    assert cqs.get_pending_check(db, "s1") is not None
