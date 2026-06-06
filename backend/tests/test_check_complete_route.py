@@ -98,3 +98,37 @@ def test_complete_foreign_session_404(client, db_session, monkeypatch):
                         _make_fake_run_streaming(db_session, "nope"))
     r = client.post("/api/sessions/nope/check/complete", json={"user_id": USER_ID})
     assert r.status_code == 404
+
+
+def _resolved_batch_miss(db, sid):
+    """Same as _resolved_batch but answers WRONG (selected_index=1, correct=0)."""
+    ctx = ToolContext(db=db, session_id=sid, user_id=USER_ID,
+                      turn_started_at=datetime(2026, 1, 1, tzinfo=timezone.utc))
+    check_question_service.register(db, ctx, AskCheckQuestionsArgs(
+        session_id=sid, gap="atp",
+        items=[{"question": "Q1?", "options": ["a", "b"],
+                "correct_index": 0, "explanation": "a."}]))
+    check_question_service.answer(db, sid, index=0, selected_index=1)
+
+
+def test_complete_sets_quiz_cooldown_on_miss(client, db_session, seeded_session, monkeypatch):
+    sid = seeded_session.id
+    _resolved_batch_miss(db_session, sid)
+    monkeypatch.setattr("agent.tutor.run_streaming",
+                        _make_fake_run_streaming(db_session, sid))
+    r = client.post(f"/api/sessions/{sid}/check/complete", json={"user_id": USER_ID})
+    assert r.status_code == 200
+    cd = check_question_service.get_quiz_cooldown(db_session, sid)
+    assert cd is not None
+    assert cd["gap"] == "atp"
+    assert cd["last_score"] == "0/1"
+
+
+def test_complete_no_cooldown_on_all_correct(client, db_session, seeded_session, monkeypatch):
+    sid = seeded_session.id
+    _resolved_batch(db_session, sid)  # answers correctly
+    monkeypatch.setattr("agent.tutor.run_streaming",
+                        _make_fake_run_streaming(db_session, sid))
+    r = client.post(f"/api/sessions/{sid}/check/complete", json={"user_id": USER_ID})
+    assert r.status_code == 200
+    assert check_question_service.get_quiz_cooldown(db_session, sid) is None
