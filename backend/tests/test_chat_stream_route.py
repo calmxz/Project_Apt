@@ -176,3 +176,34 @@ def test_chat_stream_cancelled_event_terminates_stream(client, monkeypatch):
     body = "\n".join(lines)
     assert "event: cancelled" in body
     assert "should not appear" not in body
+
+
+def test_chat_stream_includes_quiz_readiness(client, db_session, monkeypatch):
+    from services import check_question_service
+    check_question_service.set_quiz_cooldown(
+        db_session, SESSION_ID, {"gap": "joins", "last_score": "0/1", "missed": ["q0"]}
+    )
+
+    captured = {}
+
+    async def fake(messages, system_prompt, ctx):
+        captured["system_prompt"] = system_prompt
+        yield StreamEvent("done", {"message_id": "1"})
+
+    monkeypatch.setattr("agent.tutor.run_streaming", fake)
+
+    with client.stream(
+        "POST", "/api/chat/stream",
+        json={"session_id": SESSION_ID, "message": "hello"},
+        headers=AUTH_HEADERS,
+    ) as resp:
+        assert resp.status_code == 200
+        for _ in resp.iter_lines():
+            pass
+
+    # Assert on the session-specific rendered QUIZ_READINESS line, not the bare
+    # word "cooling_down" (which also appears in the immutable POST-QUIZ PROTOCOL
+    # prose). "gap": "joins" can only come from threading this turn's cooldown.
+    sp = captured["system_prompt"]
+    assert '"gap": "joins"' in sp
+    assert '"status": "cooling_down"' in sp
