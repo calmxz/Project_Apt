@@ -1,13 +1,9 @@
 """TDD: sessions.quiz_cooldown_json column + cooldown helpers."""
-import uuid
-
-import pytest
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from db.database import Base
-import db.models  # noqa: F401 - registers models on Base.metadata
 from db.models import Session as SessionModel, User
 
 
