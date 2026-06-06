@@ -77,3 +77,12 @@ def test_quiz_readiness_cooling_down_with_cooldown():
     assert '"status": "cooling_down"' in out
     assert '"gap": "derivatives"' in out
     assert '"last_score": "1/2"' in out
+
+
+def test_immutable_rules_has_post_quiz_protocol():
+    rules = prompts.IMMUTABLE_RULES
+    assert "POST-QUIZ PROTOCOL" in rules
+    # all-correct must end the loop
+    assert "do NOT re-quiz the same gap" in rules
+    # insist overrides the nudge
+    assert "insist" in rules.lower()
