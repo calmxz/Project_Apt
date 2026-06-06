@@ -61,3 +61,19 @@ def test_prompt_describes_mc_and_drops_self_grading():
     assert "options" in IMMUTABLE_RULES
     # no instruction to grade the learner's typed answer next turn
     assert "Grade it by calling" not in IMMUTABLE_RULES
+
+
+def test_quiz_readiness_ready_when_no_cooldown():
+    out = prompts.build_dynamic_context({"topic": "x"})
+    assert "QUIZ_READINESS: ready" in out
+
+
+def test_quiz_readiness_cooling_down_with_cooldown():
+    state = {
+        "topic": "x",
+        "quiz_cooldown": {"gap": "derivatives", "last_score": "1/2", "missed": ["q1"]},
+    }
+    out = prompts.build_dynamic_context(state)
+    assert '"status": "cooling_down"' in out
+    assert '"gap": "derivatives"' in out
+    assert '"last_score": "1/2"' in out

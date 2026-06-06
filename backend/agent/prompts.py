@@ -110,6 +110,18 @@ def build_dynamic_context(state: dict) -> str:
     else:
         pc_label = "none"
 
+    quiz_cooldown = state.get("quiz_cooldown")
+    if quiz_cooldown:
+        qr_label = json.dumps(
+            {
+                "gap": quiz_cooldown.get("gap"),
+                "last_score": quiz_cooldown.get("last_score"),
+                "status": "cooling_down",
+            }
+        )
+    else:
+        qr_label = "ready"
+
     return (
         f"TOPIC: {topic}\n"
         f"CURRENT TOPIC PROFILE: {json.dumps(profile_dict)}\n"
@@ -117,7 +129,8 @@ def build_dynamic_context(state: dict) -> str:
         f"RETRIEVAL: {retrieval_label}\n"
         f"SEED_MODE: {seed_mode}\n"
         f"LAST_SESSION_SUMMARY: {last_session_summary}\n"
-        f"PENDING_CHECK: {pc_label}"
+        f"PENDING_CHECK: {pc_label}\n"
+        f"QUIZ_READINESS: {qr_label}"
     )
 
 
