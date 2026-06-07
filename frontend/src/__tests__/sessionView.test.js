@@ -100,6 +100,40 @@ describe('SessionView', () => {
     expect(wrapper.find('[data-testid="session-header"]').exists()).toBe(true)
   })
 
+  it('reloads when the route id prop changes without a remount', async () => {
+    const store = useSessionStore()
+    const load = vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession()
+    })
+    const wrapper = mountView({ id: 's1' })
+    await flushPromises()
+    expect(load).toHaveBeenCalledWith('s1')
+
+    load.mockClear()
+    await wrapper.setProps({ id: 's2' })
+    await flushPromises()
+    expect(load).toHaveBeenCalledWith('s2')
+  })
+
+  it('clears a prior 404 state when navigating to a valid session', async () => {
+    const store = useSessionStore()
+    const err = Object.assign(new Error('not found'), { status: 404 })
+    const load = vi
+      .spyOn(store, 'loadSession')
+      .mockRejectedValueOnce(err)
+      .mockImplementationOnce(async () => {
+        setupSession()
+      })
+    const wrapper = mountView({ id: 'gone' })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="session-not-found"]').exists()).toBe(true)
+
+    await wrapper.setProps({ id: 's1' })
+    await flushPromises()
+    expect(load).toHaveBeenLastCalledWith('s1')
+    expect(wrapper.find('[data-testid="session-not-found"]').exists()).toBe(false)
+  })
+
   it('send dispatches sendMessage and clears draft', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'loadSession').mockImplementation(async () => {

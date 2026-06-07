@@ -238,9 +238,11 @@ watch(
   () => scrollToBottom(),
 )
 
-onMounted(async () => {
+async function loadCurrent(id) {
+  // Reset per-load so navigating away from a 404 session clears the state.
+  notFound.value = false
   try {
-    await store.loadSession(props.id)
+    await store.loadSession(id)
   } catch (e) {
     if (e?.status === 404) {
       notFound.value = true
@@ -248,7 +250,19 @@ onMounted(async () => {
     }
   }
   if (!isEnded.value && !notFound.value) focusComposer()
-})
+}
+
+onMounted(() => loadCurrent(props.id))
+
+// Sidebar session->session clicks reuse this route component (same /session/:id
+// route), so onMounted does not re-fire. Re-load when the id prop changes;
+// otherwise the body keeps showing the previous session until a full refresh.
+watch(
+  () => props.id,
+  (id) => {
+    if (id) loadCurrent(id)
+  },
+)
 
 function focusComposer() {
   nextTick(() => composerRef.value?.focus())
