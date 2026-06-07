@@ -1,12 +1,13 @@
 """TDD: POST /sessions/{id}/check/skip over a batch."""
 
+import json
 from datetime import datetime, timezone
 
 import pytest
 
 from contracts import AskCheckQuestionsArgs, TopicProfile
 from agent.types import ToolContext
-from db.models import Session as SessionModel, User
+from db.models import ChatMessage, Session as SessionModel, User
 from services import check_question_service
 
 
@@ -68,3 +69,21 @@ def test_skip_foreign_session_is_404(client, db_session):
     r = client.post("/api/sessions/nope/check/skip",
                     json={"index": 0, "user_id": USER_ID})
     assert r.status_code == 404
+
+
+def test_skip_writes_check_batch_to_message(client, db_session, seeded_session):
+    sid = seeded_session.id
+    _open_batch(db_session, sid)
+    m = ChatMessage(session_id=sid, role="assistant", content="")
+    db_session.add(m)
+    db_session.commit()
+    db_session.refresh(m)
+    check_question_service.attach_message_id(db_session, sid, m.id)
+    r = client.post(f"/api/sessions/{sid}/check/skip",
+                    json={"index": 0, "user_id": USER_ID})
+    assert r.status_code == 200
+    db_session.refresh(m)
+    assert m.check_batch_json is not None
+    data = json.loads(m.check_batch_json)
+    assert data["items"][0]["status"] == "skipped"
+    assert data["items"][0]["selected_index"] is None

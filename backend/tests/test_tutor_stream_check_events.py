@@ -4,6 +4,7 @@ Mirrors test_tutor_stream.py harness exactly. Helpers are copied from that
 module so this file is self-contained.
 """
 
+import asyncio
 import json
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -18,6 +19,7 @@ from config import settings
 from contracts import ToolResult
 from db.models import ChatMessage, Session as SessionModel, User as UserModel
 
+from services import check_question_service
 from services.cost_meter import CapStatus
 
 
@@ -197,6 +199,9 @@ async def test_stream_emits_check_question_and_breaks(monkeypatch, db_session):
     assert msg.status == "complete"
     assert msg.role == "assistant"
 
+    pc = check_question_service.get_pending_check(db_session, SESSION_ID)
+    assert pc is not None and pc["message_id"] is not None
+
 
 @pytest.mark.asyncio
 async def test_stream_check_question_event_shape(monkeypatch, db_session):
@@ -258,4 +263,96 @@ async def test_stream_check_question_event_shape(monkeypatch, db_session):
     done = next((e for e in events if e.type == "done"), None)
     assert done is not None, "done event not emitted"
     assert "message_id" in done.data
+
+
+@pytest.mark.asyncio
+async def test_cancel_mid_text_stream_does_not_raise_name_error(monkeypatch, db_session):
+    """Part B: after hoisting 'asked_check = False' before the try: block in
+    run_streaming, a plain-text cancel does not raise NameError for asked_check.
+
+    Without the hoist, 'asked_check' is only defined inside the for-loop (inside
+    the try:). The except asyncio.CancelledError: block references asked_check,
+    which would raise NameError on Python if the cancel fires before any tool
+    dispatch iteration.
+
+    This test cancels a text-only streaming turn (no tool calls) at the first
+    assistant_delta yield and verifies that:
+      (a) a 'cancelled' event is emitted (except branch completed without NameError)
+      (b) a ChatMessage with status='cancelled' is persisted
+
+    NOTE on the ask_check_questions + cancel scenario: when a check-ask turn
+    completes normally (asked_check=True), the happy path at the 'if asked_check:'
+    block calls _persist_assistant_message + attach_message_id BEFORE yielding
+    the 'done' event. If CancelledError is thrown at the 'done' yield, the
+    except branch's attach_message_id call is redundant (happy path already ran it).
+    There is no yield between asked_check=True and the done yield where
+    CancelledError could land without the happy path having already attached.
+    So the hoist is a correct defensive measure even if its effect is only
+    observable via the NameError guard (this test).
+    """
+    _disable_stub(monkeypatch)
+    _allow_cap(monkeypatch)
+
+    sid = "sc_cancel_text"
+    _insert_session(db_session, session_id=sid)
+    ctx = _ctx(db_session, session_id=sid)
+
+    monkeypatch.setattr(
+        "agent.tutor.cost_meter.estimate_cancelled_cost",
+        MagicMock(return_value=0),
+    )
+    monkeypatch.setattr(
+        "agent.tutor.cost_meter.record_cost",
+        MagicMock(),
+    )
+    monkeypatch.setattr(
+        "agent.tutor.litellm.stream_chunk_builder",
+        MagicMock(return_value=SimpleNamespace()),
+    )
+
+    # A text-only stream: no tool calls, so asked_check is never set inside the loop.
+    stream = _make_stream(
+        _content_chunk("partial text"),
+        _content_chunk(" more text"),
+    )
+
+    monkeypatch.setattr(
+        "agent.tutor.litellm.acompletion",
+        AsyncMock(side_effect=[stream]),
+    )
+
+    agen = tutor.run_streaming(
+        [{"role": "user", "content": "tell me something"}],
+        "sys",
+        ctx,
+    )
+
+    # Consume the first assistant_delta; generator is suspended at that yield.
+    first_event = await agen.__anext__()
+    assert first_event.type == "assistant_delta"
+
+    # Throw CancelledError: lands in the generator at the first yield.
+    # With the fix (asked_check hoisted to False before try:), no NameError.
+    # Without the fix, NameError: name 'asked_check' is not defined.
+    collected = []
+    try:
+        event = await agen.athrow(asyncio.CancelledError())
+        collected.append(event)
+    except (asyncio.CancelledError, StopAsyncIteration):
+        # Generator re-raised instead of yielding a final event. That is an
+        # acceptable outcome: the cancel branch still persisted the cancelled
+        # message before re-raising, which the DB assertion below verifies.
+        pass
+
+    # If athrow returned an event, it must be the 'cancelled' StreamEvent; if the
+    # generator re-raised instead, nothing was collected. Both are valid.
+    event_types = [e.type for e in collected]
+    assert event_types in ([], ["cancelled"])
+    # Either way, the generator must have persisted a cancelled message.
+    msgs = db_session.query(ChatMessage).filter(
+        ChatMessage.session_id == sid
+    ).all()
+    assert any(m.status == "cancelled" for m in msgs), (
+        "Expected a ChatMessage with status='cancelled' after the cancel branch ran"
+    )
 

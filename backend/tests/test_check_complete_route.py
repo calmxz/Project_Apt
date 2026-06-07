@@ -1,5 +1,6 @@
 """TDD: POST /sessions/{id}/check/complete fires the hidden follow-up."""
 
+import json
 from datetime import datetime, timezone
 
 import pytest
@@ -132,3 +133,26 @@ def test_complete_no_cooldown_on_all_correct(client, db_session, seeded_session,
     r = client.post(f"/api/sessions/{sid}/check/complete", json={"user_id": USER_ID})
     assert r.status_code == 200
     assert check_question_service.get_quiz_cooldown(db_session, sid) is None
+
+
+def test_complete_writes_check_batch_to_message(client, db_session, seeded_session, monkeypatch):
+    sid = seeded_session.id
+    _resolved_batch(db_session, sid)
+    m = ChatMessage(session_id=sid, role="assistant", content="")
+    db_session.add(m)
+    db_session.commit()
+    db_session.refresh(m)
+    check_question_service.attach_message_id(db_session, sid, m.id)
+
+    monkeypatch.setattr("agent.tutor.run_streaming",
+                        _make_fake_run_streaming(db_session, sid))
+
+    r = client.post(f"/api/sessions/{sid}/check/complete", json={"user_id": USER_ID})
+    assert r.status_code == 200
+
+    db_session.refresh(m)
+    assert m.check_batch_json is not None
+    data = json.loads(m.check_batch_json)
+    assert data["gap"] == "atp"
+    assert data["items"][0]["correct"] is True
+    assert check_question_service.get_pending_check(db_session, sid) is None

@@ -82,6 +82,21 @@ export const useSessionStore = defineStore('session', () => {
         message_id: m.id,
         citations: m.citations || [],
         created_at: m.created_at,
+        check_batch: m.check_batch
+          ? {
+              gap: m.check_batch.gap,
+              total: m.check_batch.total,
+              items: (m.check_batch.items || []).map((it) => ({
+                question: it.question,
+                options: it.options || [],
+                status: it.status,
+                selectedIndex: it.selected_index,
+                correctIndex: it.correct_index,
+                correct: it.correct,
+                explanation: it.explanation,
+              })),
+            }
+          : null,
       }))
       pendingCheck.value = s.pending_check
         ? {

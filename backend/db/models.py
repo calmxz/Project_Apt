@@ -64,6 +64,7 @@ class ChatMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="complete")
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    check_batch_json: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
 
     session: Mapped["Session"] = relationship("Session", back_populates="messages")
 
