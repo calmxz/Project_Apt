@@ -18,6 +18,7 @@ from config import settings
 from contracts import ToolResult
 from db.models import ChatMessage, Session as SessionModel, User as UserModel
 
+from services import check_question_service
 from services.cost_meter import CapStatus
 
 
@@ -196,6 +197,9 @@ async def test_stream_emits_check_question_and_breaks(monkeypatch, db_session):
     )
     assert msg.status == "complete"
     assert msg.role == "assistant"
+
+    pc = check_question_service.get_pending_check(db_session, SESSION_ID)
+    assert pc is not None and pc["message_id"] is not None
 
 
 @pytest.mark.asyncio

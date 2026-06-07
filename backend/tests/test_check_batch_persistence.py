@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 from contracts import AskCheckQuestionsArgs, TopicProfile
 from db.models import ChatMessage, LearningEvent, Session as SessionModel, User
+from agent import tutor
 from agent.types import ToolContext
 from services import check_question_service
 
@@ -190,3 +191,19 @@ def test_load_check_batch_falls_through_on_malformed(seeded):
     db.refresh(m)
     # Malformed column -> None, no ask tool call -> reconstruct returns None.
     assert check_question_service.load_check_batch(db, m) is None
+
+
+def test_streaming_ask_attaches_message_id(seeded):
+    db = seeded
+    ctx = ToolContext(db=db, session_id=SID, user_id=USER_ID,
+                      turn_started_at=datetime(2026, 1, 1, tzinfo=timezone.utc))
+    check_question_service.register(db, ctx, AskCheckQuestionsArgs(
+        session_id=SID, gap="atp",
+        items=[{"question": "Q1?", "options": ["a", "b"],
+                "correct_index": 0, "explanation": "a."}]))
+
+    msg_id = tutor._persist_assistant_message(ctx, "", "complete")
+    check_question_service.attach_message_id(ctx.db, ctx.session_id, msg_id)
+
+    pc = check_question_service.get_pending_check(db, SID)
+    assert pc["message_id"] == msg_id
