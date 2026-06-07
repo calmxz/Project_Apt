@@ -103,4 +103,29 @@ describe('multi-check store', () => {
     expect(s.pendingCheck.viewIndex).toBe(1)
     expect(s.pendingCheck.items[0].correct).toBe(true)
   })
+
+  it('loadSession maps check_batch onto messages (camelCase)', async () => {
+    const store = useSessionStore()
+    sessionsApi.getSession.mockResolvedValue({
+      id: 's1', messages: [
+        {
+          id: 1, role: 'assistant', content: '', created_at: '2026-06-07T00:00:00Z',
+          citations: [], tool_calls: [],
+          check_batch: {
+            gap: 'atp', current_index: 1, total: 1,
+            items: [{ question: 'Q?', options: ['a', 'b'], status: 'answered',
+                      selected_index: 0, correct_index: 0, correct: true,
+                      explanation: 'a.' }],
+          },
+        },
+      ],
+      pending_check: null,
+    })
+    await store.loadSession('s1')
+    const cb = store.messages[0].check_batch
+    expect(cb.gap).toBe('atp')
+    expect(cb.items[0].selectedIndex).toBe(0)
+    expect(cb.items[0].correctIndex).toBe(0)
+    expect(cb.items[0].correct).toBe(true)
+  })
 })
