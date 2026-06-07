@@ -336,7 +336,9 @@ async def complete_check(
         raise HTTPException(status_code=409, detail="no resolved batch to complete")
 
     summary = check_question_service.build_results_summary(pc)
+    cooldown = check_question_service.build_quiz_cooldown(pc)
     check_question_service.clear_pending_check(db, session_id)
+    check_question_service.set_quiz_cooldown(db, session_id, cooldown)
 
     profile = profile_service.load_profile(db, session_id)
     latest_doc = db.execute(
@@ -358,6 +360,7 @@ async def complete_check(
         "seed_mode": None,
         "last_session_summary": profile.last_session_summary,
         "pending_check": None,
+        "quiz_cooldown": cooldown,
     }
     system_prompt = prompts.build_system_prompt(prompt_state)
     ctx = ToolContext(
@@ -365,6 +368,7 @@ async def complete_check(
         session_id=session_id,
         user_id=user_id,
         turn_started_at=datetime.now(timezone.utc),
+        suppress_check=True,
     )
 
     async def event_stream():

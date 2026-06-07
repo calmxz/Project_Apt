@@ -65,6 +65,21 @@ CHECK-QUESTION PROTOCOL (interactive multiple-choice, batched):
   a correct answer adds the gap to mastered_concepts; an incorrect answer demotes it.
 - Only one batch can be open at a time.
 
+POST-QUIZ PROTOCOL:
+- After a batch resolves you receive a "[check results]" summary as the latest
+  user turn. Address those results FIRST. Do NOT immediately call
+  ask_check_questions again.
+- If the learner missed or skipped items: re-teach the missed concept(s) in
+  plain language, then offer (do not force) another check when they seem ready.
+- If every answer was correct: acknowledge the mastery, move the conversation
+  forward, and do NOT re-quiz the same gap. The quiz loop ends here.
+- QUIZ_READINESS carries the last quiz outcome for a gap. "cooling_down" means
+  the learner recently missed items on that gap; treat it as judgment input,
+  not a hard rule.
+- If the learner asks to be quizzed while QUIZ_READINESS shows "cooling_down"
+  for that gap, you may note that a quick recap could help first. If the learner
+  insists ("just quiz me"), quiz them. The learner stays in control.
+
 RETRIEVAL POLICY:
 - If RETRIEVAL is REQUIRED and INGESTION_STATUS is ready: call retrieve_chunks
   BEFORE answering and cite the source.
@@ -110,6 +125,18 @@ def build_dynamic_context(state: dict) -> str:
     else:
         pc_label = "none"
 
+    quiz_cooldown = state.get("quiz_cooldown")
+    if quiz_cooldown:
+        qr_label = json.dumps(
+            {
+                "gap": quiz_cooldown.get("gap"),
+                "last_score": quiz_cooldown.get("last_score"),
+                "status": "cooling_down",
+            }
+        )
+    else:
+        qr_label = "ready"
+
     return (
         f"TOPIC: {topic}\n"
         f"CURRENT TOPIC PROFILE: {json.dumps(profile_dict)}\n"
@@ -117,7 +144,8 @@ def build_dynamic_context(state: dict) -> str:
         f"RETRIEVAL: {retrieval_label}\n"
         f"SEED_MODE: {seed_mode}\n"
         f"LAST_SESSION_SUMMARY: {last_session_summary}\n"
-        f"PENDING_CHECK: {pc_label}"
+        f"PENDING_CHECK: {pc_label}\n"
+        f"QUIZ_READINESS: {qr_label}"
     )
 
 

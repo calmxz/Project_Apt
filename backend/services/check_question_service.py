@@ -113,6 +113,11 @@ def is_done(pc: dict | None) -> bool:
 
 
 def register(db: Session, ctx: "ToolContext", args: AskCheckQuestionsArgs) -> ToolResult:
+    if getattr(ctx, "suppress_check", False):
+        return ToolResult(
+            ok=False, status="failed",
+            error="address the check results before quizzing again",
+        )
     if args.session_id != ctx.session_id:
         return ToolResult(
             ok=False, status="failed",
@@ -243,3 +248,45 @@ def build_results_summary(pc: dict) -> str:
             right = it["options"][it["correct_index"]]
             lines.append(f'  Q{n + 1} missed: learner chose "{chose}", correct "{right}".')
     return "\n".join(lines)
+
+
+def build_quiz_cooldown(pc: dict) -> dict | None:
+    """Derive a quiz_cooldown record from a resolved batch.
+
+    Returns None when every item was answered correctly (no miss, no skip) -
+    an all-correct batch means the gap is mastered and the loop should end.
+    `last_score` is n_correct over GRADED (answered) items, matching
+    build_results_summary; skipped items count toward triggering the cooldown
+    but not toward the score."""
+    items = pc.get("items", [])
+    graded = [it for it in items if it["status"] == "answered"]
+    n_correct = sum(1 for it in graded if it.get("correct"))
+    has_miss = any(it["status"] == "skipped" for it in items) or n_correct < len(graded)
+    if not has_miss:
+        return None
+    missed = [it["question"] for it in graded if not it.get("correct")]
+    return {
+        "gap": pc["gap"],
+        "last_score": f"{n_correct}/{len(graded)}",
+        "missed": missed,
+    }
+
+
+def get_quiz_cooldown(db: Session, session_id: str) -> dict | None:
+    row = db.get(SessionModel, session_id)
+    if row is None or not row.quiz_cooldown_json:
+        return None
+    try:
+        data = json.loads(row.quiz_cooldown_json)
+    except (ValueError, TypeError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def set_quiz_cooldown(db: Session, session_id: str, cd: dict | None, commit: bool = True) -> None:
+    row = db.get(SessionModel, session_id)
+    if row is None:
+        raise ValueError(f"session not found: {session_id}")
+    row.quiz_cooldown_json = json.dumps(cd) if cd is not None else None
+    if commit:
+        db.commit()
