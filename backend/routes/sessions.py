@@ -283,6 +283,9 @@ def skip_check(
         prog = check_question_service.skip(db, session_id, req.index)
     except check_question_service.CheckStateError as e:
         raise HTTPException(status_code=409, detail=str(e))
+    check_question_service.write_check_batch(
+        db, check_question_service.get_pending_check(db, session_id)
+    )
     return CheckSkipResponse(**prog)
 
 
@@ -300,6 +303,9 @@ def answer_check(
         result = check_question_service.answer(db, session_id, req.index, req.selected_index)
     except check_question_service.CheckStateError as e:
         raise HTTPException(status_code=409, detail=str(e))
+    check_question_service.write_check_batch(
+        db, check_question_service.get_pending_check(db, session_id)
+    )
     return CheckAnswerResponse(**result)
 
 
@@ -337,6 +343,7 @@ async def complete_check(
 
     summary = check_question_service.build_results_summary(pc)
     cooldown = check_question_service.build_quiz_cooldown(pc)
+    check_question_service.write_check_batch(db, pc)
     check_question_service.clear_pending_check(db, session_id)
     check_question_service.set_quiz_cooldown(db, session_id, cooldown)
 
