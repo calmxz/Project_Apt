@@ -298,6 +298,7 @@ class Message(BaseModel):
     created_at: datetime
     citations: list[Citation] | None = []
     tool_calls: list[ToolCallRecord] | None = []
+    check_batch: PendingCheck | None = None
 
 
 class SessionDetail(BaseModel):
