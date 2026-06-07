@@ -11,9 +11,6 @@ Covers:
            selected_index and correct are preserved in check_batch
 """
 
-import json
-from datetime import datetime, timezone
-
 import pytest
 
 from contracts import AskCheckQuestionsArgs, TopicProfile, ToolCallRecord

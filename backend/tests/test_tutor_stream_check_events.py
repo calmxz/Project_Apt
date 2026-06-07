@@ -339,12 +339,16 @@ async def test_cancel_mid_text_stream_does_not_raise_name_error(monkeypatch, db_
         event = await agen.athrow(asyncio.CancelledError())
         collected.append(event)
     except (asyncio.CancelledError, StopAsyncIteration):
+        # Generator re-raised instead of yielding a final event. That is an
+        # acceptable outcome: the cancel branch still persisted the cancelled
+        # message before re-raising, which the DB assertion below verifies.
         pass
 
-    # The except branch yielded a 'cancelled' event (caught above or via collected).
+    # If athrow returned an event, it must be the 'cancelled' StreamEvent; if the
+    # generator re-raised instead, nothing was collected. Both are valid.
     event_types = [e.type for e in collected]
-    # Either the 'cancelled' event was returned by athrow, or the generator re-raised
-    # immediately. Either way, the generator must have persisted a cancelled message.
+    assert event_types in ([], ["cancelled"])
+    # Either way, the generator must have persisted a cancelled message.
     msgs = db_session.query(ChatMessage).filter(
         ChatMessage.session_id == sid
     ).all()
