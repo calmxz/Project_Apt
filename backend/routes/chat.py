@@ -140,6 +140,9 @@ async def chat(
     db.commit()
     db.refresh(assistant_msg)
 
+    if any(getattr(tc, "name", None) == "ask_check_questions" for tc in tool_calls):
+        check_question_service.attach_message_id(db, req.session_id, assistant_msg.id)
+
     post = cost_meter.check_cap(db, user_id)
     if post.soft_breached:
         response.headers["X-Cost-Warning"] = (
