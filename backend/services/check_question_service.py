@@ -27,10 +27,11 @@ import logging
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from contracts import AskCheckQuestionsArgs, ToolResult
-from db.models import ChatMessage, Session as SessionModel
+from db.models import ChatMessage, LearningEvent, Session as SessionModel
 
 log = logging.getLogger(__name__)
 
@@ -323,3 +324,77 @@ def set_quiz_cooldown(db: Session, session_id: str, cd: dict | None, commit: boo
     row.quiz_cooldown_json = json.dumps(cd) if cd is not None else None
     if commit:
         db.commit()
+
+
+def reconstruct_check_batch(db: Session, msg: ChatMessage) -> dict | None:
+    """Best-effort recap for an asking message with no persisted check_batch_json.
+
+    Pulls question/options/correct_index/explanation from the message's
+    ask_check_questions tool call. Joins LearningEvent by
+    (session_id, gap_tested, question) for the FIRST event at or after this
+    message's turn (deterministic when the same question recurs across turns).
+    selected_index is unknowable -> None. status = answered if an event matched,
+    else skipped.
+
+    Known tradeoff: if the same (gap, question) recurs in a LATER batch that
+    was answered before this backfill runs, this message's item may be
+    mis-marked "answered". Accepted as best-effort only."""
+    try:
+        tcs = json.loads(msg.tool_calls_json or "[]")
+    except (ValueError, TypeError):
+        return None
+    ask = next((t for t in tcs if t.get("name") == "ask_check_questions"), None)
+    if ask is None:
+        return None
+    args = ask.get("args") or {}
+    gap = args.get("gap", "")
+    raw_items = args.get("items", [])
+    if not raw_items:
+        return None
+
+    items = []
+    for it in raw_items:
+        question = it.get("question", "")
+        ev = db.execute(
+            select(LearningEvent)
+            .where(
+                LearningEvent.session_id == msg.session_id,
+                LearningEvent.gap_tested == gap,
+                LearningEvent.question == question,
+                LearningEvent.created_at >= msg.created_at,
+            )
+            .order_by(LearningEvent.created_at.asc())
+            .limit(1)
+        ).scalars().first()
+        if ev is not None:
+            status, correct = "answered", ev.correct
+        else:
+            status, correct = "skipped", None
+        items.append({
+            "question": question,
+            "options": it.get("options", []),
+            "status": status,
+            "selected_index": None,
+            "correct_index": it.get("correct_index"),
+            "correct": correct,
+            "explanation": it.get("explanation"),
+        })
+
+    return {
+        "gap": gap,
+        "current_index": len(items),
+        "total": len(items),
+        "items": items,
+    }
+
+
+def load_check_batch(db: Session, msg: ChatMessage) -> dict | None:
+    """Recap payload for a message: persisted column first, else reconstruct."""
+    if msg.check_batch_json:
+        try:
+            data = json.loads(msg.check_batch_json)
+        except (ValueError, TypeError):
+            data = None
+        if isinstance(data, dict):
+            return data
+    return reconstruct_check_batch(db, msg)

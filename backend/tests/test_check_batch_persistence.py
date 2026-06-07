@@ -1,10 +1,11 @@
 """Persistence of resolved check batches onto the asking ChatMessage."""
 
+import json as _json
 import pytest
 from datetime import datetime, timezone
 
 from contracts import AskCheckQuestionsArgs, TopicProfile
-from db.models import ChatMessage, Session as SessionModel, User
+from db.models import ChatMessage, LearningEvent, Session as SessionModel, User
 from agent.types import ToolContext
 from services import check_question_service
 
@@ -94,3 +95,98 @@ def test_write_check_batch_noop_without_message_id(seeded):
     pc = check_question_service.get_pending_check(db, SID)
     # message_id is None - must be a no-op, no raise.
     check_question_service.write_check_batch(db, pc)
+
+
+def test_reconstruct_from_tool_calls_and_event(seeded):
+    db = seeded
+    # Asking message with the ask_check_questions tool call, no check_batch_json.
+    m = ChatMessage(
+        session_id=SID, role="assistant", content="",
+        tool_calls_json=_json.dumps([{
+            "name": "ask_check_questions",
+            "args": {"session_id": SID, "gap": "atp", "items": [
+                {"question": "Q1?", "options": ["a", "b"],
+                 "correct_index": 0, "explanation": "a is right."}]},
+            "status": "ok", "error": None,
+        }]),
+    )
+    db.add(m)
+    db.commit()
+    db.refresh(m)
+    # A graded LearningEvent created AFTER the ask.
+    db.add(LearningEvent(session_id=SID, gap_tested="atp",
+                         question="Q1?", correct=True))
+    db.commit()
+
+    batch = check_question_service.reconstruct_check_batch(db, m)
+    assert batch["gap"] == "atp"
+    item = batch["items"][0]
+    assert item["status"] == "answered"
+    assert item["correct"] is True
+    assert item["selected_index"] is None
+    assert item["correct_index"] == 0
+    assert item["explanation"] == "a is right."
+
+
+def test_reconstruct_skipped_when_no_event(seeded):
+    db = seeded
+    m = ChatMessage(
+        session_id=SID, role="assistant", content="",
+        tool_calls_json=_json.dumps([{
+            "name": "ask_check_questions",
+            "args": {"session_id": SID, "gap": "g", "items": [
+                {"question": "Qx?", "options": ["a", "b"],
+                 "correct_index": 1, "explanation": "b."}]},
+            "status": "ok", "error": None,
+        }]),
+    )
+    db.add(m)
+    db.commit()
+    db.refresh(m)
+    batch = check_question_service.reconstruct_check_batch(db, m)
+    item = batch["items"][0]
+    assert item["status"] == "skipped"
+    assert item["correct"] is None
+    assert item["selected_index"] is None
+
+
+def test_reconstruct_none_without_ask_tool_call(seeded):
+    db = seeded
+    m = ChatMessage(session_id=SID, role="assistant", content="hi",
+                    tool_calls_json="[]")
+    db.add(m)
+    db.commit()
+    db.refresh(m)
+    assert check_question_service.reconstruct_check_batch(db, m) is None
+
+
+def test_load_check_batch_prefers_column(seeded):
+    db = seeded
+    m = ChatMessage(session_id=SID, role="assistant", content="",
+                    check_batch_json='{"gap": "stored", "items": []}')
+    db.add(m)
+    db.commit()
+    db.refresh(m)
+    assert check_question_service.load_check_batch(db, m)["gap"] == "stored"
+
+
+def test_reconstruct_none_on_malformed_tool_calls_json(seeded):
+    db = seeded
+    m = ChatMessage(session_id=SID, role="assistant", content="",
+                    tool_calls_json="{not json")
+    db.add(m)
+    db.commit()
+    db.refresh(m)
+    assert check_question_service.reconstruct_check_batch(db, m) is None
+
+
+def test_load_check_batch_falls_through_on_malformed(seeded):
+    db = seeded
+    m = ChatMessage(session_id=SID, role="assistant", content="",
+                    check_batch_json="{not json",
+                    tool_calls_json="[]")
+    db.add(m)
+    db.commit()
+    db.refresh(m)
+    # Malformed column -> None, no ask tool call -> reconstruct returns None.
+    assert check_question_service.load_check_batch(db, m) is None
