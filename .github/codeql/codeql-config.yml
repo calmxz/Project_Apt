@@ -1,0 +1,3 @@
+name: "Project_Apt CodeQL config"
+paths-ignore:
+  - "backend/db/alembic/versions/**"
