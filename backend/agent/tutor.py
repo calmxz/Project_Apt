@@ -265,6 +265,7 @@ async def run_streaming(
     prompt_tokens_total = 0
     tool_calls_record: list[ToolCallRecord] = []
     citations: list[Citation] = []
+    asked_check = False  # hoisted so the except asyncio.CancelledError: branch can read it
 
     try:
         for _i in range(max_iters):
@@ -541,6 +542,8 @@ async def run_streaming(
             tool_calls=tool_calls_record,
             citations=citations,
         )
+        if asked_check:
+            check_question_service.attach_message_id(ctx.db, ctx.session_id, msg_id)
         yield StreamEvent(
             "cancelled",
             {
