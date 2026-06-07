@@ -143,7 +143,7 @@ def list_sessions(
     ]
 
 
-def _load_messages(db: Session, session_id: str) -> list[Message]:
+def _load_messages(db: Session, session_id: str, open_message_id: int | None = None) -> list[Message]:
     rows = db.execute(
         select(ChatMessage)
         .where(ChatMessage.session_id == session_id)
@@ -159,6 +159,17 @@ def _load_messages(db: Session, session_id: str) -> list[Message]:
             tool_calls = [ToolCallRecord(**t) for t in json.loads(m.tool_calls_json or "[]")]
         except (ValueError, TypeError):
             tool_calls = []
+        # Suppress recap for the message whose batch is still OPEN: the live
+        # CheckQuestion card (driven by pending_check) owns that batch until
+        # it resolves. Otherwise both cards render for the same batch.
+        if m.id == open_message_id:
+            check_batch = None
+        else:
+            # Note: messages lacking a persisted check_batch_json trigger
+            # reconstruct_check_batch -> one LearningEvent SELECT per item (N+1).
+            # Bounded to legacy asking-messages; self-heals as batches resolve and
+            # write_check_batch stamps the column. Plain messages short-circuit (no query).
+            check_batch = check_question_service.load_check_batch(db, m)
         out.append(
             Message(
                 id=m.id,
@@ -167,6 +178,7 @@ def _load_messages(db: Session, session_id: str) -> list[Message]:
                 created_at=_aware_utc(m.created_at),
                 citations=citations,
                 tool_calls=tool_calls,
+                check_batch=check_batch,
             )
         )
     return out
@@ -189,6 +201,10 @@ def get_session(
     if row is None or row.user_id != user_id:
         raise HTTPException(status_code=404, detail="session not found")
     pc = check_question_service.get_pending_check(db, row.id)
+    # message_id is None until attach_message_id runs (non-streaming run()
+    # path, or a narrow race). When None, suppression below cannot fire; the
+    # read-time backfill is best-effort and any co-render window is transient.
+    open_msg_id = pc.get("message_id") if pc else None
     return SessionDetail(
         id=row.id,
         user_id=row.user_id,
@@ -197,7 +213,7 @@ def get_session(
         created_at=_aware_utc(row.created_at),
         ended_at=_aware_utc(row.ended_at),
         ingestion_status=_latest_ingestion_status(db, row.id),
-        messages=_load_messages(db, row.id),
+        messages=_load_messages(db, row.id, open_msg_id),
         pinned=row.pinned,
         pending_check=check_question_service.public_view(pc),
     )
