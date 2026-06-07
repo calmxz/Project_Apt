@@ -23,13 +23,16 @@ State machine is linear: answer()/skip() require index == current_index.
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy.orm import Session
 
 from contracts import AskCheckQuestionsArgs, ToolResult
-from db.models import Session as SessionModel
+from db.models import ChatMessage, Session as SessionModel
+
+log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from agent.types import ToolContext
@@ -106,6 +109,35 @@ def clear_pending_check(db: Session, session_id: str, commit: bool = True) -> No
         db.commit()
 
 
+def attach_message_id(db: Session, session_id: str, message_id: int) -> None:
+    """Stamp the asking assistant message id onto the open pending_check.
+
+    No-op when there is no open batch (older flow / race). Read-time backfill
+    covers messages whose batch was never linked."""
+    pc = get_pending_check(db, session_id)
+    if pc is None:
+        return
+    pc["message_id"] = message_id
+    _save(db, session_id, pc)
+
+
+def write_check_batch(db: Session, pc: dict | None) -> None:
+    """Persist public_view(pc) JSON onto the linked ChatMessage.
+
+    No-op when pc is falsy, carries no message_id, or the message is gone."""
+    if not pc:
+        return
+    message_id = pc.get("message_id")
+    if message_id is None:
+        return
+    msg = db.get(ChatMessage, message_id)
+    if msg is None:
+        log.debug("write_check_batch: message %s not found", message_id)
+        return
+    msg.check_batch_json = json.dumps(public_view(pc))
+    db.commit()
+
+
 def is_done(pc: dict | None) -> bool:
     if not pc:
         return False
@@ -147,6 +179,7 @@ def register(db: Session, ctx: "ToolContext", args: AskCheckQuestionsArgs) -> To
         "gap": args.gap,
         "current_index": 0,
         "asked_at_turn": ctx.turn_started_at.isoformat(),
+        "message_id": None,
         "items": [
             {
                 "question": it.question,
