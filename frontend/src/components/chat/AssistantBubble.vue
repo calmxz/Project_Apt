@@ -2,6 +2,7 @@
 import MarkdownContent from './MarkdownContent.vue'
 import ToolCallChip from './ToolCallChip.vue'
 import CitationsList from './CitationsList.vue'
+import CheckRecap from './CheckRecap.vue'
 
 defineProps({
   message: { type: Object, required: true },
@@ -24,14 +25,25 @@ defineProps({
     </span>
     <div class="msg-body">
       <span class="role-tag">tutor</span>
-      <span
-        v-for="(tc, ti) in (message.tool_calls || [])"
-        :key="tc.id ?? ti"
-        class="tool-call-row"
-      >
-        <ToolCallChip :tool_call="tc" :state="tc.state || 'done'" />
-      </span>
-      <MarkdownContent class="content" :text="message.content || ''" :streaming="streaming" />
+      <template v-if="message.check_batch">
+        <CheckRecap :batch="message.check_batch" />
+        <MarkdownContent
+          v-if="message.content"
+          class="content"
+          :text="message.content"
+          :streaming="streaming"
+        />
+      </template>
+      <template v-else>
+        <span
+          v-for="(tc, ti) in (message.tool_calls || [])"
+          :key="tc.id ?? ti"
+          class="tool-call-row"
+        >
+          <ToolCallChip :tool_call="tc" :state="tc.state || 'done'" />
+        </span>
+        <MarkdownContent class="content" :text="message.content || ''" :streaming="streaming" />
+      </template>
       <span v-if="message.status === 'cancelled'" class="cancelled-marker">(stopped)</span>
       <CitationsList :citations="message.citations || []" />
     </div>
