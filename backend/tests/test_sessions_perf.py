@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import event as _sa_event
 from sqlalchemy import inspect
 
-from contracts import TopicProfile
+from contracts import TopicProfile, SessionLibraryPage  # noqa: F401  (ensures schema exists)
 from db.database import Base
 from db.models import ChatMessage, LearningEvent, Session as SessionModel, User
 import db.models  # noqa: F401  (register models on Base.metadata)
@@ -142,3 +142,53 @@ def test_list_sessions_preview_skips_non_space_whitespace(client, db_session, se
     assert r.status_code == 200, r.text
     item = next(s for s in r.json() if s["id"] == "s_ws")
     assert item["last_message_preview"] == "real answer here"
+
+
+def _seed_simple(db, sid, topic, ended=False, activity=None):
+    db.add(SessionModel(id=sid, user_id=USER_ID, topic=topic, topic_profile_json="{}",
+                        ended_at=(datetime(2026, 6, 2, tzinfo=timezone.utc) if ended else None)))
+    if activity is not None:
+        db.add(ChatMessage(session_id=sid, role="user", content="x", created_at=activity))
+    db.commit()
+
+
+def test_library_filters_by_status(client, db_session, seeded_user):
+    _seed_simple(db_session, "lib_a", "Active one", ended=False)
+    _seed_simple(db_session, "lib_b", "Ended one", ended=True)
+    r = client.get(f"/api/sessions/library?status=ended&user_id={USER_ID}")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert {i["id"] for i in body["items"]} == {"lib_b"}
+    assert body["total"] == 1
+
+
+def test_library_search_and_pagination(client, db_session, seeded_user):
+    for n in range(5):
+        _seed_simple(db_session, f"lib_{n}", f"Glyco {n}")
+    _seed_simple(db_session, "lib_other", "Mitosis")
+    r = client.get(f"/api/sessions/library?q=glyco&limit=2&offset=0&user_id={USER_ID}")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["total"] == 5
+    assert len(body["items"]) == 2
+    assert all("Glyco" in i["topic"] for i in body["items"])
+
+
+def test_library_sort_last_activity(client, db_session, seeded_user):
+    base = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    _seed_simple(db_session, "lib_old_created_recent_active", "A",
+                 activity=base + timedelta(days=10))
+    _seed_simple(db_session, "lib_new_created_no_activity", "B")
+    r = client.get(f"/api/sessions/library?sort=last_activity&user_id={USER_ID}")
+    assert r.status_code == 200, r.text
+    ids = [i["id"] for i in r.json()["items"]]
+    # The session touched most recently sorts first.
+    assert ids[0] == "lib_old_created_recent_active"
+
+
+def test_library_route_not_shadowed_by_session_id(client, db_session, seeded_user):
+    # Guards the route-ordering gotcha: /sessions/library must not be captured
+    # by /sessions/{session_id}.
+    r = client.get(f"/api/sessions/library?user_id={USER_ID}")
+    assert r.status_code == 200, r.text
+    assert "items" in r.json()

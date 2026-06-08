@@ -22,6 +22,7 @@ from contracts import (
     SessionDetail,
     SessionEndResponse,
     SessionEndSummary,
+    SessionLibraryPage,
     SessionListItem,
     SessionProgress,
     SessionResponse,
@@ -278,6 +279,55 @@ def _build_end_summary(db: Session, session_id: str, text: str) -> SessionEndSum
     if not cleaned or cleaned == "no exchanges recorded":
         return SessionEndSummary(kind="no_exchanges", text=NO_EXCHANGES_TEXT)
     return SessionEndSummary(kind="summary", text=cleaned)
+
+
+@router.get("/sessions/library", response_model=SessionLibraryPage)
+def list_session_library(
+    status: str = "all",
+    q: str | None = None,
+    sort: str = "last_activity",
+    limit: int = 20,
+    offset: int = 0,
+    user_id: str = Depends(current_user_id),
+    db: Session = Depends(get_db),
+):
+    base = select(SessionModel).where(SessionModel.user_id == user_id)
+    if status == "active":
+        base = base.where(SessionModel.ended_at.is_(None))
+    elif status == "ended":
+        base = base.where(SessionModel.ended_at.is_not(None))
+    if q:
+        base = base.where(SessionModel.topic.ilike(f"%{q}%"))
+
+    total = db.execute(
+        select(func.count()).select_from(base.subquery())
+    ).scalar_one()
+
+    if sort == "created":
+        ordered = base.order_by(SessionModel.created_at.desc())
+    elif sort == "topic":
+        ordered = base.order_by(SessionModel.topic.asc())
+    else:  # last_activity: order by max(message.created_at), falling back to created_at
+        last_act_sub = (
+            select(
+                ChatMessage.session_id.label("sid"),
+                func.max(ChatMessage.created_at).label("la"),
+            )
+            .group_by(ChatMessage.session_id)
+            .subquery()
+        )
+        ordered = (
+            base.outerjoin(last_act_sub, last_act_sub.c.sid == SessionModel.id)
+            .order_by(func.coalesce(last_act_sub.c.la, SessionModel.created_at).desc())
+        )
+
+    rows = db.execute(ordered.limit(limit).offset(offset)).scalars().all()
+    return SessionLibraryPage(
+        items=_enrich_list_items(db, rows),
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get("/sessions/{session_id}", response_model=SessionDetail)
