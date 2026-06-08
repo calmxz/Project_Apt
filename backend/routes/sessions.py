@@ -149,6 +149,16 @@ def _load_messages(db: Session, session_id: str, open_message_id: int | None = N
         .where(ChatMessage.session_id == session_id)
         .order_by(ChatMessage.created_at.asc(), ChatMessage.id.asc())
     ).scalars().all()
+    # Preload LearningEvents once iff some message may need reconstruction
+    # (no persisted check_batch_json and not the open message). Avoids the
+    # former per-item N+1 entirely; skipped when every batch is persisted.
+    needs_events = any(
+        m.check_batch_json is None and m.id != open_message_id for m in rows
+    )
+    events = (
+        check_question_service.load_session_learning_events(db, session_id)
+        if needs_events else []
+    )
     out: list[Message] = []
     for m in rows:
         try:
@@ -165,11 +175,7 @@ def _load_messages(db: Session, session_id: str, open_message_id: int | None = N
         if m.id == open_message_id:
             check_batch = None
         else:
-            # Note: messages lacking a persisted check_batch_json trigger
-            # reconstruct_check_batch -> one LearningEvent SELECT per item (N+1).
-            # Bounded to legacy asking-messages; self-heals as batches resolve and
-            # write_check_batch stamps the column. Plain messages short-circuit (no query).
-            check_batch = check_question_service.load_check_batch(db, m)
+            check_batch = check_question_service.load_check_batch(db, m, events)
         out.append(
             Message(
                 id=m.id,

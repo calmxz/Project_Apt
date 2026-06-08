@@ -326,15 +326,28 @@ def set_quiz_cooldown(db: Session, session_id: str, cd: dict | None, commit: boo
         db.commit()
 
 
-def reconstruct_check_batch(db: Session, msg: ChatMessage) -> dict | None:
+def load_session_learning_events(db: Session, session_id: str) -> list[LearningEvent]:
+    """All LearningEvents for a session, oldest first. Loaded once per detail
+    render so reconstruct_check_batch can match in memory instead of issuing one
+    SELECT per check item (the former N+1)."""
+    return db.execute(
+        select(LearningEvent)
+        .where(LearningEvent.session_id == session_id)
+        .order_by(LearningEvent.created_at.asc(), LearningEvent.id.asc())
+    ).scalars().all()
+
+
+def reconstruct_check_batch(db: Session, msg: ChatMessage, events: list | None = None) -> dict | None:
     """Best-effort recap for an asking message with no persisted check_batch_json.
 
+    Matches each item against the session's LearningEvents by
+    (gap_tested, question) for the FIRST event at or after this message's turn.
+    `events` may be preloaded (load_session_learning_events) to avoid N+1; when
+    None it is loaded once here (single query, not per item).
+
     Pulls question/options/correct_index/explanation from the message's
-    ask_check_questions tool call. Joins LearningEvent by
-    (session_id, gap_tested, question) for the FIRST event at or after this
-    message's turn (deterministic when the same question recurs across turns).
-    selected_index is unknowable -> None. status = answered if an event matched,
-    else skipped.
+    ask_check_questions tool call. selected_index is unknowable -> None.
+    status = answered if an event matched, else skipped.
 
     Known tradeoff: if the same (gap, question) recurs in a LATER batch that
     was answered before this backfill runs, this message's item may be
@@ -352,20 +365,20 @@ def reconstruct_check_batch(db: Session, msg: ChatMessage) -> dict | None:
     if not raw_items:
         return None
 
+    if events is None:
+        events = load_session_learning_events(db, msg.session_id)
+
     items = []
     for it in raw_items:
         question = it.get("question", "")
-        ev = db.execute(
-            select(LearningEvent)
-            .where(
-                LearningEvent.session_id == msg.session_id,
-                LearningEvent.gap_tested == gap,
-                LearningEvent.question == question,
-                LearningEvent.created_at >= msg.created_at,
-            )
-            .order_by(LearningEvent.created_at.asc())
-            .limit(1)
-        ).scalars().first()
+        # events are oldest-first; first match is the earliest at/after this turn.
+        ev = next(
+            (e for e in events
+             if e.gap_tested == gap
+             and e.question == question
+             and e.created_at >= msg.created_at),
+            None,
+        )
         if ev is not None:
             status, correct = "answered", ev.correct
         else:
@@ -388,8 +401,13 @@ def reconstruct_check_batch(db: Session, msg: ChatMessage) -> dict | None:
     }
 
 
-def load_check_batch(db: Session, msg: ChatMessage) -> dict | None:
-    """Recap payload for a message: persisted column first, else reconstruct."""
+def load_check_batch(db: Session, msg: ChatMessage, events: list | None = None) -> dict | None:
+    """Recap payload for a message: persisted column first, else reconstruct.
+
+    `events` is an optional preloaded list of this session's LearningEvents
+    (see load_session_learning_events) so callers rendering many messages avoid
+    one SELECT per item.
+    """
     if msg.check_batch_json:
         try:
             data = json.loads(msg.check_batch_json)
@@ -397,4 +415,4 @@ def load_check_batch(db: Session, msg: ChatMessage) -> dict | None:
             data = None
         if isinstance(data, dict):
             return data
-    return reconstruct_check_batch(db, msg)
+    return reconstruct_check_batch(db, msg, events)
