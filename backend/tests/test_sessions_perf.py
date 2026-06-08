@@ -126,3 +126,19 @@ def test_get_session_detail_is_not_n_plus_one(client, db_session, seeded_user):
     assert r3.status_code == 200, r3.text
     # Query count must NOT grow with the number of asking messages / items.
     assert q3["n"] == q1["n"], f"N+1: 1-asking={q1['n']} vs 3-asking={q3['n']}"
+
+
+def test_list_sessions_preview_skips_non_space_whitespace(client, db_session, seeded_user):
+    base = datetime(2026, 6, 3, tzinfo=timezone.utc)
+    db_session.add(SessionModel(id="s_ws", user_id=USER_ID, topic="WS",
+                               topic_profile_json="{}"))
+    db_session.add(ChatMessage(session_id="s_ws", role="assistant",
+                              content="real answer here", created_at=base))
+    # aborted stream persisted a tab/newline-only trailing turn
+    db_session.add(ChatMessage(session_id="s_ws", role="assistant",
+                              content="\t\n  ", created_at=base + timedelta(minutes=1)))
+    db_session.commit()
+    r = client.get(f"/api/sessions?user_id={USER_ID}")
+    assert r.status_code == 200, r.text
+    item = next(s for s in r.json() if s["id"] == "s_ws")
+    assert item["last_message_preview"] == "real answer here"

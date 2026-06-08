@@ -76,6 +76,12 @@ def _to_response(db: Session, row: SessionModel) -> SessionResponse:
 
 
 PREVIEW_MAX = 120
+# How many of a session's most-recent messages to scan for the preview. A
+# cancelled/aborted stream can leave a trailing whitespace-only turn; we skip
+# those in Python (SQL trim() is space-only on both SQLite and Postgres, so the
+# emptiness check cannot be pushed into the window filter portably). K bounds the
+# scan: if the K most-recent turns are all blank, the card simply shows no preview.
+PREVIEW_CANDIDATES = 5
 
 
 def _enrich_list_items(db: Session, rows: list[SessionModel]) -> list[SessionListItem]:
@@ -83,7 +89,8 @@ def _enrich_list_items(db: Session, rows: list[SessionModel]) -> list[SessionLis
 
     Three set-based queries total regardless of how many sessions are passed:
     (1) the session rows (already fetched by the caller), (2) a grouped
-    count + max(created_at), (3) a window-function latest-non-empty message.
+    count + max(created_at), (3) a window-function latest-non-empty message
+    (top-K candidates per session, emptiness decided in Python).
     Progress is parsed from each row's topic_profile_json (no query).
     """
     ids = [r.id for r in rows]
@@ -102,21 +109,37 @@ def _enrich_list_items(db: Session, rows: list[SessionModel]) -> list[SessionLis
         ).all()
         for sid, c, la in agg:
             counts[sid] = c
+            # func.max() over a DateTime returns an ISO string on SQLite (not on
+            # Postgres); coerce so _aware_utc gets a real datetime either way.
             last_act[sid] = la if not isinstance(la, str) else datetime.fromisoformat(la)
-        # Latest non-empty message per session via window function (portable).
+        # Latest NON-EMPTY message per session. Rank all messages by recency in
+        # SQL (portable window function), then pick the first non-blank in Python
+        # because trim() in SQL strips only spaces, not tabs/newlines, on both
+        # SQLite and Postgres -- so an aborted-stream "\n"-only turn must be
+        # skipped here, not in the WHERE clause.
         rn = func.row_number().over(
             partition_by=ChatMessage.session_id,
             order_by=(ChatMessage.created_at.desc(), ChatMessage.id.desc()),
         ).label("rn")
         sub = (
-            select(ChatMessage.session_id.label("sid"), ChatMessage.content.label("content"), rn)
-            .where(ChatMessage.session_id.in_(ids), func.trim(ChatMessage.content) != "")
+            select(
+                ChatMessage.session_id.label("sid"),
+                ChatMessage.content.label("content"),
+                rn,
+            )
+            .where(ChatMessage.session_id.in_(ids))
             .subquery()
         )
         for sid, content in db.execute(
-            select(sub.c.sid, sub.c.content).where(sub.c.rn == 1)
+            select(sub.c.sid, sub.c.content)
+            .where(sub.c.rn <= PREVIEW_CANDIDATES)
+            .order_by(sub.c.sid, sub.c.rn)
         ).all():
-            previews[sid] = (content or "").strip()[:PREVIEW_MAX]
+            if sid in previews:
+                continue  # already took the most-recent non-blank for this session
+            stripped = (content or "").strip()
+            if stripped:
+                previews[sid] = stripped[:PREVIEW_MAX]
 
     items: list[SessionListItem] = []
     for r in rows:
