@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from agent import prompts, tutor
@@ -23,6 +23,7 @@ from contracts import (
     SessionEndResponse,
     SessionEndSummary,
     SessionListItem,
+    SessionProgress,
     SessionResponse,
     SessionUpdateRequest,
     ToolCallRecord,
@@ -72,6 +73,74 @@ def _to_response(db: Session, row: SessionModel) -> SessionResponse:
         ingestion_status=_latest_ingestion_status(db, row.id),
         pinned=row.pinned,
     )
+
+
+PREVIEW_MAX = 120
+
+
+def _enrich_list_items(db: Session, rows: list[SessionModel]) -> list[SessionListItem]:
+    """Build SessionListItems with count, last-activity, progress, and preview.
+
+    Three set-based queries total regardless of how many sessions are passed:
+    (1) the session rows (already fetched by the caller), (2) a grouped
+    count + max(created_at), (3) a window-function latest-non-empty message.
+    Progress is parsed from each row's topic_profile_json (no query).
+    """
+    ids = [r.id for r in rows]
+    counts: dict[str, int] = {}
+    last_act: dict[str, datetime] = {}
+    previews: dict[str, str] = {}
+    if ids:
+        agg = db.execute(
+            select(
+                ChatMessage.session_id,
+                func.count().label("c"),
+                func.max(ChatMessage.created_at).label("la"),
+            )
+            .where(ChatMessage.session_id.in_(ids))
+            .group_by(ChatMessage.session_id)
+        ).all()
+        for sid, c, la in agg:
+            counts[sid] = c
+            last_act[sid] = la if not isinstance(la, str) else datetime.fromisoformat(la)
+        # Latest non-empty message per session via window function (portable).
+        rn = func.row_number().over(
+            partition_by=ChatMessage.session_id,
+            order_by=(ChatMessage.created_at.desc(), ChatMessage.id.desc()),
+        ).label("rn")
+        sub = (
+            select(ChatMessage.session_id.label("sid"), ChatMessage.content.label("content"), rn)
+            .where(ChatMessage.session_id.in_(ids), func.trim(ChatMessage.content) != "")
+            .subquery()
+        )
+        for sid, content in db.execute(
+            select(sub.c.sid, sub.c.content).where(sub.c.rn == 1)
+        ).all():
+            previews[sid] = (content or "").strip()[:PREVIEW_MAX]
+
+    items: list[SessionListItem] = []
+    for r in rows:
+        try:
+            prof = json.loads(r.topic_profile_json or "{}")
+        except (ValueError, TypeError):
+            prof = {}
+        items.append(
+            SessionListItem(
+                id=r.id,
+                topic=r.topic,
+                created_at=_aware_utc(r.created_at),
+                ended_at=_aware_utc(r.ended_at),
+                pinned=r.pinned,
+                message_count=counts.get(r.id, 0),
+                last_activity_at=_aware_utc(last_act.get(r.id)),
+                last_message_preview=previews.get(r.id),
+                progress=SessionProgress(
+                    focus_target_gap=prof.get("focus_target_gap"),
+                    mastered_count=len(prof.get("mastered_concepts") or []),
+                ),
+            )
+        )
+    return items
 
 
 @router.post(
@@ -131,16 +200,7 @@ def list_sessions(
         .where(SessionModel.user_id == user_id)
         .order_by(SessionModel.created_at.desc())
     ).scalars().all()
-    return [
-        SessionListItem(
-            id=r.id,
-            topic=r.topic,
-            created_at=_aware_utc(r.created_at),
-            ended_at=_aware_utc(r.ended_at),
-            pinned=r.pinned,
-        )
-        for r in rows
-    ]
+    return _enrich_list_items(db, rows)
 
 
 def _load_messages(db: Session, session_id: str, open_message_id: int | None = None) -> list[Message]:

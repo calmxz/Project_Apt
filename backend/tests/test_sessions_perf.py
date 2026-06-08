@@ -1,5 +1,6 @@
 import json
 from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import event as _sa_event
@@ -70,6 +71,46 @@ def _seed_asking_session(db, sid, n_asking, items_per=3):
             db.add(LearningEvent(session_id=sid, gap_tested=gap,
                                 question=f"q{a}-{i}", correct=True))
     db.commit()
+
+
+def test_list_sessions_enriched_fields(client, db_session, seeded_user):
+    base = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    prof = {"focus_target_gap": "ATP yield", "mastered_concepts": ["a", "b", "c"],
+            "confirmed_gaps": [], "knowledge_level": None, "last_session_summary": None}
+    db_session.add(SessionModel(id="s_rich", user_id=USER_ID, topic="Glycolysis",
+                               topic_profile_json=json.dumps(prof)))
+    db_session.add(ChatMessage(session_id="s_rich", role="user", content="hi",
+                              created_at=base))
+    db_session.add(ChatMessage(session_id="s_rich", role="assistant",
+                              content="glycolysis nets 2 ATP per glucose",
+                              created_at=base + timedelta(minutes=1)))
+    # trailing empty assistant turn (cancelled stream) must be skipped by preview
+    db_session.add(ChatMessage(session_id="s_rich", role="assistant", content="   ",
+                              created_at=base + timedelta(minutes=2)))
+    db_session.commit()
+
+    r = client.get(f"/api/sessions?user_id={USER_ID}")
+    assert r.status_code == 200, r.text
+    item = next(s for s in r.json() if s["id"] == "s_rich")
+    assert item["message_count"] == 3
+    assert item["last_message_preview"] == "glycolysis nets 2 ATP per glucose"
+    assert item["progress"]["focus_target_gap"] == "ATP yield"
+    assert item["progress"]["mastered_count"] == 3
+    assert item["last_activity_at"] is not None
+
+
+def test_list_sessions_query_count_constant(client, db_session, seeded_user):
+    for n in range(1, 6):
+        sid = f"s_count_{n}"
+        db_session.add(SessionModel(id=sid, user_id=USER_ID, topic=f"t{n}",
+                                   topic_profile_json="{}"))
+        db_session.add(ChatMessage(session_id=sid, role="user", content="x"))
+    db_session.commit()
+    with count_queries(db_session) as q:
+        r = client.get(f"/api/sessions?user_id={USER_ID}")
+    assert r.status_code == 200, r.text
+    # Enrichment must be set-based: a small constant, not one query per session.
+    assert q["n"] <= 6, f"list endpoint not set-based: {q['n']} queries"
 
 
 def test_get_session_detail_is_not_n_plus_one(client, db_session, seeded_user):
