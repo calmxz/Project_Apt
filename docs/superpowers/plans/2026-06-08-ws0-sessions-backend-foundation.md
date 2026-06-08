@@ -26,8 +26,7 @@
 - `backend/routes/sessions.py` — `_load_messages` preloads events once; add `_enrich_list_items`; enrich `list_sessions`; add `list_session_library` (declared before `get_session`).
 - `docs/api/openapi.yaml` — add `SessionProgress`, `SessionLibraryPage`; enrich `SessionListItem`; add `/api/sessions/library` path.
 - `backend/contracts/models.py` — **generated** (do not hand-edit; commit the regen output).
-- `backend/tests/conftest.py` — add a portable `count_queries` context manager.
-- `backend/tests/test_sessions_perf.py` — **create**. N+1 + enrichment + library tests.
+- `backend/tests/test_sessions_perf.py` — **create**. N+1 + enrichment + library tests. Defines its own portable `count_queries` context manager at the top (kept in this file, not conftest, to avoid any `tests.conftest` import resolution risk).
 - `backend/scripts/backfill_check_batch.py` — **create** (Task 6, optional).
 
 ---
@@ -168,12 +167,11 @@ git commit -m "perf(db): add session_created + learning_events session indexes"
 **Files:**
 - Modify: `backend/services/check_question_service.py` (`load_check_batch`, `reconstruct_check_batch`; add `load_session_learning_events`)
 - Modify: `backend/routes/sessions.py` (`_load_messages` preloads events once)
-- Modify: `backend/tests/conftest.py` (add `count_queries`)
-- Test: `backend/tests/test_sessions_perf.py`
+- Test: `backend/tests/test_sessions_perf.py` (add `count_queries` + N+1 test)
 
-- [ ] **Step 1: Add the query-count helper to conftest**
+- [ ] **Step 1: Add the query-count helper to the test file**
 
-In `backend/tests/conftest.py`, add at module level (after the imports):
+In `backend/tests/test_sessions_perf.py`, add at the top (after the existing imports from Task 1). Keeping it here — rather than in `conftest.py` — avoids relying on `tests.conftest` being importable as a module:
 
 ```python
 from contextlib import contextmanager
@@ -212,7 +210,6 @@ import json
 
 from contracts import TopicProfile
 from db.models import ChatMessage, LearningEvent, Session as SessionModel, User
-from tests.conftest import count_queries
 
 USER_ID = "u1"
 
@@ -428,7 +425,7 @@ Expected: PASS (N+1 test green; no regressions in existing detail tests).
 - [ ] **Step 8: Commit**
 
 ```bash
-git add backend/services/check_question_service.py backend/routes/sessions.py backend/tests/conftest.py backend/tests/test_sessions_perf.py
+git add backend/services/check_question_service.py backend/routes/sessions.py backend/tests/test_sessions_perf.py
 git commit -m "perf(sessions): batch-load learning events, kill detail N+1"
 ```
 
@@ -735,6 +732,8 @@ def list_sessions(
 Run: `pytest tests/test_sessions_perf.py -v`
 Expected: PASS (enriched fields + constant query count).
 
+> Note (dialect sanity): `func.max`/`func.coalesce` are `ReturnTypeFromArgs`, so SQLAlchemy carries the `DateTime` result processor and `last_act.get(r.id)` is a `datetime` (not a raw ISO string) on both SQLite and Postgres — `_aware_utc` works as-is. If `test_list_sessions_enriched_fields` 500s on the `last_activity_at is not None` line, the value came back as a string; wrap it: `datetime.fromisoformat(v) if isinstance(v, str) else v` before `_aware_utc`. This is the only place to watch.
+
 - [ ] **Step 7: Run the existing session route tests (no regressions)**
 
 Run: `pytest tests/test_sessions_route.py -v`
@@ -996,5 +995,11 @@ git commit -m "chore(sessions): idempotent check_batch_json backfill script"
 **Placeholder scan:** no TBD/TODO; every code step shows complete code. ✔
 
 **Type consistency:** `_enrich_list_items` returns `list[SessionListItem]`; used by both `list_sessions` and `list_session_library`. `SessionProgress(focus_target_gap, mastered_count)` matches the contract added in Task 3. `load_check_batch(db, msg, events)` / `reconstruct_check_batch(db, msg, events)` / `load_session_learning_events(db, session_id)` signatures consistent across Tasks 2 and 6. ✔
+
+**Existing-test impact (checked):** the four new `SessionListItem` fields are additive and optional. All list-response assertions in `test_sessions_route.py` are field-access (`row["id"]`, `s_list_item["pinned"]`, `[row["id"] for row in rows]`) — none assert an exact key set or dict-equality — so they keep passing. No update step required; Task 4 Step 7 re-runs them as a guard.
+
+**Forward note for WS1 (not in scope here):** the progress/preview derivation in `_enrich_list_items` is also what `recent_topics` needs, but that list is built in `profile_service.aggregate_for_user`, not the route. When WS1 lands, extract the per-row derivation (count/last-activity/progress/preview) into a shared helper rather than duplicating it into `profile_service`.
+
+**Migration execution note:** tests use `create_all`, so the Alembic `0008` migration is never exercised by pytest — its first real run is `alembic upgrade head` on live Supabase. It is plain `create_index` (additive, low risk).
 
 **Open items deferred to execution (non-blocking):** Flag 1 backfill is Task 6, gated on a row count; library default sort is `last_activity` (spec default).
