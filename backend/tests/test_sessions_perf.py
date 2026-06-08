@@ -192,3 +192,20 @@ def test_library_route_not_shadowed_by_session_id(client, db_session, seeded_use
     r = client.get(f"/api/sessions/library?user_id={USER_ID}")
     assert r.status_code == 200, r.text
     assert "items" in r.json()
+
+
+@pytest.mark.parametrize("qs", ["limit=0", "limit=101", "offset=-1", "status=garbage", "sort=garbage"])
+def test_library_rejects_invalid_params(client, db_session, seeded_user, qs):
+    r = client.get(f"/api/sessions/library?{qs}&user_id={USER_ID}")
+    assert r.status_code == 422, f"expected 422 for {qs}, got {r.status_code}: {r.text}"
+
+
+def test_library_sort_topic_is_stable_by_id(client, db_session, seeded_user):
+    # All same topic so ONLY the id tiebreaker determines order. Insert in an
+    # order that differs from id-sorted order to prove the tiebreaker is applied.
+    for sid in ["s_z", "s_a", "s_m"]:
+        _seed_simple(db_session, sid, "SameTopic")
+    r = client.get(f"/api/sessions/library?sort=topic&user_id={USER_ID}")
+    assert r.status_code == 200, r.text
+    ids = [i["id"] for i in r.json()["items"]]
+    assert ids == ["s_a", "s_m", "s_z"], ids

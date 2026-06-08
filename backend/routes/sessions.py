@@ -4,7 +4,8 @@ import logging
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from typing import Literal
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -281,13 +282,14 @@ def _build_end_summary(db: Session, session_id: str, text: str) -> SessionEndSum
     return SessionEndSummary(kind="summary", text=cleaned)
 
 
+# NOTE: must be declared BEFORE GET /sessions/{session_id} or it is captured as a session lookup.
 @router.get("/sessions/library", response_model=SessionLibraryPage)
 def list_session_library(
-    status: str = "all",
+    status: Literal["all", "active", "ended"] = "all",
     q: str | None = None,
-    sort: str = "last_activity",
-    limit: int = 20,
-    offset: int = 0,
+    sort: Literal["last_activity", "created", "topic"] = "last_activity",
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     user_id: str = Depends(current_user_id),
     db: Session = Depends(get_db),
 ):
@@ -304,9 +306,9 @@ def list_session_library(
     ).scalar_one()
 
     if sort == "created":
-        ordered = base.order_by(SessionModel.created_at.desc())
+        ordered = base.order_by(SessionModel.created_at.desc(), SessionModel.id.desc())
     elif sort == "topic":
-        ordered = base.order_by(SessionModel.topic.asc())
+        ordered = base.order_by(SessionModel.topic.asc(), SessionModel.id.asc())
     else:  # last_activity: order by max(message.created_at), falling back to created_at
         last_act_sub = (
             select(
@@ -318,7 +320,7 @@ def list_session_library(
         )
         ordered = (
             base.outerjoin(last_act_sub, last_act_sub.c.sid == SessionModel.id)
-            .order_by(func.coalesce(last_act_sub.c.la, SessionModel.created_at).desc())
+            .order_by(func.coalesce(last_act_sub.c.la, SessionModel.created_at).desc(), SessionModel.id.desc())
         )
 
     rows = db.execute(ordered.limit(limit).offset(offset)).scalars().all()
