@@ -1,0 +1,275 @@
+# Sessions UX + Performance — Design
+
+Date: 2026-06-08
+Status: Draft (awaiting user review)
+Branch: `feat/sessions-ux-perf`
+
+## Problem
+
+Three observed issues on the Sessions home, the sidebar, and session loading, plus
+one root-cause performance defect found while investigating:
+
+1. **Every recent-activity card shows the same line** — "In progress — pick up where
+   you left off." The home feed renders `recent_topics` from `GET /profile/aggregate`,
+   whose `last_session_summary` is only written **when a session ends**
+   (`summary_service.py:71`). Every active session therefore has a null summary and
+   falls back to identical copy. Not a copy bug — a data-availability gap.
+
+2. **The home feed is capped at 5 with no way to see more.** `recent_topics` is
+   hardcoded to the last five sessions (`profile_service.py:230`, `sessions[-5:]`).
+   The sidebar holds the full list, but there is no dedicated place to browse, search,
+   or filter all sessions. The prior 2026-05-29 design intentionally locked the 5-cap
+   and "no pagination" — this spec supersedes that decision for the home surface.
+
+3. **The sidebar rows are thin** — topic + relative time + a status dot. No sense of
+   where a session stands, weak current-session emphasis, and ended sessions auto-collapse
+   past five rather than being a clear, switchable section.
+
+4. **Selecting a session is slow — ~1.8–2.5s, measured live and reproducibly.**
+   `GET /sessions/{id}` returns a tiny payload (19 messages, 16 KB) yet takes ~2s every
+   time (not cold-start). Root cause confirmed in code: `_load_messages()` eager-loads
+   all messages and calls `reconstruct_check_batch()` per check-message, issuing **N+1
+   `LearningEvent` queries** against the remote Supabase DB, with **no index** on
+   `chat_messages(session_id, created_at)` or the `learning_events` composite. The
+   frontend compounds this: **no caching** (every revisit refetches), **no skeleton**,
+   **no prefetch**, and the home page fires `GET /sessions` **twice** (sidebar + HomeView).
+
+## Goals
+
+- Cards (home + sidebar) describe each session distinctly and usefully.
+- A full Sessions library to browse/search/filter beyond the home shelf's 5.
+- A cleaner, richer, easier-to-scan sidebar with a clear active/ended split.
+- Session selection that is fast on the server **and** feels instant in the UI.
+
+## Non-goals
+
+- No change to chat/streaming, the check-question flow, or the tutor agent.
+- No redesign of the session *content* view beyond load/skeleton behavior.
+- No infinite scroll on the home shelf (the 5-cap shelf stays; "View all" is the route).
+
+## Scale & data reality (measured 2026-06-08)
+
+Real account has 6 sessions. `topic_profile` signals are **sparse and mixed**:
+
+| Session | `focus_target_gap` | `mastered` | last-msg preview |
+|---|---|---|---|
+| Glycolysis | set | 3 | rich |
+| Glycolysis pathway | — | 0 | empty (cancelled turn) |
+| Mitosis | — | 1 | rich |
+
+Implication: no single signal is reliably present, so the card description must **layer
+fallbacks**. The last-message preview is the most consistently distinct fallback and
+therefore earns its payload cost. Empty previews (cancelled/empty assistant turns) exist
+and must be skipped.
+
+## Architecture: one initiative, four workstreams, phased
+
+Everything hangs off one shared change — enriching session metadata — so the cards,
+sidebar, and library all read the same payload. **WS0 ships first** (contract + migration
++ perf); WS1/WS2/WS3 follow as **separate plans and PRs** (matches this repo's
+single-feature-PR history). WS3's per-id cache is an **optional tail**, gated on whether
+the earlier perceived-speed wins already suffice.
+
+```
+WS0  Backend foundation (data + perf)   <- contract change + Alembic migration; ships first
+       |
+       +--> WS1  Home cards + /sessions library
+       +--> WS2  Sidebar redesign
+       +--> WS3  Frontend load speed (safe trio first; SWR cache optional)
+```
+
+---
+
+## WS0 — Backend foundation (data + performance)
+
+Contract-first per repo discipline: edit `docs/api/openapi.yaml` →
+`python backend/scripts/gen_contracts.py` → Alembic migration. CI enforces zero contract
+drift.
+
+### Payload enrichment
+
+Add to **`SessionListItem`** (the list endpoint, consumed by sidebar + home + library):
+
+- `message_count: int` — `COUNT(chat_messages)` per session.
+- `last_activity_at: datetime | null` — `MAX(chat_messages.created_at)` per session
+  (null when a session has no messages). Falls back to `created_at` for display.
+- `progress: { focus_target_gap: str | null, mastered_count: int }` — derived from the
+  already-stored `topic_profile_json` column (deserialize per row; no extra query).
+- `last_message_preview: str | null` — trimmed content of the latest **non-empty**
+  message, capped server-side at 120 chars; null when none.
+
+All four must be produced with **set-based queries**, never per-session, so the
+unbounded list endpoint does not re-introduce N+1:
+
+- One `GROUP BY session_id` aggregate for `message_count` + `last_activity_at`.
+- One `DISTINCT ON (session_id) ... ORDER BY created_at DESC` (Postgres) for the latest
+  message content → preview. Filter out empty content in SQL where practical, else in
+  Python.
+- `progress` is a column read + JSON parse already happening for other paths.
+
+At current scale (≤ tens of sessions, 120-char previews) the added list payload is a few
+KB. If a user's session count grows large, the library route (below) is paginated; the
+home shelf only needs the top 5 and the sidebar already renders all — revisit pagination
+of the list endpoint only if profiling shows the enriched list itself regressing.
+
+### Kill the N+1 on detail (`GET /sessions/{id}`)
+
+- **Indexes** (Alembic migration): `chat_messages(session_id, created_at)` and a
+  composite on `learning_events(session_id, gap_tested, question)`.
+- **Batch-load check states**: replace per-message `load_check_batch()` →
+  `reconstruct_check_batch()` with a single set-based load of the relevant
+  `learning_events`/`check_batch_json` for the session, joined in memory.
+- **Backfill `check_batch_json`** for legacy messages (migration data step or one-off
+  script) so the live reconstruction path is never hit after deploy.
+- Target: `GET /sessions/{id}` from ~2s to a few hundred ms.
+
+### Library endpoint
+
+Add a **paginated** variant for the `/sessions` library route (WS1): query params
+`limit`, `offset` (or cursor), `status=active|ended|all`, `q` (topic search), `sort`.
+Returns enriched `SessionListItem`s + a total/next-cursor. Keep the existing unpaginated
+`GET /sessions` for the sidebar (full list) unchanged in shape aside from the new fields.
+
+### WS0 tests
+
+- List endpoint returns the four new fields; preview skips empty content; counts/last
+  activity correct.
+- Detail endpoint issues a bounded number of queries regardless of message count
+  (assert no N+1 — e.g. query-count probe).
+- Migration up/down; backfill idempotent.
+- Contract drift check passes (codegen committed).
+
+---
+
+## WS1 — Home cards + `/sessions` library
+
+### Card description (home recent-activity + reused in library/sidebar)
+
+Layered precedence for the **primary description line**:
+
+- **Active sessions:**
+  1. `progress.focus_target_gap` set → `Focus: <gap>`
+  2. else `last_message_preview` non-empty → the preview text
+  3. else `progress.mastered_count > 0` → `<n> concept(s) mastered`
+  4. else → fall through to meta only
+- **Ended sessions:** `last_session_summary` (clamped 2 lines); else `Completed`.
+
+Secondary **meta line** (always, subtle): `<message_count> messages · last active <rel>`
+using `last_activity_at`.
+
+This respects the chosen "focus gap first" while using preview as the strong fallback so
+sparse-profile sessions are still distinct (resolves Problem 1 for active sessions).
+
+### Home shelf
+
+- Keep the calm **5-item** shelf (still sourced from `recent_topics`, now enriched the
+  same way as the list — `recent_topics` entries gain the same fields).
+- Add a **`View all sessions →`** affordance below the shelf linking to `/sessions`.
+
+### `/sessions` library route (full library view)
+
+- New route + view. Rich cards (same description logic), **search** by topic,
+  **filter** Active | Ended | All, **sort** (last active / created / name), **pagination**
+  via the WS0 library endpoint.
+- Empty/loading/error states consistent with existing views.
+
+### WS1 tests
+
+- Card precedence unit tests across all fallback tiers incl. empty preview and ended.
+- Library: search/filter/sort/pagination behavior; "View all" navigation.
+
+---
+
+## WS2 — Sidebar redesign
+
+Builds on the 2026-05-30 sidebar (date groups, pins, search, rename/end/resume). Your
+three asks:
+
+- **Richer rows:** under the topic, a one-line description (same focus→preview→mastery
+  layering, single line, ellipsised) + `last active <rel>`. Strong **current-session
+  highlight**.
+- **Tighter visual hierarchy:** density/spacing pass; clearer separation of group labels
+  from rows; status conveyed without relying solely on the small dot.
+- **Active/ended split:** replace the "auto-collapse ended past 5" behavior with an
+  explicit **segmented toggle (Active | Ended)**. Pinned mini-group stays at the top of
+  Active.
+
+**Behavior decision — time semantics:** sidebar rows show and sort by `last_activity_at`
+(falling back to `created_at`), and the Today/This-week/Older buckets are computed from
+`last_activity_at`. Effect: a session you used today moves to **Today** even if created
+last week. This is an intentional change from the current created-at bucketing.
+
+### WS2 tests
+
+- Rows render description + last-active; current session highlighted.
+- Active/Ended toggle filters correctly; pinned stays under Active.
+- Bucketing by last activity (a recently-touched old session appears under Today).
+
+---
+
+## WS3 — Frontend load speed
+
+Two tiers. The **safe trio ships first**; the SWR cache is an explicit, **cuttable** tail.
+
+### Safe trio (low regression risk)
+
+- **Optimistic render:** on navigate, immediately paint the header from the
+  already-known list row (topic, status) + a **message skeleton**, then swap when detail
+  arrives. **Interaction with PR #72's `notFound`:** optimistic paint → if the fetch
+  fails/404s, clear the optimistic header and show the existing not-found state (do not
+  leave a header for a deleted/stale session).
+- **Hover/focus prefetch:** prefetch `GET /sessions/{id}` on sidebar row hover/focus
+  (and home card hover) so the detail is often warm before the click.
+- **De-dupe** the double `GET /sessions` on home load (single shared fetch between
+  sidebar + HomeView, e.g. via the store rather than two independent `onMounted` calls).
+
+### Optional tail — per-id SWR cache (only if still needed)
+
+A `Map<sessionId, detail>` in the store, **stale-while-revalidate**: serve cached detail
+instantly, refetch in background.
+
+**Why optional / sequenced last:** this component just shipped a switch-reload bug
+(PR #72, the reason this branch exists). The store holds single live refs
+(`messages`, `pendingCheck`, `currentSession`) mutated by streaming deltas, `answerCheck`,
+`endSession`, `reopenSession`, `renameSession`. A cache must define snapshot-vs-live
+semantics and invalidation on **each** of those mutations, or it regresses to stale/partial
+content (switch away mid-stream → back → stale; end in sidebar → cached detail still
+"active"). If WS0 (2s → ~200ms) + the safe trio already make switching feel instant, **do
+not build the cache.** If built: entries are snapshots, invalidated on any mutation to that
+session id, never used while a stream is in flight for that id.
+
+### WS3 tests
+
+- Optimistic header shows then swaps; failure path clears it and shows not-found.
+- Prefetch warms detail (asserted via fetch ordering/cache hit).
+- Home issues one `GET /sessions`, not two.
+- (If cache built) mutation invalidation: end/rename/stream each evict or update the entry.
+
+---
+
+## Phasing & PRs
+
+1. **WS0** — contract + migration + perf (+ library endpoint). Ships first; merge to `dev`.
+2. **WS1** — cards + `/sessions` library.
+3. **WS2** — sidebar redesign.
+4. **WS3** — safe trio; SWR cache only if measurement says it's still needed.
+
+Each workstream is its own implementation plan and PR.
+
+## Risks
+
+- **Live Alembic migration on Supabase** (indexes + optional backfill). Mitigation:
+  indexes are additive/non-locking-ish at this size; backfill idempotent; you have run
+  live upgrades before.
+- **Enriched list query cost** on the unbounded sidebar list. Mitigation: strictly
+  set-based queries; preview capped; profile after WS0.
+- **`last_activity_at` bucketing change** alters sidebar ordering. Mitigation: explicit,
+  documented, covered by tests; easy to revert to created-at if disliked.
+- **SWR cache lifecycle.** Mitigation: gated/optional, snapshot semantics, broad
+  invalidation, or simply not built.
+
+## Open questions
+
+- Backfill of `check_batch_json`: migration data-step vs standalone script — decide in the
+  WS0 plan based on row volume.
+- Library sort default (last active vs created) — default to **last active**.

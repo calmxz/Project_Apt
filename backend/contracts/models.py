@@ -273,6 +273,18 @@ class SessionResponse(BaseModel):
     pinned: bool | None = False
 
 
+class SessionProgress(BaseModel):
+    """
+    Lightweight learning-progress signal for a session card.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    focus_target_gap: str | None = None
+    mastered_count: int
+
+
 class SessionListItem(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -282,6 +294,10 @@ class SessionListItem(BaseModel):
     created_at: datetime
     ended_at: datetime | None = None
     pinned: bool | None = False
+    message_count: int | None = 0
+    last_activity_at: datetime | None = None
+    last_message_preview: str | None = None
+    progress: SessionProgress | None = None
 
 
 class Message(BaseModel):
@@ -319,6 +335,20 @@ class SessionDetail(BaseModel):
     pinned: bool | None = False
     pending_check: PendingCheck | None = None
     messages: list[Message]
+
+
+class SessionLibraryPage(BaseModel):
+    """
+    One page of the session library.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    items: list[SessionListItem]
+    total: int
+    limit: int
+    offset: int
 
 
 class SessionEndSummary(BaseModel):

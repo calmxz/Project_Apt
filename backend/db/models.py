@@ -3,7 +3,7 @@ from decimal import Decimal
 from uuid import uuid4
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from config import settings
@@ -53,6 +53,7 @@ class ChatMessage(Base):
             "status IN ('complete', 'cancelled', 'error')",
             name="chat_messages_status_check",
         ),
+        Index("ix_chat_messages_session_created", "session_id", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -82,6 +83,9 @@ class UsageCounter(Base):
 
 class LearningEvent(Base):
     __tablename__ = "learning_events"
+    __table_args__ = (
+        Index("ix_learning_events_session", "session_id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     session_id: Mapped[str] = mapped_column(ForeignKey("sessions.id"), nullable=False)

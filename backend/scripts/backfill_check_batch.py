@@ -1,0 +1,56 @@
+"""Backfill ChatMessage.check_batch_json for legacy asking-messages.
+
+Idempotent: only touches messages whose check_batch_json is NULL and that carry
+an ask_check_questions tool call. Reuses the live reconstruction logic so the
+persisted recap matches what the API would render. Safe to re-run.
+
+Run from repo root:  python backend/scripts/backfill_check_batch.py
+(or from backend/:   python scripts/backfill_check_batch.py)
+"""
+import json
+import sys
+from pathlib import Path
+
+# Make backend/ importable when invoked from repo root. The backend is an
+# editable install whose PEP 660 finder resolves packages (db, services) but
+# not loose top-level modules (config.py), so db/database.py's `from config`
+# fails without backend/ on sys.path. Mirrors scripts/eval_focus_clearing.py.
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+
+from sqlalchemy import select
+
+from db.database import SessionLocal
+from db.models import ChatMessage
+from services import check_question_service
+
+
+def main() -> int:
+    db = SessionLocal()
+    try:
+        rows = db.execute(
+            select(ChatMessage).where(ChatMessage.check_batch_json.is_(None))
+        ).scalars().all()
+        # Group by session so events load once per session, not per message.
+        by_session: dict[str, list[ChatMessage]] = {}
+        for m in rows:
+            by_session.setdefault(m.session_id, []).append(m)
+
+        updated = 0
+        for session_id, msgs in by_session.items():
+            events = check_question_service.load_session_learning_events(db, session_id)
+            for m in msgs:
+                batch = check_question_service.reconstruct_check_batch(db, m, events)
+                if batch is not None:
+                    m.check_batch_json = json.dumps(batch)
+                    updated += 1
+        db.commit()
+        print(f"backfilled {updated} message(s) across {len(by_session)} session(s)")
+        return 0
+    finally:
+        db.close()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

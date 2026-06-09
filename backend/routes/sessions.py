@@ -4,9 +4,10 @@ import logging
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from typing import Literal
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from agent import prompts, tutor
@@ -22,7 +23,9 @@ from contracts import (
     SessionDetail,
     SessionEndResponse,
     SessionEndSummary,
+    SessionLibraryPage,
     SessionListItem,
+    SessionProgress,
     SessionResponse,
     SessionUpdateRequest,
     ToolCallRecord,
@@ -72,6 +75,97 @@ def _to_response(db: Session, row: SessionModel) -> SessionResponse:
         ingestion_status=_latest_ingestion_status(db, row.id),
         pinned=row.pinned,
     )
+
+
+PREVIEW_MAX = 120
+# How many of a session's most-recent messages to scan for the preview. A
+# cancelled/aborted stream can leave a trailing whitespace-only turn; we skip
+# those in Python (SQL trim() is space-only on both SQLite and Postgres, so the
+# emptiness check cannot be pushed into the window filter portably). K bounds the
+# scan: if the K most-recent turns are all blank, the card simply shows no preview.
+PREVIEW_CANDIDATES = 5
+
+
+def _enrich_list_items(db: Session, rows: list[SessionModel]) -> list[SessionListItem]:
+    """Build SessionListItems with count, last-activity, progress, and preview.
+
+    Three set-based queries total regardless of how many sessions are passed:
+    (1) the session rows (already fetched by the caller), (2) a grouped
+    count + max(created_at), (3) a window-function latest-non-empty message
+    (top-K candidates per session, emptiness decided in Python).
+    Progress is parsed from each row's topic_profile_json (no query).
+    """
+    ids = [r.id for r in rows]
+    counts: dict[str, int] = {}
+    last_act: dict[str, datetime] = {}
+    previews: dict[str, str] = {}
+    if ids:
+        agg = db.execute(
+            select(
+                ChatMessage.session_id,
+                func.count().label("c"),
+                func.max(ChatMessage.created_at).label("la"),
+            )
+            .where(ChatMessage.session_id.in_(ids))
+            .group_by(ChatMessage.session_id)
+        ).all()
+        for sid, c, la in agg:
+            counts[sid] = c
+            # func.max() over a DateTime returns an ISO string on SQLite (not on
+            # Postgres); coerce so _aware_utc gets a real datetime either way.
+            last_act[sid] = la if not isinstance(la, str) else datetime.fromisoformat(la)
+        # Latest NON-EMPTY message per session. Rank all messages by recency in
+        # SQL (portable window function), then pick the first non-blank in Python
+        # because trim() in SQL strips only spaces, not tabs/newlines, on both
+        # SQLite and Postgres -- so an aborted-stream "\n"-only turn must be
+        # skipped here, not in the WHERE clause.
+        rn = func.row_number().over(
+            partition_by=ChatMessage.session_id,
+            order_by=(ChatMessage.created_at.desc(), ChatMessage.id.desc()),
+        ).label("rn")
+        sub = (
+            select(
+                ChatMessage.session_id.label("sid"),
+                ChatMessage.content.label("content"),
+                rn,
+            )
+            .where(ChatMessage.session_id.in_(ids))
+            .subquery()
+        )
+        for sid, content in db.execute(
+            select(sub.c.sid, sub.c.content)
+            .where(sub.c.rn <= PREVIEW_CANDIDATES)
+            .order_by(sub.c.sid, sub.c.rn)
+        ).all():
+            if sid in previews:
+                continue  # already took the most-recent non-blank for this session
+            stripped = (content or "").strip()
+            if stripped:
+                previews[sid] = stripped[:PREVIEW_MAX]
+
+    items: list[SessionListItem] = []
+    for r in rows:
+        try:
+            prof = json.loads(r.topic_profile_json or "{}")
+        except (ValueError, TypeError):
+            prof = {}
+        items.append(
+            SessionListItem(
+                id=r.id,
+                topic=r.topic,
+                created_at=_aware_utc(r.created_at),
+                ended_at=_aware_utc(r.ended_at),
+                pinned=r.pinned,
+                message_count=counts.get(r.id, 0),
+                last_activity_at=_aware_utc(last_act.get(r.id)),
+                last_message_preview=previews.get(r.id),
+                progress=SessionProgress(
+                    focus_target_gap=prof.get("focus_target_gap"),
+                    mastered_count=len(prof.get("mastered_concepts") or []),
+                ),
+            )
+        )
+    return items
 
 
 @router.post(
@@ -131,16 +225,7 @@ def list_sessions(
         .where(SessionModel.user_id == user_id)
         .order_by(SessionModel.created_at.desc())
     ).scalars().all()
-    return [
-        SessionListItem(
-            id=r.id,
-            topic=r.topic,
-            created_at=_aware_utc(r.created_at),
-            ended_at=_aware_utc(r.ended_at),
-            pinned=r.pinned,
-        )
-        for r in rows
-    ]
+    return _enrich_list_items(db, rows)
 
 
 def _load_messages(db: Session, session_id: str, open_message_id: int | None = None) -> list[Message]:
@@ -149,6 +234,16 @@ def _load_messages(db: Session, session_id: str, open_message_id: int | None = N
         .where(ChatMessage.session_id == session_id)
         .order_by(ChatMessage.created_at.asc(), ChatMessage.id.asc())
     ).scalars().all()
+    # Preload LearningEvents once iff some message may need reconstruction
+    # (no persisted check_batch_json and not the open message). Avoids the
+    # former per-item N+1 entirely; skipped when every batch is persisted.
+    needs_events = any(
+        m.check_batch_json is None and m.id != open_message_id for m in rows
+    )
+    events = (
+        check_question_service.load_session_learning_events(db, session_id)
+        if needs_events else []
+    )
     out: list[Message] = []
     for m in rows:
         try:
@@ -165,11 +260,7 @@ def _load_messages(db: Session, session_id: str, open_message_id: int | None = N
         if m.id == open_message_id:
             check_batch = None
         else:
-            # Note: messages lacking a persisted check_batch_json trigger
-            # reconstruct_check_batch -> one LearningEvent SELECT per item (N+1).
-            # Bounded to legacy asking-messages; self-heals as batches resolve and
-            # write_check_batch stamps the column. Plain messages short-circuit (no query).
-            check_batch = check_question_service.load_check_batch(db, m)
+            check_batch = check_question_service.load_check_batch(db, m, events)
         out.append(
             Message(
                 id=m.id,
@@ -189,6 +280,56 @@ def _build_end_summary(db: Session, session_id: str, text: str) -> SessionEndSum
     if not cleaned or cleaned == "no exchanges recorded":
         return SessionEndSummary(kind="no_exchanges", text=NO_EXCHANGES_TEXT)
     return SessionEndSummary(kind="summary", text=cleaned)
+
+
+# NOTE: must be declared BEFORE GET /sessions/{session_id} or it is captured as a session lookup.
+@router.get("/sessions/library", response_model=SessionLibraryPage)
+def list_session_library(
+    status: Literal["all", "active", "ended"] = "all",
+    q: str | None = None,
+    sort: Literal["last_activity", "created", "topic"] = "last_activity",
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    user_id: str = Depends(current_user_id),
+    db: Session = Depends(get_db),
+):
+    base = select(SessionModel).where(SessionModel.user_id == user_id)
+    if status == "active":
+        base = base.where(SessionModel.ended_at.is_(None))
+    elif status == "ended":
+        base = base.where(SessionModel.ended_at.is_not(None))
+    if q:
+        base = base.where(SessionModel.topic.ilike(f"%{q}%"))
+
+    total = db.execute(
+        select(func.count()).select_from(base.subquery())
+    ).scalar_one()
+
+    if sort == "created":
+        ordered = base.order_by(SessionModel.created_at.desc(), SessionModel.id.desc())
+    elif sort == "topic":
+        ordered = base.order_by(SessionModel.topic.asc(), SessionModel.id.asc())
+    else:  # last_activity: order by max(message.created_at), falling back to created_at
+        last_act_sub = (
+            select(
+                ChatMessage.session_id.label("sid"),
+                func.max(ChatMessage.created_at).label("la"),
+            )
+            .group_by(ChatMessage.session_id)
+            .subquery()
+        )
+        ordered = (
+            base.outerjoin(last_act_sub, last_act_sub.c.sid == SessionModel.id)
+            .order_by(func.coalesce(last_act_sub.c.la, SessionModel.created_at).desc(), SessionModel.id.desc())
+        )
+
+    rows = db.execute(ordered.limit(limit).offset(offset)).scalars().all()
+    return SessionLibraryPage(
+        items=_enrich_list_items(db, rows),
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get("/sessions/{session_id}", response_model=SessionDetail)

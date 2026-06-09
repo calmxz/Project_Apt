@@ -103,6 +103,40 @@ paths:
                 items:
                   $ref: "#/components/schemas/SessionListItem"
 
+  /api/sessions/library:
+    get:
+      tags: [sessions]
+      summary: Paginated, filterable, searchable session library.
+      operationId: listSessionLibrary
+      parameters:
+        - in: query
+          name: status
+          required: false
+          schema: { type: string, enum: [active, ended, all], default: all }
+        - in: query
+          name: q
+          required: false
+          schema: { type: [string, "null"], default: null }
+        - in: query
+          name: sort
+          required: false
+          schema: { type: string, enum: [last_activity, created, topic], default: last_activity }
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer, default: 20, minimum: 1, maximum: 100 }
+        - in: query
+          name: offset
+          required: false
+          schema: { type: integer, default: 0, minimum: 0 }
+      responses:
+        "200":
+          description: A page of sessions.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionLibraryPage"
+
   /api/sessions/{session_id}:
     get:
       tags: [sessions]
@@ -629,16 +663,33 @@ components:
           default: null
         pinned:            { type: boolean, default: false }
 
+    SessionProgress:
+      type: object
+      additionalProperties: false
+      required: [mastered_count]
+      description: Lightweight learning-progress signal for a session card.
+      properties:
+        focus_target_gap: { type: [string, "null"], default: null }
+        mastered_count:   { type: integer, default: 0 }
+
     SessionListItem:
       type: object
       additionalProperties: false
       required: [id, topic, created_at]
       properties:
-        id:         { type: string }
-        topic:      { type: string }
-        created_at: { type: string, format: date-time }
-        ended_at:   { type: [string, "null"], format: date-time, default: null }
-        pinned:     { type: boolean, default: false }
+        id:                   { type: string }
+        topic:                { type: string }
+        created_at:           { type: string, format: date-time }
+        ended_at:             { type: [string, "null"], format: date-time, default: null }
+        pinned:               { type: boolean, default: false }
+        message_count:        { type: integer, default: 0 }
+        last_activity_at:     { type: [string, "null"], format: date-time, default: null }
+        last_message_preview: { type: [string, "null"], default: null }
+        progress:
+          oneOf:
+            - $ref: "#/components/schemas/SessionProgress"
+            - type: "null"
+          default: null
 
     Message:
       type: object
@@ -690,6 +741,19 @@ components:
         messages:
           type: array
           items: { $ref: "#/components/schemas/Message" }
+
+    SessionLibraryPage:
+      type: object
+      additionalProperties: false
+      required: [items, total, limit, offset]
+      description: One page of the session library.
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/SessionListItem" }
+        total:  { type: integer }
+        limit:  { type: integer }
+        offset: { type: integer }
 
     SessionEndSummaryKind:
       type: string
