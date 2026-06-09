@@ -4,12 +4,10 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import event as _sa_event
-from sqlalchemy import inspect
 
-from contracts import TopicProfile, SessionLibraryPage  # noqa: F401  (ensures schema exists)
+from contracts import TopicProfile  # noqa: F401  (ensures schema exists)
 from db.database import Base
-from db.models import ChatMessage, LearningEvent, Session as SessionModel, User
-import db.models  # noqa: F401  (register models on Base.metadata)
+from db.models import ChatMessage, LearningEvent, Session as SessionModel, User  # noqa: F401  (registers models on Base.metadata)
 
 
 @contextmanager
