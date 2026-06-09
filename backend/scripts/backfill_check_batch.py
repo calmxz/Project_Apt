@@ -4,9 +4,20 @@ Idempotent: only touches messages whose check_batch_json is NULL and that carry
 an ask_check_questions tool call. Reuses the live reconstruction logic so the
 persisted recap matches what the API would render. Safe to re-run.
 
-Run from backend/:  python scripts/backfill_check_batch.py
+Run from repo root:  python backend/scripts/backfill_check_batch.py
+(or from backend/:   python scripts/backfill_check_batch.py)
 """
 import json
+import sys
+from pathlib import Path
+
+# Make backend/ importable when invoked from repo root. The backend is an
+# editable install whose PEP 660 finder resolves packages (db, services) but
+# not loose top-level modules (config.py), so db/database.py's `from config`
+# fails without backend/ on sys.path. Mirrors scripts/eval_focus_clearing.py.
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
 
 from sqlalchemy import select
 
