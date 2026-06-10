@@ -66,7 +66,7 @@ describe('Sidebar.vue — session list rendering', () => {
     expect(wrapper.find('[data-testid="sidebar-row-a2"]').exists()).toBe(true)
   })
 
-  it('renders Ended section when ended sessions exist', async () => {
+  it('shows an Ended tab with a count when ended sessions exist', async () => {
     const store = useSessionStore()
     store.sessions = [
       { id: 'a1', topic: 'Big-O', created_at: '2026-05-20T10:00:00Z', ended_at: null },
@@ -74,24 +74,43 @@ describe('Sidebar.vue — session list rendering', () => {
     ]
     wrapper = mount(Sidebar)
     await flushPromises()
-    expect(wrapper.find('[data-testid="sidebar-section-ended"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="sidebar-row-e1"]').exists()).toBe(true)
+    // Default view is Active: the ended row is behind the Ended tab, not visible yet.
+    expect(wrapper.find('[data-testid="sidebar-row-e1"]').exists()).toBe(false)
+    const endedTab = wrapper.find('[data-testid="sidebar-status-ended"]')
+    expect(endedTab.exists()).toBe(true)
+    expect(endedTab.text()).toContain('1')
   })
 
-  it('Ended section toggles visibility', async () => {
+  it('Active/Ended toggle switches which sessions are shown', async () => {
     const store = useSessionStore()
     store.sessions = [
-      { id: 'e1', topic: 'X', ended_at: '2026-05-18T10:00:00Z' },
+      { id: 'a1', topic: 'Active one', created_at: '2026-05-20T10:00:00Z', ended_at: null },
+      { id: 'e1', topic: 'Ended one', created_at: '2026-05-15T10:00:00Z', ended_at: '2026-05-18T10:00:00Z' },
     ]
     wrapper = mount(Sidebar)
     await flushPromises()
-    const toggle = wrapper.find('[data-testid="sidebar-ended-toggle"]')
-    const list = () => wrapper.find('#sb-ended-list').element
-    expect(toggle.attributes('aria-expanded')).toBe('true')
-    expect(list().style.display).not.toBe('none')
-    await toggle.trigger('click')
-    expect(toggle.attributes('aria-expanded')).toBe('false')
-    expect(list().style.display).toBe('none')
+    // Active view by default.
+    expect(wrapper.find('[data-testid="sidebar-status-active"]').attributes('aria-pressed')).toBe('true')
+    expect(wrapper.find('[data-testid="sidebar-row-a1"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sidebar-row-e1"]').exists()).toBe(false)
+    // Switch to Ended.
+    await wrapper.find('[data-testid="sidebar-status-ended"]').trigger('click')
+    expect(wrapper.find('[data-testid="sidebar-status-ended"]').attributes('aria-pressed')).toBe('true')
+    expect(wrapper.find('[data-testid="sidebar-row-e1"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sidebar-row-a1"]').exists()).toBe(false)
+  })
+
+  it('keeps the pinned mini-group under the Active view only', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'p1', topic: 'Pinned', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: true },
+      { id: 'e1', topic: 'Ended', created_at: '2026-05-15T10:00:00Z', ended_at: '2026-05-18T10:00:00Z' },
+    ]
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sidebar-section-pinned"]').exists()).toBe(true)
+    await wrapper.find('[data-testid="sidebar-status-ended"]').trigger('click')
+    expect(wrapper.find('[data-testid="sidebar-section-pinned"]').exists()).toBe(false)
   })
 
   it('marks current session row with aria-current=page', async () => {
@@ -272,6 +291,8 @@ describe('Sidebar.vue — row interactions', () => {
     const reopenSpy = vi.spyOn(store, 'reopenSession').mockResolvedValue({})
     wrapper = mount(Sidebar, { attachTo: document.body })
     await flushPromises()
+    // Ended rows now live behind the Ended tab (default view is Active).
+    await wrapper.find('[data-testid="sidebar-status-ended"]').trigger('click')
     await wrapper.find('[data-session-id="e1"] [data-testid="sidebar-row-menu-trigger"]').trigger('click')
     await wrapper.find('[data-testid="sidebar-row-menu-resume"]').trigger('click')
     await flushPromises()
@@ -286,6 +307,8 @@ describe('Sidebar.vue — row interactions', () => {
     ]
     wrapper = mount(Sidebar, { attachTo: document.body })
     await flushPromises()
+    // Ended rows now live behind the Ended tab (default view is Active).
+    await wrapper.find('[data-testid="sidebar-status-ended"]').trigger('click')
     await wrapper.find('[data-session-id="e1"] [data-testid="sidebar-row-menu-trigger"]').trigger('click')
     expect(wrapper.find('[data-testid="sidebar-row-menu-end"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="sidebar-row-menu-resume"]').exists()).toBe(true)
@@ -399,7 +422,8 @@ describe('Sidebar.vue — row interactions', () => {
     ]
     wrapper = mount(Sidebar)
     await flushPromises()
-    // ended section uses v-show so the row is in the DOM
+    // Ended view is v-if-gated behind the Ended tab; switch to it first.
+    await wrapper.find('[data-testid="sidebar-status-ended"]').trigger('click')
     expect(wrapper.find('[data-session-id="e1"]').exists()).toBe(true)
     expect(wrapper.find('[data-session-id="e1"] .sb-row-pin').exists()).toBe(false)
   })

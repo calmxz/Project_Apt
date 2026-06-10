@@ -22,7 +22,11 @@ const { sessions, loading } = storeToRefs(sessionStore)
 
 const listEl = ref(null)
 const asideEl = ref(null)
-const endedOpen = ref(true)
+const statusFilter = ref('active') // 'active' | 'ended'
+const STATUS_TABS = [
+  { key: 'active', label: 'Active' },
+  { key: 'ended', label: 'Ended' },
+]
 let lastFocused = null
 
 const FOCUSABLE_SELECTOR =
@@ -83,7 +87,7 @@ onBeforeUnmount(() => {
 })
 
 const searchQuery = ref('')
-const { searching, filteredFlat, matchCount, pinnedActive, activeGroups, endedRows } =
+const { searching, filteredFlat, matchCount, pinnedActive, activeGroups, endedGroups, endedRows } =
   useSessionGroups(sessions, searchQuery, ref(null)) // null => Date.now() captured at setup time
 
 const activeFlat = computed(() => activeGroups.value.flatMap((g) => g.rows))
@@ -94,6 +98,15 @@ const showEmptyHint = computed(
   () => !loading.value && !searching.value && !sessions.value.length,
 )
 
+const showEmptyActiveHint = computed(
+  () =>
+    !loading.value &&
+    !searching.value &&
+    sessions.value.length > 0 &&
+    !activeGroups.value.length &&
+    !pinnedActive.value.length,
+)
+
 // Fetch only if we haven't loaded yet. HomeView also calls listSessions on mount;
 // shared Pinia store means second call refetches (and that's fine — it'll be
 // fresh data), but skipping when populated avoids the deep-link redundant fetch.
@@ -102,14 +115,6 @@ onMounted(async () => {
     await sessionStore.listSessions().catch(() => {})
   }
 })
-
-// Auto-collapse Ended section when there are many ended sessions, default open
-// when there are few. Per spec: collapsed if > 5, open if ≤ 5.
-watch(
-  () => endedRows.value.length,
-  (count) => { endedOpen.value = count <= 5 },
-  { immediate: true },
-)
 
 // Scroll the active session row into view on route change.
 watch(
@@ -220,6 +225,27 @@ function onNewSession() {
       />
     </div>
 
+    <div
+      v-if="isExpanded && !searching"
+      class="sb-status-toggle"
+      role="group"
+      aria-label="Filter sessions by status"
+    >
+      <button
+        v-for="t in STATUS_TABS"
+        :key="t.key"
+        type="button"
+        class="sb-status-btn"
+        :class="{ active: statusFilter === t.key }"
+        :aria-pressed="statusFilter === t.key"
+        :data-testid="`sidebar-status-${t.key}`"
+        @click="statusFilter = t.key"
+      >
+        {{ t.label }}
+        <span v-if="t.key === 'ended' && endedRows.length" class="sb-section-count">({{ endedRows.length }})</span>
+      </button>
+    </div>
+
     <nav ref="listEl" class="sb-list-wrap" aria-label="Sessions">
       <template v-if="isExpanded">
         <template v-if="searching">
@@ -239,59 +265,66 @@ function onNewSession() {
           </p>
         </template>
         <template v-else>
-          <section
-            v-if="pinnedActive.length"
-            class="sb-section sb-section--pinned"
-            data-testid="sidebar-section-pinned"
-          >
-            <h3 class="sb-section-label label">
-              <i class="pi pi-bookmark-fill" aria-hidden="true" /> Pinned
-              <span class="sb-section-count">({{ pinnedActive.length }})</span>
-            </h3>
-            <ul class="sb-session-list">
-              <SidebarSessionRow v-for="s in pinnedActive" :key="s.id" :session="s" state="active" />
-            </ul>
-          </section>
+          <!-- ACTIVE view: pinned mini-group + activity buckets -->
+          <template v-if="statusFilter === 'active'">
+            <section
+              v-if="pinnedActive.length"
+              class="sb-section sb-section--pinned"
+              data-testid="sidebar-section-pinned"
+            >
+              <h3 class="sb-section-label label">
+                <i class="pi pi-bookmark-fill" aria-hidden="true" /> Pinned
+                <span class="sb-section-count">({{ pinnedActive.length }})</span>
+              </h3>
+              <ul class="sb-session-list">
+                <SidebarSessionRow v-for="s in pinnedActive" :key="s.id" :session="s" state="active" />
+              </ul>
+            </section>
 
-          <section class="sb-section sb-section--active" data-testid="sidebar-section-active">
-            <SidebarSkeletonList v-if="showSkeleton" :count="3" />
-            <template v-else>
-              <div
-                v-for="g in activeGroups"
-                :key="g.key"
-                class="sb-group"
-                :data-testid="`sidebar-group-${g.key}`"
-              >
-                <h3 class="sb-section-label label">{{ g.label }}</h3>
-                <ul class="sb-session-list">
-                  <SidebarSessionRow v-for="s in g.rows" :key="s.id" :session="s" state="active" />
-                </ul>
-              </div>
-              <p v-if="showEmptyHint" class="sb-empty-hint" data-testid="sidebar-empty-hint">
-                No sessions yet. Click + New session above.
-              </p>
-            </template>
-          </section>
+            <section class="sb-section sb-section--active" data-testid="sidebar-section-active">
+              <SidebarSkeletonList v-if="showSkeleton" :count="3" />
+              <template v-else>
+                <div
+                  v-for="g in activeGroups"
+                  :key="g.key"
+                  class="sb-group"
+                  :data-testid="`sidebar-group-${g.key}`"
+                >
+                  <h3 class="sb-section-label label">{{ g.label }}</h3>
+                  <ul class="sb-session-list">
+                    <SidebarSessionRow v-for="s in g.rows" :key="s.id" :session="s" state="active" />
+                  </ul>
+                </div>
+                <p v-if="showEmptyHint" class="sb-empty-hint" data-testid="sidebar-empty-hint">
+                  No sessions yet. Click + New session above.
+                </p>
+                <p v-else-if="showEmptyActiveHint" class="sb-empty-hint" data-testid="sidebar-empty-active">
+                  No active sessions. Check the Ended tab.
+                </p>
+              </template>
+            </section>
+          </template>
 
+          <!-- ENDED view: activity buckets, no pinning -->
           <section
-            v-if="endedRows.length"
+            v-else
             class="sb-section sb-section--ended"
             data-testid="sidebar-section-ended"
           >
-            <button
-              type="button"
-              class="sb-section-toggle label"
-              :aria-expanded="endedOpen"
-              aria-controls="sb-ended-list"
-              data-testid="sidebar-ended-toggle"
-              @click="endedOpen = !endedOpen"
+            <div
+              v-for="g in endedGroups"
+              :key="g.key"
+              class="sb-group"
+              :data-testid="`sidebar-ended-group-${g.key}`"
             >
-              <span>Ended <span class="sb-section-count">({{ endedRows.length }})</span></span>
-              <i :class="endedOpen ? 'pi pi-chevron-down' : 'pi pi-chevron-right'" aria-hidden="true" />
-            </button>
-            <ul v-show="endedOpen" id="sb-ended-list" class="sb-session-list">
-              <SidebarSessionRow v-for="s in endedRows" :key="s.id" :session="s" state="ended" />
-            </ul>
+              <h3 class="sb-section-label label">{{ g.label }}</h3>
+              <ul class="sb-session-list">
+                <SidebarSessionRow v-for="s in g.rows" :key="s.id" :session="s" state="ended" />
+              </ul>
+            </div>
+            <p v-if="!endedGroups.length" class="sb-empty-hint" data-testid="sidebar-ended-empty">
+              No ended sessions yet.
+            </p>
           </section>
         </template>
       </template>
@@ -650,6 +683,50 @@ function onNewSession() {
 .sb-search-count {
   padding: 0.25rem 0.75rem;
   color: var(--color-text-muted);
+}
+
+.sb-status-toggle {
+  display: flex;
+  gap: 0.25rem;
+  margin: 0 0.75rem 0.5rem;
+}
+
+.sb-status-btn {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0.3125rem 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--motion-fast) ease, color var(--motion-fast) ease, border-color var(--motion-fast) ease;
+}
+
+.sb-status-btn:hover {
+  border-color: var(--color-accent-soft);
+  color: var(--color-text);
+}
+
+.sb-status-btn:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+}
+
+.sb-status-btn.active {
+  background: var(--color-accent-soft);
+  border-color: var(--color-accent);
+  color: var(--color-accent-text);
+}
+
+.sb-status-btn.active .sb-section-count {
+  color: var(--color-accent-text);
 }
 
 .sb-group { margin-bottom: 0.5rem; }
