@@ -7,6 +7,7 @@ vi.mock('@/services/sessionsApi.js', () => ({
   getSession: vi.fn(),
   endSession: vi.fn(),
   reopenSession: vi.fn(),
+  getSessionLibrary: vi.fn(),
 }))
 vi.mock('@/services/chatApi.js', () => ({ postChat: vi.fn() }))
 
@@ -150,6 +151,25 @@ describe('session store', () => {
     s.reset()
     expect(s.error).toBeNull()
     expect(s.currentSessionId).toBeNull()
+  })
+
+  it('fetchLibrary returns the page and toggles libraryLoading', async () => {
+    const page = { items: [{ id: 's1' }], total: 1, limit: 20, offset: 0 }
+    sessionsApi.getSessionLibrary.mockResolvedValueOnce(page)
+    const s = useSessionStore()
+    const out = await s.fetchLibrary({ status: 'all', limit: 20, offset: 0 })
+    expect(sessionsApi.getSessionLibrary).toHaveBeenCalledWith({ status: 'all', limit: 20, offset: 0 })
+    expect(out).toEqual(page)
+    expect(s.libraryLoading).toBe(false)
+    expect(s.libraryError).toBeNull()
+  })
+
+  it('fetchLibrary records error and rethrows', async () => {
+    sessionsApi.getSessionLibrary.mockRejectedValueOnce(new Error('boom'))
+    const s = useSessionStore()
+    await expect(s.fetchLibrary({})).rejects.toThrow('boom')
+    expect(s.libraryError).toBeTruthy()
+    expect(s.libraryLoading).toBe(false)
   })
 })
 

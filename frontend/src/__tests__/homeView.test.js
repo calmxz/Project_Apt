@@ -8,7 +8,7 @@ import { useSessionStore } from '@/stores/session.js'
 const push = vi.fn()
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push }),
-  RouterLink: { props: ['to'], template: '<a><slot /></a>' },
+  RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
 }))
 
 const apiEndSession = vi.fn()
@@ -37,7 +37,7 @@ const stubs = {
     props: ['tone', 'eyebrow', 'headline', 'subtext'],
     template: '<div data-testid="empty-stub"><slot name="subtext" /><slot name="cta" /></div>',
   },
-  RouterLink: { props: ['to'], template: '<a><slot /></a>' },
+  RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
 }
 
 function makeSession(id, topic, ended = false, createdOffset = 0) {
@@ -278,7 +278,7 @@ describe('HomeView', () => {
     const wrapper = mountView()
     await flushPromises()
     expect(wrapper.get('[data-testid="home-recent-e1"]').text()).toContain('Covered amortized analysis.')
-    expect(wrapper.get('[data-testid="home-recent-a1"]').text()).toContain('In progress')
+    expect(wrapper.get('[data-testid="home-recent-a1"]').text()).toContain('No activity yet')
   })
 
   it('clicking a feed row navigates to the session', async () => {
@@ -332,5 +332,34 @@ describe('HomeView', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="home-recent"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="home-empty-active"]').exists()).toBe(true)
+  })
+
+  function makeRichRecent(id, over = {}) {
+    return {
+      id, topic: 'Glycolysis', created_at: new Date().toISOString(), ended_at: null,
+      last_session_summary: null, message_count: 4,
+      last_activity_at: new Date().toISOString(), last_message_preview: null,
+      progress: { focus_target_gap: 'ATP yield', mastered_count: 0 }, ...over,
+    }
+  }
+
+  it('renders the layered card description (focus tier)', async () => {
+    apiAggregate.mockResolvedValue({ recent_topics: [makeRichRecent('r1')] })
+    const store = useSessionStore()
+    vi.spyOn(store, 'listSessions').mockResolvedValue([])
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.get('[data-testid="home-recent-r1"]').text()).toContain('Focus: ATP yield')
+  })
+
+  it('shows a "View all sessions" link to /sessions when sessions exist', async () => {
+    apiAggregate.mockResolvedValue({ recent_topics: [makeRichRecent('r1')] })
+    const store = useSessionStore()
+    vi.spyOn(store, 'listSessions').mockResolvedValue([])
+    store.sessions = [makeRichRecent('r1')]
+    const wrapper = mountView()
+    await flushPromises()
+    const link = wrapper.get('[data-testid="home-view-all"]')
+    expect(link.attributes('to') || link.attributes('href')).toContain('/sessions')
   })
 })

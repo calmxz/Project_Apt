@@ -1,9 +1,13 @@
 """GET /api/profile/aggregate — cross-session aggregate dashboard."""
 
+import json
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import event as _sa_event
+
 from contracts import TopicProfile
-from db.models import LearningEvent, Session as SessionModel, User
+from db.models import ChatMessage, LearningEvent, Session as SessionModel, User
 
 
 USER_ID = "u_agg"
@@ -223,3 +227,66 @@ def test_aggregate_recent_topics_carry_last_session_summary(client, db_session):
     by_id = {t["id"]: t for t in body["recent_topics"]}
     assert by_id["ended1"]["last_session_summary"] == "Covered Big-O; gap in log bounds."
     assert by_id["active1"]["last_session_summary"] is None
+
+
+# Mirrors backend/tests/test_sessions_perf.py::count_queries (kept local to avoid
+# cross-test-module import; dedupe into a shared helper is a future option).
+@contextmanager
+def _count_queries(db):
+    bind = db.get_bind()
+    state = {"n": 0}
+
+    def _before(conn, cursor, statement, params, context, executemany):
+        state["n"] += 1
+
+    _sa_event.listen(bind, "before_cursor_execute", _before)
+    try:
+        yield state
+    finally:
+        _sa_event.remove(bind, "before_cursor_execute", _before)
+
+
+def test_recent_topics_carry_enriched_fields(client, db_session):
+    base = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    prof = {"focus_target_gap": "ATP yield",
+            "mastered_concepts": ["a", "b", "c"], "confirmed_gaps": []}
+    db_session.add(User(id=USER_ID))
+    db_session.flush()
+    db_session.add(SessionModel(id="s_rich", user_id=USER_ID, topic="Glycolysis",
+                                created_at=base, topic_profile_json=json.dumps(prof)))
+    db_session.add(ChatMessage(session_id="s_rich", role="user", content="hi",
+                               created_at=base))
+    db_session.add(ChatMessage(session_id="s_rich", role="assistant",
+                               content="glycolysis nets 2 ATP per glucose",
+                               created_at=base + timedelta(minutes=1)))
+    db_session.commit()
+
+    r = client.get("/api/profile/aggregate", params={"user_id": USER_ID})
+    assert r.status_code == 200, r.text
+    rt = next(t for t in r.json()["recent_topics"] if t["id"] == "s_rich")
+    assert rt["message_count"] == 2
+    assert rt["last_message_preview"] == "glycolysis nets 2 ATP per glucose"
+    assert rt["last_activity_at"] is not None
+    assert rt["progress"]["focus_target_gap"] == "ATP yield"
+    assert rt["progress"]["mastered_count"] == 3
+
+
+def test_recent_topics_enrichment_is_set_based(client, db_session):
+    base = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    db_session.add(User(id=USER_ID))
+    db_session.flush()
+    for n in range(8):  # more than the 5-row recent window
+        sid = f"s{n}"
+        db_session.add(SessionModel(id=sid, user_id=USER_ID, topic=f"t{n}",
+                                    created_at=base, topic_profile_json="{}"))
+        db_session.add(ChatMessage(session_id=sid, role="user", content="x",
+                                   created_at=base))
+    db_session.commit()
+
+    with _count_queries(db_session) as q:
+        r = client.get("/api/profile/aggregate", params={"user_id": USER_ID})
+    assert r.status_code == 200, r.text
+    # Set-based path is ~4-5 total queries (baseline ~2 + compute_enrichment's 2);
+    # a per-session preview over the 5-row recent window would clear this. Keep the
+    # bound tight so the assertion actually proves "set-based", not just "not insane".
+    assert q["n"] <= 6, f"aggregate enrichment not set-based: {q['n']} queries"

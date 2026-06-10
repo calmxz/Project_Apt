@@ -27,6 +27,23 @@ export const useSessionStore = defineStore('session', () => {
   // menu, future shortcuts, etc.). SessionView consumes and clears it.
   const pendingSummary = ref(null) // { sessionId, kind, text } | null
 
+  // Library-scoped state — never touches sidebar sessions/loading/error
+  const libraryLoading = ref(false)
+  const libraryError = ref(null)
+
+  async function fetchLibrary(params) {
+    libraryLoading.value = true
+    libraryError.value = null
+    try {
+      return await sessionsApi.getSessionLibrary(params)
+    } catch (e) {
+      libraryError.value = e?.message || 'Failed to load sessions'
+      throw e
+    } finally {
+      libraryLoading.value = false
+    }
+  }
+
   function _setError(e) {
     error.value = friendlyError(e)
     throw e
@@ -561,5 +578,8 @@ export const useSessionStore = defineStore('session', () => {
     stopStream,
     sendMessageStreaming,
     reset,
+    libraryLoading,
+    libraryError,
+    fetchLibrary,
   }
 })

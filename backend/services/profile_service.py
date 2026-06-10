@@ -28,6 +28,7 @@ from contracts import (
     UpdateTopicProfileArgs,
 )
 from db.models import LearningEvent, Session as SessionModel
+from services.session_enrichment import compute_enrichment
 
 
 log = logging.getLogger(__name__)
@@ -228,15 +229,18 @@ def aggregate_for_user(db: Session, user_id: str) -> AggregateProfileResponse:
 
     # `sessions` already ordered by created_at asc; last 5 reversed = newest first.
     recent = list(reversed(sessions[-5:]))
+    recent_enr = compute_enrichment(db, recent)
     recent_topics = [
         RecentSessionSummary(
             id=s.id,
             topic=s.topic or "",
             created_at=s.created_at,
             ended_at=s.ended_at,
-            last_session_summary=_parse_profile(
-                s.topic_profile_json
-            ).last_session_summary,
+            last_session_summary=recent_enr[s.id].last_session_summary,
+            message_count=recent_enr[s.id].message_count,
+            last_activity_at=recent_enr[s.id].last_activity_at,
+            last_message_preview=recent_enr[s.id].last_message_preview,
+            progress=recent_enr[s.id].progress,
         )
         for s in recent
     ]

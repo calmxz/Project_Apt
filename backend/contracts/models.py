@@ -297,6 +297,7 @@ class SessionListItem(BaseModel):
     message_count: int | None = 0
     last_activity_at: datetime | None = None
     last_message_preview: str | None = None
+    last_session_summary: str | None = None
     progress: SessionProgress | None = None
 
 
@@ -448,6 +449,10 @@ class RecentSessionSummary(BaseModel):
     created_at: datetime
     ended_at: datetime | None = None
     last_session_summary: str | None = None
+    message_count: int | None = 0
+    last_activity_at: datetime | None = None
+    last_message_preview: str | None = None
+    progress: SessionProgress | None = None
 
 
 class AggregateProfileResponse(BaseModel):

@@ -91,15 +91,20 @@
                 </div>
                 <p
                   class="recent-snippet"
-                  :class="{ 'recent-snippet-muted': !s.last_session_summary }"
+                  :class="{ 'recent-snippet-muted': !cardDescription(s) }"
                 >
-                  {{ snippetText(s) }}
+                  {{ cardDescription(s) || 'No activity yet' }}
                 </p>
+                <p class="recent-meta">{{ cardMeta(s) }}</p>
               </div>
               <i class="pi pi-arrow-right recent-arrow" aria-hidden="true" />
             </div>
           </li>
         </ul>
+        <RouterLink to="/sessions" class="recent-view-all" data-testid="home-view-all">
+          View all sessions
+          <i class="pi pi-arrow-right" aria-hidden="true" />
+        </RouterLink>
       </section>
 
       <EmptyState
@@ -148,6 +153,7 @@ import { friendlyError } from '../lib/errors.js'
 import * as sessionsApi from '../services/sessionsApi.js'
 import { useSessionStore } from '../stores/session.js'
 import { formatRelative, normalizeTopicKey } from '../utils/formatDate.js'
+import { cardDescription, cardMeta } from '../utils/sessionCard.js'
 import { getAggregateProfile } from '../services/profileApi.js'
 
 const router = useRouter()
@@ -197,11 +203,6 @@ const sortedRecent = computed(() =>
       new Date(b.created_at) - new Date(a.created_at),
   ),
 )
-
-function snippetText(s) {
-  const raw = (s.last_session_summary || '').replace(/^\[auto\]\s*/, '')
-  return raw || 'In progress — pick up where you left off.'
-}
 
 function openSession(id) {
   router.push({ name: 'session', params: { id } })
@@ -510,6 +511,24 @@ async function cleanupDuplicates() {
   color: var(--color-text-muted);
   font-style: italic;
 }
+
+.recent-meta {
+  margin: 2px 0 0;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.recent-view-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+  font-size: 0.9rem;
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+.recent-view-all:hover { text-decoration: underline; }
 
 .recent-arrow {
   margin-top: 0.25rem;

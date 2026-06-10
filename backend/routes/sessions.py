@@ -25,7 +25,6 @@ from contracts import (
     SessionEndSummary,
     SessionLibraryPage,
     SessionListItem,
-    SessionProgress,
     SessionResponse,
     SessionUpdateRequest,
     ToolCallRecord,
@@ -35,6 +34,7 @@ from db.database import get_db
 from db.models import ChatMessage, Document, Session as SessionModel, User
 from services import check_question_service, profile_service, summary_service
 from services.auth import current_user_id
+from services.session_enrichment import aware_utc as _aware_utc, compute_enrichment
 
 NO_EXCHANGES_TEXT = (
     "This session ended without any exchanges. Start a new session to continue."
@@ -43,15 +43,6 @@ NO_EXCHANGES_TEXT = (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api")
-
-
-def _aware_utc(dt: datetime | None) -> datetime | None:
-    # SQLite drops tzinfo on read even when the column is DateTime(timezone=True).
-    # Attach UTC explicitly so Pydantic serializes ISO 8601 with offset; otherwise
-    # the frontend's `new Date(iso)` parses the naive string as local time.
-    if dt is None:
-        return None
-    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
 
 
 def _latest_ingestion_status(db: Session, session_id: str) -> str | None:
@@ -77,95 +68,25 @@ def _to_response(db: Session, row: SessionModel) -> SessionResponse:
     )
 
 
-PREVIEW_MAX = 120
-# How many of a session's most-recent messages to scan for the preview. A
-# cancelled/aborted stream can leave a trailing whitespace-only turn; we skip
-# those in Python (SQL trim() is space-only on both SQLite and Postgres, so the
-# emptiness check cannot be pushed into the window filter portably). K bounds the
-# scan: if the K most-recent turns are all blank, the card simply shows no preview.
-PREVIEW_CANDIDATES = 5
-
-
 def _enrich_list_items(db: Session, rows: list[SessionModel]) -> list[SessionListItem]:
     """Build SessionListItems with count, last-activity, progress, and preview.
-
-    Three set-based queries total regardless of how many sessions are passed:
-    (1) the session rows (already fetched by the caller), (2) a grouped
-    count + max(created_at), (3) a window-function latest-non-empty message
-    (top-K candidates per session, emptiness decided in Python).
-    Progress is parsed from each row's topic_profile_json (no query).
-    """
-    ids = [r.id for r in rows]
-    counts: dict[str, int] = {}
-    last_act: dict[str, datetime] = {}
-    previews: dict[str, str] = {}
-    if ids:
-        agg = db.execute(
-            select(
-                ChatMessage.session_id,
-                func.count().label("c"),
-                func.max(ChatMessage.created_at).label("la"),
-            )
-            .where(ChatMessage.session_id.in_(ids))
-            .group_by(ChatMessage.session_id)
-        ).all()
-        for sid, c, la in agg:
-            counts[sid] = c
-            # func.max() over a DateTime returns an ISO string on SQLite (not on
-            # Postgres); coerce so _aware_utc gets a real datetime either way.
-            last_act[sid] = la if not isinstance(la, str) else datetime.fromisoformat(la)
-        # Latest NON-EMPTY message per session. Rank all messages by recency in
-        # SQL (portable window function), then pick the first non-blank in Python
-        # because trim() in SQL strips only spaces, not tabs/newlines, on both
-        # SQLite and Postgres -- so an aborted-stream "\n"-only turn must be
-        # skipped here, not in the WHERE clause.
-        rn = func.row_number().over(
-            partition_by=ChatMessage.session_id,
-            order_by=(ChatMessage.created_at.desc(), ChatMessage.id.desc()),
-        ).label("rn")
-        sub = (
-            select(
-                ChatMessage.session_id.label("sid"),
-                ChatMessage.content.label("content"),
-                rn,
-            )
-            .where(ChatMessage.session_id.in_(ids))
-            .subquery()
+    Enrichment is computed set-based in services.session_enrichment."""
+    enr = compute_enrichment(db, rows)
+    return [
+        SessionListItem(
+            id=r.id,
+            topic=r.topic,
+            created_at=_aware_utc(r.created_at),
+            ended_at=_aware_utc(r.ended_at),
+            pinned=r.pinned,
+            message_count=enr[r.id].message_count,
+            last_activity_at=enr[r.id].last_activity_at,
+            last_message_preview=enr[r.id].last_message_preview,
+            last_session_summary=enr[r.id].last_session_summary,
+            progress=enr[r.id].progress,
         )
-        for sid, content in db.execute(
-            select(sub.c.sid, sub.c.content)
-            .where(sub.c.rn <= PREVIEW_CANDIDATES)
-            .order_by(sub.c.sid, sub.c.rn)
-        ).all():
-            if sid in previews:
-                continue  # already took the most-recent non-blank for this session
-            stripped = (content or "").strip()
-            if stripped:
-                previews[sid] = stripped[:PREVIEW_MAX]
-
-    items: list[SessionListItem] = []
-    for r in rows:
-        try:
-            prof = json.loads(r.topic_profile_json or "{}")
-        except (ValueError, TypeError):
-            prof = {}
-        items.append(
-            SessionListItem(
-                id=r.id,
-                topic=r.topic,
-                created_at=_aware_utc(r.created_at),
-                ended_at=_aware_utc(r.ended_at),
-                pinned=r.pinned,
-                message_count=counts.get(r.id, 0),
-                last_activity_at=_aware_utc(last_act.get(r.id)),
-                last_message_preview=previews.get(r.id),
-                progress=SessionProgress(
-                    focus_target_gap=prof.get("focus_target_gap"),
-                    mastered_count=len(prof.get("mastered_concepts") or []),
-                ),
-            )
-        )
-    return items
+        for r in rows
+    ]
 
 
 @router.post(
