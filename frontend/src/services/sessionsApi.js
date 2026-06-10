@@ -12,6 +12,10 @@ export const createSession = ({ topic, seedMode, priorSessionId }) =>
 
 export const listSessions = () => apiGet('/sessions')
 
+// params: { status?: 'all'|'active'|'ended', q?: string,
+//           sort?: 'last_activity'|'created'|'topic', limit?: number, offset?: number }
+export const getSessionLibrary = (params) => apiGet('/sessions/library', params)
+
 export const getSession = (sessionId) => apiGet(`/sessions/${sessionId}`)
 
 export const endSession = (sessionId) => apiPost(`/sessions/${sessionId}/end`, {})
