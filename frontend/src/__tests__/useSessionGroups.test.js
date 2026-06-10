@@ -12,6 +12,7 @@ function sess(over = {}) {
     id: over.id || 'x',
     topic: over.topic ?? 'Topic',
     created_at: over.created_at ?? iso('2026-05-30T09:00:00Z'),
+    last_activity_at: over.last_activity_at ?? null,
     ended_at: over.ended_at ?? null,
     pinned: over.pinned ?? false,
   }
@@ -101,5 +102,59 @@ describe('useSessionGroups', () => {
     const byKey = Object.fromEntries(activeGroups.value.map((g) => [g.key, g.rows.map((r) => r.id)]))
     expect(byKey.week).toEqual(['w'])
     expect(byKey.older).toEqual(['o'])
+  })
+
+  it('buckets by last_activity_at, not created_at: an old session touched today is "today"', () => {
+    const sessions = ref([
+      sess({
+        id: 'touched',
+        created_at: iso('2026-05-01T08:00:00Z'), // old
+        last_activity_at: iso('2026-05-30T08:00:00Z'), // today
+      }),
+    ])
+    const { activeGroups } = useSessionGroups(sessions, ref(''), ref(NOW))
+    const byKey = Object.fromEntries(activeGroups.value.map((g) => [g.key, g.rows.map((r) => r.id)]))
+    expect(byKey.today).toEqual(['touched'])
+    expect(byKey.older).toBeUndefined()
+  })
+
+  it('falls back to created_at when last_activity_at is null', () => {
+    const sessions = ref([
+      sess({ id: 'noact', created_at: iso('2026-05-30T08:00:00Z'), last_activity_at: null }),
+    ])
+    const { activeGroups } = useSessionGroups(sessions, ref(''), ref(NOW))
+    const byKey = Object.fromEntries(activeGroups.value.map((g) => [g.key, g.rows.map((r) => r.id)]))
+    expect(byKey.today).toEqual(['noact'])
+  })
+
+  it('sorts rows within a bucket most-recently-active first', () => {
+    const sessions = ref([
+      sess({ id: 'older', last_activity_at: iso('2026-05-30T06:00:00Z') }),
+      sess({ id: 'newer', last_activity_at: iso('2026-05-30T11:00:00Z') }),
+    ])
+    const { activeGroups } = useSessionGroups(sessions, ref(''), ref(NOW))
+    const today = activeGroups.value.find((g) => g.key === 'today')
+    expect(today.rows.map((r) => r.id)).toEqual(['newer', 'older'])
+  })
+
+  it('exposes endedGroups bucketed by last activity', () => {
+    const sessions = ref([
+      sess({
+        id: 'e-today',
+        ended_at: iso('2026-05-29T08:00:00Z'),
+        last_activity_at: iso('2026-05-30T08:00:00Z'),
+      }),
+      sess({
+        id: 'e-old',
+        ended_at: iso('2026-05-02T08:00:00Z'),
+        last_activity_at: iso('2026-05-01T08:00:00Z'),
+      }),
+    ])
+    const { endedGroups, endedRows } = useSessionGroups(sessions, ref(''), ref(NOW))
+    const byKey = Object.fromEntries(endedGroups.value.map((g) => [g.key, g.rows.map((r) => r.id)]))
+    expect(byKey.today).toEqual(['e-today'])
+    expect(byKey.older).toEqual(['e-old'])
+    // flat endedRows retained for the count badge + collapsed rail, sorted by activity
+    expect(endedRows.value.map((r) => r.id)).toEqual(['e-today', 'e-old'])
   })
 })
