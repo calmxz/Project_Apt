@@ -166,6 +166,18 @@ describe('session store', () => {
     expect(sessionsApi.listSessions).toHaveBeenCalledTimes(1)
     expect(r1).toEqual([{ id: 's1' }])
     expect(r2).toEqual([{ id: 's1' }])
+    expect(s.detailLoading).toBe(false)
+  })
+
+  it('listSessions refetches after a failed request (error path clears inflight key)', async () => {
+    sessionsApi.listSessions
+      .mockRejectedValueOnce(new Error('network'))
+      .mockResolvedValueOnce([{ id: 'b' }])
+    const s = useSessionStore()
+    await expect(s.listSessions()).rejects.toThrow('network')
+    const out = await s.listSessions()
+    expect(sessionsApi.listSessions).toHaveBeenCalledTimes(2)
+    expect(out).toEqual([{ id: 'b' }])
   })
 
   it('listSessions refetches after the in-flight request settles (no retained cache)', async () => {
