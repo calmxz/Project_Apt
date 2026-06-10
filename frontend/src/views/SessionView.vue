@@ -271,7 +271,6 @@ async function loadCurrent(id) {
       // Dev-only WS3 gate measurement: navigate -> detail painted. This number
       // decides whether the retention tail (warm prefetch + SWR cache) is worth
       // building (see Task 5). Remove once that decision is recorded.
-      // eslint-disable-next-line no-console
       console.debug(`[perf] session ${id} detail painted in ${Math.round(performance.now() - startedAt)}ms`)
     }
   } catch (e) {
