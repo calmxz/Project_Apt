@@ -1,0 +1,85 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { mount, flushPromises } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
+
+const push = vi.fn()
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ push }),
+  RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
+}))
+
+vi.mock('@/services/sessionsApi.js', () => ({ getSessionLibrary: vi.fn() }))
+
+import SessionsLibraryView from '@/views/SessionsLibraryView.vue'
+import * as sessionsApi from '@/services/sessionsApi.js'
+
+const stubs = {
+  EmptyState: { template: '<div data-testid="empty-stub"><slot name="cta" /></div>' },
+  RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
+}
+
+function page(items, over = {}) {
+  return { items, total: items.length, limit: 20, offset: 0, ...over }
+}
+function item(id, over = {}) {
+  return {
+    id, topic: `Topic ${id}`, created_at: '2026-06-01T00:00:00Z', ended_at: null,
+    message_count: 2, last_activity_at: '2026-06-01T00:00:00Z',
+    last_message_preview: null, last_session_summary: null,
+    progress: { focus_target_gap: 'gap-' + id, mastered_count: 0 },
+    ...over,
+  }
+}
+
+describe('SessionsLibraryView', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    push.mockClear()
+    sessionsApi.getSessionLibrary.mockReset()
+  })
+
+  it('renders rich cards from the library page', async () => {
+    sessionsApi.getSessionLibrary.mockResolvedValue(page([item('a'), item('b')]))
+    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+    await flushPromises()
+    expect(wrapper.findAll('[data-testid^="library-card-"]')).toHaveLength(2)
+    expect(wrapper.get('[data-testid="library-card-a"]').text()).toContain('Focus: gap-a')
+  })
+
+  it('shows the empty state when no results', async () => {
+    sessionsApi.getSessionLibrary.mockResolvedValue(page([]))
+    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="empty-stub"]').exists()).toBe(true)
+  })
+
+  it('shows an error message when the fetch fails', async () => {
+    sessionsApi.getSessionLibrary.mockRejectedValue(new Error('nope'))
+    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="library-error"]').exists()).toBe(true)
+  })
+
+  it('navigates to the session on card click', async () => {
+    sessionsApi.getSessionLibrary.mockResolvedValue(page([item('a')]))
+    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+    await flushPromises()
+    await wrapper.get('[data-testid="library-card-a"]').trigger('click')
+    expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'a' } })
+  })
+
+  // Guards the cross-model defect: the library is fed SessionListItem (not
+  // RecentSessionSummary). This fails unless SessionListItem carries
+  // last_session_summary (Task 1 Step 5b) AND it is in the item() factory.
+  it('ended card shows the auto-stripped summary, not "Completed"', async () => {
+    sessionsApi.getSessionLibrary.mockResolvedValue(page([
+      item('z', { ended_at: '2026-06-02T00:00:00Z',
+                  last_session_summary: '[auto] Covered the Krebs cycle' }),
+    ]))
+    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+    await flushPromises()
+    const card = wrapper.get('[data-testid="library-card-z"]')
+    expect(card.text()).toContain('Covered the Krebs cycle')
+    expect(card.text()).not.toContain('Completed')
+  })
+})
