@@ -124,4 +124,51 @@ describe('SessionsLibraryView', () => {
     )
     vi.useRealTimers()
   })
+
+  it('Next advances offset by limit and refetches; Prev goes back', async () => {
+    sessionsApi.getSessionLibrary.mockResolvedValue(
+      page([item('a')], { total: 45, limit: 20, offset: 0 }),
+    )
+    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+    await flushPromises()
+
+    sessionsApi.getSessionLibrary.mockClear()
+    sessionsApi.getSessionLibrary.mockResolvedValue(page([item('b')], { total: 45, limit: 20, offset: 20 }))
+    await wrapper.get('[data-testid="library-next"]').trigger('click')
+    await flushPromises()
+    expect(sessionsApi.getSessionLibrary).toHaveBeenCalledWith(expect.objectContaining({ offset: 20 }))
+
+    sessionsApi.getSessionLibrary.mockClear()
+    sessionsApi.getSessionLibrary.mockResolvedValue(page([item('a')], { total: 45, limit: 20, offset: 0 }))
+    await wrapper.get('[data-testid="library-prev"]').trigger('click')
+    await flushPromises()
+    expect(sessionsApi.getSessionLibrary).toHaveBeenCalledWith(expect.objectContaining({ offset: 0 }))
+  })
+
+  it('disables Next on the last page', async () => {
+    sessionsApi.getSessionLibrary.mockResolvedValue(
+      page([item('a')], { total: 10, limit: 20, offset: 0 }),
+    )
+    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="library-next"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('[data-testid="library-prev"]').attributes('disabled')).toBeDefined()
+  })
+
+  it('covers Untitled topic and the empty 0-of-0 range', async () => {
+    // total:0 with one item exercises both `topic || 'Untitled'` and rangeLabel '0 of 0'.
+    sessionsApi.getSessionLibrary.mockResolvedValue(
+      page([item('a', { topic: '' })], { total: 0, limit: 20, offset: 0 }),
+    )
+    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="library-card-a"]').text()).toContain('Untitled')
+  })
+
+  it('falls back to a generic message on a non-Error rejection', async () => {
+    sessionsApi.getSessionLibrary.mockRejectedValue('weird')
+    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="library-error"]').text()).toBe('Failed to load sessions')
+  })
 })

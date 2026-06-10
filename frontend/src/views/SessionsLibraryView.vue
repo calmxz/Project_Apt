@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSessionStore } from '@/stores/session.js'
 import { cardDescription, cardMeta } from '@/utils/sessionCard.js'
@@ -70,6 +70,26 @@ function onSearchInput() {
 
 function open(id) {
   router.push({ name: 'session', params: { id } })
+}
+
+const hasPrev = computed(() => offset.value > 0)
+const hasNext = computed(() => offset.value + limit.value < total.value)
+const rangeLabel = computed(() => {
+  if (!total.value) return '0 of 0'
+  const start = offset.value + 1
+  const end = Math.min(offset.value + limit.value, total.value)
+  return `${start}-${end} of ${total.value}`
+})
+
+function nextPage() {
+  if (!hasNext.value) return
+  offset.value += limit.value
+  load()
+}
+function prevPage() {
+  if (!hasPrev.value) return
+  offset.value = Math.max(0, offset.value - limit.value)
+  load()
 }
 
 onMounted(load)
@@ -154,6 +174,28 @@ defineExpose({ load }) // used by control/pagination tasks
         <p class="library-meta">{{ cardMeta(s) }}</p>
       </li>
     </ul>
+
+    <nav v-if="items.length" class="library-pager" aria-label="Pagination">
+      <button
+        type="button"
+        class="library-pg-btn"
+        data-testid="library-prev"
+        :disabled="!hasPrev"
+        @click="prevPage"
+      >
+        Prev
+      </button>
+      <span class="library-range">{{ rangeLabel }}</span>
+      <button
+        type="button"
+        class="library-pg-btn"
+        data-testid="library-next"
+        :disabled="!hasNext"
+        @click="nextPage"
+      >
+        Next
+      </button>
+    </nav>
   </main>
 </template>
 
@@ -286,5 +328,38 @@ defineExpose({ load }) // used by control/pagination tasks
 
 .error {
   color: var(--signal-error, #e05252);
+}
+
+.library-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.library-pg-btn {
+  padding: 5px 18px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm, 8px);
+  background: transparent;
+  color: var(--color-text);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: border-color var(--motion-fast, 140ms);
+}
+
+.library-pg-btn:hover:not(:disabled) {
+  border-color: var(--color-accent-soft);
+}
+
+.library-pg-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.library-range {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
 }
 </style>
