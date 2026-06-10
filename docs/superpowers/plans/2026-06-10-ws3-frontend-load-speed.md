@@ -379,7 +379,14 @@ respects prefers-reduced-motion. Gated by detailLoading in the next task."
 
 - [ ] **Step 1: Write the failing tests**
 
-Add these tests inside the existing `describe('SessionView', ...)` block in `frontend/src/__tests__/sessionView.test.js` (after the `clears a prior 404 state` test). They drive `detailLoading`/`sessions` directly (matching the file's existing "set store state directly" style) and use a never-resolving `loadSession` spy to hold the loading snapshot:
+First add the `CheckQuestion` import at the top of `frontend/src/__tests__/sessionView.test.js`, next to the existing `SessionHeader` import (line 7):
+
+```js
+import SessionHeader from '@/components/chat/SessionHeader.vue'
+import CheckQuestion from '@/components/chat/CheckQuestion.vue'
+```
+
+Then add these tests inside the existing `describe('SessionView', ...)` block (after the `clears a prior 404 state` test). They drive `detailLoading`/`sessions` directly (matching the file's existing "set store state directly" style) and use a never-resolving `loadSession` spy to hold the loading snapshot:
 
 ```js
   it('paints the optimistic header topic from the known list row while detail loads', async () => {
@@ -393,15 +400,20 @@ Add these tests inside the existing `describe('SessionView', ...)` block in `fro
     expect(wrapper.findComponent(SessionHeader).props('topic')).toBe('Thermodynamics')
   })
 
-  it('shows the message skeleton while detailLoading and hides the empty state', async () => {
+  it('shows the message skeleton while detailLoading and hides empty-state + stale check card', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'loadSession').mockImplementation(() => new Promise(() => {}))
     store.detailLoading = true
+    // Seed a pending check from the PREVIOUS session: it must NOT show over the
+    // skeleton during a switch (it isn't overwritten until the await resolves).
+    store.pendingCheck = { gap: 'g', total: 1, currentIndex: 0, viewIndex: 0, items: [] }
     const wrapper = mountView({ id: 's1' })
     await flushPromises()
     expect(wrapper.find('[data-testid="session-messages-skeleton"]').exists()).toBe(true)
     // ChatEmptyState (and its quick prompts) must not render behind the skeleton.
     expect(wrapper.find('[data-testid="quick-prompt-0"]').exists()).toBe(false)
+    // The old session's CheckQuestion must not leak over the skeleton.
+    expect(wrapper.findComponent(CheckQuestion).exists()).toBe(false)
   })
 
   it('swaps skeleton for messages and shows the real topic once detail resolves', async () => {
@@ -508,10 +520,28 @@ with (skeleton replaces BOTH the empty-state and any stale messages during a loa
       </div>
 ```
 
+- [ ] **Step 6b: Gate the stale check card during a load/switch**
+
+While `detailLoading` is true, `store.pendingCheck` still holds the PREVIOUS session's open check-batch (it is overwritten only after the await resolves), so the `CheckQuestion` card would render over the skeleton — a mixed old/new state the optimistic header makes read as wrong. Gate it on `!store.detailLoading`. Replace line 67-68:
+
+```vue
+      <CheckQuestion
+        v-if="store.pendingCheck"
+```
+
+with:
+
+```vue
+      <CheckQuestion
+        v-if="store.pendingCheck && !store.detailLoading"
+```
+
+(Safe against existing tests: they spy `loadSession`, so `detailLoading` stays false and the card renders exactly as before. The active→active common case with no pending check is unaffected.)
+
 - [ ] **Step 7: Run the tests to verify they pass**
 
 Run (from `frontend/`): `npm run test:unit -- --run sessionView`
-Expected: PASS — the 3 new tests green AND all pre-existing SessionView tests still green (they spy `loadSession` to resolve, leaving `detailLoading` false → body renders as before; `headerTopic` returns `'Calculus'` because `currentSession.id === props.id`).
+Expected: PASS — the 3 new tests green (including the check-card-absent assertion) AND all pre-existing SessionView tests still green (they spy `loadSession` to resolve, leaving `detailLoading` false → body renders as before; `headerTopic` returns `'Calculus'` because `currentSession.id === props.id`).
 
 - [ ] **Step 8: Commit**
 
@@ -521,8 +551,9 @@ git commit -m "feat(sessions): WS3 optimistic header + message skeleton on navig
 
 While the detail fetch is in flight, paint the target topic from the known
 list row (view-local, never stubs store.currentSession) and show the message
-skeleton instead of the previous session's stale content / empty-state
-(fixes the load-time empty-state flash). Swaps to real detail on resolve."
+skeleton instead of the previous session's stale content / empty-state /
+open check card (fixes the load-time empty-state flash). Swaps to real
+detail on resolve."
 ```
 
 ---
@@ -669,6 +700,7 @@ git commit -m "docs(sessions): WS3 measurement outcome — record retention-tail
 - Spec "in-flight-promise guard (de-dupes double GET /sessions + concurrent same-id loads)" → Task 1.
 - Spec "optimistic render — view-local header from list row, never stubs store.currentSession; 404 → not-found" → Task 3 (404 path unchanged in `loadCurrent`).
 - Spec "message skeleton on a detail-specific flag, not shared loading" → `detailLoading` (Task 1) + `MessageListSkeleton` (Task 2) + wiring (Task 3).
+- Anti-stale-flash (sibling components): Task 3 Step 6b gates the previous session's `CheckQuestion` on `!detailLoading` so it can't leak over the skeleton during a switch (advisor-caught; the optimistic header makes a mixed old/new state read as wrong). Ended-banner/composer flip is pre-existing/lower-stakes and left as-is; `store.error` self-clears on `loadSession` entry.
 - Spec "dev-only timing log behind import.meta.env.DEV" → Task 4.
 - Spec "Home issues one GET /sessions, not two" → covered by Task 1's concurrent-dedup test (the home double-fetch is exactly two concurrent `listSessions` calls) + Task 5 Step 4 Network-tab confirmation.
 - Spec gated tail (warm prefetch + SWR cache) → explicitly out of scope; decided by Task 5.
