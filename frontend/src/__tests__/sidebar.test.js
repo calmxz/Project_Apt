@@ -106,6 +106,41 @@ describe('Sidebar.vue — session list rendering', () => {
     expect(btn.attributes('aria-current')).toBe('page')
   })
 
+  it('renders a description line and a meta line in each row', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      {
+        id: 'a1',
+        topic: 'Glycolysis',
+        created_at: new Date().toISOString(),
+        last_activity_at: new Date().toISOString(),
+        ended_at: null,
+        message_count: 4,
+        progress: { focus_target_gap: 'ATP yield', mastered_count: 0 },
+        last_message_preview: null,
+      },
+    ]
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    const row = wrapper.find('[data-testid="sidebar-row-a1"]')
+    expect(row.find('.sb-row-desc').text()).toBe('Focus: ATP yield')
+    expect(row.find('.sb-row-meta').text()).toContain('4 messages')
+    expect(row.find('.sb-row-meta').text()).toContain('last active')
+  })
+
+  it('highlights the current session row', async () => {
+    routeRef.params = { id: 'a1' }
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'a1', topic: 'Glycolysis', created_at: new Date().toISOString(), ended_at: null },
+    ]
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    // Closes clause (b) of the spec's first WS2 test bullet (current session highlighted)
+    // with an automated check rather than deferring entirely to live smoke.
+    expect(wrapper.find('[data-testid="sidebar-row-a1"]').classes()).toContain('sb-row--current')
+  })
+
   it('filters sessions via the search input and shows a match count', async () => {
     const store = useSessionStore()
     store.sessions = [
