@@ -17,6 +17,7 @@ export const useSessionStore = defineStore('session', () => {
   const sessions = ref([])
   const messages = ref([])
   const loading = ref(false)
+  const detailLoading = ref(false)
   const error = ref(null)
   const dailyCapInfo = ref(null) // { cap, used, resets_at }
   const dailyCapReached = computed(() => dailyCapInfo.value !== null)
@@ -30,6 +31,12 @@ export const useSessionStore = defineStore('session', () => {
   // Library-scoped state — never touches sidebar sessions/loading/error
   const libraryLoading = ref(false)
   const libraryError = ref(null)
+
+  // In-flight-promise guard. Holds ONLY pending promises (deleted on settle),
+  // never resolved results — so a reused promise is as fresh as a new request
+  // and carries no invalidation surface. De-dupes the double GET /sessions on
+  // home load and collapses concurrent same-id detail loads. NOT a cache.
+  const _inflight = new Map()
 
   async function fetchLibrary(params) {
     libraryLoading.value = true
@@ -54,16 +61,22 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   async function listSessions() {
-    loading.value = true
-    error.value = null
-    try {
-      sessions.value = await sessionsApi.listSessions()
-      return sessions.value
-    } catch (e) {
-      _setError(e)
-    } finally {
-      loading.value = false
-    }
+    if (_inflight.has('list')) return _inflight.get('list')
+    const p = (async () => {
+      loading.value = true
+      error.value = null
+      try {
+        sessions.value = await sessionsApi.listSessions()
+        return sessions.value
+      } catch (e) {
+        _setError(e)
+      } finally {
+        loading.value = false
+        _inflight.delete('list')
+      }
+    })()
+    _inflight.set('list', p)
+    return p
   }
 
   async function createSession({ topic, seedMode, priorSessionId } = {}) {
@@ -87,23 +100,44 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   async function loadSession(id) {
-    loading.value = true
-    error.value = null
-    try {
-      const s = await sessionsApi.getSession(id)
-      currentSession.value = s
-      currentSessionId.value = s.id
-      messages.value = (s.messages || []).map((m) => ({
-        role: m.role,
-        content: m.content,
-        message_id: m.id,
-        citations: m.citations || [],
-        created_at: m.created_at,
-        check_batch: m.check_batch
+    if (_inflight.has(id)) return _inflight.get(id)
+    const p = (async () => {
+      loading.value = true
+      detailLoading.value = true
+      error.value = null
+      try {
+        const s = await sessionsApi.getSession(id)
+        currentSession.value = s
+        currentSessionId.value = s.id
+        messages.value = (s.messages || []).map((m) => ({
+          role: m.role,
+          content: m.content,
+          message_id: m.id,
+          citations: m.citations || [],
+          created_at: m.created_at,
+          check_batch: m.check_batch
+            ? {
+                gap: m.check_batch.gap,
+                total: m.check_batch.total,
+                items: (m.check_batch.items || []).map((it) => ({
+                  question: it.question,
+                  options: it.options || [],
+                  status: it.status,
+                  selectedIndex: it.selected_index,
+                  correctIndex: it.correct_index,
+                  correct: it.correct,
+                  explanation: it.explanation,
+                })),
+              }
+            : null,
+        }))
+        pendingCheck.value = s.pending_check
           ? {
-              gap: m.check_batch.gap,
-              total: m.check_batch.total,
-              items: (m.check_batch.items || []).map((it) => ({
+              gap: s.pending_check.gap,
+              total: s.pending_check.total,
+              currentIndex: s.pending_check.current_index,
+              viewIndex: s.pending_check.current_index,
+              items: (s.pending_check.items || []).map((it) => ({
                 question: it.question,
                 options: it.options || [],
                 status: it.status,
@@ -113,31 +147,18 @@ export const useSessionStore = defineStore('session', () => {
                 explanation: it.explanation,
               })),
             }
-          : null,
-      }))
-      pendingCheck.value = s.pending_check
-        ? {
-            gap: s.pending_check.gap,
-            total: s.pending_check.total,
-            currentIndex: s.pending_check.current_index,
-            viewIndex: s.pending_check.current_index,
-            items: (s.pending_check.items || []).map((it) => ({
-              question: it.question,
-              options: it.options || [],
-              status: it.status,
-              selectedIndex: it.selected_index,
-              correctIndex: it.correct_index,
-              correct: it.correct,
-              explanation: it.explanation,
-            })),
-          }
-        : null
-      return s
-    } catch (e) {
-      _setError(e)
-    } finally {
-      loading.value = false
-    }
+          : null
+        return s
+      } catch (e) {
+        _setError(e)
+      } finally {
+        loading.value = false
+        detailLoading.value = false
+        _inflight.delete(id)
+      }
+    })()
+    _inflight.set(id, p)
+    return p
   }
 
   async function sendMessage({ text }) {
@@ -542,6 +563,7 @@ export const useSessionStore = defineStore('session', () => {
     sessions,
     messages,
     loading,
+    detailLoading,
     error,
     dailyCapReached,
     dailyCapInfo,

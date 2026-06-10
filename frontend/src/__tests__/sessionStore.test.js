@@ -153,6 +153,54 @@ describe('session store', () => {
     expect(s.currentSessionId).toBeNull()
   })
 
+  it('listSessions de-dupes concurrent calls into one network request', async () => {
+    let resolve
+    sessionsApi.listSessions.mockImplementationOnce(
+      () => new Promise((r) => { resolve = r }),
+    )
+    const s = useSessionStore()
+    const p1 = s.listSessions()
+    const p2 = s.listSessions()
+    resolve([{ id: 's1' }])
+    const [r1, r2] = await Promise.all([p1, p2])
+    expect(sessionsApi.listSessions).toHaveBeenCalledTimes(1)
+    expect(r1).toEqual([{ id: 's1' }])
+    expect(r2).toEqual([{ id: 's1' }])
+  })
+
+  it('listSessions refetches after the in-flight request settles (no retained cache)', async () => {
+    sessionsApi.listSessions
+      .mockResolvedValueOnce([{ id: 'a' }])
+      .mockResolvedValueOnce([{ id: 'b' }])
+    const s = useSessionStore()
+    await s.listSessions()
+    await s.listSessions()
+    expect(sessionsApi.listSessions).toHaveBeenCalledTimes(2)
+    expect(s.sessions).toEqual([{ id: 'b' }])
+  })
+
+  it('loadSession de-dupes concurrent same-id calls and toggles detailLoading', async () => {
+    let resolve
+    sessionsApi.getSession.mockImplementationOnce(
+      () => new Promise((r) => { resolve = r }),
+    )
+    const s = useSessionStore()
+    const p1 = s.loadSession('s1')
+    const p2 = s.loadSession('s1')
+    expect(s.detailLoading).toBe(true)
+    resolve({ id: 's1', messages: [] })
+    await Promise.all([p1, p2])
+    expect(sessionsApi.getSession).toHaveBeenCalledTimes(1)
+    expect(s.detailLoading).toBe(false)
+  })
+
+  it('loadSession does not de-dupe different ids', async () => {
+    sessionsApi.getSession.mockResolvedValue({ id: 'x', messages: [] })
+    const s = useSessionStore()
+    await Promise.all([s.loadSession('s1'), s.loadSession('s2')])
+    expect(sessionsApi.getSession).toHaveBeenCalledTimes(2)
+  })
+
   it('fetchLibrary returns the page and toggles libraryLoading', async () => {
     const page = { items: [{ id: 's1' }], total: 1, limit: 20, offset: 0 }
     sessionsApi.getSessionLibrary.mockResolvedValueOnce(page)
