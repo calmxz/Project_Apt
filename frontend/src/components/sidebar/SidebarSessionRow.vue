@@ -220,7 +220,7 @@ function commitRenameFromKey() {
   display: flex;
   align-items: center;
   gap: 0.625rem;
-  padding: 0.5rem 0.5rem 0.5rem 0.75rem;
+  padding: 0.4375rem 0.5rem 0.4375rem 0.75rem;
   border: 0;
   background: transparent;
   text-align: left;
@@ -259,7 +259,7 @@ function commitRenameFromKey() {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.125rem;
+  gap: 0.0625rem;
 }
 
 .sb-row-topic {
@@ -299,7 +299,7 @@ function commitRenameFromKey() {
 .sb-row-meta {
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
-  color: var(--color-text-muted);
+  color: var(--color-text-faint);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
