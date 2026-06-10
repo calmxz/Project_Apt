@@ -5,6 +5,7 @@ import { createPinia, setActivePinia } from 'pinia'
 
 import SessionView from '@/views/SessionView.vue'
 import SessionHeader from '@/components/chat/SessionHeader.vue'
+import CheckQuestion from '@/components/chat/CheckQuestion.vue'
 import { useSessionStore } from '@/stores/session.js'
 
 const push = vi.fn()
@@ -132,6 +133,50 @@ describe('SessionView', () => {
     await flushPromises()
     expect(load).toHaveBeenLastCalledWith('s1')
     expect(wrapper.find('[data-testid="session-not-found"]').exists()).toBe(false)
+  })
+
+  it('paints the optimistic header topic from the known list row while detail loads', async () => {
+    const store = useSessionStore()
+    // Hold the loading snapshot: loadSession never resolves.
+    vi.spyOn(store, 'loadSession').mockImplementation(() => new Promise(() => {}))
+    store.sessions = [{ id: 's2', topic: 'Thermodynamics' }]
+    store.detailLoading = true
+    const wrapper = mountView({ id: 's2' })
+    await flushPromises()
+    expect(wrapper.findComponent(SessionHeader).props('topic')).toBe('Thermodynamics')
+  })
+
+  it('shows the message skeleton while detailLoading and hides empty-state + stale check card', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(() => new Promise(() => {}))
+    store.detailLoading = true
+    // Seed a pending check from the PREVIOUS session: it must NOT show over the
+    // skeleton during a switch (it isn't overwritten until the await resolves).
+    store.pendingCheck = { gap: 'g', total: 1, currentIndex: 0, viewIndex: 0, items: [] }
+    const wrapper = mountView({ id: 's1' })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="session-messages-skeleton"]').exists()).toBe(true)
+    // ChatEmptyState (and its quick prompts) must not render behind the skeleton.
+    expect(wrapper.find('[data-testid="quick-prompt-0"]').exists()).toBe(false)
+    // The old session's CheckQuestion must not leak over the skeleton.
+    expect(wrapper.findComponent(CheckQuestion).exists()).toBe(false)
+  })
+
+  it('swaps skeleton for messages and shows the real topic once detail resolves', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(() => new Promise(() => {}))
+    store.detailLoading = true
+    const wrapper = mountView({ id: 's1' })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="session-messages-skeleton"]').exists()).toBe(true)
+    // Flip state the way the real loadSession would on resolve.
+    store.detailLoading = false
+    store.currentSession = { id: 's1', topic: 'Calculus', ended_at: null }
+    store.currentSessionId = 's1'
+    store.messages = [{ role: 'assistant', content: 'hi', message_id: 'm1', citations: [] }]
+    await nextTick()
+    expect(wrapper.find('[data-testid="session-messages-skeleton"]').exists()).toBe(false)
+    expect(wrapper.findComponent(SessionHeader).props('topic')).toBe('Calculus')
   })
 
   it('send dispatches sendMessage and clears draft', async () => {
