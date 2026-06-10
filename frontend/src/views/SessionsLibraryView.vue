@@ -100,6 +100,10 @@ defineExpose({ load }) // used by control/pagination tasks
 <template>
   <main class="library">
     <header class="library-head">
+      <RouterLink to="/" class="library-back" data-testid="library-back">
+        <i class="pi pi-arrow-left" aria-hidden="true" />
+        Back to home
+      </RouterLink>
       <h1 class="library-title">All sessions</h1>
     </header>
 
@@ -205,6 +209,20 @@ defineExpose({ load }) // used by control/pagination tasks
   max-width: 880px;
   margin: 0 auto;
   padding: 24px 16px 64px;
+}
+
+.library-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  text-decoration: none;
+}
+.library-back:hover {
+  color: var(--color-accent);
+  text-decoration: underline;
 }
 
 .library-title {

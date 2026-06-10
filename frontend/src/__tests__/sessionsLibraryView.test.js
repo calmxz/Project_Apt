@@ -171,4 +171,12 @@ describe('SessionsLibraryView', () => {
     await flushPromises()
     expect(wrapper.get('[data-testid="library-error"]').text()).toBe('Failed to load sessions')
   })
+
+  it('shows a back-to-home link', async () => {
+    sessionsApi.getSessionLibrary.mockResolvedValue(page([item('a')]))
+    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+    await flushPromises()
+    const back = wrapper.get('[data-testid="library-back"]')
+    expect(back.attributes('to') || back.attributes('href')).toBe('/')
+  })
 })
