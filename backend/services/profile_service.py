@@ -236,9 +236,7 @@ def aggregate_for_user(db: Session, user_id: str) -> AggregateProfileResponse:
             topic=s.topic or "",
             created_at=s.created_at,
             ended_at=s.ended_at,
-            last_session_summary=_parse_profile(
-                s.topic_profile_json
-            ).last_session_summary,
+            last_session_summary=recent_enr[s.id].last_session_summary,
             message_count=recent_enr[s.id].message_count,
             last_activity_at=recent_enr[s.id].last_activity_at,
             last_message_preview=recent_enr[s.id].last_message_preview,

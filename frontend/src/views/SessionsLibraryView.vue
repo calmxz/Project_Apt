@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSessionStore } from '@/stores/session.js'
 import { cardDescription, cardMeta } from '@/utils/sessionCard.js'
@@ -93,6 +93,7 @@ function prevPage() {
 }
 
 onMounted(load)
+onUnmounted(() => clearTimeout(searchTimer))
 defineExpose({ load }) // used by control/pagination tasks
 </script>
 
