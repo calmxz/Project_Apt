@@ -42,6 +42,32 @@ async function load() {
   }
 }
 
+const STATUSES = [
+  { key: 'all', label: 'All' },
+  { key: 'active', label: 'Active' },
+  { key: 'ended', label: 'Ended' },
+]
+
+function setStatus(next) {
+  status.value = next
+  offset.value = 0
+  load()
+}
+
+function onSortChange() {
+  offset.value = 0
+  load()
+}
+
+let searchTimer = null
+function onSearchInput() {
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => {
+    offset.value = 0
+    load()
+  }, 250)
+}
+
 function open(id) {
   router.push({ name: 'session', params: { id } })
 }
@@ -55,6 +81,46 @@ defineExpose({ load }) // used by control/pagination tasks
     <header class="library-head">
       <h1 class="library-title">All sessions</h1>
     </header>
+
+    <div class="library-controls">
+      <div class="library-filter" role="tablist" aria-label="Filter by status">
+        <button
+          v-for="opt in STATUSES"
+          :key="opt.key"
+          type="button"
+          class="library-filter-btn"
+          :class="{ active: status === opt.key }"
+          :data-testid="`library-filter-${opt.key}`"
+          role="tab"
+          :aria-selected="status === opt.key"
+          @click="setStatus(opt.key)"
+        >
+          {{ opt.label }}
+        </button>
+      </div>
+
+      <input
+        v-model="q"
+        type="search"
+        class="library-search"
+        data-testid="library-search"
+        placeholder="Search topics..."
+        aria-label="Search sessions by topic"
+        @input="onSearchInput"
+      />
+
+      <select
+        v-model="sort"
+        class="library-sort"
+        data-testid="library-sort"
+        aria-label="Sort sessions"
+        @change="onSortChange"
+      >
+        <option value="last_activity">Last active</option>
+        <option value="created">Newest</option>
+        <option value="topic">Topic</option>
+      </select>
+    </div>
 
     <p v-if="loading" class="muted" data-testid="library-loading">Loading...</p>
     <p v-else-if="error" class="error" data-testid="library-error">{{ error }}</p>
@@ -160,6 +226,58 @@ defineExpose({ load }) // used by control/pagination tasks
   margin: 0;
   font-size: 0.8rem;
   color: var(--color-text-muted);
+}
+
+.library-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.library-filter {
+  display: flex;
+  gap: 4px;
+}
+
+.library-filter-btn {
+  padding: 5px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background var(--motion-fast, 140ms), border-color var(--motion-fast, 140ms);
+}
+
+.library-filter-btn:hover {
+  border-color: var(--color-accent-soft);
+}
+
+.library-filter-btn.active {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #fff;
+}
+
+.library-search,
+.library-sort {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm, 8px);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.85rem;
+  padding: 5px 10px;
+}
+
+.library-search {
+  flex: 1 1 180px;
+}
+
+.library-sort {
+  flex: 0 0 auto;
 }
 
 .muted {

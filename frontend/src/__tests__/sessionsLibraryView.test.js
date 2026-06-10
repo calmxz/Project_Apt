@@ -82,4 +82,46 @@ describe('SessionsLibraryView', () => {
     expect(card.text()).toContain('Covered the Krebs cycle')
     expect(card.text()).not.toContain('Completed')
   })
+
+  it('refetches with status filter when a tab is clicked', async () => {
+    sessionsApi.getSessionLibrary.mockResolvedValue(page([item('a')]))
+    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+    await flushPromises()
+    sessionsApi.getSessionLibrary.mockClear()
+    sessionsApi.getSessionLibrary.mockResolvedValue(page([item('b', { ended_at: '2026-06-02T00:00:00Z' })]))
+    await wrapper.get('[data-testid="library-filter-ended"]').trigger('click')
+    await flushPromises()
+    expect(sessionsApi.getSessionLibrary).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'ended', offset: 0 }),
+    )
+  })
+
+  it('refetches with sort when sort changes', async () => {
+    sessionsApi.getSessionLibrary.mockResolvedValue(page([item('a')]))
+    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+    await flushPromises()
+    sessionsApi.getSessionLibrary.mockClear()
+    sessionsApi.getSessionLibrary.mockResolvedValue(page([item('a')]))
+    await wrapper.get('[data-testid="library-sort"]').setValue('topic')
+    await flushPromises()
+    expect(sessionsApi.getSessionLibrary).toHaveBeenCalledWith(
+      expect.objectContaining({ sort: 'topic' }),
+    )
+  })
+
+  it('searching resets offset to 0 and passes q', async () => {
+    vi.useFakeTimers()
+    sessionsApi.getSessionLibrary.mockResolvedValue(page([item('a')], { total: 50 }))
+    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+    await flushPromises()
+    sessionsApi.getSessionLibrary.mockClear()
+    sessionsApi.getSessionLibrary.mockResolvedValue(page([item('a')]))
+    await wrapper.get('[data-testid="library-search"]').setValue('gly')
+    vi.advanceTimersByTime(300)
+    await flushPromises()
+    expect(sessionsApi.getSessionLibrary).toHaveBeenCalledWith(
+      expect.objectContaining({ q: 'gly', offset: 0 }),
+    )
+    vi.useRealTimers()
+  })
 })
