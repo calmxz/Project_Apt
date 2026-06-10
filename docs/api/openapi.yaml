@@ -845,6 +845,14 @@ components:
         created_at: { type: string, format: date-time }
         ended_at: { type: [string, "null"], format: date-time, default: null }
         last_session_summary: { type: [string, "null"], default: null }
+        message_count: { type: integer, default: 0 }
+        last_activity_at: { type: [string, "null"], format: date-time, default: null }
+        last_message_preview: { type: [string, "null"], default: null }
+        progress:
+          oneOf:
+            - $ref: "#/components/schemas/SessionProgress"
+            - type: "null"
+          default: null
 
     AggregateProfileResponse:
       type: object
