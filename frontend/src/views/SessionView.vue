@@ -162,7 +162,14 @@ const uploading = ref(false)
 const uploadStatus = ref(null)
 const lastError = ref(null)
 
-const isEnded = computed(() => Boolean(store.currentSession?.ended_at))
+// Use the same target-id discriminator as headerTopic so the ended-banner /
+// composer / resume action agree with the optimistic header during a switch.
+// While detail loads, store.currentSession still holds the PREVIOUS session, so
+// reading ended_at directly would show a stale banner and misdirect resume() to
+// the old session id. Falls back to not-ended until the target detail resolves.
+const isEnded = computed(() =>
+  store.currentSession?.id === props.id ? Boolean(store.currentSession.ended_at) : false,
+)
 const canEnd = computed(() => Boolean(store.currentSession && !store.currentSession.ended_at))
 const canSend = computed(() => canEnd.value && !store.dailyCapReached && !store.costCapReached)
 

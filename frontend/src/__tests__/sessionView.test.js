@@ -5,6 +5,7 @@ import { createPinia, setActivePinia } from 'pinia'
 
 import SessionView from '@/views/SessionView.vue'
 import SessionHeader from '@/components/chat/SessionHeader.vue'
+import SessionEndedBanner from '@/components/SessionEndedBanner.vue'
 import CheckQuestion from '@/components/chat/CheckQuestion.vue'
 import { useSessionStore } from '@/stores/session.js'
 
@@ -177,6 +178,30 @@ describe('SessionView', () => {
     await nextTick()
     expect(wrapper.find('[data-testid="session-messages-skeleton"]').exists()).toBe(false)
     expect(wrapper.findComponent(SessionHeader).props('topic')).toBe('Calculus')
+  })
+
+  it('prefers the target list row topic over a stale previous session during load', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(() => new Promise(() => {}))
+    // Previous session still in currentSession; we are navigating to s2.
+    store.currentSession = { id: 's1', topic: 'Old Topic', ended_at: null }
+    store.sessions = [{ id: 's2', topic: 'Thermodynamics' }]
+    store.detailLoading = true
+    const wrapper = mountView({ id: 's2' })
+    await flushPromises()
+    expect(wrapper.findComponent(SessionHeader).props('topic')).toBe('Thermodynamics')
+  })
+
+  it('hides the previous ended-session banner while loading a different session', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(() => new Promise(() => {}))
+    // Previous session is ENDED; we navigate to a different, still-loading session.
+    store.currentSession = { id: 's1', topic: 'Old', ended_at: '2026-01-01T00:00:00Z' }
+    store.sessions = [{ id: 's2', topic: 'New' }]
+    store.detailLoading = true
+    const wrapper = mountView({ id: 's2' })
+    await flushPromises()
+    expect(wrapper.findComponent(SessionEndedBanner).exists()).toBe(false)
   })
 
   it('send dispatches sendMessage and clears draft', async () => {
