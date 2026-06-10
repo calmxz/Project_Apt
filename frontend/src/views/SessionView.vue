@@ -263,8 +263,17 @@ watch(
 async function loadCurrent(id) {
   // Reset per-load so navigating away from a 404 session clears the state.
   notFound.value = false
+  const startedAt = import.meta.env.DEV ? performance.now() : 0
   try {
     await store.loadSession(id)
+    if (import.meta.env.DEV) {
+      await nextTick()
+      // Dev-only WS3 gate measurement: navigate -> detail painted. This number
+      // decides whether the retention tail (warm prefetch + SWR cache) is worth
+      // building (see Task 5). Remove once that decision is recorded.
+      // eslint-disable-next-line no-console
+      console.debug(`[perf] session ${id} detail painted in ${Math.round(performance.now() - startedAt)}ms`)
+    }
   } catch (e) {
     if (e?.status === 404) {
       notFound.value = true

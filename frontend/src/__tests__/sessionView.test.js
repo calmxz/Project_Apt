@@ -452,6 +452,18 @@ describe('SessionView', () => {
     expect(wrapper.find('#cap-banner-daily').exists()).toBe(true)
   })
 
+  it('logs a dev-only navigate->painted timing after detail resolves', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => { setupSession() })
+    const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {})
+    mountView()
+    await flushPromises()
+    await nextTick()
+    const logged = debugSpy.mock.calls.some((c) => String(c[0]).includes('[perf] session'))
+    expect(logged).toBe(true)
+    debugSpy.mockRestore()
+  })
+
   it('renders streaming bubble when store.streamingMessage is set', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'loadSession').mockImplementation(async () => {
