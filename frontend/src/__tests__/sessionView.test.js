@@ -137,6 +137,33 @@ describe('SessionView', () => {
     expect(wrapper.find('[data-testid="session-not-found"]').exists()).toBe(false)
   })
 
+  it('does not flash 404 when a superseded load 404s after navigating away', async () => {
+    const store = useSessionStore()
+    let rejectGone
+    vi.spyOn(store, 'loadSession').mockImplementation((id) => {
+      if (id === 'gone') {
+        return new Promise((_res, rej) => {
+          rejectGone = () => rej(Object.assign(new Error('not found'), { status: 404 }))
+        })
+      }
+      store.currentSession = { id, topic: 'Calculus', ended_at: null }
+      store.currentSessionId = id
+      store.messages = []
+      return Promise.resolve()
+    })
+    const wrapper = mountView({ id: 'gone' })
+    await flushPromises() // first load pending (never resolved yet)
+
+    await wrapper.setProps({ id: 's1' }) // navigate away before 'gone' settles
+    await flushPromises()
+
+    rejectGone() // the superseded 'gone' load 404s late
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="session-not-found"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="session-header"]').exists()).toBe(true)
+  })
+
   it('paints the optimistic header topic from the known list row while detail loads', async () => {
     const store = useSessionStore()
     // Hold the loading snapshot: loadSession never resolves.
