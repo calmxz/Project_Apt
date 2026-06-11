@@ -9,6 +9,11 @@ import SessionChips from '@/components/SessionChips.vue'
 const router = useRouter()
 const store = useSessionStore()
 
+async function continueSession(id) {
+  await store.reopenSession(id)
+  router.push({ name: 'session', params: { id } })
+}
+
 const items = ref([])
 const total = ref(0)
 const limit = ref(20)
@@ -175,6 +180,16 @@ defineExpose({ load }) // used by control/pagination tasks
           <span class="library-status" :class="{ ended: !!s.ended_at }">
             {{ s.ended_at ? 'Ended' : 'Active' }}
           </span>
+          <button
+            v-if="s.ended_at"
+            type="button"
+            class="library-continue"
+            :data-testid="`library-continue-${s.id}`"
+            @click.stop="continueSession(s.id)"
+            @keydown.enter.stop
+          >
+            Continue
+          </button>
         </div>
         <p
           class="library-desc"
@@ -287,6 +302,25 @@ defineExpose({ load }) // used by control/pagination tasks
 
 .library-status.ended {
   color: var(--color-text-muted);
+}
+
+.library-continue {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 0.3rem 0.75rem;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  border: 1px solid var(--color-accent-soft);
+  color: var(--color-accent-text);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: background var(--motion-fast) ease;
+}
+
+.library-continue:hover {
+  background: var(--color-accent-soft);
 }
 
 .library-desc {
