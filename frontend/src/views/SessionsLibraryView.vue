@@ -178,7 +178,10 @@ defineExpose({ load }) // used by control/pagination tasks
         </div>
         <p
           class="library-desc"
-          :class="{ 'library-desc-quote': !s.ended_at && !!cardStory(s) }"
+          :class="{
+            'library-desc-muted': !cardStory(s),
+            'library-desc-quote': !s.ended_at && !!cardStory(s),
+          }"
         >
           {{ cardStory(s) || 'No activity yet' }}
         </p>
@@ -293,6 +296,11 @@ defineExpose({ load }) // used by control/pagination tasks
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.library-desc-muted {
+  color: var(--color-text-muted);
+  font-style: italic;
 }
 
 .library-desc-quote {
