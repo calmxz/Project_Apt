@@ -1,5 +1,7 @@
 <script setup>
 defineProps({
+  /** Optional id so consumers can reference the chip row from aria-describedby. */
+  id: { type: String, default: undefined },
   /** Output of cardChips(session): [{ type, label, count? }]. */
   chips: { type: Array, required: true },
   /** 'rail' (sidebar, compact) | 'card' (home/library, full-size). */
@@ -12,7 +14,7 @@ defineProps({
 </script>
 
 <template>
-  <span class="chips" :class="`chips--${variant}`" data-testid="session-chips">
+  <span class="chips" :id="id" :class="`chips--${variant}`" data-testid="session-chips">
     <template v-for="chip in chips" :key="chip.type">
       <span v-if="chip.type === 'focus'" class="chip chip--focus" data-testid="chip-focus">
         <span class="chip-glyph" aria-hidden="true">&#9678;</span>

@@ -141,7 +141,7 @@ function commitRenameFromKey() {
       class="sb-row-button"
       :aria-current="isCurrent ? 'page' : undefined"
       :aria-label="`Open session: ${session.topic || 'Untitled'}`"
-      :aria-describedby="!isCollapsed ? describedBy : undefined"
+      :aria-describedby="!isCollapsed && !renaming ? describedBy : undefined"
       :title="isCollapsed ? tooltip : ''"
       data-testid="sidebar-row-open"
       @click="openSession"
