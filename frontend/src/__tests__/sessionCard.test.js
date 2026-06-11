@@ -142,6 +142,13 @@ describe('railMeta', () => {
     expect(railMeta(s)).toBe('1 msg · 5m ago')
   })
 
+  it('shows "now" when the timestamp is under a minute old', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-06-01T00:00:30Z'))
+    const s = active({ message_count: 2 })
+    expect(railMeta(s)).toBe('2 msgs · now')
+  })
+
   it('omits the time clause when no timestamps at all', () => {
     const s = active({ message_count: 0, created_at: null, last_activity_at: null })
     expect(railMeta(s)).toBe('0 msgs')

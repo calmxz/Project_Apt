@@ -41,7 +41,7 @@ export const formatRelative = (iso) => {
   return RTF.format(Math.round(diffSec / 31557600), 'year')
 }
 
-const SHORT_UNITS = { minute: 'm', hour: 'h', day: 'd', week: 'w', month: 'mo', year: 'y' }
+const SHORT_UNITS = { second: 's', minute: 'm', hour: 'h', day: 'd', week: 'w', month: 'mo', year: 'y' }
 
 // Compact rail variant of formatRelative: "5m ago", "2h ago", "3d ago".
 // Same STEPS thresholds; sub-minute renders as "now".
