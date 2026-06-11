@@ -490,7 +490,7 @@ function goHome() {
 }
 
 .session {
-  max-width: 56rem;
+  max-width: 64rem;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
