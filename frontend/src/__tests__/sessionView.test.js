@@ -7,6 +7,7 @@ import SessionView from '@/views/SessionView.vue'
 import SessionHeader from '@/components/chat/SessionHeader.vue'
 import SessionEndedBanner from '@/components/SessionEndedBanner.vue'
 import CheckQuestion from '@/components/chat/CheckQuestion.vue'
+import Composer from '@/components/chat/Composer.vue'
 import { useSessionStore } from '@/stores/session.js'
 
 const push = vi.fn()
@@ -462,6 +463,23 @@ describe('SessionView', () => {
     const logged = debugSpy.mock.calls.some((c) => String(c[0]).includes('[perf] session'))
     expect(logged).toBe(true)
     debugSpy.mockRestore()
+  })
+
+  it('disables the composer during a switch when currentSession still lags props.id', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(() => new Promise(() => {}))
+    // currentSession still belongs to the PREVIOUS session (open), we navigate to s2.
+    store.currentSession = { id: 's1', topic: 'Old', ended_at: null }
+    store.currentSessionId = 's1'
+    store.detailLoading = true
+    store.sessions = [{ id: 's2', topic: 'New' }]
+    const wrapper = mountView({ id: 's2' })
+    await flushPromises()
+    const composer = wrapper.findComponent(Composer)
+    // Composer renders (isEnded is false via discriminator) but must be disabled
+    // (canSend false because canEnd's discriminator fails id match).
+    expect(composer.exists()).toBe(true)
+    expect(composer.props('disabled')).toBe(true)
   })
 
   it('renders streaming bubble when store.streamingMessage is set', async () => {

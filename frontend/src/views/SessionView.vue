@@ -170,7 +170,14 @@ const lastError = ref(null)
 const isEnded = computed(() =>
   store.currentSession?.id === props.id ? Boolean(store.currentSession.ended_at) : false,
 )
-const canEnd = computed(() => Boolean(store.currentSession && !store.currentSession.ended_at))
+// Discriminator-gated (same as isEnded/headerTopic): during a switch,
+// store.currentSession still holds the PREVIOUS session, so gating on raw
+// currentSession would leave the composer enabled+pointed at the old session
+// (currentSessionId lags props.id until the await resolves) — a send would
+// land in the wrong session and then vanish when the target detail loads.
+const canEnd = computed(() =>
+  store.currentSession?.id === props.id && !store.currentSession.ended_at,
+)
 const canSend = computed(() => canEnd.value && !store.dailyCapReached && !store.costCapReached)
 
 // Optimistic header: while the detail fetch is in flight, store.currentSession
@@ -263,6 +270,11 @@ watch(
 async function loadCurrent(id) {
   // Reset per-load so navigating away from a 404 session clears the state.
   notFound.value = false
+  // Drop any prior session's send-error so it can't render (with a wrong-session
+  // Retry) over the newly-navigated session. Mirrors store.error clearing on
+  // loadSession entry. loadCurrent only runs on mount + id-change, so a same-
+  // session send-error stays retryable.
+  lastError.value = null
   const startedAt = import.meta.env.DEV ? performance.now() : 0
   try {
     await store.loadSession(id)

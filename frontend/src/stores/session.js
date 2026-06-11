@@ -37,6 +37,10 @@ export const useSessionStore = defineStore('session', () => {
   // and carries no invalidation surface. De-dupes the double GET /sessions on
   // home load and collapses concurrent same-id detail loads. NOT a cache.
   const _inflight = new Map()
+  // Tracks the most recently requested detail id so an out-of-order resolution
+  // (A->B->A, B resolving last) cannot clobber currentSession/messages for the
+  // session the user is actually viewing. Module-scoped (not reactive).
+  let _latestRequestedId = null
 
   async function fetchLibrary(params) {
     libraryLoading.value = true
@@ -100,6 +104,7 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   async function loadSession(id) {
+    _latestRequestedId = id
     if (_inflight.has(id)) return _inflight.get(id)
     const p = (async () => {
       loading.value = true
@@ -107,6 +112,7 @@ export const useSessionStore = defineStore('session', () => {
       error.value = null
       try {
         const s = await sessionsApi.getSession(id)
+        if (_latestRequestedId !== id) return s // superseded by a newer load; drop the write
         currentSession.value = s
         currentSessionId.value = s.id
         messages.value = (s.messages || []).map((m) => ({

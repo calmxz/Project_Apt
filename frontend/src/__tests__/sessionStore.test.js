@@ -213,6 +213,22 @@ describe('session store', () => {
     expect(sessionsApi.getSession).toHaveBeenCalledTimes(2)
   })
 
+  it('drops a superseded out-of-order load (A->B->A, B resolves last)', async () => {
+    const resolvers = {}
+    sessionsApi.getSession.mockImplementation(
+      (id) => new Promise((r) => { resolvers[id] = () => r({ id, messages: [] }) }),
+    )
+    const s = useSessionStore()
+    const pA1 = s.loadSession('A')
+    const pB = s.loadSession('B')
+    const pA2 = s.loadSession('A') // deduped onto the still-pending A load; re-stamps latest='A'
+    resolvers['A']()
+    resolvers['B']() // B resolves AFTER A, but A is the latest requested -> B must not clobber
+    await Promise.all([pA1, pB, pA2])
+    expect(s.currentSessionId).toBe('A')
+    expect(s.currentSession.id).toBe('A')
+  })
+
   it('fetchLibrary returns the page and toggles libraryLoading', async () => {
     const page = { items: [{ id: 's1' }], total: 1, limit: 20, offset: 0 }
     sessionsApi.getSessionLibrary.mockResolvedValueOnce(page)
