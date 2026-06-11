@@ -229,6 +229,31 @@ describe('session store', () => {
     expect(s.currentSession.id).toBe('A')
   })
 
+  it('a superseded load that 404s does not clobber the current session error', async () => {
+    const slots = {}
+    sessionsApi.getSession.mockImplementation(
+      (id) => new Promise((res, rej) => { slots[id] = { res, rej } }),
+    )
+    const s = useSessionStore()
+    const pA = s.loadSession('A')
+    const pB = s.loadSession('B') // latest requested -> B
+    slots['B'].res({ id: 'B', messages: [] })
+    // A 404s AFTER navigating to B; it must not surface an error over B.
+    slots['A'].rej(Object.assign(new Error('gone'), { status: 404 }))
+    await Promise.allSettled([pA, pB])
+    expect(s.currentSession.id).toBe('B')
+    expect(s.error).toBeNull()
+  })
+
+  it('a non-superseded 404 still surfaces the error (guard does not over-suppress)', async () => {
+    sessionsApi.getSession.mockRejectedValueOnce(
+      Object.assign(new Error('gone'), { status: 404 }),
+    )
+    const s = useSessionStore()
+    await expect(s.loadSession('gone')).rejects.toBeTruthy()
+    expect(s.error).toBeTruthy()
+  })
+
   it('fetchLibrary returns the page and toggles libraryLoading', async () => {
     const page = { items: [{ id: 's1' }], total: 1, limit: 20, offset: 0 }
     sessionsApi.getSessionLibrary.mockResolvedValueOnce(page)

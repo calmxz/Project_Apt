@@ -286,6 +286,10 @@ async function loadCurrent(id) {
       console.debug(`[perf] session ${id} detail painted in ${Math.round(performance.now() - startedAt)}ms`)
     }
   } catch (e) {
+    // Superseded load: a newer navigation already changed props.id, so a late
+    // 404 from the session we left must not flash its not-found over the one now
+    // on screen. Same discriminator the success-path computeds use (id===props.id).
+    if (id !== props.id) return
     if (e?.status === 404) {
       notFound.value = true
       store.setError(null)

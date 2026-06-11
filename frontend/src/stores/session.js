@@ -156,6 +156,10 @@ export const useSessionStore = defineStore('session', () => {
           : null
         return s
       } catch (e) {
+        // Same discriminator as the success path: a superseded load (the user
+        // already navigated on) must not surface its error over the session now
+        // being viewed. Drop it silently — the active load owns error state.
+        if (_latestRequestedId !== id) return
         _setError(e)
       } finally {
         loading.value = false
