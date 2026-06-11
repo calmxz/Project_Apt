@@ -14,6 +14,8 @@ The sidebar session rows, the home "Recent activity" cards, and the `/sessions` 
 
 The enriched payload fields `progress.focus_target_gap` and `progress.mastered_count` (shipped in WS0/WS1, present on both `SessionListItem` and `RecentSessionSummary`) are underused: today they only appear as text fallbacks inside `cardDescription`.
 
+Live verification (2026-06-11, real 6-session account): home cards mirror sidebar rows string-for-string; sessions with a focus gap set (4 of 6) show `Focus: <gap>` as their entire description on home — no narrative at all, because focus outranks preview in the fallback chain; the sidebar meta line (`"NN messages · last active …"`) truncates on every row at default rail width.
+
 ## Decision
 
 Hybrid of the two directions explored in mockups:
