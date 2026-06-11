@@ -43,7 +43,9 @@ describe('SessionsLibraryView', () => {
     const wrapper = mount(SessionsLibraryView, { global: { stubs } })
     await flushPromises()
     expect(wrapper.findAll('[data-testid^="library-card-"]')).toHaveLength(2)
-    expect(wrapper.get('[data-testid="library-card-a"]').text()).toContain('Focus: gap-a')
+    const card = wrapper.get('[data-testid="library-card-a"]')
+    expect(card.find('.library-chips').text()).toContain('Focus: gap-a')
+    expect(card.find('.library-desc').text()).toBe('No activity yet')
   })
 
   it('shows the empty state when no results', async () => {
