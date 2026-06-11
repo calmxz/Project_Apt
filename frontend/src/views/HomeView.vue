@@ -91,10 +91,19 @@
                 </div>
                 <p
                   class="recent-snippet"
-                  :class="{ 'recent-snippet-muted': !cardDescription(s) }"
+                  :class="{
+                    'recent-snippet-muted': !cardStory(s),
+                    'recent-snippet-quote': !s.ended_at && !!cardStory(s),
+                  }"
                 >
-                  {{ cardDescription(s) || 'No activity yet' }}
+                  {{ cardStory(s) || 'No activity yet' }}
                 </p>
+                <SessionChips
+                  v-if="cardChips(s).length"
+                  class="recent-chips"
+                  :chips="cardChips(s)"
+                  variant="card"
+                />
                 <p class="recent-meta">{{ cardMeta(s) }}</p>
               </div>
               <i class="pi pi-arrow-right recent-arrow" aria-hidden="true" />
@@ -153,7 +162,8 @@ import { friendlyError } from '../lib/errors.js'
 import * as sessionsApi from '../services/sessionsApi.js'
 import { useSessionStore } from '../stores/session.js'
 import { formatRelative, normalizeTopicKey } from '../utils/formatDate.js'
-import { cardDescription, cardMeta } from '../utils/sessionCard.js'
+import { cardStory, cardChips, cardMeta } from '../utils/sessionCard.js'
+import SessionChips from '../components/SessionChips.vue'
 import { getAggregateProfile } from '../services/profileApi.js'
 
 const router = useRouter()
@@ -510,6 +520,22 @@ async function cleanupDuplicates() {
 .recent-snippet-muted {
   color: var(--color-text-muted);
   font-style: italic;
+}
+
+.recent-snippet-quote {
+  font-style: italic;
+}
+
+.recent-snippet-quote::before {
+  content: '\201C';
+}
+
+.recent-snippet-quote::after {
+  content: '\201D';
+}
+
+.recent-chips {
+  margin-top: 0.125rem;
 }
 
 .recent-meta {
