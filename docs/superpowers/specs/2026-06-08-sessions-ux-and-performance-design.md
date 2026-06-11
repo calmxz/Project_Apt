@@ -267,6 +267,19 @@ does — confirm via the dev timing log), **build neither.** If built: entries a
 invalidated on any mutation to that session id, never used while a stream is in flight for
 that id.
 
+### Cut-1 measurement outcome (2026-06-11) — retention tail DEFERRED
+
+Executed Cut 1 (subagent-driven-development); measured live via Chrome automation against the dev stack.
+
+- **Median navigate→painted ≈ 693ms** across 10 real sidebar switches (warm ≈ 683ms; first 2292ms was a cold-start outlier). Per-session times were **flat ~666–985ms regardless of history length** — the 19-message Glycolysis session sat mid-pack at 804ms, not at the top. Flat-vs-length is the signature of **fixed per-request network overhead, not the `reconstruct_check_batch` N+1** (which would scale with message count). No backend N+1 hunt warranted.
+- **Not production-representative.** The dev backend talks to **remote Supabase-managed Postgres**, so this measured `local FastAPI → WAN → hosted Postgres` — every query pays an internet round-trip. The ~250ms gate threshold was implicitly for production (backend co-located with the DB). A ~2.7× inflation from WAN round-trips on a multi-query endpoint is exactly expected.
+- **Home issues ONE `GET /sessions`** (dedup confirmed via Network tab). **Optimistic header confirmed live** — the target topic paints immediately on click (perceived responsiveness = header-paint ~0ms, not content-arrival).
+
+**Decision: ship Cut 1; DEFER the retention tail (warm prefetch + SWR cache) — neither cut nor built.** Switching already *feels* instant via the optimistic header + skeleton; the ~700ms is a dev WAN artifact that likely vanishes when backend and DB are co-located in prod. Building the cache + its invalidation surface (the PR #72 bug class) to mask a latency that may not exist in production would pay real complexity for a dev artifact. The **dev timing log is KEPT** to re-measure post-deploy against a production-like backend; the tail decision is re-gated on that number plus a "does switching feel instant?" human check.
+
+**Switch-state correctness fixes landed beyond the plan-as-written** (holistic review + advisor, all reviewed): `isEnded` + `canEnd`/`canSend` use the same `currentSession?.id === props.id` discriminator as `headerTopic` (the optimistic header otherwise let the ended-banner/resume and the composer act on the *previous* session during a switch — wrong-session send + silent message loss); `loadCurrent` clears `lastError` on navigation (a prior session's send-error + wrong-session Retry could bleed over the new session); `loadSession` tracks `_latestRequestedId` and drops a superseded out-of-order commit (A→B→A with B resolving last would clobber `currentSession`/`messages`).
+**Known fast-follow (pre-existing, not introduced):** a superseded load that *rejects* (e.g. an abandoned A request 404s after B paints) still runs `_setError`/`notFound` — the sentinel guards only the success-path write. Extend the discriminator into the error path in a follow-up.
+
 ### WS3 tests (Cut 1)
 
 - In-flight guard: two concurrent `listSessions()` (and two concurrent same-id `loadSession`)
