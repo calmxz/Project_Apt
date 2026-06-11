@@ -41,6 +41,7 @@ defineProps({
   align-items: center;
   gap: 0.375rem;
   min-width: 0;
+  max-width: 100%;
 }
 
 .chip {
@@ -48,6 +49,7 @@ defineProps({
   align-items: center;
   gap: 0.25rem;
   min-width: 0;
+  max-width: 100%;
   border-radius: var(--radius-pill);
   font-family: var(--font-sans);
   white-space: nowrap;
@@ -68,6 +70,7 @@ defineProps({
 .chip-text {
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .chips--rail .chip {
