@@ -48,6 +48,7 @@ const SHORT_UNITS = { minute: 'm', hour: 'h', day: 'd', week: 'w', month: 'mo', 
 export const formatRelativeShort = (iso) => {
   if (!iso) return ''
   const absSec = Math.abs((Date.now() - new Date(iso).getTime()) / 1000)
+  if (isNaN(absSec)) return ''
   if (absSec < 60) return 'now'
   for (const { limit, divisor, unit } of STEPS) {
     if (absSec < limit) {

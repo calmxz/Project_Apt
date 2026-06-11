@@ -109,4 +109,8 @@ describe('formatRelativeShort', () => {
     expect(formatRelativeShort('2025-11-15T12:00:00Z')).toBe('2mo ago')
     expect(formatRelativeShort('2024-01-15T12:00:00Z')).toBe('2y ago')
   })
+
+  it('returns empty string for an invalid date string', () => {
+    expect(formatRelativeShort('not-a-date')).toBe('')
+  })
 })
