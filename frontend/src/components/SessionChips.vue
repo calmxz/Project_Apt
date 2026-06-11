@@ -3,7 +3,11 @@ defineProps({
   /** Output of cardChips(session): [{ type, label, count? }]. */
   chips: { type: Array, required: true },
   /** 'rail' (sidebar, compact) | 'card' (home/library, full-size). */
-  variant: { type: String, default: 'card' },
+  variant: {
+    type: String,
+    default: 'card',
+    validator: (v) => ['rail', 'card'].includes(v),
+  },
 })
 </script>
 
@@ -65,7 +69,7 @@ defineProps({
 }
 
 .chips--rail .chip {
-  font-size: 0.6875rem;
+  font-size: var(--fs-label);
   line-height: 1.5;
   padding: 0 0.4375rem;
 }
@@ -90,7 +94,7 @@ defineProps({
   padding: 0;
   margin: -1px;
   overflow: hidden;
-  clip: rect(0 0 0 0);
+  clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
 }
