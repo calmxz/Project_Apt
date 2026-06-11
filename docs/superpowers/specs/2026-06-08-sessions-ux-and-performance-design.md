@@ -67,15 +67,16 @@ and must be skipped.
 Everything hangs off one shared change — enriching session metadata — so the cards,
 sidebar, and library all read the same payload. **WS0 ships first** (contract + migration
 + perf); WS1/WS2/WS3 follow as **separate plans and PRs** (matches this repo's
-single-feature-PR history). WS3's per-id cache is an **optional tail**, gated on whether
-the earlier perceived-speed wins already suffice.
+single-feature-PR history). WS3's warm prefetch **and** per-id cache are an **optional tail**
+(both retention-based, same lifecycle risk), gated on whether the earlier perceived-speed
+wins already suffice. (Reclassified 2026-06-10 — see WS3 below; warm prefetch is not "safe".)
 
 ```
 WS0  Backend foundation (data + perf)   <- contract change + Alembic migration; ships first
        |
        +--> WS1  Home cards + /sessions library
        +--> WS2  Sidebar redesign
-       +--> WS3  Frontend load speed (safe trio first; SWR cache optional)
+       +--> WS3  Frontend load speed (zero-retention cut first; prefetch+cache gated)
 ```
 
 ---
@@ -209,41 +210,86 @@ last week. This is an intentional change from the current created-at bucketing.
 
 ## WS3 — Frontend load speed
 
-Two tiers. The **safe trio ships first**; the SWR cache is an explicit, **cuttable** tail.
+Two tiers, split by **retention**, not by the original "safe trio vs cache" line.
 
-### Safe trio (low regression risk)
+> **Reclassification (2026-06-10, brainstorm).** The original spec grouped *hover prefetch*
+> with optimistic-render + de-dupe as a "safe trio," isolating only the SWR cache as risky.
+> Tracing the code, that boundary is wrong. To make a **deliberate** hover (hover → pause →
+> click ~600-800ms later) actually warm, you must **retain** the resolved detail and serve it
+> on the click — and the moment you retain a resolved result you owe invalidation on
+> `endSession` / `renameSession` / `reopenSession` / `answerCheck` / stream-start (a mutation
+> can land between prefetch-resolve and click-consume). **That invalidation surface *is* the
+> deferred SWR-cache work.** In-flight-*only* prefetch (never retain the resolved value) has
+> zero invalidation surface but, post-WS0 (~200ms detail), the hover-to-click gap outlasts the
+> request, so it warms ~nothing. Conclusion: **warm prefetch ≈ a smaller instance of the
+> cache, same lifecycle risk** — so it moves into the gated tail with the cache, not the first
+> cut. The honest split is **retention vs no-retention.**
 
-- **Optimistic render:** on navigate, immediately paint the header from the
-  already-known list row (topic, status) + a **message skeleton**, then swap when detail
-  arrives. **Interaction with PR #72's `notFound`:** optimistic paint → if the fetch
-  fails/404s, clear the optimistic header and show the existing not-found state (do not
-  leave a header for a deleted/stale session).
-- **Hover/focus prefetch:** prefetch `GET /sessions/{id}` on sidebar row hover/focus
-  (and home card hover) so the detail is often warm before the click.
-- **De-dupe** the double `GET /sessions` on home load (single shared fetch between
-  sidebar + HomeView, e.g. via the store rather than two independent `onMounted` calls).
+### Cut 1 — no-retention (ships first, zero PR #72 exposure)
 
-### Optional tail — per-id SWR cache (only if still needed)
+Nothing here retains a resolved detail across navigations, so there is no invalidation surface.
 
-A `Map<sessionId, detail>` in the store, **stale-while-revalidate**: serve cached detail
-instantly, refetch in background.
+- **In-flight-promise guard (one primitive):** a `_inflight` Map in the store holding only
+  *pending* promises (never resolved results). `listSessions()` keyed `'list'`,
+  `loadSession(id)` keyed by id; concurrent calls reuse the pending promise, deleted on
+  settle. This **de-dupes the double `GET /sessions`** on home load (HomeView + Sidebar now
+  share one in-flight promise underneath — no change to their `onMounted` calls) *and*
+  collapses concurrent same-id detail loads. No retained results ⇒ a reused promise is by
+  definition as fresh as a new request.
+- **Optimistic render:** on navigate, immediately paint the header from the already-known
+  list row (topic, status) + a **message skeleton**, then swap when detail arrives. The
+  optimistic header is **view-local in `SessionView`** (computed from `store.sessions.find(id)`);
+  it is **never** written into `store.currentSession` — that ref is read by streaming/`endSession`,
+  and a stub there is precisely the PR #72 bug class. **Interaction with PR #72's `notFound`:**
+  optimistic paint → if the fetch fails/404s, clear the optimistic header and show the existing
+  not-found state (do not leave a header for a deleted/stale session).
+- **Message skeleton:** a new detail-area shimmer component, gated on a **detail-specific**
+  flag (`detailLoading`), NOT the shared `loading` (list refetch also sets `loading` and would
+  flash the skeleton). Hidden once messages for the current id arrive.
+- **Dev-only timing log:** `performance.now()` from navigate → detail painted, behind
+  `import.meta.env.DEV`. Zero prod overhead, removable. Produces the number that **gates** the
+  tail below.
 
-**Why optional / sequenced last:** this component just shipped a switch-reload bug
-(PR #72, the reason this branch exists). The store holds single live refs
-(`messages`, `pendingCheck`, `currentSession`) mutated by streaming deltas, `answerCheck`,
-`endSession`, `reopenSession`, `renameSession`. A cache must define snapshot-vs-live
-semantics and invalidation on **each** of those mutations, or it regresses to stale/partial
-content (switch away mid-stream → back → stale; end in sidebar → cached detail still
-"active"). If WS0 (2s → ~200ms) + the safe trio already make switching feel instant, **do
-not build the cache.** If built: entries are snapshots, invalidated on any mutation to that
-session id, never used while a stream is in flight for that id.
+### Gated tail — warm prefetch + per-id SWR cache (only if still needed)
 
-### WS3 tests
+Both are **retention-based and decided together** by the Cut-1 measurement. Warm prefetch =
+`GET /sessions/{id}` on sidebar row / home card hover/focus, result retained until click.
+SWR cache = `Map<sessionId, detail>` serving cached detail instantly + background refetch.
 
-- Optimistic header shows then swaps; failure path clears it and shows not-found.
-- Prefetch warms detail (asserted via fetch ordering/cache hit).
+**Why gated / sequenced last:** this component just shipped a switch-reload bug (PR #72, the
+reason this branch exists). The store holds single live refs (`messages`, `pendingCheck`,
+`currentSession`) mutated by streaming deltas, `answerCheck`, `endSession`, `reopenSession`,
+`renameSession`. Any retained-detail mechanism must define snapshot-vs-live semantics and
+invalidation on **each** of those mutations, or it regresses to stale/partial content (switch
+away mid-stream → back → stale; end in sidebar → cached detail still "active"). **If WS0
+(2s → ~200ms) + Cut 1 already make switching feel instant** (200ms behind a skeleton usually
+does — confirm via the dev timing log), **build neither.** If built: entries are snapshots,
+invalidated on any mutation to that session id, never used while a stream is in flight for
+that id.
+
+### Cut-1 measurement outcome (2026-06-11) — retention tail DEFERRED
+
+Executed Cut 1 (subagent-driven-development); measured live via Chrome automation against the dev stack.
+
+- **Median navigate→painted ≈ 693ms** across 10 real sidebar switches (warm ≈ 683ms; first 2292ms was a cold-start outlier). Per-session times were **flat ~666–985ms regardless of history length** — the 19-message Glycolysis session sat mid-pack at 804ms, not at the top. Flat-vs-length is the signature of **fixed per-request network overhead, not the `reconstruct_check_batch` N+1** (which would scale with message count). No backend N+1 hunt warranted.
+- **Not production-representative.** The dev backend talks to **remote Supabase-managed Postgres**, so this measured `local FastAPI → WAN → hosted Postgres` — every query pays an internet round-trip. The ~250ms gate threshold was implicitly for production (backend co-located with the DB). A ~2.7× inflation from WAN round-trips on a multi-query endpoint is exactly expected.
+- **Home issues ONE `GET /sessions`** (dedup confirmed via Network tab). **Optimistic header confirmed live** — the target topic paints immediately on click (perceived responsiveness = header-paint ~0ms, not content-arrival).
+
+**Decision: ship Cut 1; DEFER the retention tail (warm prefetch + SWR cache) — neither cut nor built.** Switching already *feels* instant via the optimistic header + skeleton; the ~700ms is a dev WAN artifact that likely vanishes when backend and DB are co-located in prod. Building the cache + its invalidation surface (the PR #72 bug class) to mask a latency that may not exist in production would pay real complexity for a dev artifact. The **dev timing log is KEPT** to re-measure post-deploy against a production-like backend; the tail decision is re-gated on that number plus a "does switching feel instant?" human check.
+
+**Switch-state correctness fixes landed beyond the plan-as-written** (holistic review + advisor, all reviewed): `isEnded` + `canEnd`/`canSend` use the same `currentSession?.id === props.id` discriminator as `headerTopic` (the optimistic header otherwise let the ended-banner/resume and the composer act on the *previous* session during a switch — wrong-session send + silent message loss); `loadCurrent` clears `lastError` on navigation (a prior session's send-error + wrong-session Retry could bleed over the new session); `loadSession` tracks `_latestRequestedId` and drops a superseded out-of-order commit (A→B→A with B resolving last would clobber `currentSession`/`messages`).
+**Known fast-follow (pre-existing, not introduced):** a superseded load that *rejects* (e.g. an abandoned A request 404s after B paints) still runs `_setError`/`notFound` — the sentinel guards only the success-path write. Extend the discriminator into the error path in a follow-up.
+
+### WS3 tests (Cut 1)
+
+- In-flight guard: two concurrent `listSessions()` (and two concurrent same-id `loadSession`)
+  issue **one** network call each.
 - Home issues one `GET /sessions`, not two.
-- (If cache built) mutation invalidation: end/rename/stream each evict or update the entry.
+- Optimistic header shows (topic from list row) then swaps to real detail; 404 path clears it
+  and shows not-found.
+- Message skeleton shows while `detailLoading`, hidden once messages arrive.
+- (If the gated tail is built) mutation invalidation: end/rename/reopen/answerCheck/stream each
+  evict or update the entry, and the retained value is never served mid-stream.
 
 ---
 
@@ -252,7 +298,8 @@ session id, never used while a stream is in flight for that id.
 1. **WS0** — contract + migration + perf (+ library endpoint). Ships first; merge to `dev`.
 2. **WS1** — cards + `/sessions` library.
 3. **WS2** — sidebar redesign.
-4. **WS3** — safe trio; SWR cache only if measurement says it's still needed.
+4. **WS3** — Cut 1 (in-flight guard + optimistic render + skeleton + dev timing log);
+   warm prefetch + SWR cache only if the measurement says Cut 1 isn't already instant.
 
 Each workstream is its own implementation plan and PR.
 
@@ -265,8 +312,10 @@ Each workstream is its own implementation plan and PR.
   set-based queries; preview capped; profile after WS0.
 - **`last_activity_at` bucketing change** alters sidebar ordering. Mitigation: explicit,
   documented, covered by tests; easy to revert to created-at if disliked.
-- **SWR cache lifecycle.** Mitigation: gated/optional, snapshot semantics, broad
-  invalidation, or simply not built.
+- **Retained-detail lifecycle (warm prefetch + SWR cache).** Both retain a resolved detail
+  and share one invalidation surface (end/rename/reopen/answerCheck/stream). Mitigation:
+  gated/optional behind the Cut-1 dev-timing measurement, snapshot semantics, broad
+  invalidation, or simply not built. Cut 1 retains nothing, so it carries none of this.
 
 ## Open questions
 

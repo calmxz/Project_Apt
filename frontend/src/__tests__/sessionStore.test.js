@@ -153,6 +153,82 @@ describe('session store', () => {
     expect(s.currentSessionId).toBeNull()
   })
 
+  it('listSessions de-dupes concurrent calls into one network request', async () => {
+    let resolve
+    sessionsApi.listSessions.mockImplementationOnce(
+      () => new Promise((r) => { resolve = r }),
+    )
+    const s = useSessionStore()
+    const p1 = s.listSessions()
+    const p2 = s.listSessions()
+    resolve([{ id: 's1' }])
+    const [r1, r2] = await Promise.all([p1, p2])
+    expect(sessionsApi.listSessions).toHaveBeenCalledTimes(1)
+    expect(r1).toEqual([{ id: 's1' }])
+    expect(r2).toEqual([{ id: 's1' }])
+    expect(s.detailLoading).toBe(false)
+  })
+
+  it('listSessions refetches after a failed request (error path clears inflight key)', async () => {
+    sessionsApi.listSessions
+      .mockRejectedValueOnce(new Error('network'))
+      .mockResolvedValueOnce([{ id: 'b' }])
+    const s = useSessionStore()
+    await expect(s.listSessions()).rejects.toThrow('network')
+    const out = await s.listSessions()
+    expect(sessionsApi.listSessions).toHaveBeenCalledTimes(2)
+    expect(out).toEqual([{ id: 'b' }])
+  })
+
+  it('listSessions refetches after the in-flight request settles (no retained cache)', async () => {
+    sessionsApi.listSessions
+      .mockResolvedValueOnce([{ id: 'a' }])
+      .mockResolvedValueOnce([{ id: 'b' }])
+    const s = useSessionStore()
+    await s.listSessions()
+    await s.listSessions()
+    expect(sessionsApi.listSessions).toHaveBeenCalledTimes(2)
+    expect(s.sessions).toEqual([{ id: 'b' }])
+  })
+
+  it('loadSession de-dupes concurrent same-id calls and toggles detailLoading', async () => {
+    let resolve
+    sessionsApi.getSession.mockImplementationOnce(
+      () => new Promise((r) => { resolve = r }),
+    )
+    const s = useSessionStore()
+    const p1 = s.loadSession('s1')
+    const p2 = s.loadSession('s1')
+    expect(s.detailLoading).toBe(true)
+    resolve({ id: 's1', messages: [] })
+    await Promise.all([p1, p2])
+    expect(sessionsApi.getSession).toHaveBeenCalledTimes(1)
+    expect(s.detailLoading).toBe(false)
+  })
+
+  it('loadSession does not de-dupe different ids', async () => {
+    sessionsApi.getSession.mockResolvedValue({ id: 'x', messages: [] })
+    const s = useSessionStore()
+    await Promise.all([s.loadSession('s1'), s.loadSession('s2')])
+    expect(sessionsApi.getSession).toHaveBeenCalledTimes(2)
+  })
+
+  it('drops a superseded out-of-order load (A->B->A, B resolves last)', async () => {
+    const resolvers = {}
+    sessionsApi.getSession.mockImplementation(
+      (id) => new Promise((r) => { resolvers[id] = () => r({ id, messages: [] }) }),
+    )
+    const s = useSessionStore()
+    const pA1 = s.loadSession('A')
+    const pB = s.loadSession('B')
+    const pA2 = s.loadSession('A') // deduped onto the still-pending A load; re-stamps latest='A'
+    resolvers['A']()
+    resolvers['B']() // B resolves AFTER A, but A is the latest requested -> B must not clobber
+    await Promise.all([pA1, pB, pA2])
+    expect(s.currentSessionId).toBe('A')
+    expect(s.currentSession.id).toBe('A')
+  })
+
   it('fetchLibrary returns the page and toggles libraryLoading', async () => {
     const page = { items: [{ id: 's1' }], total: 1, limit: 20, offset: 0 }
     sessionsApi.getSessionLibrary.mockResolvedValueOnce(page)

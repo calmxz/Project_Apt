@@ -13,7 +13,7 @@
     </div>
 
     <template v-else>
-      <SessionHeader :topic="store.currentSession?.topic || ''" />
+      <SessionHeader :topic="headerTopic" />
 
       <BackButton />
 
@@ -27,17 +27,20 @@
       />
 
       <div ref="messagesEl" class="messages" :class="{ 'is-empty': !store.messages.length }" data-testid="session-messages">
-        <ChatEmptyState
-          v-if="!store.messages.length"
-          :archived="isEnded"
-          @quick-prompt="useQuickPrompt"
-        />
-        <MessageList
-          v-if="store.messages.length || store.streamingMessage || awaitingResponse"
-          :messages="store.messages"
-          :streaming-message="store.streamingMessage"
-          :awaiting="awaitingResponse"
-        />
+        <MessageListSkeleton v-if="store.detailLoading" />
+        <template v-else>
+          <ChatEmptyState
+            v-if="!store.messages.length"
+            :archived="isEnded"
+            @quick-prompt="useQuickPrompt"
+          />
+          <MessageList
+            v-if="store.messages.length || store.streamingMessage || awaitingResponse"
+            :messages="store.messages"
+            :streaming-message="store.streamingMessage"
+            :awaiting="awaitingResponse"
+          />
+        </template>
       </div>
 
       <div
@@ -65,7 +68,7 @@
       <UploadStatus :upload="uploadStatus" />
 
       <CheckQuestion
-        v-if="store.pendingCheck"
+        v-if="store.pendingCheck && !store.detailLoading"
         :check="store.pendingCheck"
         @answer="onAnswerCheck"
         @skip="onSkipCheck"
@@ -125,6 +128,7 @@ import ChatEmptyState from '../components/chat/EmptyState.vue'
 import CheckQuestion from '../components/chat/CheckQuestion.vue'
 import Composer from '../components/chat/Composer.vue'
 import MessageList from '../components/chat/MessageList.vue'
+import MessageListSkeleton from '../components/chat/MessageListSkeleton.vue'
 import SessionHeader from '../components/chat/SessionHeader.vue'
 import SessionEndedBanner from '../components/SessionEndedBanner.vue'
 import UploadStatus from '../components/chat/UploadStatus.vue'
@@ -158,9 +162,34 @@ const uploading = ref(false)
 const uploadStatus = ref(null)
 const lastError = ref(null)
 
-const isEnded = computed(() => Boolean(store.currentSession?.ended_at))
-const canEnd = computed(() => Boolean(store.currentSession && !store.currentSession.ended_at))
+// Use the same target-id discriminator as headerTopic so the ended-banner /
+// composer / resume action agree with the optimistic header during a switch.
+// While detail loads, store.currentSession still holds the PREVIOUS session, so
+// reading ended_at directly would show a stale banner and misdirect resume() to
+// the old session id. Falls back to not-ended until the target detail resolves.
+const isEnded = computed(() =>
+  store.currentSession?.id === props.id ? Boolean(store.currentSession.ended_at) : false,
+)
+// Discriminator-gated (same as isEnded/headerTopic): during a switch,
+// store.currentSession still holds the PREVIOUS session, so gating on raw
+// currentSession would leave the composer enabled+pointed at the old session
+// (currentSessionId lags props.id until the await resolves) — a send would
+// land in the wrong session and then vanish when the target detail loads.
+const canEnd = computed(() =>
+  store.currentSession?.id === props.id && !store.currentSession.ended_at,
+)
 const canSend = computed(() => canEnd.value && !store.dailyCapReached && !store.costCapReached)
+
+// Optimistic header: while the detail fetch is in flight, store.currentSession
+// still holds the PREVIOUS session (it is overwritten only after the await
+// resolves), so paint the target session's topic from the already-known list
+// row. View-local only — store.currentSession is never stubbed, which is what
+// keeps this clear of the PR #72 switch-reload bug class.
+const knownRow = computed(() => store.sessions.find((s) => s.id === props.id) || null)
+const headerTopic = computed(() => {
+  if (store.currentSession?.id === props.id) return store.currentSession.topic || ''
+  return knownRow.value?.topic || ''
+})
 
 // When the composer is disabled because a daily/cost cap was hit, point its
 // aria-describedby at the matching cap banner so screen-reader users hear why
@@ -241,8 +270,21 @@ watch(
 async function loadCurrent(id) {
   // Reset per-load so navigating away from a 404 session clears the state.
   notFound.value = false
+  // Drop any prior session's send-error so it can't render (with a wrong-session
+  // Retry) over the newly-navigated session. Mirrors store.error clearing on
+  // loadSession entry. loadCurrent only runs on mount + id-change, so a same-
+  // session send-error stays retryable.
+  lastError.value = null
+  const startedAt = import.meta.env.DEV ? performance.now() : 0
   try {
     await store.loadSession(id)
+    if (import.meta.env.DEV) {
+      await nextTick()
+      // Dev-only WS3 gate measurement: navigate -> detail painted. This number
+      // decides whether the retention tail (warm prefetch + SWR cache) is worth
+      // building (see Task 5). Remove once that decision is recorded.
+      console.debug(`[perf] session ${id} detail painted in ${Math.round(performance.now() - startedAt)}ms`)
+    }
   } catch (e) {
     if (e?.status === 404) {
       notFound.value = true
@@ -448,7 +490,7 @@ function goHome() {
 }
 
 .session {
-  max-width: 56rem;
+  max-width: 64rem;
   margin: 0 auto;
   display: flex;
   flex-direction: column;

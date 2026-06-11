@@ -142,9 +142,15 @@ def test_list_sessions_preview_skips_non_space_whitespace(client, db_session, se
     assert item["last_message_preview"] == "real answer here"
 
 
-def _seed_simple(db, sid, topic, ended=False, activity=None):
-    db.add(SessionModel(id=sid, user_id=USER_ID, topic=topic, topic_profile_json="{}",
-                        ended_at=(datetime(2026, 6, 2, tzinfo=timezone.utc) if ended else None)))
+def _seed_simple(db, sid, topic, ended=False, activity=None, created=None):
+    sess = SessionModel(id=sid, user_id=USER_ID, topic=topic, topic_profile_json="{}",
+                        ended_at=(datetime(2026, 6, 2, tzinfo=timezone.utc) if ended else None))
+    # Pin created_at when given so last_activity fallback (created_at when a
+    # session has no messages) is deterministic instead of defaulting to the
+    # real clock — otherwise a "no activity" seed sorts by wall-time.
+    if created is not None:
+        sess.created_at = created
+    db.add(sess)
     if activity is not None:
         db.add(ChatMessage(session_id=sid, role="user", content="x", created_at=activity))
     db.commit()
@@ -174,9 +180,14 @@ def test_library_search_and_pagination(client, db_session, seeded_user):
 
 def test_library_sort_last_activity(client, db_session, seeded_user):
     base = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    # Old session, recently active: its message activity dominates last_activity.
     _seed_simple(db_session, "lib_old_created_recent_active", "A",
-                 activity=base + timedelta(days=10))
-    _seed_simple(db_session, "lib_new_created_no_activity", "B")
+                 created=base, activity=base + timedelta(days=10))
+    # Freshly created but never touched: last_activity falls back to created_at.
+    # Pin it in the past (and before the other's activity) so the sort is
+    # deterministic regardless of the real wall-clock at test time.
+    _seed_simple(db_session, "lib_new_created_no_activity", "B",
+                 created=base + timedelta(days=5))
     r = client.get(f"/api/sessions/library?sort=last_activity&user_id={USER_ID}")
     assert r.status_code == 200, r.text
     ids = [i["id"] for i in r.json()["items"]]
