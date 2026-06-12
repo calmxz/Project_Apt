@@ -125,7 +125,7 @@ describe('Sidebar.vue — session list rendering', () => {
     expect(btn.attributes('aria-current')).toBe('page')
   })
 
-  it('renders a description line and a meta line in each row', async () => {
+  it('renders chips and a compact meta line in each row', async () => {
     const store = useSessionStore()
     store.sessions = [
       {
@@ -142,9 +142,105 @@ describe('Sidebar.vue — session list rendering', () => {
     wrapper = mount(Sidebar)
     await flushPromises()
     const row = wrapper.find('[data-testid="sidebar-row-a1"]')
-    expect(row.find('.sb-row-desc').text()).toBe('Focus: ATP yield')
-    expect(row.find('.sb-row-meta').text()).toContain('4 messages')
-    expect(row.find('.sb-row-meta').text()).toContain('last active')
+    expect(row.find('.sb-row-chips').text()).toContain('ATP yield')
+    expect(row.find('.sb-row-desc').exists()).toBe(false)
+    expect(row.find('.sb-row-meta').text()).toBe('4 msgs · now')
+  })
+
+  it('signal-poor row renders no chips and never prose', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      {
+        id: 'a9',
+        topic: 'Mitosis',
+        created_at: new Date().toISOString(),
+        last_activity_at: new Date().toISOString(),
+        ended_at: null,
+        message_count: 4,
+        progress: { focus_target_gap: null, mastered_count: 0 },
+        last_message_preview: 'That is correct! You listed all four stages.',
+      },
+    ]
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    const row = wrapper.find('[data-testid="sidebar-row-a9"]')
+    expect(row.find('.sb-row-chips').exists()).toBe(false)
+    expect(row.text()).not.toContain('That is correct!')
+  })
+
+  it('ended row follows the same chips rule — summary prose never renders', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      {
+        id: 'e1',
+        topic: 'Krebs',
+        created_at: new Date().toISOString(),
+        last_activity_at: new Date().toISOString(),
+        ended_at: new Date().toISOString(),
+        message_count: 9,
+        progress: { focus_target_gap: null, mastered_count: 2 },
+        last_session_summary: '[auto] Covered the Krebs cycle',
+      },
+    ]
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    await wrapper.find('[data-testid="sidebar-status-ended"]').trigger('click')
+    const row = wrapper.find('[data-testid="sidebar-row-e1"]')
+    expect(row.find('.sb-row-chips [data-testid="chip-mastered"]').text()).toContain('2')
+    expect(row.text()).not.toContain('Covered the Krebs cycle')
+  })
+
+  it('aria-describedby lists chips id then meta id when chips exist, meta only otherwise', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      {
+        id: 'a1',
+        topic: 'Glycolysis',
+        created_at: new Date().toISOString(),
+        last_activity_at: new Date().toISOString(),
+        ended_at: null,
+        message_count: 4,
+        progress: { focus_target_gap: 'ATP yield', mastered_count: 0 },
+        last_message_preview: null,
+      },
+      {
+        id: 'a9',
+        topic: 'Mitosis',
+        created_at: new Date().toISOString(),
+        last_activity_at: new Date().toISOString(),
+        ended_at: null,
+        message_count: 4,
+        progress: { focus_target_gap: null, mastered_count: 0 },
+        last_message_preview: null,
+      },
+    ]
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    const richBtn = wrapper.get('[data-testid="sidebar-row-a1"] [data-testid="sidebar-row-open"]')
+    expect(richBtn.attributes('aria-describedby')).toBe('sb-row-chips-a1 sb-row-meta-a1')
+    const sparseBtn = wrapper.get('[data-testid="sidebar-row-a9"] [data-testid="sidebar-row-open"]')
+    expect(sparseBtn.attributes('aria-describedby')).toBe('sb-row-meta-a9')
+  })
+
+  it('collapsed tooltip is built from chip labels', async () => {
+    sidebarTest._setExpanded(false)
+    const store = useSessionStore()
+    store.sessions = [
+      {
+        id: 'a1',
+        topic: 'Glycolysis',
+        created_at: new Date().toISOString(),
+        last_activity_at: new Date().toISOString(),
+        ended_at: null,
+        message_count: 4,
+        progress: { focus_target_gap: 'ATP yield', mastered_count: 2 },
+        last_message_preview: null,
+      },
+    ]
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    const btn = wrapper.get('[data-testid="sidebar-row-a1"] [data-testid="sidebar-row-open"]')
+    expect(btn.attributes('title')).toBe('Glycolysis — Focus: ATP yield, 2 mastered')
   })
 
   it('highlights the current session row', async () => {

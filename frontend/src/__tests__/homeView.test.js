@@ -343,13 +343,25 @@ describe('HomeView', () => {
     }
   }
 
-  it('renders the layered card description (focus tier)', async () => {
+  it('renders chips separately from the story line', async () => {
     apiAggregate.mockResolvedValue({ recent_topics: [makeRichRecent('r1')] })
     const store = useSessionStore()
     vi.spyOn(store, 'listSessions').mockResolvedValue([])
     const wrapper = mountView()
     await flushPromises()
-    expect(wrapper.get('[data-testid="home-recent-r1"]').text()).toContain('Focus: ATP yield')
+    const card = wrapper.get('[data-testid="home-recent-r1"]')
+    expect(card.find('.recent-chips').text()).toContain('Focus: ATP yield')
+    expect(card.find('.recent-snippet').text()).not.toContain('Focus:')
+  })
+
+  it('renders no chips element when the session has no signals', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'listSessions').mockResolvedValue([])
+    store.sessions = [makeSession('a1', 'Trees')]
+    apiAggregate.mockResolvedValue({ recent_topics: [makeRecent('a1', 'Trees')] })
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.get('[data-testid="home-recent-a1"]').find('.recent-chips').exists()).toBe(false)
   })
 
   it('shows a "View all sessions" link to /sessions when sessions exist', async () => {

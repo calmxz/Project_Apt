@@ -43,7 +43,9 @@ describe('SessionsLibraryView', () => {
     const wrapper = mount(SessionsLibraryView, { global: { stubs } })
     await flushPromises()
     expect(wrapper.findAll('[data-testid^="library-card-"]')).toHaveLength(2)
-    expect(wrapper.get('[data-testid="library-card-a"]').text()).toContain('Focus: gap-a')
+    const card = wrapper.get('[data-testid="library-card-a"]')
+    expect(card.find('.library-chips').text()).toContain('Focus: gap-a')
+    expect(card.find('.library-desc').text()).toBe('No activity yet')
   })
 
   it('shows the empty state when no results', async () => {
@@ -178,5 +180,32 @@ describe('SessionsLibraryView', () => {
     await flushPromises()
     const back = wrapper.get('[data-testid="library-back"]')
     expect(back.attributes('to') || back.attributes('href')).toBe('/')
+  })
+
+  it('ended card shows Continue button; active card does not', async () => {
+    sessionsApi.getSessionLibrary.mockResolvedValue(page([
+      item('active1'),
+      item('ended1', { ended_at: '2026-06-02T00:00:00Z' }),
+    ]))
+    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="library-continue-ended1"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="library-continue-active1"]').exists()).toBe(false)
+  })
+
+  it('clicking Continue reopens then navigates without double-firing card navigation', async () => {
+    const { useSessionStore } = await import('@/stores/session.js')
+    const store = useSessionStore()
+    const reopenSpy = vi.spyOn(store, 'reopenSession').mockResolvedValue({})
+    sessionsApi.getSessionLibrary.mockResolvedValue(page([
+      item('z', { ended_at: '2026-06-02T00:00:00Z' }),
+    ]))
+    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+    await flushPromises()
+    await wrapper.get('[data-testid="library-continue-z"]').trigger('click')
+    await flushPromises()
+    expect(reopenSpy).toHaveBeenCalledWith('z')
+    expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'z' } })
+    expect(push).toHaveBeenCalledTimes(1)
   })
 })

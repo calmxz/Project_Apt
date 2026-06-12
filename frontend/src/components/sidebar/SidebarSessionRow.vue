@@ -1,7 +1,8 @@
 <script setup>
 import { computed, nextTick, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { cardDescription, cardMeta } from '@/utils/sessionCard.js'
+import { cardChips, railMeta } from '@/utils/sessionCard.js'
+import SessionChips from '../SessionChips.vue'
 import { useSidebar } from '@/composables/useSidebar.js'
 import { useSessionStore } from '@/stores/session.js'
 import SidebarRowMenu from './SidebarRowMenu.vue'
@@ -26,22 +27,22 @@ const inputEl = ref(null)
 const isCurrent = computed(() => route.params.id === props.session.id)
 const isCollapsed = computed(() => mode.value === 'collapsed')
 
-const description = computed(() => cardDescription(props.session))
-const meta = computed(() => cardMeta(props.session))
+const chips = computed(() => cardChips(props.session))
+const meta = computed(() => railMeta(props.session))
 
-const descId = computed(() => `sb-row-desc-${props.session.id}`)
+const chipsId = computed(() => `sb-row-chips-${props.session.id}`)
 const metaId = computed(() => `sb-row-meta-${props.session.id}`)
 const describedBy = computed(() => {
   const ids = []
-  if (description.value) ids.push(descId.value)
+  if (chips.value.length) ids.push(chipsId.value)
   ids.push(metaId.value)
   return ids.join(' ')
 })
 
 const tooltip = computed(() => {
-  const d = cardDescription(props.session)
   const topic = props.session.topic || 'Untitled'
-  return d ? `${topic} — ${d}` : topic
+  const parts = chips.value.map((c) => (c.type === 'focus' ? `Focus: ${c.label}` : c.label))
+  return parts.length ? `${topic} — ${parts.join(', ')}` : topic
 })
 
 function openSession() {
@@ -140,7 +141,7 @@ function commitRenameFromKey() {
       class="sb-row-button"
       :aria-current="isCurrent ? 'page' : undefined"
       :aria-label="`Open session: ${session.topic || 'Untitled'}`"
-      :aria-describedby="!isCollapsed ? describedBy : undefined"
+      :aria-describedby="!isCollapsed && !renaming ? describedBy : undefined"
       :title="isCollapsed ? tooltip : ''"
       data-testid="sidebar-row-open"
       @click="openSession"
@@ -164,7 +165,13 @@ function commitRenameFromKey() {
           <i v-if="session.pinned && !session.ended_at" class="pi pi-bookmark-fill sb-row-pin" aria-hidden="true" />
           {{ session.topic || 'Untitled' }}
         </span>
-        <span v-if="description && !renaming" :id="descId" class="sb-row-desc">{{ description }}</span>
+        <SessionChips
+          v-if="chips.length && !renaming"
+          :id="chipsId"
+          class="sb-row-chips"
+          :chips="chips"
+          variant="rail"
+        />
         <span v-if="!renaming" :id="metaId" class="sb-row-meta">{{ meta }}</span>
       </span>
     </button>
@@ -278,18 +285,12 @@ function commitRenameFromKey() {
   font-weight: 400;
 }
 
-.sb-row-desc {
-  font-family: var(--font-sans);
-  font-size: var(--fs-caption);
-  color: var(--color-text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 1.25;
+.sb-row-chips {
+  margin-top: 0.0625rem;
 }
 
-.sb-row--ended .sb-row-desc {
-  color: var(--color-text-muted);
+.sb-row--ended .sb-row-chips {
+  opacity: 0.75;
 }
 
 .sb-row--current .sb-row-topic {
