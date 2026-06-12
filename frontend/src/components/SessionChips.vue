@@ -62,6 +62,8 @@ defineProps({
 }
 
 .chip--mastered {
+  /* fixed-content chip: never shrinks; the focus chip absorbs all flex shrinkage */
+  flex-shrink: 0;
   background: transparent;
   border: 1px solid var(--signal-success, #0a7);
   color: var(--signal-success, #0a7);
