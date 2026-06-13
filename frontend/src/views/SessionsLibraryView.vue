@@ -106,6 +106,7 @@ defineExpose({ load }) // used by control/pagination tasks
         <i class="pi pi-arrow-left" aria-hidden="true" />
         Back to home
       </RouterLink>
+      <p class="library-folio">library</p>
       <h1 class="library-title">All sessions</h1>
     </header>
 
@@ -231,17 +232,17 @@ defineExpose({ load }) // used by control/pagination tasks
 
 <style scoped>
 .library {
-  max-width: 880px;
+  max-width: 72rem;
   margin: 0 auto;
-  padding: 24px 16px 64px;
+  padding: var(--space-6) var(--space-4) var(--space-10);
 }
 
 .library-back {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 10px;
-  font-size: 0.85rem;
+  gap: var(--space-1);
+  margin-bottom: var(--space-2);
+  font-size: var(--fs-caption);
   color: var(--color-text-muted);
   text-decoration: none;
 }
@@ -250,9 +251,23 @@ defineExpose({ load }) // used by control/pagination tasks
   text-decoration: underline;
 }
 
+.library-folio {
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  font-weight: 600;
+  color: var(--color-accent-text);
+  margin: 0 0 var(--space-1);
+}
+
 .library-title {
-  font-size: 1.4rem;
-  margin: 0 0 16px;
+  font-family: var(--font-display);
+  font-size: clamp(1.875rem, 4vw, 2.25rem);
+  font-weight: 700;
+  letter-spacing: var(--tracking-display);
+  line-height: 1.05;
+  margin: 0 0 var(--space-5);
   color: var(--color-heading);
 }
 
@@ -261,16 +276,16 @@ defineExpose({ load }) // used by control/pagination tasks
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: var(--space-3);
 }
 
 .library-card {
   position: relative;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md, 14px);
+  border-radius: var(--radius-md);
   background: var(--color-surface);
-  transition: border-color var(--motion-fast, 140ms);
+  transition: border-color var(--motion-fast);
 }
 
 .library-card:hover {
@@ -279,7 +294,7 @@ defineExpose({ load }) // used by control/pagination tasks
 
 .library-card-link {
   display: block;
-  padding: 14px;
+  padding: var(--space-3);
   color: inherit;
   text-decoration: none;
   cursor: pointer;
@@ -294,7 +309,7 @@ defineExpose({ load }) // used by control/pagination tasks
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 /* Reserve top-right room for the de-nested Continue on ended cards so the
@@ -309,7 +324,7 @@ defineExpose({ load }) // used by control/pagination tasks
 }
 
 .library-status {
-  font-size: 0.72rem;
+  font-size: var(--fs-label);
   color: var(--color-accent-text);
 }
 
@@ -344,7 +359,7 @@ defineExpose({ load }) // used by control/pagination tasks
 }
 
 .library-desc {
-  margin: 8px 0 4px;
+  margin: var(--space-2) 0 var(--space-1);
   color: var(--color-text);
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -375,7 +390,7 @@ defineExpose({ load }) // used by control/pagination tasks
 
 .library-meta {
   margin: 0;
-  font-size: 0.8rem;
+  font-size: var(--fs-caption);
   color: var(--color-text-muted);
 }
 
@@ -383,24 +398,24 @@ defineExpose({ load }) // used by control/pagination tasks
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 16px;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
 }
 
 .library-filter {
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .library-filter-btn {
-  padding: 5px 14px;
+  padding: var(--space-1) var(--space-3);
   border: 1px solid var(--color-border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--color-text);
-  font-size: 0.85rem;
+  font-size: var(--fs-caption);
   cursor: pointer;
-  transition: background var(--motion-fast, 140ms), border-color var(--motion-fast, 140ms);
+  transition: background var(--motion-fast), border-color var(--motion-fast);
 }
 
 .library-filter-btn:hover {
@@ -416,15 +431,15 @@ defineExpose({ load }) // used by control/pagination tasks
 .library-search,
 .library-sort {
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm, 8px);
+  border-radius: var(--radius-sm);
   background: var(--color-surface);
   color: var(--color-text);
-  font-size: 0.85rem;
-  padding: 5px 10px;
+  font-size: var(--fs-caption);
+  padding: var(--space-1) var(--space-2);
 }
 
 .library-search {
-  flex: 1 1 180px;
+  flex: 1 1 11.25rem;
 }
 
 .library-sort {
@@ -436,26 +451,26 @@ defineExpose({ load }) // used by control/pagination tasks
 }
 
 .error {
-  color: var(--signal-error, #e05252);
+  color: var(--signal-error);
 }
 
 .library-pager {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 16px;
-  margin-top: 24px;
+  gap: var(--space-4);
+  margin-top: var(--space-6);
 }
 
 .library-pg-btn {
-  padding: 5px 18px;
+  padding: var(--space-1) var(--space-4);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm, 8px);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--color-text);
-  font-size: 0.85rem;
+  font-size: var(--fs-caption);
   cursor: pointer;
-  transition: border-color var(--motion-fast, 140ms);
+  transition: border-color var(--motion-fast);
 }
 
 .library-pg-btn:hover:not(:disabled) {
@@ -468,7 +483,7 @@ defineExpose({ load }) // used by control/pagination tasks
 }
 
 .library-range {
-  font-size: 0.85rem;
+  font-size: var(--fs-caption);
   color: var(--color-text-muted);
 }
 </style>

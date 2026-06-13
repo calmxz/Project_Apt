@@ -229,6 +229,15 @@ describe('SessionsLibraryView', () => {
     expect(back.attributes('to') || back.attributes('href')).toBe('/')
   })
 
+  it('renders a folio eyebrow above the display title', async () => {
+    sessionsApi.getSessionLibrary.mockResolvedValue(page([item('a')]))
+    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+    await flushPromises()
+    const folio = wrapper.get('.library-folio')
+    expect(folio.text()).toBe('library')
+    expect(wrapper.get('.library-title').text()).toBe('All sessions')
+  })
+
   it('ended card shows Continue button; active card does not', async () => {
     sessionsApi.getSessionLibrary.mockResolvedValue(page([
       item('active1'),
