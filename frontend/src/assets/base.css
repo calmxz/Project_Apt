@@ -5,6 +5,7 @@
   --ink-200: #DDE2EE;
   --ink-300: #B7BFD2;
   --ink-400: #7E8AA3;
+  --ink-450: #66718A;
   --ink-500: #58637A;
   --ink-700: #2A3142;
   --ink-900: #141826;
@@ -97,7 +98,7 @@
   --color-surface-raised: var(--paper-50);
   --color-text: var(--ink-900);
   --color-text-muted: var(--ink-500);
-  --color-text-faint: var(--ink-400);
+  --color-text-faint: var(--ink-450);
   --color-heading: var(--ink-900);
   --color-border: var(--ink-200);
   --color-border-strong: var(--ink-300);
@@ -116,6 +117,14 @@
   --color-accent-text: var(--accent-coral-700);
   --color-wordmark: var(--ink-900);
   --color-stub-heading: var(--ink-700);
+  /* Foreground tokens that stay AA on LIGHT surfaces. Filled white-text CTAs use
+     --color-accent-strong (coral-700); --color-text-on-accent is that white.
+     Signal-as-text must use these darkened variants, NOT the raw --signal-* ramp
+     (tuned for fills/borders/dark surfaces; fails as light-bg text). */
+  --color-text-on-accent: #FFFFFF;
+  --color-success-text: #0E7A36;
+  --color-error-text:   #B91C1C;
+  --color-warning-text: #8A5A00;
 }
 
 :root[data-theme="dark"] {
@@ -149,6 +158,11 @@
   --signal-error:   #FF6B6B;
   --signal-warning: #FFC54D;
   --signal-info:    #7AA3F5;
+
+  /* Dark surfaces: the bright signal ramp already clears AA as text. */
+  --color-success-text: #34D77B;
+  --color-error-text:   #FF6B6B;
+  --color-warning-text: #FFC54D;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -180,6 +194,10 @@
     --signal-error:   #FF6B6B;
     --signal-warning: #FFC54D;
     --signal-info:    #7AA3F5;
+
+    --color-success-text: #34D77B;
+    --color-error-text:   #FF6B6B;
+    --color-warning-text: #FFC54D;
   }
 }
 
