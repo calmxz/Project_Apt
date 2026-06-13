@@ -428,7 +428,7 @@ async function signOut() {
   height: 1.5rem;
   border-radius: var(--radius-pill);
   border: 1px solid var(--color-border-strong);
-  background: var(--color-surface-soft);
+  background: var(--color-border-strong);
   cursor: pointer;
   transition: background var(--motion-fast) ease, border-color var(--motion-fast) ease;
 }
@@ -452,7 +452,7 @@ async function signOut() {
   transform: translateY(-50%);
   border-radius: var(--radius-pill);
   background: #FFFFFF;
-  box-shadow: var(--shadow-pop);
+  box-shadow: var(--shadow-paper);
   transition: left var(--motion-fast) var(--motion-bounce);
 }
 
