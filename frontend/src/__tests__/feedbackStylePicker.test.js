@@ -47,4 +47,29 @@ describe('FeedbackStylePicker', () => {
     expect(wrapper.find('.radio-sub').exists()).toBe(false)
     expect(wrapper.text()).toContain('Hints')
   })
+
+  it('all radios in one instance share a single non-empty group name', () => {
+    const wrapper = mount(FeedbackStylePicker, {
+      props: { modelValue: 'hints', options },
+    })
+    const radios = wrapper.findAll('input[type="radio"]')
+    expect(radios).toHaveLength(2)
+    const names = radios.map((r) => r.attributes('name'))
+    expect(names[0]).toBeTruthy()
+    expect(new Set(names).size).toBe(1)
+  })
+
+  // Note: cross-instance uniqueness is not asserted here. useId() restarts its
+  // counter per Vue app, and each VTU mount() spins up a fresh app, so two
+  // isolated mounts both yield the same id in this harness. The uniqueness is
+  // real in production (one app, distinct ids per instance) but not observable
+  // from isolated mounts.
+
+  it('honors an explicit name prop on every radio', () => {
+    const wrapper = mount(FeedbackStylePicker, {
+      props: { modelValue: 'hints', options, name: 'custom-group' },
+    })
+    const names = wrapper.findAll('input[type="radio"]').map((r) => r.attributes('name'))
+    expect(names).toEqual(['custom-group', 'custom-group'])
+  })
 })

@@ -1,14 +1,24 @@
 <script setup>
+import { computed, useId } from 'vue'
+
 // Shared feedback-style control used by both Settings and Onboarding. Native
 // radio cards (not a PrimeVue SelectButton) so the two screens stay consistent
 // and accessible. Each option needs `value` + `label`; an optional `sub`
 // renders as a description line.
-defineProps({
+const props = defineProps({
   modelValue: { type: String, default: '' },
   options: { type: Array, required: true },
+  // Radio-group name. All inputs in one instance share this so they form a
+  // single native radio group (arrow-key roving, mutual exclusivity, AT
+  // "1 of N"). Defaults to a per-instance unique id so two pickers mounted on
+  // different views never collide; callers may override.
+  name: { type: String, default: '' },
 })
 
 const emit = defineEmits(['update:modelValue'])
+
+const generatedId = useId()
+const groupName = computed(() => props.name || `fsp-${generatedId}`)
 
 function select(value) {
   emit('update:modelValue', value)
@@ -25,6 +35,7 @@ function select(value) {
     >
       <input
         type="radio"
+        :name="groupName"
         :value="opt.value"
         :checked="modelValue === opt.value"
         :data-testid="`feedback-style-${opt.value}`"
