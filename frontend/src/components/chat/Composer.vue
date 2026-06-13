@@ -298,7 +298,11 @@ defineExpose({ focus })
   background: var(--color-accent-soft);
   border-color: var(--color-accent-soft);
   color: var(--color-accent);
-  outline: none;
+}
+
+.composer-attach:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 
 .composer-attach:disabled {
@@ -356,7 +360,11 @@ defineExpose({ focus })
 .composer-stop:not(:disabled):focus-visible {
   transform: translateY(-2px);
   filter: brightness(1.08);
-  outline: none;
+}
+
+.composer-stop:not(:disabled):focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 
 .composer-stop:not(:disabled):active {
@@ -444,7 +452,11 @@ defineExpose({ focus })
 .composer-skip:focus-visible {
   border-color: var(--color-accent);
   color: var(--color-accent);
-  outline: none;
+}
+
+.composer-skip:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 
 @media (max-width: 600px) {
