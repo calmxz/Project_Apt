@@ -62,12 +62,36 @@ describe('SessionsLibraryView', () => {
     expect(wrapper.get('[data-testid="library-error"]').exists()).toBe(true)
   })
 
-  it('navigates to the session on card click', async () => {
+  it('the card links to the session route', async () => {
     sessionsApi.getSessionLibrary.mockResolvedValue(page([item('a')]))
     const wrapper = mount(SessionsLibraryView, { global: { stubs } })
     await flushPromises()
-    await wrapper.get('[data-testid="library-card-a"]').trigger('click')
-    expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'a' } })
+    const link = wrapper
+      .findAllComponents(stubs.RouterLink)
+      .find((c) => c.props('to')?.params?.id === 'a')
+    expect(link).toBeTruthy()
+    expect(link.props('to')).toEqual({ name: 'session', params: { id: 'a' } })
+  })
+
+  it('renders each card as a router-link, not a role=button', async () => {
+    sessionsApi.getSessionLibrary.mockResolvedValue(page([item('a')]))
+    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+    await flushPromises()
+    const card = wrapper.get('[data-testid="library-card-a"]')
+    const link = card.find('.library-card-link')
+    expect(link.element.tagName).toBe('A')
+    expect(card.attributes('role')).toBeUndefined()
+    expect(card.attributes('tabindex')).toBeUndefined()
+  })
+
+  it('does not nest the Continue button inside the card link', async () => {
+    sessionsApi.getSessionLibrary.mockResolvedValue(page([
+      item('z', { ended_at: '2026-06-02T00:00:00Z' }),
+    ]))
+    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="library-card-z"] .library-card-link button').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="library-continue-z"]').exists()).toBe(true)
   })
 
   // Guards the cross-model defect: the library is fed SessionListItem (not

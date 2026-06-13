@@ -74,10 +74,6 @@ function onSearchInput() {
   }, 250)
 }
 
-function open(id) {
-  router.push({ name: 'session', params: { id } })
-}
-
 const hasPrev = computed(() => offset.value > 0)
 const hasNext = computed(() => offset.value + limit.value < total.value)
 const rangeLabel = computed(() => {
@@ -170,43 +166,43 @@ defineExpose({ load }) // used by control/pagination tasks
         :key="s.id"
         class="library-card"
         :data-testid="`library-card-${s.id}`"
-        role="button"
-        tabindex="0"
-        @click="open(s.id)"
-        @keydown.enter="open(s.id)"
       >
-        <div class="library-card-head">
-          <span class="library-topic">{{ s.topic || 'Untitled' }}</span>
-          <span class="library-status" :class="{ ended: !!s.ended_at }">
-            {{ s.ended_at ? 'Ended' : 'Active' }}
-          </span>
-          <button
-            v-if="s.ended_at"
-            type="button"
-            class="library-continue"
-            :data-testid="`library-continue-${s.id}`"
-            @click.stop="continueSession(s.id)"
-            @keydown.enter.stop
-          >
-            Continue
-          </button>
-        </div>
-        <p
-          class="library-desc"
-          :class="{
-            'library-desc-muted': !cardStory(s),
-            'library-desc-quote': !s.ended_at && !!cardStory(s),
-          }"
+        <RouterLink
+          class="library-card-link"
+          :to="{ name: 'session', params: { id: s.id } }"
         >
-          {{ cardStory(s) || 'No activity yet' }}
-        </p>
-        <SessionChips
-          v-if="cardChips(s).length"
-          class="library-chips"
-          :chips="cardChips(s)"
-          variant="card"
-        />
-        <p class="library-meta">{{ cardMeta(s) }}</p>
+          <div class="library-card-head">
+            <span class="library-topic">{{ s.topic || 'Untitled' }}</span>
+            <span class="library-status" :class="{ ended: !!s.ended_at }">
+              {{ s.ended_at ? 'Ended' : 'Active' }}
+            </span>
+          </div>
+          <p
+            class="library-desc"
+            :class="{
+              'library-desc-muted': !cardStory(s),
+              'library-desc-quote': !s.ended_at && !!cardStory(s),
+            }"
+          >
+            {{ cardStory(s) || 'No activity yet' }}
+          </p>
+          <SessionChips
+            v-if="cardChips(s).length"
+            class="library-chips"
+            :chips="cardChips(s)"
+            variant="card"
+          />
+          <p class="library-meta">{{ cardMeta(s) }}</p>
+        </RouterLink>
+        <button
+          v-if="s.ended_at"
+          type="button"
+          class="library-continue"
+          :data-testid="`library-continue-${s.id}`"
+          @click="continueSession(s.id)"
+        >
+          Continue
+        </button>
       </li>
     </ul>
 
@@ -271,11 +267,10 @@ defineExpose({ load }) // used by control/pagination tasks
 }
 
 .library-card {
+  position: relative;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md, 14px);
   background: var(--color-surface);
-  padding: 14px;
-  cursor: pointer;
   transition: border-color var(--motion-fast, 140ms);
 }
 
@@ -283,11 +278,30 @@ defineExpose({ load }) // used by control/pagination tasks
   border-color: var(--color-accent-soft);
 }
 
+.library-card-link {
+  display: block;
+  padding: 14px;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.library-card-link:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+}
+
 .library-card-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+
+/* Reserve top-right room for the de-nested Continue on ended cards so the
+   status badge does not slide under it. */
+.library-card:has(.library-continue) .library-card-head {
+  padding-right: 5.5rem;
 }
 
 .library-topic {
@@ -305,11 +319,13 @@ defineExpose({ load }) // used by control/pagination tasks
 }
 
 .library-continue {
-  margin-left: auto;
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
   flex-shrink: 0;
   padding: 0.3rem 0.75rem;
   border-radius: var(--radius-pill);
-  background: transparent;
+  background: var(--color-surface);
   border: 1px solid var(--color-accent-soft);
   color: var(--color-accent-text);
   font-family: var(--font-sans);
@@ -321,6 +337,11 @@ defineExpose({ load }) // used by control/pagination tasks
 
 .library-continue:hover {
   background: var(--color-accent-soft);
+}
+
+.library-continue:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 
 .library-desc {
