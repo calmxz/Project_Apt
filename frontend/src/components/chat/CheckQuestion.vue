@@ -181,12 +181,12 @@ function optionClass(i) {
 }
 .check-next {
   align-self: flex-start;
-  background: var(--color-accent);
+  background: var(--color-accent-strong);
   /* On the solid accent fill, foreground must be light. --color-accent-text is
      the accent COLOR itself (for text on dark surfaces, e.g. the eyebrow), so it
      would render coral-on-coral (invisible). Use the app's on-accent light text. */
-  color: var(--color-text-on-accent, #fff);
-  border: 1px solid var(--color-accent);
+  color: var(--color-text-on-accent);
+  border: 1px solid var(--color-accent-strong);
   border-radius: var(--radius-pill);
   padding: 0.4rem 1.1rem;
   font-weight: 600;

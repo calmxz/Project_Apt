@@ -51,7 +51,7 @@ const store = useSessionStore()
 }
 
 .cap-banner strong {
-  color: var(--signal-error);
+  color: var(--color-error-text);
   font-weight: 700;
 }
 </style>

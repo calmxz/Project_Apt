@@ -36,11 +36,11 @@ defineProps({
 
 .upload-status-ready {
   background: rgba(34, 197, 94, 0.12);
-  color: var(--signal-success);
+  color: var(--color-success-text);
 }
 
 .upload-status-failed {
   background: rgba(239, 68, 68, 0.12);
-  color: var(--signal-error);
+  color: var(--color-error-text);
 }
 </style>

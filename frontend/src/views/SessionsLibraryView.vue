@@ -409,9 +409,9 @@ defineExpose({ load }) // used by control/pagination tasks
 }
 
 .library-filter-btn.active {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: #fff;
+  background: var(--color-accent-strong);
+  border-color: var(--color-accent-strong);
+  color: var(--color-text-on-accent);
 }
 
 .library-search,
