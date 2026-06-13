@@ -56,7 +56,9 @@ function build() {
     md.renderer.rules.link_open ||
     ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options))
   md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
-    tokens[idx].attrSet('rel', 'noopener nofollow')
+    const existing = tokens[idx].attrGet('rel') || ''
+    const merged = [...new Set([...existing.split(/\s+/), 'noopener', 'nofollow'].filter(Boolean))].join(' ')
+    tokens[idx].attrSet('rel', merged)
     return defaultLinkOpen(tokens, idx, options, env, self)
   }
 

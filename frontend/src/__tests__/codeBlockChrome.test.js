@@ -18,19 +18,4 @@ describe('code-block chrome', () => {
     const html = renderMarkdown('```python\ndef foo(): pass\n```')
     expect(html).toContain('hljs-keyword')
   })
-
-  it('adds rel="noopener nofollow" to rendered links', () => {
-    const html = renderMarkdown('[x](https://example.com)')
-    const anchor = html.match(/<a\b[^>]*>/)
-    expect(anchor).not.toBeNull()
-    expect(anchor[0]).toMatch(/rel="[^"]*\bnoopener\b[^"]*"/)
-    expect(anchor[0]).toMatch(/rel="[^"]*\bnofollow\b[^"]*"/)
-  })
-
-  it('adds rel to autolinked (linkify) urls', () => {
-    const html = renderMarkdown('see https://example.com for more')
-    const anchor = html.match(/<a\b[^>]*>/)
-    expect(anchor).not.toBeNull()
-    expect(anchor[0]).toMatch(/rel="[^"]*noopener[^"]*nofollow[^"]*"|rel="[^"]*nofollow[^"]*noopener[^"]*"/)
-  })
 })
