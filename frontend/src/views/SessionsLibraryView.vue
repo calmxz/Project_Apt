@@ -110,7 +110,7 @@ defineExpose({ load }) // used by control/pagination tasks
     </header>
 
     <div class="library-controls">
-      <div class="library-filter" role="tablist" aria-label="Filter by status">
+      <div class="library-filter" role="group" aria-label="Filter by status">
         <button
           v-for="opt in STATUSES"
           :key="opt.key"
@@ -118,8 +118,7 @@ defineExpose({ load }) // used by control/pagination tasks
           class="library-filter-btn"
           :class="{ active: status === opt.key }"
           :data-testid="`library-filter-${opt.key}`"
-          role="tab"
-          :aria-selected="status === opt.key"
+          :aria-pressed="status === opt.key"
           @click="setStatus(opt.key)"
         >
           {{ opt.label }}

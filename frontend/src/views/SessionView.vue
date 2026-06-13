@@ -13,9 +13,9 @@
     </div>
 
     <template v-else>
-      <SessionHeader :topic="headerTopic" />
-
       <BackButton />
+
+      <SessionHeader :topic="headerTopic" />
 
       <CapBanners />
 

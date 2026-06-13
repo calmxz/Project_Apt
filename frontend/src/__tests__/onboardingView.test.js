@@ -14,17 +14,6 @@ const stubs = {
     template:
       '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
-  SelectButton: {
-    props: ['modelValue', 'options'],
-    template: `<div>
-      <button
-        v-for="o in options"
-        :key="o.value"
-        :data-testid="'sel-' + o.value"
-        @click="$emit('update:modelValue', o.value)"
-      >{{ o.label }}</button>
-    </div>`,
-  },
   Button: {
     props: ['disabled', 'label'],
     template:
@@ -57,7 +46,7 @@ describe('OnboardingView', () => {
   it('feedback help copy switches with the selection', async () => {
     const wrapper = mount(OnboardingView, { global: { stubs } })
     expect(wrapper.text()).toContain('nudge')
-    await wrapper.get('[data-testid="sel-direct_answers"]').trigger('click')
+    await wrapper.get('[data-testid="feedback-style-direct_answers"]').setValue(true)
     expect(wrapper.text()).toContain('explain')
   })
 })

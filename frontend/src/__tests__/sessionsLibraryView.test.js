@@ -109,7 +109,7 @@ describe('SessionsLibraryView', () => {
     expect(card.text()).not.toContain('Completed')
   })
 
-  it('refetches with status filter when a tab is clicked', async () => {
+  it('refetches with status filter when a status toggle is clicked', async () => {
     sessionsApi.getSessionLibrary.mockResolvedValue(page([item('a')]))
     const wrapper = mount(SessionsLibraryView, { global: { stubs } })
     await flushPromises()
@@ -120,6 +120,29 @@ describe('SessionsLibraryView', () => {
     expect(sessionsApi.getSessionLibrary).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'ended', offset: 0 }),
     )
+  })
+
+  it('uses a toggle-group (role=group + aria-pressed), not an incomplete tabs contract', async () => {
+    sessionsApi.getSessionLibrary.mockResolvedValue(page([item('a')]))
+    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+    await flushPromises()
+
+    const group = wrapper.get('.library-filter')
+    expect(group.attributes('role')).toBe('group')
+
+    // No tabs contract residue.
+    expect(wrapper.find('[role="tablist"]').exists()).toBe(false)
+    expect(wrapper.find('[role="tab"]').exists()).toBe(false)
+    expect(wrapper.find('[aria-selected]').exists()).toBe(false)
+
+    // 'all' is the default and is pressed; 'ended' is not.
+    expect(wrapper.get('[data-testid="library-filter-all"]').attributes('aria-pressed')).toBe('true')
+    expect(wrapper.get('[data-testid="library-filter-ended"]').attributes('aria-pressed')).toBe('false')
+
+    await wrapper.get('[data-testid="library-filter-ended"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="library-filter-ended"]').attributes('aria-pressed')).toBe('true')
+    expect(wrapper.get('[data-testid="library-filter-all"]').attributes('aria-pressed')).toBe('false')
   })
 
   it('refetches with sort when sort changes', async () => {
