@@ -275,7 +275,7 @@ async function submit() {
 
 .quick-pick:hover {
   background: var(--color-accent-soft);
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   border-color: var(--color-accent-soft);
   transform: translateY(-1px);
 }
@@ -345,7 +345,7 @@ async function submit() {
 
 .error {
   margin: 0;
-  color: var(--signal-error);
+  color: var(--color-error-text);
   font-size: 0.9375rem;
 }
 

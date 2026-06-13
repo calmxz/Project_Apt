@@ -13,9 +13,9 @@
     </div>
 
     <template v-else>
-      <SessionHeader :topic="headerTopic" />
-
       <BackButton />
+
+      <SessionHeader :topic="headerTopic" />
 
       <CapBanners />
 
@@ -609,7 +609,7 @@ function goHome() {
 }
 
 .error {
-  color: var(--signal-error);
+  color: var(--color-error-text);
   margin: 0;
   font-size: var(--fs-caption);
 }

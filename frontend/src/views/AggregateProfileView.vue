@@ -249,7 +249,7 @@ onMounted(load)
 }
 
 .muted { color: var(--color-text-muted); }
-.error { color: var(--signal-error); }
+.error { color: var(--color-error-text); }
 
 .cta-primary {
   display: inline-flex;
@@ -326,7 +326,7 @@ onMounted(load)
 :root[data-theme='dark'] .stat-green {
   background: linear-gradient(180deg, rgba(52, 215, 123, 0.16) 0%, var(--color-surface) 70%);
 }
-.stat-green .stat-glyph { background: rgba(34, 197, 94, 0.25); color: var(--signal-success); }
+.stat-green .stat-glyph { background: rgba(34, 197, 94, 0.25); color: var(--color-success-text); }
 
 .stat-yellow {
   background: linear-gradient(180deg, rgba(255, 176, 32, 0.18) 0%, var(--color-surface) 60%);
@@ -334,7 +334,7 @@ onMounted(load)
 :root[data-theme='dark'] .stat-yellow {
   background: linear-gradient(180deg, rgba(255, 197, 77, 0.18) 0%, var(--color-surface) 70%);
 }
-.stat-yellow .stat-glyph { background: rgba(255, 176, 32, 0.28); color: #8A5A00; }
+.stat-yellow .stat-glyph { background: rgba(255, 176, 32, 0.28); color: var(--color-warning-text); }
 :root[data-theme='dark'] .stat-yellow .stat-glyph { color: var(--signal-warning); }
 
 .stat-blue {
@@ -448,8 +448,8 @@ onMounted(load)
 .col-icon {
   font-size: 1.05rem;
 }
-.col-icon-green { color: var(--signal-success); }
-.col-icon-yellow { color: var(--signal-warning); }
+.col-icon-green { color: var(--color-success-text); }
+.col-icon-yellow { color: var(--color-warning-text); }
 
 .two-col {
   display: grid;
@@ -484,14 +484,14 @@ onMounted(load)
 
 .chip-mastered {
   background: rgba(34, 197, 94, 0.14);
-  color: var(--signal-success);
+  color: var(--color-success-text);
   border-color: rgba(34, 197, 94, 0.3);
 }
-:root:not([data-theme='dark']) .chip-mastered { color: #0E7A36; }
+:root:not([data-theme='dark']) .chip-mastered { color: var(--color-success-text); }
 
 .chip-gap {
   background: rgba(255, 176, 32, 0.16);
-  color: #8A5A00;
+  color: var(--color-warning-text);
   border-color: rgba(255, 176, 32, 0.35);
 }
 :root[data-theme='dark'] .chip-gap { color: var(--signal-warning); }

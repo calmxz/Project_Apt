@@ -250,19 +250,30 @@ describe('HomeView', () => {
     expect(text).toContain('user: hi')
   })
 
-  it('Enter on Continue does not bubble to row navigation', async () => {
+  it('renders each recent session as a router-link, not a role=button', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    vi.spyOn(store, 'reopenSession').mockResolvedValue({})
+    store.sessions = [makeSession('a1', 'Trees')]
+    apiAggregate.mockResolvedValue({ recent_topics: [makeRecent('a1', 'Trees')] })
+    const wrapper = mountView()
+    await flushPromises()
+    const card = wrapper.get('[data-testid="home-recent-a1"] .recent-link')
+    expect(card.element.tagName).toBe('A')
+    expect(card.attributes('role')).toBeUndefined()
+    expect(card.attributes('tabindex')).toBeUndefined()
+  })
+
+  it('does not nest the Continue button inside the card link', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'listSessions').mockResolvedValue([])
     store.sessions = [makeSession('e1', 'Big-O', true)]
     apiAggregate.mockResolvedValue({
       recent_topics: [makeRecent('e1', 'Big-O', { ended: true, summary: 'done' })],
     })
     const wrapper = mountView()
     await flushPromises()
-    await wrapper.get('[data-testid="home-continue-e1"]').trigger('keydown.enter')
-    await flushPromises()
-    expect(push).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="home-recent-e1"] .recent-link button').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="home-continue-e1"]').exists()).toBe(true)
   })
 
   it('shows summary snippet when present and fallback when null', async () => {
@@ -281,15 +292,18 @@ describe('HomeView', () => {
     expect(wrapper.get('[data-testid="home-recent-a1"]').text()).toContain('No activity yet')
   })
 
-  it('clicking a feed row navigates to the session', async () => {
+  it('the feed row links to the session route', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'listSessions').mockResolvedValue([])
     store.sessions = [makeSession('a1', 'Trees')]
     apiAggregate.mockResolvedValue({ recent_topics: [makeRecent('a1', 'Trees')] })
     const wrapper = mountView()
     await flushPromises()
-    await wrapper.get('[data-testid="home-recent-a1"] .recent-link').trigger('click')
-    expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'a1' } })
+    const link = wrapper
+      .findAllComponents(stubs.RouterLink)
+      .find((c) => c.props('to')?.params?.id === 'a1')
+    expect(link).toBeTruthy()
+    expect(link.props('to')).toEqual({ name: 'session', params: { id: 'a1' } })
   })
 
   it('ended row shows Continue; active row does not', async () => {

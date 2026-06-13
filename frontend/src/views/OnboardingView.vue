@@ -22,14 +22,10 @@
 
       <div class="field" style="--delay: 60ms">
         <span class="label">When you get stuck</span>
-        <SelectButton
+        <FeedbackStylePicker
           v-model="feedback"
           :options="feedbackOptions"
-          option-label="label"
-          option-value="value"
           data-testid="onboarding-feedback"
-          :allow-empty="false"
-          class="select"
         />
         <p class="help">
           {{
@@ -60,8 +56,8 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import InputText from 'primevue/inputtext'
-import SelectButton from 'primevue/selectbutton'
 
+import FeedbackStylePicker from '../components/FeedbackStylePicker.vue'
 import Logo from '../components/Logo.vue'
 import { useUserStore } from '../stores/user.js'
 
@@ -204,44 +200,6 @@ function submit() {
   border-color: var(--color-accent);
   outline: none;
   box-shadow: 0 0 0 4px var(--color-accent-ring);
-}
-
-/* Pill-chip SelectButton */
-.select :deep(.p-selectbutton) {
-  display: inline-flex;
-  gap: 0.5rem;
-  background: transparent;
-  border: 0;
-  padding: 0;
-}
-
-.select :deep(.p-togglebutton),
-.select :deep(.p-selectbutton .p-button) {
-  background: var(--color-surface-soft);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  color: var(--color-text-muted);
-  font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 0.9375rem;
-  padding: 0.625rem 1.25rem;
-  transition: background var(--motion-fast) ease, color var(--motion-fast) ease, border-color var(--motion-fast) ease, transform var(--motion-fast) var(--motion-bounce);
-}
-
-.select :deep(.p-togglebutton:hover),
-.select :deep(.p-selectbutton .p-button:hover) {
-  background: var(--color-accent-soft);
-  color: var(--color-accent-text);
-  border-color: var(--color-accent-soft);
-  transform: translateY(-1px);
-}
-
-.select :deep(.p-togglebutton.p-togglebutton-checked),
-.select :deep(.p-selectbutton .p-button.p-highlight) {
-  background: var(--color-accent-strong);
-  color: #FFFFFF;
-  border-color: var(--color-accent);
-  box-shadow: var(--shadow-pop);
 }
 
 .cta {

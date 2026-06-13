@@ -10,7 +10,7 @@ defineProps({
 </script>
 
 <template>
-  <div class="message-list">
+  <div class="message-list" aria-live="polite" aria-atomic="false">
     <TransitionGroup name="msg-fade" tag="div" class="msg-list">
       <template v-for="(m, i) in messages" :key="m.message_id || `m-${i}`">
         <UserBubble v-if="m.role === 'user'" :content="m.content || ''" />

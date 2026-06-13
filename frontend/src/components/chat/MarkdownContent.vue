@@ -73,7 +73,7 @@ const parts = computed(() => {
 }
 .md-rendered :deep(code:not(pre code)) {
   background: var(--color-accent-soft);
-  color: var(--color-accent-hover);
+  color: var(--color-accent-text);
   padding: 1px 5px;
   border-radius: 3px;
   font-family: 'Consolas', 'Monaco', monospace;

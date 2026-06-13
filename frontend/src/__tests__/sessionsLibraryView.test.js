@@ -62,12 +62,36 @@ describe('SessionsLibraryView', () => {
     expect(wrapper.get('[data-testid="library-error"]').exists()).toBe(true)
   })
 
-  it('navigates to the session on card click', async () => {
+  it('the card links to the session route', async () => {
     sessionsApi.getSessionLibrary.mockResolvedValue(page([item('a')]))
     const wrapper = mount(SessionsLibraryView, { global: { stubs } })
     await flushPromises()
-    await wrapper.get('[data-testid="library-card-a"]').trigger('click')
-    expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'a' } })
+    const link = wrapper
+      .findAllComponents(stubs.RouterLink)
+      .find((c) => c.props('to')?.params?.id === 'a')
+    expect(link).toBeTruthy()
+    expect(link.props('to')).toEqual({ name: 'session', params: { id: 'a' } })
+  })
+
+  it('renders each card as a router-link, not a role=button', async () => {
+    sessionsApi.getSessionLibrary.mockResolvedValue(page([item('a')]))
+    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+    await flushPromises()
+    const card = wrapper.get('[data-testid="library-card-a"]')
+    const link = card.find('.library-card-link')
+    expect(link.element.tagName).toBe('A')
+    expect(card.attributes('role')).toBeUndefined()
+    expect(card.attributes('tabindex')).toBeUndefined()
+  })
+
+  it('does not nest the Continue button inside the card link', async () => {
+    sessionsApi.getSessionLibrary.mockResolvedValue(page([
+      item('z', { ended_at: '2026-06-02T00:00:00Z' }),
+    ]))
+    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="library-card-z"] .library-card-link button').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="library-continue-z"]').exists()).toBe(true)
   })
 
   // Guards the cross-model defect: the library is fed SessionListItem (not
@@ -85,7 +109,7 @@ describe('SessionsLibraryView', () => {
     expect(card.text()).not.toContain('Completed')
   })
 
-  it('refetches with status filter when a tab is clicked', async () => {
+  it('refetches with status filter when a status toggle is clicked', async () => {
     sessionsApi.getSessionLibrary.mockResolvedValue(page([item('a')]))
     const wrapper = mount(SessionsLibraryView, { global: { stubs } })
     await flushPromises()
@@ -96,6 +120,29 @@ describe('SessionsLibraryView', () => {
     expect(sessionsApi.getSessionLibrary).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'ended', offset: 0 }),
     )
+  })
+
+  it('uses a toggle-group (role=group + aria-pressed), not an incomplete tabs contract', async () => {
+    sessionsApi.getSessionLibrary.mockResolvedValue(page([item('a')]))
+    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+    await flushPromises()
+
+    const group = wrapper.get('.library-filter')
+    expect(group.attributes('role')).toBe('group')
+
+    // No tabs contract residue.
+    expect(wrapper.find('[role="tablist"]').exists()).toBe(false)
+    expect(wrapper.find('[role="tab"]').exists()).toBe(false)
+    expect(wrapper.find('[aria-selected]').exists()).toBe(false)
+
+    // 'all' is the default and is pressed; 'ended' is not.
+    expect(wrapper.get('[data-testid="library-filter-all"]').attributes('aria-pressed')).toBe('true')
+    expect(wrapper.get('[data-testid="library-filter-ended"]').attributes('aria-pressed')).toBe('false')
+
+    await wrapper.get('[data-testid="library-filter-ended"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="library-filter-ended"]').attributes('aria-pressed')).toBe('true')
+    expect(wrapper.get('[data-testid="library-filter-all"]').attributes('aria-pressed')).toBe('false')
   })
 
   it('refetches with sort when sort changes', async () => {
@@ -180,6 +227,15 @@ describe('SessionsLibraryView', () => {
     await flushPromises()
     const back = wrapper.get('[data-testid="library-back"]')
     expect(back.attributes('to') || back.attributes('href')).toBe('/')
+  })
+
+  it('renders a folio eyebrow above the display title', async () => {
+    sessionsApi.getSessionLibrary.mockResolvedValue(page([item('a')]))
+    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+    await flushPromises()
+    const folio = wrapper.get('.library-folio')
+    expect(folio.text()).toBe('library')
+    expect(wrapper.get('.library-title').text()).toBe('All sessions')
   })
 
   it('ended card shows Continue button; active card does not', async () => {

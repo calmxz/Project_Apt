@@ -77,4 +77,11 @@ describe('MessageList', () => {
     expect(w.find('[data-testid="msg-typing"]').exists()).toBe(false)
     expect(w.find('[data-testid="msg-streaming"]').exists()).toBe(false)
   })
+
+  it('.message-list is a polite, non-atomic live region', () => {
+    const w = mount(MessageList, { props: { messages: [userMsg] } })
+    const list = w.find('.message-list')
+    expect(list.attributes('aria-live')).toBe('polite')
+    expect(list.attributes('aria-atomic')).toBe('false')
+  })
 })

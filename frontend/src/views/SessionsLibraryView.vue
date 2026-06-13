@@ -74,10 +74,6 @@ function onSearchInput() {
   }, 250)
 }
 
-function open(id) {
-  router.push({ name: 'session', params: { id } })
-}
-
 const hasPrev = computed(() => offset.value > 0)
 const hasNext = computed(() => offset.value + limit.value < total.value)
 const rangeLabel = computed(() => {
@@ -110,11 +106,12 @@ defineExpose({ load }) // used by control/pagination tasks
         <i class="pi pi-arrow-left" aria-hidden="true" />
         Back to home
       </RouterLink>
+      <p class="library-folio">library</p>
       <h1 class="library-title">All sessions</h1>
     </header>
 
     <div class="library-controls">
-      <div class="library-filter" role="tablist" aria-label="Filter by status">
+      <div class="library-filter" role="group" aria-label="Filter by status">
         <button
           v-for="opt in STATUSES"
           :key="opt.key"
@@ -122,8 +119,7 @@ defineExpose({ load }) // used by control/pagination tasks
           class="library-filter-btn"
           :class="{ active: status === opt.key }"
           :data-testid="`library-filter-${opt.key}`"
-          role="tab"
-          :aria-selected="status === opt.key"
+          :aria-pressed="status === opt.key"
           @click="setStatus(opt.key)"
         >
           {{ opt.label }}
@@ -170,43 +166,43 @@ defineExpose({ load }) // used by control/pagination tasks
         :key="s.id"
         class="library-card"
         :data-testid="`library-card-${s.id}`"
-        role="button"
-        tabindex="0"
-        @click="open(s.id)"
-        @keydown.enter="open(s.id)"
       >
-        <div class="library-card-head">
-          <span class="library-topic">{{ s.topic || 'Untitled' }}</span>
-          <span class="library-status" :class="{ ended: !!s.ended_at }">
-            {{ s.ended_at ? 'Ended' : 'Active' }}
-          </span>
-          <button
-            v-if="s.ended_at"
-            type="button"
-            class="library-continue"
-            :data-testid="`library-continue-${s.id}`"
-            @click.stop="continueSession(s.id)"
-            @keydown.enter.stop
-          >
-            Continue
-          </button>
-        </div>
-        <p
-          class="library-desc"
-          :class="{
-            'library-desc-muted': !cardStory(s),
-            'library-desc-quote': !s.ended_at && !!cardStory(s),
-          }"
+        <RouterLink
+          class="library-card-link"
+          :to="{ name: 'session', params: { id: s.id } }"
         >
-          {{ cardStory(s) || 'No activity yet' }}
-        </p>
-        <SessionChips
-          v-if="cardChips(s).length"
-          class="library-chips"
-          :chips="cardChips(s)"
-          variant="card"
-        />
-        <p class="library-meta">{{ cardMeta(s) }}</p>
+          <div class="library-card-head">
+            <span class="library-topic">{{ s.topic || 'Untitled' }}</span>
+            <span class="library-status" :class="{ ended: !!s.ended_at }">
+              {{ s.ended_at ? 'Ended' : 'Active' }}
+            </span>
+          </div>
+          <p
+            class="library-desc"
+            :class="{
+              'library-desc-muted': !cardStory(s),
+              'library-desc-quote': !s.ended_at && !!cardStory(s),
+            }"
+          >
+            {{ cardStory(s) || 'No activity yet' }}
+          </p>
+          <SessionChips
+            v-if="cardChips(s).length"
+            class="library-chips"
+            :chips="cardChips(s)"
+            variant="card"
+          />
+          <p class="library-meta">{{ cardMeta(s) }}</p>
+        </RouterLink>
+        <button
+          v-if="s.ended_at"
+          type="button"
+          class="library-continue"
+          :data-testid="`library-continue-${s.id}`"
+          @click="continueSession(s.id)"
+        >
+          Continue
+        </button>
       </li>
     </ul>
 
@@ -236,17 +232,17 @@ defineExpose({ load }) // used by control/pagination tasks
 
 <style scoped>
 .library {
-  max-width: 880px;
+  max-width: 72rem;
   margin: 0 auto;
-  padding: 24px 16px 64px;
+  padding: var(--space-6) var(--space-4) var(--space-10);
 }
 
 .library-back {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 10px;
-  font-size: 0.85rem;
+  gap: var(--space-1);
+  margin-bottom: var(--space-2);
+  font-size: var(--fs-caption);
   color: var(--color-text-muted);
   text-decoration: none;
 }
@@ -255,9 +251,23 @@ defineExpose({ load }) // used by control/pagination tasks
   text-decoration: underline;
 }
 
+.library-folio {
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-label);
+  font-weight: 600;
+  color: var(--color-accent-text);
+  margin: 0 0 var(--space-1);
+}
+
 .library-title {
-  font-size: 1.4rem;
-  margin: 0 0 16px;
+  font-family: var(--font-display);
+  font-size: clamp(1.875rem, 4vw, 2.25rem);
+  font-weight: 700;
+  letter-spacing: var(--tracking-display);
+  line-height: 1.05;
+  margin: 0 0 var(--space-5);
   color: var(--color-heading);
 }
 
@@ -266,28 +276,46 @@ defineExpose({ load }) // used by control/pagination tasks
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: var(--space-3);
 }
 
 .library-card {
+  position: relative;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md, 14px);
+  border-radius: var(--radius-md);
   background: var(--color-surface);
-  padding: 14px;
-  cursor: pointer;
-  transition: border-color var(--motion-fast, 140ms);
+  transition: border-color var(--motion-fast);
 }
 
 .library-card:hover {
   border-color: var(--color-accent-soft);
 }
 
+.library-card-link {
+  display: block;
+  padding: var(--space-3);
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.library-card-link:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+}
+
 .library-card-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--space-2);
+}
+
+/* Reserve top-right room for the de-nested Continue on ended cards so the
+   status badge does not slide under it. */
+.library-card:has(.library-continue) .library-card-head {
+  padding-right: 5.5rem;
 }
 
 .library-topic {
@@ -296,7 +324,7 @@ defineExpose({ load }) // used by control/pagination tasks
 }
 
 .library-status {
-  font-size: 0.72rem;
+  font-size: var(--fs-label);
   color: var(--color-accent-text);
 }
 
@@ -305,11 +333,13 @@ defineExpose({ load }) // used by control/pagination tasks
 }
 
 .library-continue {
-  margin-left: auto;
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
   flex-shrink: 0;
   padding: 0.3rem 0.75rem;
   border-radius: var(--radius-pill);
-  background: transparent;
+  background: var(--color-surface);
   border: 1px solid var(--color-accent-soft);
   color: var(--color-accent-text);
   font-family: var(--font-sans);
@@ -323,8 +353,13 @@ defineExpose({ load }) // used by control/pagination tasks
   background: var(--color-accent-soft);
 }
 
+.library-continue:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+}
+
 .library-desc {
-  margin: 8px 0 4px;
+  margin: var(--space-2) 0 var(--space-1);
   color: var(--color-text);
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -355,7 +390,7 @@ defineExpose({ load }) // used by control/pagination tasks
 
 .library-meta {
   margin: 0;
-  font-size: 0.8rem;
+  font-size: var(--fs-caption);
   color: var(--color-text-muted);
 }
 
@@ -363,24 +398,24 @@ defineExpose({ load }) // used by control/pagination tasks
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 16px;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
 }
 
 .library-filter {
   display: flex;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .library-filter-btn {
-  padding: 5px 14px;
+  padding: var(--space-1) var(--space-3);
   border: 1px solid var(--color-border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--color-text);
-  font-size: 0.85rem;
+  font-size: var(--fs-caption);
   cursor: pointer;
-  transition: background var(--motion-fast, 140ms), border-color var(--motion-fast, 140ms);
+  transition: background var(--motion-fast), border-color var(--motion-fast);
 }
 
 .library-filter-btn:hover {
@@ -388,23 +423,23 @@ defineExpose({ load }) // used by control/pagination tasks
 }
 
 .library-filter-btn.active {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: #fff;
+  background: var(--color-accent-strong);
+  border-color: var(--color-accent-strong);
+  color: var(--color-text-on-accent);
 }
 
 .library-search,
 .library-sort {
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm, 8px);
+  border-radius: var(--radius-sm);
   background: var(--color-surface);
   color: var(--color-text);
-  font-size: 0.85rem;
-  padding: 5px 10px;
+  font-size: var(--fs-caption);
+  padding: var(--space-1) var(--space-2);
 }
 
 .library-search {
-  flex: 1 1 180px;
+  flex: 1 1 11.25rem;
 }
 
 .library-sort {
@@ -416,26 +451,26 @@ defineExpose({ load }) // used by control/pagination tasks
 }
 
 .error {
-  color: var(--signal-error, #e05252);
+  color: var(--color-error-text);
 }
 
 .library-pager {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 16px;
-  margin-top: 24px;
+  gap: var(--space-4);
+  margin-top: var(--space-6);
 }
 
 .library-pg-btn {
-  padding: 5px 18px;
+  padding: var(--space-1) var(--space-4);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm, 8px);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--color-text);
-  font-size: 0.85rem;
+  font-size: var(--fs-caption);
   cursor: pointer;
-  transition: border-color var(--motion-fast, 140ms);
+  transition: border-color var(--motion-fast);
 }
 
 .library-pg-btn:hover:not(:disabled) {
@@ -448,7 +483,7 @@ defineExpose({ load }) // used by control/pagination tasks
 }
 
 .library-range {
-  font-size: 0.85rem;
+  font-size: var(--fs-caption);
   color: var(--color-text-muted);
 }
 </style>

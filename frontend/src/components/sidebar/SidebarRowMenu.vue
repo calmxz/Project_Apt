@@ -165,6 +165,15 @@ onBeforeUnmount(() => {
   color: var(--color-text);
 }
 
+/* On touch / coarse-pointer devices there is no hover to reveal the trigger, so
+   keep it visible — otherwise Rename/Pin/End are unreachable (a row tap just
+   navigates). Fine pointers keep the opacity:0-until-hover behavior above. */
+@media (hover: none) {
+  .sb-row-menu-trigger {
+    opacity: 1;
+  }
+}
+
 .sb-row-menu-trigger:focus-visible {
   outline: 2px solid var(--color-accent-ring);
   outline-offset: 2px;
@@ -222,11 +231,11 @@ onBeforeUnmount(() => {
 }
 
 .sb-row-menu-item--danger {
-  color: var(--signal-error);
+  color: var(--color-error-text);
 }
 
 .sb-row-menu-item--danger:hover:not(:disabled) {
   background: rgba(239, 68, 68, 0.1);
-  color: var(--signal-error);
+  color: var(--color-error-text);
 }
 </style>

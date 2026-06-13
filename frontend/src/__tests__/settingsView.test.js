@@ -54,7 +54,7 @@ describe('SettingsView', () => {
   it('saving persists to the user store and fires a toast', async () => {
     const wrapper = mount(SettingsView, { global: { stubs } })
     await wrapper.get('[data-testid="settings-name"]').setValue('Edward')
-    await wrapper.get('[data-testid="settings-feedback-direct_answers"]').setValue(true)
+    await wrapper.get('[data-testid="feedback-style-direct_answers"]').setValue(true)
     await wrapper.find('form').trigger('submit.prevent')
     await flushPromises()
 

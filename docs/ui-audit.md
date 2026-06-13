@@ -1,205 +1,247 @@
-# AdaptLearn UI/UX Audit — 2026-05-28
+# AdaptLearn Frontend — UI/UX Audit
 
-Branch: `ui-audit/2026-05-28` (off `dev`). Source-of-truth: live walkthrough at `http://localhost:5173/` + source under `frontend/src/`. Backend at `:8000` rejected the synthetic JWT (401), so happy-path data on protected routes was injected via a fetch interceptor; chrome, motion, contrast, and focus rings are live observations. Screenshots: `docs/audit-screens/`.
-
-Rubrics: `ui-refactor` (hierarchy, layout, type, color, depth) + `frontend-design` (distinctiveness, type character, color cohesion, motion, spatial composition). Scoring weights: hierarchy 1.2, layout 1.0, typography 1.0, color 1.0, depth 0.8, distinctiveness 1.5, ux 1.5, accessibility 1.0 (sum 9.0).
-
-## BUILT / STUB inventory
-
-User briefing said ProfileView and OnboardingView are stubs — that is stale. Both fully implemented on `dev`.
-
-| Surface | File | Status |
-|---|---|---|
-| LoginView (magic-link) | `frontend/src/views/LoginView.vue` | BUILT |
-| HomeView (sessions shelf) | `frontend/src/views/HomeView.vue` | BUILT |
-| OnboardingView | `frontend/src/views/OnboardingView.vue` | BUILT |
-| NewSessionView | `frontend/src/views/NewSessionView.vue` | BUILT |
-| SessionView (chat) | `frontend/src/views/SessionView.vue` | BUILT |
-| SettingsView | `frontend/src/views/SettingsView.vue` | BUILT |
-| ProfileView (session profile) | `frontend/src/views/ProfileView.vue` | BUILT |
-| AggregateProfileView | `frontend/src/views/AggregateProfileView.vue` | BUILT |
-| App shell topnav | `frontend/src/App.vue` | BUILT |
-| Logo | `frontend/src/components/Logo.vue` | BUILT |
-| EmptyState (generic) | `frontend/src/components/EmptyState.vue` | BUILT |
-| SessionEndedBanner | `frontend/src/components/SessionEndedBanner.vue` | BUILT |
-| BackButton | `frontend/src/components/BackButton.vue` | BUILT |
-| ChatHeader (teleported) | `frontend/src/components/chat/ChatHeader.vue` | BUILT |
-| Composer | `frontend/src/components/chat/Composer.vue` | BUILT |
-| MessageList + User/Assistant bubbles | `frontend/src/components/chat/*.vue` | BUILT |
-| ChatEmptyState | `frontend/src/components/chat/EmptyState.vue` | BUILT |
-| CapBanners | `frontend/src/components/chat/CapBanners.vue` | BUILT |
-| UploadStatus | `frontend/src/components/chat/UploadStatus.vue` | BUILT |
-| CitationsList | `frontend/src/components/chat/CitationsList.vue` | BUILT |
-| ToolCallChip | `frontend/src/components/chat/ToolCallChip.vue` | BUILT |
-| MarkdownContent | `frontend/src/components/chat/MarkdownContent.vue` | BUILT |
-
-No stubs found. All 8 routes evaluated live.
-
-## Design system observations
-
-Tokens in `frontend/src/assets/base.css`:
-
-- **Fonts**: `'Bricolage Grotesque'` (display, 400–700, optical sizing 12–96), `'Inter'` (sans), `'IBM Plex Mono'`. Loaded via Google Fonts CDN with `preconnect` + `display=swap` in `frontend/index.html:10`. All three are non-generic — escapes the "AI-slop" Inter-only trap because Bricolage carries the H1s.
-- **Accent ramp**: 11-step coral (`--accent-coral-50…950`), primary `#FF6B5C`. Strong, singular accent — restraint-positive.
-- **Neutrals**: 8-step cool slate `--ink-50…900`. Cohesive with coral. No grey-on-grey muddiness.
-- **Signals**: success `#22C55E`, error `#EF4444`, warning `#FFB020`, info `#5B8DEF`. Distinct from accent so semantic colors don't fight the brand.
-- **Type scale**: 0.6875 / 0.8125 / 1 / 1.125 / 1.375 / 1.875 / `clamp(2.5,5.5vw,3.75)`. Clean fifths.
-- **Spacing**: 0.25 / 0.5 / 0.75 / 1 / 1.5 / 2 / 3 / 4.5rem. Restricted scale honored across all screens (no rogue padding values found).
-- **Radii**: pill 999 / card 20 / md 14 / sm 8. Friendly vocabulary.
-- **Shadows**: `--shadow-lift = 0 4px 0 0 var(--ink-200), 0 10px 20px -8px rgba(...)` — bespoke "chunky press-down". `--shadow-pop` adds a `0 6px 0 0 var(--accent-coral-700)` hard ledge under primary CTAs. `--shadow-pop-pressed` for active state. This is the strongest distinctiveness signal in the system.
-- **Motion**: `--motion-bounce = cubic-bezier(0.34, 1.56, 0.64, 1)`. Used on hover lifts, message-list TransitionGroup, theme toggle thumb travel. Restrained — not chaotic.
-- **Dark mode**: 11-step inverted surface ramp `#0F1220 → #FFFFFF` driven by `[data-theme="dark"]` attribute + `prefers-color-scheme` fallback. Composition holds — see screenshots 13b/14/15.
-
-## Per-screen scores (1–5)
-
-### LoginView — screenshot `01-login-light.png`
-
-| Category | Score | Reason (cited) |
-|---|---|---|
-| Hierarchy | 5 | `LoginView.vue:5-8`: lg-mark → folio `"sign in"` → `clamp(1.875,4vw,2.5)` H1 → muted lede → form-card. Clear top-down scan. |
-| Layout/spacing | 5 | 30rem max-w centered; `gap: 1.75rem` between hero and form-card; form-card internal `1.75rem` padding. Consistent rhythm. |
-| Typography | 5 | Display Bricolage on H1, Inter body, uppercase-tracked `var(--tracking-label) = 0.14em` on the field label. |
-| Color | 5 | Coral appears only on folio + CTA; rest is paper/ink. Restraint-positive. |
-| Depth/polish | 4 | Card uses `--shadow-lift`; CTA uses `--shadow-pop` + press-down at `:active translateY(4px) → --shadow-pop-pressed`. Email pill input has `0 0 0 4px var(--color-accent-ring)` on focus — observed live. |
-| Distinctiveness | 4 | Spark mark SVG (two layered stars). Form is well-tuned but stops short of editorial — could have a marginal eyebrow or kicker. |
-| UX flow | 5 | `canSubmit` computed regex disables submit until email is valid; sent-confirmation names the inbox address back: `LoginView.vue:27`. |
-| Accessibility | 5 | `<label for="email">`, `autocomplete="email"`, `role="switch"` + `aria-checked` on the theme toggle in topnav. Focus rings visible. |
-| **Weighted** | **4.66** | |
-
-### HomeView — screenshots `02-home-error.png`, `03-home-active-populated.png`, `04-home-ended.png`, `13b-home-dark.png`
-
-| Category | Score | Reason |
-|---|---|---|
-| Hierarchy | 5 | `HomeView.vue:4-15`: folio `"your shelf"` → display `Sessions` at `clamp(2.25,4vw,2.75)` → muted lede → CTA row → pill tablist → tile grid. Strong vertical scan. |
-| Layout/spacing | 5 | 64rem column, `flex-wrap` head, `align-items: flex-end` so eyebrow baseline-aligns to CTA pills. Grid uses `repeat(auto-fill, minmax(20rem, 1fr))`. |
-| Typography | 4 | Tile-meta mixes `var(--font-mono)` for `#shortId` next to sans `started 45 minutes ago` — editorial flourish (`HomeView.vue:585`). Minor: `tile-topic` at 1.125rem feels modest beside the 2.75rem H1. |
-| Color | 4 | Tile-glyph uses 8 hashed pastel gradients (`HomeView.vue:254-263`). Concern: hash is on topic spelling, so colour is not semantic — same domain can land on different tints across re-naming. |
-| Depth/polish | 5 | Tiles use `--shadow-lift` and `translateY(-2px)` on hover; arrow translates `4px` and shifts colour to accent on hover. Dupe-banner uses subtle amber (`rgba(255,176,32,0.12)` bg, `0.35` border). |
-| Distinctiveness | 5 | Hashed pastel glyph tints, bespoke duplicate-cleanup banner with broom icon, pill segmented tabs with count badges, "page 01" folio voice. Reads as designed, not Aura default. |
-| UX flow | 3 | **Critical**: when `/api/sessions` fails, the raw `ApiError.message` lands in body as `API 401 /sessions: {"detail":"invalid_token"}` (`02-home-error.png`) because `HomeView.vue:64` renders `{{ store.error }}` directly. JSON leak. |
-| Accessibility | 4 | `aria-selected` on tabs, `aria-label` on each tile router-link with relative time. Concern: tab-count `.tab-active .tab-count` is `background: rgba(255,255,255,0.22)` + `color: inherit` (white) on coral — contrast unverified on small chip glyph; [unverified live AA pass]. |
-| **Weighted** | **4.18** | |
-
-### OnboardingView — screenshot `08-onboarding.png`
-
-| Category | Score | Reason |
-|---|---|---|
-| Hierarchy | 5 | `OnboardingView.vue:2-9`: lg spark → folio "welcome" → display `Welcome to AdaptLearn.` at `clamp(2.25,5vw,3)` → lede → form-card with two fields → CTA. |
-| Layout/spacing | 5 | 38rem column, 2.5rem outer gap, 1.75rem internal field gap, 2rem form-card padding. |
-| Typography | 5 | Display H1, uppercase tracked label, 1.0625rem help line. |
-| Color | 5 | Single coral CTA, coral SelectButton `:highlight` for selected feedback option, neutral elsewhere. |
-| Depth/polish | 5 | **Standout**: fields rise via staggered `--delay: 0/60/120ms` keyframe (`OnboardingView.vue:160`), and `head .logo-mark` runs a `gentle-spin 8s` 12° rotation (`:113`). Pop-shadow + `translateY(4px)` press-down on CTA. |
-| Distinctiveness | 5 | The choreography is hand-built — staggered reveal + slow logo wobble + PrimeVue SelectButton restyled as pill chips with coral-soft hover. Memorable. |
-| UX flow | 5 | Single decision (hints vs direct answers) with live help-line that updates per selection (`:34-40`). One field optional, no required asterisks needed. |
-| Accessibility | 5 | `<label for>`-bound inputs, `aria-label` carried by PrimeVue SelectButton; focus rings on CTA visible live. |
-| **Weighted** | **5.00** | |
-
-### NewSessionView — screenshots `05-new-session-empty.png`, `06-new-session-dupe-warn.png`
-
-| Category | Score | Reason |
-|---|---|---|
-| Hierarchy | 5 | Back-button mono caption (`BackButton.vue:48`) → folio → display H1 → lede → giant pill input as visual centerpiece → quick-picks → CTA. |
-| Layout/spacing | 5 | 42rem column, `gap: 1.5rem`, centered hero. |
-| Typography | 4 | **Distinctive**: topic input uses **display Bricolage at 1.25rem 500** (`NewSessionView.vue:227-229`) — unusual choice that reads like a journal page. |
-| Color | 4 | Calm. Dupe-warn uses `signal-info` blue at `rgba(91,141,239,0.1)` bg / `0.3` border — semantically separate from the amber duplicate-cleanup on Home (warning vs info). Intentional split. |
-| Depth/polish | 5 | Topic pill has `--shadow-paper` + 4px `accent-ring` on focus; quick-picks lift on hover. CTA gets full `--shadow-pop` press-down. |
-| Distinctiveness | 5 | Display-font textbox is the strongest single design choice on this screen. Quick-pick chip row + dupe-detection card all feel hand-rolled. |
-| UX flow | 5 | Live duplicate detection: typing `Recursion deep dive` surfaced the existing session (`06-new-session-dupe-warn.png`) with an "Open existing" jump CTA before the user wastes a create. Excellent friction-removal. |
-| Accessibility | 5 | `<label class="sr-only">`, focus-visible rings on chip + CTA, `aria-label` on Quick-picks container. |
-| **Weighted** | **4.78** | |
-
-### SessionView (chat) — screenshots `11-session-chat.png`, `12-session-chat-dark.png`, `15-session-chat-dark-confirmed.png`, `16-session-empty-state.png`, `17-session-not-found.png`
-
-| Category | Score | Reason |
-|---|---|---|
-| Hierarchy | 5 | Teleported topnav: status-pill (`in session` / `archived`) + topic + Profile + End buttons (`ChatHeader.vue:1-30`). Body is purely conversation. The "tutor" `role-tag` is small caps so it reads as supporting detail not headline. |
-| Layout/spacing | 4 | App-shell locks document scroll, `.messages` is the only scroller (`SessionView.vue:366-376`) — correctly engineered. Reading column 48rem. Concern: code blocks inside assistant bubble use `font-size: 12px` (`MarkdownContent.vue:69`) which is smaller than the typographic minimum elsewhere — verified live in `11-session-chat.png`. |
-| Typography | 5 | `role-tag` uppercase + `var(--tracking-label)`, content 0.9375rem 1.6 line-height, inline `code` is accent-soft / accent-hover (`MarkdownContent.vue:74-81`). |
-| Color | 5 | User bubble coral with `0 2px 8px -4px rgba(255,107,92,0.22)` glow (`UserBubble.vue:77`); assistant bubble on `--color-surface-raised` neutral. Tool-pill in `--color-accent-soft`. Cap banners use `signal-error` at 0.12 opacity. |
-| Depth/polish | 5 | Composer `focus-within` gets coral border + 4px accent-ring + `translateY(-1px)`. Send button uses `--shadow-pop` with `:active translateY(3px) → --shadow-pop-pressed`. Typing indicator has phased dot delays `0/200/400ms` (`MessageList.vue:128`). |
-| Distinctiveness | 5 | Reuses the spark SVG as the tutor avatar (`MessageList.vue:25-32`, `AssistantBubble.vue:17-24`) — small but memorable visual anchor. `pi-spin` spinner inside the attach button shares the round-icon vocabulary with send/stop so the composer reads balanced. |
-| UX flow | 5 | Stop button replaces Send mid-stream (`Composer.vue:54-64`), retry of last message via error-banner Retry, cap banners + toasts, summary dialog on End. Quick-prompt cards auto-fill composer + focus it. 404 path renders an inline 404 card not a separate route (`17-session-not-found.png`). |
-| Accessibility | 4 | `role="alert"` on error/cap banners, `aria-label` on stop/send, typing dots have `aria-label="Tutor is thinking"`. Concern: composer hint strip uses `⏎` and `⇧` glyphs as `<kbd>` content — screen readers may read these as their Unicode names rather than "Enter" / "Shift". |
-| **Weighted** | **4.78** | |
-
-### SettingsView — screenshot `07-settings.png`
-
-| Category | Score | Reason |
-|---|---|---|
-| Hierarchy | 5 | folio `preferences` → display H1 → lede → Account card → Feedback card → Save + flash → Danger Zone with dashed `signal-error` border. |
-| Layout/spacing | 5 | 42rem column, 1.5rem card padding, 1rem gap, 0.625rem radio-row gap inside fieldset. |
-| Typography | 5 | Card titles 1.125rem 700 display, uppercase tracked labels, 0.8125rem hint copy. |
-| Color | 5 | Coral icons on primary cards; signal-error scoped to the Danger Zone (dashed border + outline link). Saved-flash uses signal-success. |
-| Depth/polish | 5 | Custom radio cards animate the inner `radio-dot-inner` via `transform: scale(0→1)` on `.selected` (`SettingsView.vue:336-342`) — bespoke. `--shadow-pop` press-down on Save. |
-| Distinctiveness | 5 | The radio-row "card" pattern with inline `radio-label` + `radio-sub` description is genuine design work, not a stock PrimeVue RadioButton. Dashed Danger Zone with red outline-link reads editorial. |
-| UX flow | 5 | Save disabled until `dirty` (`SettingsView.vue:126-131`); `savedFlash` clears as soon as the form mutates; danger-zone link routes to `/onboarding?retake=1`. |
-| Accessibility | 5 | `<fieldset>` + `<legend class="sr-only">`, native radio `position: absolute opacity: 0` but still in the tab order, label-row captures click. |
-| **Weighted** | **5.00** | |
-
-### ProfileView (session profile) — screenshot `10-session-profile.png`
-
-| Category | Score | Reason |
-|---|---|---|
-| Hierarchy | 5 | Back → folio `session profile` → topic title → level-pill → focus card → two-col `Mastered` / `Confirmed gaps` → `Session summary` → `Recent check-questions`. |
-| Layout/spacing | 4 | Two-col `auto-fit minmax(18rem,1fr)`. Event-row `border-left: 3px solid signal-*` is visual signal; the chip-list above also uses color, slight color-load on small viewports. |
-| Typography | 5 | Section titles `1.25rem` display 700 with signal-colored icon; event-q in display font 1rem 500 — gives each check-question a headline weight. |
-| Color | 4 | level-pill data-attribute styling for `beginner / intermediate / advanced / unknown` is clean semantic mapping (`ProfileView.vue:196-223`). Concern: `.chip-gap` is `color: #B5800F` on `rgba(255,176,32,0.16)` — looks borderline for AA on the light theme; [unverified — needs a contrast probe]. Dark mode overrides to `signal-warning #FFC54D` so dark side is fine. |
-| Depth/polish | 5 | Focus card uses a 135° coral gradient (`linear-gradient(135deg, var(--accent-coral-100), var(--accent-coral-50))`) with coral-200 border + `--shadow-paper` (`ProfileView.vue:230-238`). Event rows lift on hover. |
-| Distinctiveness | 5 | Bullseye icon in coral-filled circle as a "focus" affordance, ok/bad rail in `signal-success` / `signal-warning` left-borders for events — distinct from a generic stats page. |
-| UX flow | 4 | Read-only inspection. No filter / search on chip lists; not critical at v1 but worth flagging if topics grow. |
-| Accessibility | 4 | Icons `aria-hidden`, h1 + h2 hierarchy correct. Same `.chip-gap` contrast caveat as Color above. |
-| **Weighted** | **4.40** | |
-
-### AggregateProfileView — screenshots `09-aggregate-profile.png`, `14-profile-dark.png`
-
-| Category | Score | Reason |
-|---|---|---|
-| Hierarchy | 5 | folio `across all sessions` → display H1 `Your Learning Profile` → lede with `last_active_at` → stats grid → distribution bar → two-col chips → `Recent topics` list. |
-| Layout/spacing | 5 | 60rem column, 1.75rem section rhythm, stats `repeat(auto-fit, minmax(11rem, 1fr))`, two-col `minmax(20rem, 1fr)`. |
-| Typography | 5 | Stat-value at display 2.25rem 700 carries the eye; stat-label uppercase tracked; `chip-meta` mono. |
-| Color | 5 | Four signal-colored gradient cards (coral / green / yellow / blue) wash into `--color-surface` so each card stays in the same surface family — bold but cohesive (`AggregateProfileView.vue:304-335`). |
-| Depth/polish | 5 | Distribution bar (`AggregateProfileView.vue:368-377`) is a 0.75rem pill with 4 inner segments, 2px gap, 2px outer padding — micro-craft. Stat-glyph absolutely positioned top-right in each card. |
-| Distinctiveness | 5 | The colored-corner stat-card pattern + segmented distribution bar + inline `×N` count chip that links to the first-seen session profile (`:103-110`) is bespoke and useful. |
-| UX flow | 5 | Every concept chip is a deep-link to the originating session profile. Recent topics list links onward too — strong forward-navigation density on a v1 dashboard. |
-| Accessibility | 4 | Stat cards lack a wrapping `role="group"` or `aria-label` summary; distribution segments have `title=` tooltips but no `aria-label` summarising the bar in one read. Otherwise solid. |
-| **Weighted** | **4.89** | |
-
-## Weighted overall
-
-Mean of weighted screen scores: **4.71 / 5**. AdaptLearn is already a well-designed app — bespoke shadow system, distinctive Bricolage display, restrained coral palette, hand-crafted micro-interactions. The audit is therefore mostly about polish, contrast verification, and a single critical leak.
-
-## Ranked issues
-
-### Critical (1)
-
-1. **Raw API error JSON leaks to user on HomeView.** When `/api/sessions` errors, `HomeView.vue:64` renders `{{ store.error }}` which contains `ApiError.message = "API 401 /sessions: {\"detail\":\"invalid_token\"}"` (`apiClient.js:10-11`). Captured live in `02-home-error.png`. ProfileView/AggregateProfileView wrap errors with `friendlyError(e)` (`ProfileView.vue:135`); HomeView does not. **User-facing.**
-
-### Major (5)
-
-2. **Unverified AA contrast on `.chip-gap` text.** `color: #B5800F` on `rgba(255,176,32,0.16)` over a light card. Likely passes WCAG AA on the chip but should be measured. Dark-mode override to `signal-warning #FFC54D` is safe. (`ProfileView.vue:336`, `AggregateProfileView.vue:483`.)
-3. **Unverified AA contrast on level-pill `beginner` and `advanced` variants.** `#5B8DEF` on `rgba(91,141,239,0.16)` and `signal-success #22C55E` on `rgba(34,197,94,0.16)` (`ProfileView.vue:196-217`). Both are borderline at small text sizes; need a contrast probe.
-4. **Tab-count chip inside an active tab is white-on-coral with `0.22` alpha background.** `.tab-active .tab-count` (`HomeView.vue:470-472`) — small text, high-saturation accent. Likely fine but worth verifying.
-5. **Topnav action set is icon-only with no visible labels and no `title=` tooltips.** `.icon-btn` only carries `aria-label` (`App.vue:50-87`). First-time users get no hover-affordance — `pi-cog`, `pi-user`, `pi-sign-out` are guessable but the theme toggle is non-obvious for tertiary users. Add `title=` matching `aria-label`.
-6. **Code block font-size 12px inside assistant bubble.** `MarkdownContent.vue:69` — drops below the rest of the type scale on a wide reading column. Reads cramped beside the 0.9375rem prose (`11-session-chat.png`). Bump to 0.8125rem (the existing caption token).
-
-### Minor (8)
-
-7. **Tile-glyph color/icon hashes on topic spelling.** Renaming "Recursion" to "Recursion deep dive" changes both the glyph and the gradient. Cosmetic but breaks recognition over time (`HomeView.vue:264-275`).
-8. **Composer hint kbd uses `⏎` / `⇧` glyphs.** Screen readers may pronounce the Unicode names rather than "Enter" / "Shift" (`Composer.vue:69-72`). Either add visually-hidden text or replace with words.
-9. **Distribution bar lacks an aria summary.** Segments have `title=` tooltips (`AggregateProfileView.vue:76`) but no aria-label on `.dist-bar` summarising the breakdown. Add e.g. `aria-label="Knowledge level distribution: 2 beginner, 4 intermediate, 1 advanced, 0 unknown"`.
-10. **Theme-toggle `aria-label` mismatch.** The label is "Switch to light mode" / "Switch to dark mode", but the underlying state is a tri-state (`light` / `dark` / `auto`) in `useTheme.js`. The button forces light↔dark and loses the auto state on first click — accessibility-acceptable, but it under-represents the actual state machine.
-11. **Empty state on chat sits with `padding: 1.75rem 1rem 1.25rem`** in a 48rem flex column that can be very tall. Quick-prompts cluster near the top. Acceptable, just noted (`components/chat/EmptyState.vue:69`).
-12. **Two animations run unconditionally:** the homepage tile arrow (`translateX 4px on hover`) and the chat `empty-spark` `4.5s` breathing animation. `MessageList.vue` typing dots and `OnboardingView` `gentle-spin` are guarded by `prefers-reduced-motion` only in one place (`components/chat/EmptyState.vue:85`); the others are not. Add a global `@media (prefers-reduced-motion: reduce)` block in `base.css`.
-13. **CitationsList typography uses raw `font-size: 11px` and `gap: 8px`** (`CitationsList.vue:38-44`) — not tokenized. Cosmetic drift from the rest of the system.
-14. **`.back-btn :hover` background uses `--color-surface`**, which on light theme is the same paper as the page (`base.css:88` `--color-surface = --paper-50`). Hover state is therefore nearly invisible on Light theme — observed live. Use `--color-surface-soft` instead.
-
-## What I could not verify live
-
-- Magic-link send happy path (only stubbed in e2e). The Supabase project the dev bundle was built against did not return a session for my injected token. The `LoginView.vue:71` `auth.signInWithMagicLink(email)` call path is exercised in `e2e/auth.spec.js:66-72` via a route-stub; verification of the on-screen sent-confirmation reads from the source + e2e spec, not from a live magic-link round-trip.
-- PDF upload + ingestion polling (`SessionView.vue:298-340`). Backend stub mode + real Supabase Storage would be needed; not exercised in this audit.
-- Streaming SSE chat path. Live screenshot `11-session-chat.png` shows a static assistant bubble injected via store; the `Composer` stop / streaming-state transition was verified only from source (`Composer.vue:54-64`, `chatStreamService.js`).
-- Real-device dark / OS contrast against pinned-down WCAG values for `.chip-gap`, `.level-pill[data-level=beginner|advanced]`, `.tab-count` — see Major issues 2–4.
+- **Date:** 2026-06-13
+- **Scope:** `frontend/src/` only (views, components, router, composables, stores referenced for state, `assets/*.css`, PrimeVue/Aura theme setup in `main.js`).
+- **Method:** Source read of every view + component + token file, cross-checked against the running app at `http://localhost:5173` (authenticated session). Inspected rendered output at 1440px in both dark and light themes. Sub-desktop window resize was **not honored by the automation harness** — the captured viewport stayed ≥1280px — so 375px responsive behavior is reasoned from CSS + media queries, not a live render. Those items are tagged `[uncertain]`.
+- **Standards (priority order):** (1) project `ui-refactor` + `frontend-design` skills, (2) Nielsen's 10 heuristics, (3) WCAG 2.2 AA, (4) PrimeVue/Aura usage consistency, (5) responsive at 375px / 1440px.
+- **Supersedes:** the prior `docs/ui-audit.md` dated 2026-05-28 (retained in git history). That audit predated the sidebar redesign, the `/sessions` library, card-differentiation, and MC check-questions, and is stale.
+- **Contrast note:** Ratios below are computed against the **light** theme surfaces (`--paper-100` #F5F7FC / white cards), which is where almost every contrast issue lives. The **dark** theme brightens the same signal/accent tokens (coral-400, success #34D77B) and clears AA — verified visually. Unless stated, contrast findings are light-theme-specific.
+- **Implementation:** This document is **findings only**. No source file was modified. The remediation plan is a separate file (`docs/ui-remediation-spec.md`), produced after sign-off at the Gate.
 
 ---
 
-**End of audit. Awaiting go-ahead before writing `docs/ui-remediation-spec.md` (Phase 4).**
+## Phase 1 — Inventory
+
+### Routes → Views (`frontend/src/router/index.js`)
+
+| Path | Name | View | Shell? | Notes |
+|---|---|---|---|---|
+| `/login` | `login` | `LoginView.vue` | no (`sidebar:false`) | public, magic-link |
+| `/` | `home` | `HomeView.vue` | yes | session shelf + recent feed |
+| `/onboarding` | `onboarding` | `OnboardingView.vue` | no | name + feedback style |
+| `/settings` | `settings` | `SettingsView.vue` | yes | profile + appearance + danger zone |
+| `/profile` | `profile-aggregate` | `AggregateProfileView.vue` | yes | cross-session stats |
+| `/new` | `new-session` | `NewSessionView.vue` | yes | topic entry |
+| `/sessions` | `sessions-library` | `SessionsLibraryView.vue` | yes | paginated library |
+| `/session/:id` | `session` | `SessionView.vue` | yes | chat surface |
+| `/session/:id/profile` | `session-profile` | `ProfileView.vue` | yes | per-session profile (read-only) |
+
+Guard (`router/index.js:61-81`): unauth → `/login`; auth + onboarding-incomplete → `/onboarding`. Sound.
+
+### App shell (`App.vue`)
+- `.shell` = CSS grid `auto 1fr` (sidebar | main). Skip link → `#main-content` (`App.vue:49`). RouterView with fade transition.
+- `<SidebarMobileTopStrip>` rendered only when `!isDesktop` (`App.vue:54`).
+- Global error bus → toast, with 429/404 suppressed (`App.vue:37-42`).
+- Body scroll-lock class for the mobile drawer.
+
+### Shared components
+- **Layout/nav:** `Sidebar.vue`, `SidebarSessionRow.vue`, `SidebarRowMenu.vue`, `SidebarMobileTopStrip.vue`, `SidebarSkeletonList.vue`, `BackButton.vue`, `Logo.vue`.
+- **Chat:** `chat/Composer.vue`, `MessageList.vue`, `MessageListSkeleton.vue`, `AssistantBubble.vue`, `UserBubble.vue`, `MarkdownContent.vue`, `CheckQuestion.vue`, `CheckRecap.vue`, `CitationsList.vue`, `ToolCallChip.vue`, `CapBanners.vue`, `UploadStatus.vue`, `SessionHeader.vue`, `chat/EmptyState.vue`.
+- **Generic:** `EmptyState.vue`, `SessionChips.vue`, `SessionEndedBanner.vue`.
+- **Composables:** `useSidebar.js` (breakpoint 1280, drawer/collapse state, localStorage), `useTheme.js` (auto/light/dark, system media query), `useToast.js`, `useSessionGroups.js`.
+
+### Global styles / design tokens
+- `assets/base.css` — the real design system: cool-slate neutrals (`--ink-*`), coral accent ramp (`--accent-coral-*`), signal triad, type scale, spacing scale, radii, "chunky press-down" shadows, motion, **semantic tokens** (`--color-*`) for light + dark + `prefers-color-scheme` fallback, global `:focus-visible`, `.skip-link`, reduced-motion guard.
+- `assets/aura-tokens.css` — re-points legacy chat tokens to `base.css` semantics (safe fallbacks only).
+- `assets/main.css` — `#app` flex column, `.profile-link` shared style.
+
+### Theme / PrimeVue setup (`main.js`)
+- `definePreset(Aura, …)` overrides `primary` to the coral ramp, `surface` to cool-slate, `formField.borderRadius:14px`, `content.borderRadius:20px`, dark via `[data-theme="dark"]` selector (`main.js:19-94`).
+- Registered PrimeVue components in use: `InputText` (Login, Onboarding), `SelectButton` (Onboarding), `Dialog` + `Button` (Session summary), `Toast` (App). **Everything else is hand-rolled native markup styled with the design tokens** — a deliberate "native-first, minimal PrimeVue" architecture (chat input was migrated off PrimeVue `Textarea` because Aura tokens bled through the wrapper).
+
+### Typography (`base.css:35-37`)
+- Display: **Bricolage Grotesque** (distinctive). Body: **Inter**. Mono: **IBM Plex Mono** (distinctive).
+
+---
+
+## Standards scoring legend
+
+Each screen scored 1–5 per category. 5 = exemplary, 4 = solid with nits, 3 = works but with a clear gap, 2 = notable violations, 1 = broken. Categories: **DS** (ui-refactor + frontend-design), **Nie** (Nielsen), **WCAG** (2.2 AA), **Aura** (PrimeVue/Aura consistency), **Resp** (375/1440).
+
+Severity: **blocker** (unusable / fails for a class of users with no workaround) · **high** (real defect, common path) · **medium** (degraded experience or edge path) · **low** (polish / nit).
+
+---
+
+## Cross-cutting findings (apply to multiple screens)
+
+### S1 — `--color-text-faint` fails AA as body/meta text — **high** — WCAG 1.4.3
+`--color-text-faint: var(--ink-400)` = `#7E8AA3` (`base.css:100`). On the light page background it is **≈3.2:1**, below the 4.5:1 normal-text minimum. It is the default color for small secondary text used everywhere: sidebar row meta (`SidebarSessionRow.vue:303`), recent-card arrows/time (`HomeView.vue:561`, `:486`), event timestamps (`ProfileView.vue:431`), composer hint strip (`Composer.vue:381`), recap eyebrow (`CheckRecap.vue:81`), distribution counts (`AggregateProfileView.vue:424`). The brighter `--color-text-muted` (#58637A ≈5.5:1) passes; faint does not.
+
+### S2 — Filled coral-500 + white text fails AA, and is inconsistent with the app's own `--color-accent-strong` convention — **high** — WCAG 1.4.3 + Nielsen #4 (consistency)
+White on `--color-accent` (coral-500 #FF6B5C) is **≈2.8:1**. The codebase's documented pattern (`base.css:108-116`) is that filled white-text CTAs use `--color-accent-strong` (coral-700, ≈5.5:1). Two surfaces break that rule:
+- `SessionsLibraryView.vue:390-394` — `.library-filter-btn.active { background: var(--color-accent); color:#fff }`.
+- `CheckQuestion.vue:177-181` — `.check-next { background: var(--color-accent); color: var(--color-text-on-accent, #fff) }`. **`--color-text-on-accent` is never defined** in `base.css`, so it falls back to `#fff` on coral-500. The inline comment even flags the coral-on-coral risk but the chosen fallback still fails.
+
+### S3 — `outline: none` on `:focus-visible` substituting only a transform/border tint — **medium** — WCAG 2.4.7 / 2.4.11
+Several interactive elements remove the focus outline and rely on an insufficient cue. Worst cases:
+- `Composer.vue:320-324` — `.composer-send:focus-visible` applies **only** `transform: translateY(-2px)` (a position change is not a perceivable focus indicator).
+- `CheckQuestion.vue:130-134` — `.check-option:focus-visible` only swaps a 1px border to coral, outline removed.
+- `chat/EmptyState.vue:136-143`, `NewSessionView.vue:283` quick-picks change background (acceptable). The global `:focus-visible` (`base.css:235`) is good — the problem is components overriding it away.
+
+### S4 — Signal colors used as text on their own tint — **medium** — WCAG 1.4.3
+Green `--signal-success` (#22C55E ≈2.3:1 on white) and red/amber used as foreground text on light tinted backgrounds:
+- `SessionChips.vue:64-70` — mastered chip text+border green (see C-SC1).
+- `UploadStatus.vue:37-45` — `ready` green text, `failed` red text.
+- `LoginView.vue:203-207` — `.sent` confirmation green.
+- `CapBanners.vue:53-56` — `strong` red (#EF4444 ≈3.7:1, sub-AA for 15px bold).
+Dark theme brightens these and passes; light fails.
+
+### S5 — Body font is Inter — **low** (portfolio-oriented) — frontend-design skill
+`--font-sans: 'Inter'` (`base.css:36`). The `frontend-design` skill explicitly names Inter as a generic "AI-slop" font to avoid. The display (Bricolage Grotesque) and mono (IBM Plex Mono) choices are distinctive and good; the body face is the one default-feeling pick. Given the portfolio/LinkedIn goal, a more characterful text face would sharpen differentiation. Functionally fine — flagged for the secondary goal only.
+
+---
+
+## Per-screen findings
+
+### LoginView (`views/LoginView.vue`)
+- **LG1 — medium — WCAG 1.4.3:** `.sent` success line uses `--signal-success` green, ≈1.9–2.3:1 on the card (`LoginView.vue:203-207`). (instance of S4)
+- **LG2 — low — A11y:** `Logo variant="mark-only"` (`:4`) is `aria-hidden`, so the logo has no accessible name; the `<h1>` "Welcome to AdaptLearn" covers it, so acceptable.
+- **Good:** real `<label for>` + `InputText`, `autocomplete="email"`, client-side email validation gating submit (`:61-63`), disabled+"Sending…" state, post-send inbox confirmation. Strong status visibility.
+
+### OnboardingView (`views/OnboardingView.vue`)
+- **O1 — low — WCAG 2.4.7 `[uncertain]`:** `SelectButton` is heavily `:deep`-themed (`:218-245`) but no explicit `:focus-visible` is set on the toggle buttons; relies on PrimeVue's default focus ring surviving the override. Could not confirm the ring renders from CSS alone.
+- **O2 — not a defect (labeled):** fields start `opacity:0` with a staggered `rise` animation (`:155-162`); the global reduced-motion guard (`base.css:291-300`) collapses the duration so content still resolves to `opacity:1`. OK.
+- **Good:** logo `gentle-spin` respects reduced-motion; `:allow-empty="false"` prevents an empty selection; live help text per choice.
+
+### HomeView (`views/HomeView.vue`)
+- **H1 — high — WCAG 2.1.1 (keyboard):** the recent-activity row is a `div role="button" tabindex="0"` with `@click` + `@keydown.enter` but **no Space-key handler** (`HomeView.vue:65-71`). A native button activates on both Enter and Space; this one ignores Space.
+- **H2 — medium — ARIA (nested interactive):** a real `<button class="recent-continue">` is nested inside that `div[role=button]` (`:81-90`). Interactive-inside-interactive is invalid and confuses AT.
+- **H3 — low — semantics:** the whole-card click target would be better as a `RouterLink`/`<button>` than a `div[role=button]`, which would also fix H1 for free.
+- **Inherits:** S1 (faint meta), S4 (green mastered chip via SessionChips).
+- **Good:** clear editorial hierarchy (folio → display title → lede → cards), duplicate-session detection banner with cleanup (`:28-50`), empty state with CTA, hover lift micro-interactions.
+
+### NewSessionView (`views/NewSessionView.vue`)
+- **N1 — low — WCAG 1.4.3:** quick-pick hover sets text to `--color-accent` (coral-500) on `--color-accent-soft` (coral-100) ≈2:1 (`:276-281`); hover-only so low impact.
+- **Good:** `sr-only` label on the topic input, Enter-to-submit, active-session-on-topic warning with "Open existing" (`:42-64`), submit disabled while duplicate-blocked, focus ring via box-shadow on the topic field.
+
+### SessionView — chat (`views/SessionView.vue`)
+- **SV1 — medium — Nielsen #4/visual order:** `<BackButton>` (`:18`) renders **below** the sticky `<SessionHeader>` h1 (`:16`), so the back affordance sits under the page title rather than above it. Minor order confusion.
+- **SV2 — medium — WCAG 4.1.3 (status messages):** streamed assistant text in `MessageList` is not wrapped in an `aria-live` region (`MessageList.vue:13-45`); the typing indicator has an `aria-label` but new/streaming responses are not announced to screen readers.
+- **Inherits:** S1, plus C-MD1 (inline-code contrast) inside tutor markdown.
+- **Good:** error banner is `role="alert"` with Retry + collapsible technical details (`:46-66`); composer `aria-describedby` is wired to the active cap banner so SR users hear why input is disabled (`:197-202`); robust 404 / superseded-load handling; daily/cost cap banners + toasts.
+
+### SessionsLibraryView (`views/SessionsLibraryView.vue`)
+- **L1 — high — WCAG 1.4.3 + consistency:** active filter pill is coral-500 + white ≈2.8:1 (`:390-394`). (instance of S2)
+- **L2 — high — WCAG 2.1.1 + ARIA:** library card is `role="button" tabindex="0"` with Enter-only, no Space (`:168-177`); nested `<button class="library-continue">` inside it (`:183-192`). Same defect class as H1/H2.
+- **L3 — medium — DS consistency (ui-refactor):** this screen uses an **older px-based idiom** divergent from every other view: `max-width:880px` (others use rem like 72rem), px paddings (`24px 16px 64px`, `14px`, `12px`), px font sizes (`0.85rem`/`1.4rem`), and a bare `<h1 class="library-title">` at 1.4rem with **no folio eyebrow and no display-font treatment** (`:238-262`, `:113`, `:258-262`). It reads as a different, less-finished design language than Home/Profile/Settings.
+- **L4 — medium — ARIA tabs:** filter uses `role="tablist"`/`role="tab"`/`aria-selected` (`:117-131`) without roving-tabindex arrow-key navigation or a connected `tabpanel` — an incomplete ARIA tabs contract. (Same Active/Ended concept is implemented differently in the Sidebar; see C-SB2.)
+- **Good:** debounced search, status filter, sort, pagination with range label and disabled edge states.
+
+### ProfileView — per-session (`views/ProfileView.vue`)
+- **P1 — low — token consistency:** mixes hardcoded AA-safe hex (`#2E5DC4`, `#0E7A36`, `#8A5A00` at `:198`, `:337`, `:342`) with semantic tokens; values are AA-correct but bypass the token system (maintainability).
+- **Good:** level pills have per-theme AA overrides (`:196-227`), mastered/gap chips, learning-event rows with correct/missed marks (icon + color + `aria-label`, not color-only), read-only by design (labeled v1 cut).
+
+### AggregateProfileView (`views/AggregateProfileView.vue`)
+- **P2 — low — WCAG 1.4.1:** the distribution bar segments are distinguished by **coral lightness only** (`seg-beginner` coral-200 → `advanced` coral-600, `:396-399`); mitigated by `role="img"` + full `aria-label` (`:69-73`) and a text legend with counts, so acceptable.
+- **Inherits:** P1-style hardcoded hex.
+- **Good:** colorful stat cards, `role="img"` distribution bar, chips linking to source sessions, clean responsive `auto-fit` grids.
+
+### SettingsView (`views/SettingsView.vue`)
+- **ST1 — high — WCAG 2.4.7:** the feedback radios use custom cards with the native input visually removed (`opacity:0;width:0;height:0`, `:364-369`) and **no focus-visible style** on `.radio-row` or `.radio-dot`. Keyboard focus on the radio group is invisible — a keyboard user cannot see which option is focused.
+- **ST2 — medium — Nielsen #4 (consistency):** the same "feedback style" setting is a PrimeVue `SelectButton` in Onboarding (`OnboardingView.vue:26-33`) but custom radio cards here (`:37-59`). Two controls for one concept across the flow.
+- **Good:** dark-mode `role="switch"` + `aria-checked` with a real focus ring (`:565-568`); Save disabled until dirty + saved-flash confirmation; danger zone visually separated (dashed error border); sign-out present.
+- **Low (labeled):** the theme toggle only flips light↔dark — once toggled there is no UI path back to `auto` (`useTheme.js` supports `auto`, the toggle does not expose it).
+
+---
+
+## Per-component findings (shared)
+
+### Composer (`components/chat/Composer.vue`)
+- **C-CMP1 — medium — WCAG 2.4.7:** `.composer-send:focus-visible` = transform only (`:320-324`). (instance of S3)
+- **Exemplary otherwise:** Enter-to-send / Shift+Enter newline (`:143-156`), `aria-describedby`, char count `aria-live` (`:85-87`), kbd hints with `aria-label`s, auto-resize, dedicated Stop button using `--signal-error`, ≥600px hint strip hidden on mobile. 40px → 36px buttons (AA-sized).
+
+### CheckQuestion (`components/chat/CheckQuestion.vue`)
+- **C-CQ1 — high — WCAG 1.4.3:** `.check-next` coral-500 + undefined-token #fff fallback (`:177-181`). (instance of S2)
+- **C-CQ2 — medium — WCAG 2.4.7:** `.check-option:focus-visible` border-tint only, outline removed (`:130-134`). (instance of S3)
+- **Good:** options are real `<button>`s, disabled after answer, verdict is text ("Correct"/"Not quite") + color (not color-only), batch progress indicator.
+
+### SessionChips (`components/SessionChips.vue`)
+- **C-SC1 — high — WCAG 1.4.3:** `.chip--mastered` sets text **and** border to raw `--signal-success` (#22C55E ≈2.3:1 on white card, `:64-70`). Unlike ProfileView/Aggregate, which darken to `#0E7A36` in light, this shared component never darkens — so it fails AA on **every** home card, library card, and sidebar rail row that shows a mastered chip. Visually confirmed pale in the light-theme render.
+- **Good:** focus chip uses `--color-accent-text` (AA), `sr-only` prefixes for rail variant, ellipsis truncation.
+
+### MarkdownContent + renderer (`components/chat/MarkdownContent.vue`, `lib/markdownRenderer.js`)
+- **C-MD1 — medium — WCAG 1.4.3:** inline `code` uses `--color-accent-hover` (coral-600) on `--color-accent-soft` (coral-100) ≈3.3:1 (`MarkdownContent.vue:74-81`), sub-AA for normal text.
+- **C-MD2 — low — security/privacy:** linkified links get no `rel="noopener"`; low risk because no `target="_blank"` is added.
+- **Good (security):** `markdown-it` with `html:false`, output run through DOMPurify, KaTeX via the Microsoft fork that avoids the known `markdown-it-katex@2` XSS, lang attributes escaped. No XSS exposure on the `v-html` path.
+
+### SidebarRowMenu (`components/sidebar/SidebarRowMenu.vue`)
+- **C-RM1 — medium — responsive/discoverability:** the `⋯` trigger is `opacity:0` until `:hover`/`:focus-within` (`:156`; revealed on row hover by `SidebarSessionRow`). On touch (the mobile drawer) there is no hover, and a row tap navigates into the session — so Rename / Pin / End are effectively undiscoverable on mobile.
+- **Good:** full ARIA menu (`aria-haspopup`, `aria-expanded`, `role="menu"`/`menuitem`), Escape-to-close, focus returned to trigger, outside-pointerdown close.
+
+### Sidebar (`components/sidebar/Sidebar.vue`)
+- **C-SB2 — medium — consistency:** the Active/Ended toggle uses `role="group"` + `aria-pressed` buttons (`:228-247`) — a valid toggle-group — but the *same* Active/Ended concept in SessionsLibraryView uses `role="tablist"`. Pick one pattern.
+- **C-SB3 — low — WCAG 2.5.8:** collapse toggle is 28px (`1.75rem`, `:459-464`) and the row `⋯` trigger 28px — above the 24px AA minimum, below 44px.
+- **Good:** mobile drawer focus trap + Escape + scroll lock + focus restore (`:42-87`), `aria-label`s, sticky layout, active-row scroll-into-view, localStorage-persisted collapse.
+
+### SidebarSessionRow (`components/sidebar/SidebarSessionRow.vue`)
+- **Model implementation:** real `<button>`, `aria-current="page"`, `aria-label`, `aria-describedby` → chips+meta, full rename keyboard support (Enter/Esc/blur) with focus management, collapsed-state tooltip. Inherits S1 (faint meta) + C-SC1 (green chip).
+
+### Smaller components
+- **CapBanners** (`:53-56`) — `role="alert"`; `strong` red ≈3.7:1 (sub-AA bold). **medium** (instance of S4). Good live-region semantics + `id`s for composer describedby.
+- **UploadStatus** — `role="status"` + `aria-live="polite"`; ready/failed text use signal colors (S4). **medium**/good.
+- **ToolCallChip** (`:42-44`) — raw px (`font-size:11px`, `border-radius:12px`) + hardcoded rgba fallbacks; minor token/scale drift. **low**.
+- **SessionEndedBanner** — amber bg with `#2A1F00` dark text (good contrast), resume button, read-only messaging. **good**.
+- **CitationsList** — tokenized, dashed separator, grouped by doc. **good**.
+- **MessageList** — typing indicator + TransitionGroup; see SV2 (no live region). **good** otherwise.
+- **BackButton** — history-state guard with fallback, `aria-label`, mono uppercase label at 11px (small but ≥24px target). **good**.
+- **Logo / EmptyState** — clean, `aria-hidden` decorative SVGs, reduced-motion-aware bounce. **good**.
+
+---
+
+## Responsive (375 / 1440)
+
+Reasoned primarily from CSS (`[uncertain]` for live 375 — harness did not reflow the captured viewport below 1280px).
+
+- **1440px — verified live:** sidebar (16rem) + 72rem content column, comfortable gutters via `clamp()` page padding (`App.vue:98`). Cards, stat grids, two-col profile grids all read well. No issues.
+- **375px — from CSS:** `useSidebar.js:3` breakpoint 1280 → below it the sidebar becomes a fixed off-canvas drawer (`Sidebar.vue:399-417`) and `SidebarMobileTopStrip` (hamburger + logo + profile) appears. Page padding `clamp()` floors at ~1rem. `auto-fit`/`auto-fill` grids (stats `minmax(11rem)`, two-col `minmax(18–20rem)`, library `minmax(260px)`) collapse to a single column at 375. Composer `@media ≤600px` shrinks buttons to 36px and hides the hint strip (`Composer.vue:446-454`). SessionHeader sits below the 3rem strip (`SessionHeader.vue:40-44`). Structurally sound.
+- **R2 — low:** breakpoint 1280 is high — 1024–1279px tablets/small laptops get the mobile drawer rather than the rail. Reasonable, but worth a conscious decision.
+- **R3 — see C-RM1:** the row action menu is hover-gated, so it is unreachable by touch — the main responsive *functionality* gap (not just layout).
+
+---
+
+## Score table — screens
+
+| Screen | DS | Nie | WCAG | Aura | Resp | One-line justification |
+|---|:--:|:--:|:--:|:--:|:--:|---|
+| LoginView | 5 | 4 | 3 | 4 | 5 | Strong form UX; green `.sent` text sub-AA (`LoginView.vue:206`). |
+| OnboardingView | 5 | 4 | 4 | 4 | 5 | Polished editorial; SelectButton focus ring unverified (`:218-245`). |
+| HomeView | 5 | 4 | 2 | 4 | 5 | Excellent hierarchy; `div[role=button]` no Space + nested button (`:65-90`). |
+| NewSessionView | 5 | 5 | 4 | 4 | 5 | Best-balanced screen; only hover-contrast nit (`:276-281`). |
+| SessionView (chat) | 5 | 4 | 3 | 4 | 5 | Great error/cap UX; no live region for streamed text (`MessageList.vue`). |
+| SessionsLibraryView | 2 | 4 | 2 | 3 | 4 | Off-system px idiom + no folio (`:238-262`); coral-500 active fail + Enter-only card. |
+| ProfileView | 5 | 4 | 4 | 5 | 5 | Read-only (cut) but clean; hardcoded hex bypasses tokens. |
+| AggregateProfileView | 5 | 4 | 4 | 5 | 5 | Strong dashboard; dist-bar color-only mitigated by `role=img`+legend. |
+| SettingsView | 5 | 4 | 2 | 4 | 5 | Invisible keyboard focus on custom radios (`:364-369`); control inconsistency vs Onboarding. |
+
+## Score table — shared components
+
+| Component | DS | Nie | WCAG | Aura | Resp | One-line justification |
+|---|:--:|:--:|:--:|:--:|:--:|---|
+| Composer | 5 | 5 | 4 | 4 | 5 | Exemplary input; send focus = transform only (`:320-324`). |
+| CheckQuestion | 4 | 5 | 2 | 4 | 5 | Good interaction; coral-500 #fff `.check-next` fails AA (`:177-181`). |
+| SessionChips | 4 | 4 | 2 | 5 | 5 | Green mastered chip ≈2.3:1 on every card (`:64-70`). |
+| MarkdownContent | 5 | 5 | 4 | 5 | 5 | Secure pipeline; inline-code contrast ≈3.3:1 (`:74-81`). |
+| SidebarRowMenu | 4 | 4 | 4 | 4 | 2 | Full ARIA menu; hover-gated trigger hidden on touch (`:156`). |
+| Sidebar | 5 | 5 | 4 | 4 | 5 | Focus trap + scroll lock; toggle pattern differs from Library. |
+| SidebarSessionRow | 5 | 5 | 4 | 5 | 5 | Model accessible row; inherits faint-meta + green-chip. |
+| CapBanners / UploadStatus | 4 | 5 | 3 | 5 | 5 | Correct live regions; signal-color-as-text sub-AA in light. |
+| ToolCallChip | 4 | 4 | 4 | 4 | 5 | Works; raw px sizing off the token scale (`:42-44`). |
+| EmptyState / SessionEndedBanner / BackButton / Logo / Citations | 5 | 5 | 5 | 5 | 5 | Clean, accessible, on-system. |
+
+---
+
+## Deliberate v1 cuts (labeled as cuts, not defects)
+- **ProfileView is read-only** — no in-place editing of the session profile. Intentional v1 scope.
+- **No `aria-live` on streamed chat** — streaming itself works; the SR-announcement region is unbuilt. (SV2 still flagged because it is a low-cost a11y add, but the absence is a known scope edge, not a regression.)
+- **Theme toggle exposes only light/dark, not `auto`** — `useTheme` supports `auto`; the Settings switch is binary by design.
+- **375px responsiveness not e2e-tested** — verified by CSS structure, not an automated mobile render.
+
+---
+
+## Summary counts
+- **Blocker:** 0
+- **High:** 6 — S1 (faint text), S2 (coral-500 fill; surfaces L1 + C-CQ1), C-SC1 (green chip), H1 (Home Space-key), L2 (Library Space-key + nesting), ST1 (invisible radio focus).
+- **Medium:** 11 — S3 (focus-outline removal; C-CMP1 + C-CQ2), S4 (signal-as-text; LG1 + CapBanners + UploadStatus), H2 (nested button), SV1 (back-button order), SV2 (no live region), L3 (off-system Library styling), L4 (incomplete tablist), ST2 (control inconsistency), C-MD1 (inline-code contrast), C-RM1 (hover-gated row menu on touch), C-SB2 (toggle pattern mismatch).
+- **Low:** ~9 — S5 (Inter), H3, N1, P1, P2, C-MD2, C-SB3, ToolCallChip px, R2 (1280 breakpoint), theme `auto` unreachable.
+
+**Lowest-scoring screens:** SessionsLibraryView (off-system styling + two high a11y fails), SettingsView (invisible radio focus), HomeView (keyboard activation). The chat surface, profiles, and most shared components are strong; the design system itself is cohesive and well-tokenized — most issues are **light-theme contrast** and a cluster of **keyboard/focus** gaps, both concentrated and fixable.

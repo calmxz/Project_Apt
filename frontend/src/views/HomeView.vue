@@ -62,12 +62,9 @@
             class="recent-row"
             :data-testid="`home-recent-${s.id}`"
           >
-            <div
+            <RouterLink
               class="recent-link"
-              role="button"
-              tabindex="0"
-              @click="openSession(s.id)"
-              @keydown.enter="openSession(s.id)"
+              :to="{ name: 'session', params: { id: s.id } }"
             >
               <span
                 class="recent-dot"
@@ -78,16 +75,6 @@
                 <div class="recent-head">
                   <span class="recent-topic">{{ s.topic || 'untitled' }}</span>
                   <span class="recent-when">{{ formatRelative(s.created_at) }}</span>
-                  <button
-                    v-if="s.ended_at"
-                    type="button"
-                    class="recent-continue"
-                    :data-testid="`home-continue-${s.id}`"
-                    @click.stop="continueSession(s.id)"
-                    @keydown.enter.stop
-                  >
-                    Continue
-                  </button>
                 </div>
                 <p
                   class="recent-snippet"
@@ -107,7 +94,16 @@
                 <p class="recent-meta">{{ cardMeta(s) }}</p>
               </div>
               <i class="pi pi-arrow-right recent-arrow" aria-hidden="true" />
-            </div>
+            </RouterLink>
+            <button
+              v-if="s.ended_at"
+              type="button"
+              class="recent-continue"
+              :data-testid="`home-continue-${s.id}`"
+              @click="continueSession(s.id)"
+            >
+              Continue
+            </button>
           </li>
         </ul>
         <RouterLink to="/sessions" class="recent-view-all" data-testid="home-view-all">
@@ -213,10 +209,6 @@ const sortedRecent = computed(() =>
       new Date(b.created_at) - new Date(a.created_at),
   ),
 )
-
-function openSession(id) {
-  router.push({ name: 'session', params: { id } })
-}
 
 async function continueSession(id) {
   await store.reopenSession(id)
@@ -327,7 +319,7 @@ async function cleanupDuplicates() {
 }
 
 .error {
-  color: var(--signal-error);
+  color: var(--color-error-text);
 }
 
 /* Duplicate banner */
@@ -352,7 +344,7 @@ async function cleanupDuplicates() {
 }
 
 .dupe-icon {
-  color: var(--signal-warning);
+  color: var(--color-warning-text);
   font-size: 1.125rem;
 }
 
@@ -416,6 +408,7 @@ async function cleanupDuplicates() {
 }
 
 .recent-row {
+  position: relative;
   border-radius: var(--radius-md);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
@@ -433,6 +426,7 @@ async function cleanupDuplicates() {
   gap: 0.75rem;
   padding: 0.875rem 1.125rem;
   color: inherit;
+  text-decoration: none;
   cursor: pointer;
 }
 
@@ -488,11 +482,13 @@ async function cleanupDuplicates() {
 }
 
 .recent-continue {
-  margin-left: auto;
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
   flex-shrink: 0;
   padding: 0.3rem 0.75rem;
   border-radius: var(--radius-pill);
-  background: transparent;
+  background: var(--color-surface);
   border: 1px solid var(--color-accent-soft);
   color: var(--color-accent-text);
   font-family: var(--font-sans);
@@ -504,6 +500,17 @@ async function cleanupDuplicates() {
 
 .recent-continue:hover {
   background: var(--color-accent-soft);
+}
+
+.recent-continue:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+}
+
+/* On ended rows the de-nested Continue occupies the top-right; drop the
+   decorative arrow there so they do not collide. */
+.recent-row:has(.recent-continue) .recent-arrow {
+  display: none;
 }
 
 .recent-snippet {

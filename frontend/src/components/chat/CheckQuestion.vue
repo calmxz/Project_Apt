@@ -127,10 +127,13 @@ function optionClass(i) {
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s;
 }
-.check-option:not(:disabled):hover,
+.check-option:not(:disabled):hover {
+  border-color: var(--color-accent);
+}
 .check-option:not(:disabled):focus-visible {
   border-color: var(--color-accent);
-  outline: none;
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 .check-option:disabled {
   cursor: default;
@@ -153,11 +156,15 @@ function optionClass(i) {
   color: var(--color-text-muted);
   cursor: pointer;
 }
-.check-skip:hover,
+.check-skip:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
 .check-skip:focus-visible {
   border-color: var(--color-accent);
   color: var(--color-accent);
-  outline: none;
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 .check-verdict {
   font-weight: 600;
@@ -174,20 +181,23 @@ function optionClass(i) {
 }
 .check-next {
   align-self: flex-start;
-  background: var(--color-accent);
+  background: var(--color-accent-strong);
   /* On the solid accent fill, foreground must be light. --color-accent-text is
      the accent COLOR itself (for text on dark surfaces, e.g. the eyebrow), so it
      would render coral-on-coral (invisible). Use the app's on-accent light text. */
-  color: var(--color-text-on-accent, #fff);
-  border: 1px solid var(--color-accent);
+  color: var(--color-text-on-accent);
+  border: 1px solid var(--color-accent-strong);
   border-radius: var(--radius-pill);
   padding: 0.4rem 1.1rem;
   font-weight: 600;
   cursor: pointer;
 }
-.check-next:hover,
-.check-next:focus-visible {
-  outline: none;
+.check-next:hover {
   filter: brightness(1.05);
+}
+.check-next:focus-visible {
+  filter: brightness(1.05);
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 </style>

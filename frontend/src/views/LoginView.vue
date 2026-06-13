@@ -196,13 +196,13 @@ async function submit() {
 
 .error {
   margin: 0;
-  color: var(--signal-error);
+  color: var(--color-error-text);
   font-size: 0.875rem;
 }
 
 .sent {
   margin: 0;
   font-size: 0.875rem;
-  color: var(--signal-success, #0a7);
+  color: var(--color-success-text);
 }
 </style>
