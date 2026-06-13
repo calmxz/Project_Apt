@@ -319,7 +319,7 @@ async function cleanupDuplicates() {
 }
 
 .error {
-  color: var(--signal-error);
+  color: var(--color-error-text);
 }
 
 /* Duplicate banner */
@@ -344,7 +344,7 @@ async function cleanupDuplicates() {
 }
 
 .dupe-icon {
-  color: var(--signal-warning);
+  color: var(--color-warning-text);
   font-size: 1.125rem;
 }
 

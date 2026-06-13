@@ -231,11 +231,11 @@ onBeforeUnmount(() => {
 }
 
 .sb-row-menu-item--danger {
-  color: var(--signal-error);
+  color: var(--color-error-text);
 }
 
 .sb-row-menu-item--danger:hover:not(:disabled) {
   background: rgba(239, 68, 68, 0.1);
-  color: var(--signal-error);
+  color: var(--color-error-text);
 }
 </style>

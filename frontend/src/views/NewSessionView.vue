@@ -345,7 +345,7 @@ async function submit() {
 
 .error {
   margin: 0;
-  color: var(--signal-error);
+  color: var(--color-error-text);
   font-size: 0.9375rem;
 }
 

@@ -451,7 +451,7 @@ defineExpose({ load }) // used by control/pagination tasks
 }
 
 .error {
-  color: var(--signal-error);
+  color: var(--color-error-text);
 }
 
 .library-pager {

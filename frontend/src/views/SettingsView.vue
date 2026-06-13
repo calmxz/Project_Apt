@@ -341,7 +341,7 @@ async function signOut() {
   font-family: var(--font-sans);
   font-size: 0.875rem;
   font-weight: 600;
-  color: var(--signal-success);
+  color: var(--color-success-text);
 }
 
 /* Danger zone */
@@ -356,11 +356,11 @@ async function signOut() {
 }
 
 .danger-title {
-  color: var(--signal-error);
+  color: var(--color-error-text);
 }
 
 .danger .card-icon {
-  color: var(--signal-error);
+  color: var(--color-error-text);
 }
 
 .danger-text {
@@ -377,7 +377,7 @@ async function signOut() {
   padding: 0.5rem 1rem;
   border-radius: var(--radius-pill);
   background: transparent;
-  color: var(--signal-error);
+  color: var(--color-error-text);
   border: 1px solid var(--signal-error);
   font-family: var(--font-sans);
   font-weight: 600;

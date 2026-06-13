@@ -215,7 +215,7 @@ onMounted(load)
 
 .level-pill[data-level='advanced'] {
   background: rgba(34, 197, 94, 0.16);
-  color: var(--signal-success);
+  color: var(--color-success-text);
   border-color: rgba(34, 197, 94, 0.3);
 }
 :root:not([data-theme='dark']) .level-pill[data-level='advanced'] { color: var(--color-success-text); }
@@ -227,7 +227,7 @@ onMounted(load)
 }
 
 .muted { color: var(--color-text-muted); }
-.error { color: var(--signal-error); }
+.error { color: var(--color-error-text); }
 
 /* Focus */
 .focus {
@@ -298,8 +298,8 @@ onMounted(load)
 }
 
 .col-icon { font-size: 1.05rem; }
-.col-icon-green { color: var(--signal-success); }
-.col-icon-yellow { color: var(--signal-warning); }
+.col-icon-green { color: var(--color-success-text); }
+.col-icon-yellow { color: var(--color-warning-text); }
 
 .two-col {
   display: grid;
@@ -331,7 +331,7 @@ onMounted(load)
 
 .chip-mastered {
   background: rgba(34, 197, 94, 0.14);
-  color: var(--signal-success);
+  color: var(--color-success-text);
   border-color: rgba(34, 197, 94, 0.3);
 }
 :root:not([data-theme='dark']) .chip-mastered { color: var(--color-success-text); }

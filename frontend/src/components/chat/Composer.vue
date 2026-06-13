@@ -428,7 +428,7 @@ defineExpose({ focus })
 }
 
 .composer-hints.is-near-limit .composer-count {
-  color: var(--signal-warning);
+  color: var(--color-warning-text);
   font-weight: 600;
 }
 
