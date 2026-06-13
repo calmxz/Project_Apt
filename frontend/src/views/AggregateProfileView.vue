@@ -334,7 +334,7 @@ onMounted(load)
 :root[data-theme='dark'] .stat-yellow {
   background: linear-gradient(180deg, rgba(255, 197, 77, 0.18) 0%, var(--color-surface) 70%);
 }
-.stat-yellow .stat-glyph { background: rgba(255, 176, 32, 0.28); color: #8A5A00; }
+.stat-yellow .stat-glyph { background: rgba(255, 176, 32, 0.28); color: var(--color-warning-text); }
 :root[data-theme='dark'] .stat-yellow .stat-glyph { color: var(--signal-warning); }
 
 .stat-blue {
@@ -487,11 +487,11 @@ onMounted(load)
   color: var(--signal-success);
   border-color: rgba(34, 197, 94, 0.3);
 }
-:root:not([data-theme='dark']) .chip-mastered { color: #0E7A36; }
+:root:not([data-theme='dark']) .chip-mastered { color: var(--color-success-text); }
 
 .chip-gap {
   background: rgba(255, 176, 32, 0.16);
-  color: #8A5A00;
+  color: var(--color-warning-text);
   border-color: rgba(255, 176, 32, 0.35);
 }
 :root[data-theme='dark'] .chip-gap { color: var(--signal-warning); }

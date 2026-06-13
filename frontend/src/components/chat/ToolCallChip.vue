@@ -39,8 +39,8 @@ const display = computed(() => {
   border: 1px solid var(--tool-pill-border, rgba(255,107,91,0.2));
   color: var(--tool-pill-text, #c44);
   padding: 4px 10px;
-  border-radius: 12px;
-  font-size: 11px;
+  border-radius: var(--radius-md);
+  font-size: var(--fs-label);
   line-height: 1.2;
 }
 .tool-pill-dot {

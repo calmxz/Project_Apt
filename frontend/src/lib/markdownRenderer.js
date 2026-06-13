@@ -50,6 +50,16 @@ function build() {
   })
   md.use(mdKatex, { throwOnError: false, errorColor: 'var(--math-accent, #ff6b5b)' })
 
+  // Harden generated/linkified anchors: add rel="noopener nofollow".
+  // No target is added (links open in place); html:false is unchanged.
+  const defaultLinkOpen =
+    md.renderer.rules.link_open ||
+    ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options))
+  md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
+    tokens[idx].attrSet('rel', 'noopener nofollow')
+    return defaultLinkOpen(tokens, idx, options, env, self)
+  }
+
   md.renderer.rules.fence = (tokens, idx) => {
     const token = tokens[idx]
     const langRaw = token.info.trim().split(/\s+/)[0] || ''
