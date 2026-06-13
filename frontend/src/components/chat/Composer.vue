@@ -320,7 +320,11 @@ defineExpose({ focus })
 .composer-send:not(:disabled):hover,
 .composer-send:not(:disabled):focus-visible {
   transform: translateY(-2px);
-  outline: none;
+}
+
+.composer-send:not(:disabled):focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 
 .composer-send:not(:disabled):active {

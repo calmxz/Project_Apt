@@ -361,6 +361,11 @@ async function signOut() {
   background: var(--color-accent-soft);
 }
 
+.radio-row:has(.radio-input:focus-visible) {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
 .radio-input {
   position: absolute;
   opacity: 0;

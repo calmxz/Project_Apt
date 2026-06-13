@@ -127,10 +127,13 @@ function optionClass(i) {
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s;
 }
-.check-option:not(:disabled):hover,
+.check-option:not(:disabled):hover {
+  border-color: var(--color-accent);
+}
 .check-option:not(:disabled):focus-visible {
   border-color: var(--color-accent);
-  outline: none;
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 .check-option:disabled {
   cursor: default;
@@ -153,11 +156,15 @@ function optionClass(i) {
   color: var(--color-text-muted);
   cursor: pointer;
 }
-.check-skip:hover,
+.check-skip:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
 .check-skip:focus-visible {
   border-color: var(--color-accent);
   color: var(--color-accent);
-  outline: none;
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 .check-verdict {
   font-weight: 600;
@@ -185,9 +192,12 @@ function optionClass(i) {
   font-weight: 600;
   cursor: pointer;
 }
-.check-next:hover,
-.check-next:focus-visible {
-  outline: none;
+.check-next:hover {
   filter: brightness(1.05);
+}
+.check-next:focus-visible {
+  filter: brightness(1.05);
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 </style>

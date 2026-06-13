@@ -236,6 +236,12 @@ function submit() {
   transform: translateY(-1px);
 }
 
+.select :deep(.p-togglebutton:focus-visible),
+.select :deep(.p-selectbutton .p-button:focus-visible) {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+}
+
 .select :deep(.p-togglebutton.p-togglebutton-checked),
 .select :deep(.p-selectbutton .p-button.p-highlight) {
   background: var(--color-accent-strong);
