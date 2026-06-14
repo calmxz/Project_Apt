@@ -18,11 +18,13 @@ from contracts import (
     CheckSkipRequest,
     CheckSkipResponse,
     Citation,
+    DocumentStatus,
     Message,
     SessionCreateRequest,
     SessionDetail,
     SessionEndResponse,
     SessionEndSummary,
+    SessionIngestionStatus,
     SessionLibraryPage,
     SessionListItem,
     SessionResponse,
@@ -32,7 +34,7 @@ from contracts import (
 )
 from db.database import get_db
 from db.models import ChatMessage, Document, Session as SessionModel, User
-from services import check_question_service, profile_service, summary_service
+from services import check_question_service, documents_service, profile_service, summary_service
 from services.auth import current_user_id
 from services.session_enrichment import aware_utc as _aware_utc, compute_enrichment
 
@@ -322,6 +324,25 @@ def reopen_session(
         db.commit()
         db.refresh(row)
     return _to_response(db, row)
+
+
+@router.get("/sessions/{session_id}/ingestion", response_model=SessionIngestionStatus)
+def get_session_ingestion(
+    session_id: str,
+    user_id: str = Depends(current_user_id),
+    db: Session = Depends(get_db),
+):
+    row = db.get(SessionModel, session_id)
+    if row is None or row.user_id != user_id:
+        raise HTTPException(status_code=404, detail="session not found")
+    docs = documents_service.list_document_statuses(db, session_id)
+    return SessionIngestionStatus(
+        status=documents_service.aggregate_status(d.status for d in docs),
+        documents=[
+            DocumentStatus(id=d.id, filename=d.filename, status=d.status, error=d.error)
+            for d in docs
+        ],
+    )
 
 
 @router.patch("/sessions/{session_id}", response_model=SessionResponse)
