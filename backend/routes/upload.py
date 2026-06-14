@@ -27,6 +27,7 @@ from services.auth import current_user_id
 router = APIRouter(prefix="/api")
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB
+ALLOWED_EXTENSIONS = {".pdf", ".pptx", ".txt", ".md", ".markdown"}
 
 
 @router.post(
@@ -34,7 +35,7 @@ MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB
     response_model=UploadResponse,
     status_code=status.HTTP_202_ACCEPTED,
 )
-def upload_pdf(
+def upload_file(
     request: Request,
     background_tasks: BackgroundTasks,
     session_id: str = Form(...),
@@ -65,8 +66,15 @@ def upload_pdf(
         except ValueError:
             pass
 
-    if (file.content_type or "").split(";")[0].strip() != "application/pdf":
-        raise HTTPException(status_code=400, detail="file must be application/pdf")
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "UNSUPPORTED_FILE_TYPE",
+                "message": "file type not supported; use PDF, PPTX, TXT, or MD",
+            },
+        )
 
     sess = db.get(SessionModel, session_id)
     if sess is None or sess.user_id != user_id:
