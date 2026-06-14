@@ -114,6 +114,7 @@ const stubs = {
   // ChatHeader teleports to the navbar slot; stub Teleport so it renders inline.
   teleport: true,
   BackButton: { template: '<button data-testid="back" />' },
+  ReferenceStatusBanner: { template: '<div />' },
   SessionEndedBanner: { template: '<div />' },
   Button: {
     props: ['disabled', 'loading', 'label'],

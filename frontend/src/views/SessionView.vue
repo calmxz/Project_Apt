@@ -65,6 +65,8 @@
         </details>
       </div>
 
+      <ReferenceStatusBanner ref="referenceBannerRef" :session-id="props.id" />
+
       <UploadStatus :upload="uploadStatus" />
 
       <CheckQuestion
@@ -131,6 +133,7 @@ import MessageList from '../components/chat/MessageList.vue'
 import MessageListSkeleton from '../components/chat/MessageListSkeleton.vue'
 import SessionHeader from '../components/chat/SessionHeader.vue'
 import SessionEndedBanner from '../components/SessionEndedBanner.vue'
+import ReferenceStatusBanner from '../components/chat/ReferenceStatusBanner.vue'
 import UploadStatus from '../components/chat/UploadStatus.vue'
 import { friendlyError } from '../lib/errors.js'
 import { useSessionStore } from '../stores/session.js'
@@ -161,6 +164,7 @@ const composerRef = ref(null)
 const uploading = ref(false)
 const uploadStatus = ref(null)
 const lastError = ref(null)
+const referenceBannerRef = ref(null)
 
 // Use the same target-id discriminator as headerTopic so the ended-banner /
 // composer / resume action agree with the optimistic header during a switch.

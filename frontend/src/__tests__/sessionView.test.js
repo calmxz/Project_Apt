@@ -31,6 +31,7 @@ vi.mock('@/services/uploadApi.js', () => ({
 
 const stubs = {
   BackButton: { template: '<button data-testid="back" />' },
+  ReferenceStatusBanner: { template: '<div />' },
   SessionEndedBanner: {
     props: ['endedAt', 'loading'],
     emits: ['resume'],
