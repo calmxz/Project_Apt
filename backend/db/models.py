@@ -3,7 +3,7 @@ from decimal import Decimal
 from uuid import uuid4
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, Numeric, String, Text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from config import settings
@@ -72,6 +72,9 @@ class ChatMessage(Base):
 
 class UsageCounter(Base):
     __tablename__ = "usage_counters"
+    __table_args__ = (
+        UniqueConstraint("user_id", "date_utc", name="uq_usage_counters_user_date"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
