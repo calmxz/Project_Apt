@@ -139,8 +139,9 @@ vi.mock('vue-router', () => ({
 }))
 
 vi.mock('@/services/uploadApi.js', () => ({
-  uploadPdf: vi.fn(),
-  getUploadStatus: vi.fn(),
+  uploadDocument: vi.fn().mockResolvedValue({ document_id: 1 }),
+  validateFile: vi.fn(() => ({ ok: true })),
+  getUploadStatus: vi.fn().mockResolvedValue({ id: 1, status: 'ready', error: null }),
   MAX_UPLOAD_BYTES: 25 * 1024 * 1024,
 }))
 

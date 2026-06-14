@@ -139,7 +139,7 @@ import { friendlyError } from '../lib/errors.js'
 import { useSessionStore } from '../stores/session.js'
 import { useToast } from '../composables/useToast.js'
 import { costBus } from '../services/costBus.js'
-import { MAX_UPLOAD_BYTES, getUploadStatus, uploadPdf } from '../services/uploadApi.js'
+import { getUploadStatus, uploadDocument, validateFile } from '../services/uploadApi.js'
 import { formatShortDateTime } from '../utils/formatDate.js'
 
 const props = defineProps({ id: { type: String, required: true } })
@@ -379,26 +379,19 @@ watch(
 )
 
 async function onAttachFile(file) {
-  // Client-side pre-check for instant feedback. The backend still enforces both
-  // (PDF-only + 25 MB) and is authoritative; this just avoids a full upload that
-  // would only fail with a generic rejection.
-  if (file.type && file.type !== 'application/pdf') {
-    uploadStatus.value = { kind: 'failed', text: 'Only PDF files can be attached.' }
-    return
-  }
-  if (file.size > MAX_UPLOAD_BYTES) {
-    const maxMb = Math.round(MAX_UPLOAD_BYTES / (1024 * 1024))
-    uploadStatus.value = {
-      kind: 'failed',
-      text: `${file.name} is too large (max ${maxMb} MB). Choose a smaller PDF.`,
-    }
+  // Client-side pre-check for instant feedback; backend re-validates (type + 25 MB).
+  const v = validateFile(file)
+  if (!v.ok) {
+    uploadStatus.value = { kind: 'failed', text: v.reason }
     return
   }
   uploading.value = true
-  uploadStatus.value = { kind: 'pending', text: `Uploading ${file.name}…` }
+  uploadStatus.value = { kind: 'pending', text: `Uploading ${file.name}...` }
   try {
-    const resp = await uploadPdf({ sessionId: props.id, file })
+    const resp = await uploadDocument({ sessionId: props.id, file })
+    referenceBannerRef.value?.refresh?.()
     await pollUploadStatus(resp.document_id, file.name)
+    referenceBannerRef.value?.refresh?.()
   } catch (e) {
     uploadStatus.value = {
       kind: 'failed',

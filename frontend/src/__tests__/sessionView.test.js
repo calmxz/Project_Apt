@@ -21,17 +21,20 @@ vi.mock('@/composables/useToast.js', () => ({
   useToast: () => ({ showError, showInfo: vi.fn(), showSuccess: vi.fn() }),
 }))
 
-const uploadPdf = vi.fn()
+const uploadDocument = vi.fn()
+const validateFile = vi.fn()
 const getUploadStatus = vi.fn()
+const bannerRefresh = vi.fn()
 vi.mock('@/services/uploadApi.js', () => ({
-  uploadPdf: (...args) => uploadPdf(...args),
+  uploadDocument: (...args) => uploadDocument(...args),
+  validateFile: (...args) => validateFile(...args),
   getUploadStatus: (...args) => getUploadStatus(...args),
   MAX_UPLOAD_BYTES: 25 * 1024 * 1024,
 }))
 
 const stubs = {
   BackButton: { template: '<button data-testid="back" />' },
-  ReferenceStatusBanner: { template: '<div />' },
+  ReferenceStatusBanner: { methods: { refresh: bannerRefresh }, template: '<div />' },
   SessionEndedBanner: {
     props: ['endedAt', 'loading'],
     emits: ['resume'],
@@ -74,7 +77,9 @@ describe('SessionView', () => {
     setActivePinia(createPinia())
     push.mockClear()
     showError.mockClear()
-    uploadPdf.mockReset()
+    uploadDocument.mockReset()
+    bannerRefresh.mockReset()
+    validateFile.mockReset()
     getUploadStatus.mockReset()
   })
 
@@ -415,12 +420,13 @@ describe('SessionView', () => {
     expect(showError).toHaveBeenCalled()
   })
 
-  it('upload triggers uploadPdf and polls status', async () => {
+  it('upload triggers uploadDocument and polls status', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'loadSession').mockImplementation(async () => {
       setupSession()
     })
-    uploadPdf.mockResolvedValue({ document_id: 'doc-1' })
+    validateFile.mockReturnValue({ ok: true })
+    uploadDocument.mockResolvedValue({ document_id: 'doc-1' })
     getUploadStatus.mockResolvedValue({ status: 'ready' })
     const wrapper = mountView()
     await flushPromises()
@@ -429,12 +435,15 @@ describe('SessionView', () => {
     Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
     await input.trigger('change')
     await flushPromises()
-    expect(uploadPdf).toHaveBeenCalledWith({ sessionId: 's1', file })
+    await flushPromises()
+    expect(uploadDocument).toHaveBeenCalledWith({ sessionId: 's1', file })
     expect(getUploadStatus).toHaveBeenCalledWith('doc-1')
     expect(wrapper.find('[data-testid="upload-status-ready"]').exists()).toBe(true)
+    // Banner is refreshed so the newly uploaded doc's ingestion status appears.
+    expect(bannerRefresh).toHaveBeenCalled()
   })
 
-  it('rejects an oversize PDF client-side without uploading (H5)', async () => {
+  it('rejects an oversize file client-side without uploading (H5)', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'loadSession').mockImplementation(async () => {
       setupSession()
@@ -443,29 +452,32 @@ describe('SessionView', () => {
     await flushPromises()
     const file = new File(['x'], 'huge.pdf', { type: 'application/pdf' })
     Object.defineProperty(file, 'size', { value: 25 * 1024 * 1024 + 1 })
+    validateFile.mockReturnValue({ ok: false, reason: 'huge.pdf is too large (max 25 MB).' })
     const input = wrapper.get('[data-testid="session-upload-input"]')
     Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
     await input.trigger('change')
     await flushPromises()
-    expect(uploadPdf).not.toHaveBeenCalled()
+    expect(uploadDocument).not.toHaveBeenCalled()
     const failed = wrapper.find('[data-testid="upload-status-failed"]')
     expect(failed.exists()).toBe(true)
     expect(failed.text()).toContain('too large')
   })
 
-  it('rejects a non-PDF client-side without uploading (H5)', async () => {
+  it('rejects an unsupported file type client-side without uploading (H5)', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'loadSession').mockImplementation(async () => {
       setupSession()
     })
     const wrapper = mountView()
     await flushPromises()
-    const file = new File(['x'], 'notes.txt', { type: 'text/plain' })
+    // .exe is not in the accepted set (PDF/PPTX/TXT/MD); validateFile returns not-ok.
+    const file = new File(['x'], 'malware.exe', { type: 'application/octet-stream' })
+    validateFile.mockReturnValue({ ok: false, reason: 'malware.exe is not a supported type. Use PDF, PPTX, TXT, or MD.' })
     const input = wrapper.get('[data-testid="session-upload-input"]')
     Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
     await input.trigger('change')
     await flushPromises()
-    expect(uploadPdf).not.toHaveBeenCalled()
+    expect(uploadDocument).not.toHaveBeenCalled()
     expect(wrapper.find('[data-testid="upload-status-failed"]').exists()).toBe(true)
   })
 

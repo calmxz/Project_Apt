@@ -3,7 +3,7 @@
     <input
       ref="fileInputEl"
       type="file"
-      accept="application/pdf"
+      accept=".pdf,.pptx,.txt,.md"
       data-testid="session-upload-input"
       hidden
       @change="onFileChange"
@@ -15,8 +15,8 @@
         class="composer-attach"
         data-testid="session-upload-btn"
         :disabled="disabled || uploading || locked"
-        :aria-label="uploading ? 'Uploading PDF' : 'Attach a PDF'"
-        :title="uploading ? 'Uploading…' : 'Attach PDF'"
+        :aria-label="uploading ? 'Uploading file' : 'Attach a reference file'"
+        :title="uploading ? 'Uploading...' : 'Attach a reference file (PDF, PPTX, TXT, MD)'"
         @click="openFilePicker"
       >
         <i v-if="!uploading" class="pi pi-paperclip" aria-hidden="true" />
