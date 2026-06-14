@@ -188,3 +188,142 @@ def test_pgvector_insert_failure_marks_failed(
     doc = db_session.get(Document, setup_doc)
     assert doc.status == "failed"
     assert "pgvector" in (doc.error or "")
+
+
+def test_extract_plaintext_txt_and_md(tmp_path):
+    from services import ingestion_service
+
+    txt = tmp_path / "notes.txt"
+    txt.write_text("Plain text reference content.", encoding="utf-8")
+    assert ingestion_service._extract(str(txt), "notes.txt") == [
+        (None, "Plain text reference content.")
+    ]
+
+    md = tmp_path / "notes.md"
+    md.write_text("# Heading\n\nBody.", encoding="utf-8")
+    assert ingestion_service._extract(str(md), "notes.md") == [
+        (None, "# Heading\n\nBody.")
+    ]
+
+    markdown = tmp_path / "notes.markdown"
+    markdown.write_text("Long-form note.", encoding="utf-8")
+    assert ingestion_service._extract(str(markdown), "notes.markdown") == [
+        (None, "Long-form note.")
+    ]
+
+
+def test_extract_unknown_extension_raises(tmp_path):
+    from services import ingestion_service
+
+    f = tmp_path / "data.bin"
+    f.write_bytes(b"\x00\x01")
+    with pytest.raises(ValueError):
+        ingestion_service._extract(str(f), "data.bin")
+
+
+def test_extract_slides_uses_python_pptx(monkeypatch):
+    from services import ingestion_service
+
+    class FakeTextFrame:
+        def __init__(self, text):
+            self.text = text
+
+    class FakeShape:
+        def __init__(self, text):
+            self.has_text_frame = True
+            self.has_table = False
+            self.text_frame = FakeTextFrame(text)
+
+    class FakeSlide:
+        def __init__(self, texts):
+            self.shapes = [FakeShape(t) for t in texts]
+
+    class FakePresentation:
+        def __init__(self, _path):
+            self.slides = [
+                FakeSlide(["Title one", "Bullet a"]),
+                FakeSlide(["Title two"]),
+            ]
+
+    monkeypatch.setattr("services.ingestion_service.Presentation", FakePresentation)
+    pages = ingestion_service._extract("x.pptx", "x.pptx")
+    assert pages[0][0] == 1 and "Title one" in pages[0][1] and "Bullet a" in pages[0][1]
+    assert pages[1][0] == 2 and "Title two" in pages[1][1]
+
+
+def test_extract_slides_includes_table_cell_text(monkeypatch):
+    from services import ingestion_service
+
+    class FakeCell:
+        def __init__(self, text):
+            self.text = text
+
+    class FakeRow:
+        def __init__(self, cells):
+            self.cells = [FakeCell(c) for c in cells]
+
+    class FakeTable:
+        def __init__(self, rows):
+            self.rows = [FakeRow(r) for r in rows]
+
+    class FakeTableShape:
+        def __init__(self, rows):
+            self.has_text_frame = False
+            self.has_table = True
+            self.table = FakeTable(rows)
+
+    class FakeSlide:
+        def __init__(self, shapes):
+            self.shapes = shapes
+
+    class FakePresentation:
+        def __init__(self, _path):
+            self.slides = [
+                FakeSlide([FakeTableShape([["r1c1", "r1c2"], ["r2c1", "r2c2"]])])
+            ]
+
+    monkeypatch.setattr("services.ingestion_service.Presentation", FakePresentation)
+    pages = ingestion_service._extract("x.pptx", "x.pptx")
+    assert pages[0][0] == 1
+    assert "r1c1 r1c2" in pages[0][1]
+    assert "r2c1 r2c2" in pages[0][1]
+
+
+def test_run_txt_success(db_session, insert_capture, mock_embed, monkeypatch, tmp_path):
+    from contracts import TopicProfile
+    from db.models import Document, Session as SessionModel, User
+    from sqlalchemy.orm import sessionmaker
+    from services import ingestion_service
+
+    db_session.add(User(id="u_txt"))
+    db_session.flush()
+    db_session.add(
+        SessionModel(
+            id="s_txt",
+            user_id="u_txt",
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.flush()
+    doc = Document(session_id="s_txt", filename="ref.txt", status="pending")
+    db_session.add(doc)
+    db_session.commit()
+    db_session.refresh(doc)
+
+    monkeypatch.setattr("services.ingestion_service.settings.uploads_path", str(tmp_path))
+    (tmp_path / f"{doc.id}_ref.txt").write_text(
+        "Indexes accelerate database queries. " * 20, encoding="utf-8"
+    )
+    monkeypatch.setattr(
+        "services.ingestion_service.SessionLocal",
+        sessionmaker(autocommit=False, autoflush=False, bind=db_session.get_bind()),
+    )
+
+    ingestion_service.run(doc.id)
+    db_session.expire_all()
+    refreshed = db_session.get(Document, doc.id)
+    assert refreshed.status == "ready"
+    assert refreshed.page_count is None
+    assert len(insert_capture) == 1
+    assert len(insert_capture[0]["rows"]) >= 1
