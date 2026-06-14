@@ -211,10 +211,31 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/sessions/{session_id}/ingestion:
+    get:
+      tags: [sessions]
+      summary: Aggregate ingestion status for a session's reference documents.
+      operationId: getSessionIngestion
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          description: Session-wide ingestion status plus per-document detail.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionIngestionStatus"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /api/upload:
     post:
       tags: [upload]
-      summary: Upload a PDF to attach to a session (background ingestion).
+      summary: Upload a reference file (PDF, PPTX, TXT, or MD) to attach to a session (background ingestion).
+      description: |
+        Accepted file types are validated by extension: .pdf, .pptx, .txt, .md
+        (.markdown is also accepted). The 25 MB per-request cap and background
+        ingestion behaviour are unchanged.
       operationId: uploadPdf
       requestBody:
         required: true
@@ -799,6 +820,35 @@ components:
         id:     { type: integer }
         status: { $ref: "#/components/schemas/IngestionStatus" }
         error:  { type: [string, "null"], default: null }
+
+    DocumentStatus:
+      type: object
+      additionalProperties: false
+      required: [id, filename, status]
+      description: Ingestion state for one uploaded document.
+      properties:
+        id:       { type: integer }
+        filename: { type: string }
+        status:   { $ref: "#/components/schemas/IngestionStatus" }
+        error:    { type: [string, "null"], default: null }
+
+    SessionIngestionStatus:
+      type: object
+      additionalProperties: false
+      required: [status, documents]
+      description: |-
+        Session-wide ingestion aggregate. `status` is `pending` if any document
+        is still ingesting, else `ready` if any document is ready, else `failed`,
+        else null when the session has no documents.
+      properties:
+        status:
+          oneOf:
+            - $ref: "#/components/schemas/IngestionStatus"
+            - type: "null"
+          default: null
+        documents:
+          type: array
+          items: { $ref: "#/components/schemas/DocumentStatus" }
 
     ProfileResponse:
       type: object

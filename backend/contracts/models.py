@@ -398,6 +398,34 @@ class UploadStatus(BaseModel):
     error: str | None = None
 
 
+class DocumentStatus(BaseModel):
+    """
+    Ingestion state for one uploaded document.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    id: int
+    filename: str
+    status: Literal["pending", "ready", "failed"]
+    error: str | None = None
+
+
+class SessionIngestionStatus(BaseModel):
+    """
+    Session-wide ingestion aggregate. `status` is `pending` if any document
+    is still ingesting, else `ready` if any document is ready, else `failed`,
+    else null when the session has no documents.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    status: Literal["pending", "ready", "failed"] | None = None
+    documents: list[DocumentStatus]
+
+
 class ProfileResponse(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
