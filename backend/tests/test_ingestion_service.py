@@ -109,6 +109,32 @@ def _path_exists_stub(monkeypatch):
     monkeypatch.setattr("services.ingestion_service.os.path.exists", lambda p: True)
 
 
+def test_embed_all_requests_configured_dimension(monkeypatch):
+    """Embeddings must be requested at settings.embedding_dim so they match the
+    chunk_embeddings.embedding column. Without an explicit dimensions argument
+    the model emits its native size (e.g. gemini-embedding-2 -> 3072), which the
+    768-dim pgvector column rejects, failing ingestion for every document."""
+    from config import settings
+    from services import ingestion_service
+
+    captured = {}
+
+    def fake_embedding(model, input, **kw):
+        captured["dimensions"] = kw.get("dimensions")
+        if isinstance(input, str):
+            input = [input]
+        return SimpleNamespace(
+            data=[{"embedding": [0.1] * settings.embedding_dim} for _ in input]
+        )
+
+    monkeypatch.setattr(
+        "services.ingestion_service.litellm.embedding", fake_embedding
+    )
+    ingestion_service._embed_all(["hello world"])
+    expected_dim = settings.embedding_dim  # local int: keep secrets out of failure repr
+    assert captured["dimensions"] == expected_dim
+
+
 def test_success_path(setup_doc, insert_capture, mock_pdf, mock_embed, db_session, monkeypatch):
     _path_exists_stub(monkeypatch)
     from services import ingestion_service

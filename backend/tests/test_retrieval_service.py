@@ -98,6 +98,34 @@ def test_ready_doc_returns_chunks(session, ctx, mock_embed, db_session, monkeypa
     assert chunks[0]["page"] == 1
 
 
+def test_retrieve_requests_configured_dimension(session, ctx, db_session, monkeypatch):
+    """The query embedding must use the same configured dimension as the stored
+    chunk embeddings, otherwise cosine search is dimension-mismatched. This and
+    the ingestion-side counterpart together pin both halves to embedding_dim."""
+    from config import settings
+
+    captured = {}
+
+    def fake_embedding(model, input, **kw):
+        captured["dimensions"] = kw.get("dimensions")
+        if isinstance(input, str):
+            input = [input]
+        return SimpleNamespace(
+            data=[{"embedding": [0.1] * settings.embedding_dim} for _ in input]
+        )
+
+    monkeypatch.setattr(
+        "services.retrieval_service.litellm.embedding", fake_embedding
+    )
+    _seed_ready_doc(db_session)
+    _stub_query(monkeypatch, [])
+    retrieval_service.retrieve(
+        db_session, ctx, RetrieveChunksArgs(session_id=SESSION_ID, query="q", k=5)
+    )
+    expected_dim = settings.embedding_dim  # local int: keep secrets out of failure repr
+    assert captured["dimensions"] == expected_dim
+
+
 def test_pending_doc_returns_no_results(session, ctx, mock_embed, db_session):
     db_session.add(Document(session_id=SESSION_ID, filename="x.pdf", status="pending"))
     db_session.commit()

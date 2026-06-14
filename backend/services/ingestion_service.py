@@ -89,7 +89,11 @@ def _embed_all(texts: list[str]) -> list[list[float]]:
     for i in range(0, len(texts), EMBED_BATCH):
         batch = texts[i : i + EMBED_BATCH]
         try:
-            resp = litellm.embedding(model=settings.embedding_model, input=batch)
+            resp = litellm.embedding(
+                model=settings.embedding_model,
+                input=batch,
+                dimensions=settings.embedding_dim,
+            )
         except Exception as e:
             raise RuntimeError(f"embedding api failed: {e}") from e
         for item in resp.data:

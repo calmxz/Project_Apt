@@ -37,7 +37,11 @@ def retrieve(db: Session, ctx: ToolContext, args: RetrieveChunksArgs) -> ToolRes
         )
 
     try:
-        resp = litellm.embedding(model=settings.embedding_model, input=[args.query])
+        resp = litellm.embedding(
+            model=settings.embedding_model,
+            input=[args.query],
+            dimensions=settings.embedding_dim,
+        )
         query_vec = (
             resp.data[0]["embedding"]
             if isinstance(resp.data[0], dict)
