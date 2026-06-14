@@ -33,7 +33,7 @@ from contracts import (
     TopicProfile,
 )
 from db.database import get_db
-from db.models import ChatMessage, Document, Session as SessionModel, User
+from db.models import ChatMessage, Session as SessionModel, User
 from services import check_question_service, documents_service, profile_service, summary_service
 from services.auth import current_user_id
 from services.session_enrichment import aware_utc as _aware_utc, compute_enrichment
@@ -47,16 +47,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api")
 
 
-def _latest_ingestion_status(db: Session, session_id: str) -> str | None:
-    doc = db.execute(
-        select(Document)
-        .where(Document.session_id == session_id)
-        .order_by(Document.created_at.desc())
-        .limit(1)
-    ).scalars().first()
-    return doc.status if doc else None
-
-
 def _to_response(db: Session, row: SessionModel) -> SessionResponse:
     return SessionResponse(
         id=row.id,
@@ -65,7 +55,7 @@ def _to_response(db: Session, row: SessionModel) -> SessionResponse:
         topic_profile=profile_service.load_profile(db, row.id),
         created_at=_aware_utc(row.created_at),
         ended_at=_aware_utc(row.ended_at),
-        ingestion_status=_latest_ingestion_status(db, row.id),
+        ingestion_status=documents_service.session_ingestion_status(db, row.id),
         pinned=row.pinned,
     )
 
@@ -276,7 +266,7 @@ def get_session(
         topic_profile=profile_service.load_profile(db, row.id),
         created_at=_aware_utc(row.created_at),
         ended_at=_aware_utc(row.ended_at),
-        ingestion_status=_latest_ingestion_status(db, row.id),
+        ingestion_status=documents_service.session_ingestion_status(db, row.id),
         messages=_load_messages(db, row.id, open_msg_id),
         pinned=row.pinned,
         pending_check=check_question_service.public_view(pc),
@@ -447,13 +437,7 @@ async def complete_check(
     check_question_service.set_quiz_cooldown(db, session_id, cooldown)
 
     profile = profile_service.load_profile(db, session_id)
-    latest_doc = db.execute(
-        select(Document)
-        .where(Document.session_id == session_id)
-        .order_by(Document.created_at.desc())
-        .limit(1)
-    ).scalars().first()
-    ingestion_status = latest_doc.status if latest_doc else None
+    ingestion_status = documents_service.session_ingestion_status(db, session_id)
 
     messages = _recent_history(db, session_id)
     messages.append({"role": "user", "content": summary})
