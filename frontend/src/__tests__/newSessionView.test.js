@@ -8,6 +8,16 @@ import { useSessionStore } from '@/stores/session.js'
 const push = vi.fn()
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
 
+const uploadDocument = vi.fn()
+vi.mock('@/services/uploadApi.js', () => ({
+  uploadDocument: (...a) => uploadDocument(...a),
+  validateFile: (file) =>
+    file.name.endsWith('.exe')
+      ? { ok: false, reason: 'not supported' }
+      : { ok: true },
+  ACCEPT_ATTR: '.pdf,.pptx,.txt,.md',
+}))
+
 const stubs = {
   BackButton: { template: '<button data-testid="back" />' },
 }
@@ -20,6 +30,8 @@ describe('NewSessionView', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     push.mockClear()
+    uploadDocument.mockReset()
+    uploadDocument.mockResolvedValue({ document_id: 1 })
   })
 
   it('renders hero copy and quick picks', () => {
@@ -135,5 +147,65 @@ describe('NewSessionView', () => {
     await flushPromises()
     expect(store.createSession).toHaveBeenCalled()
     expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'new-2' } })
+  })
+
+  it('adds valid attached files as chips and rejects invalid ones', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'listSessions').mockResolvedValue([])
+    const wrapper = mountView()
+    const input = wrapper.get('[data-testid="new-file-input"]')
+    const good = new File(['a'], 'ref.pdf', { type: 'application/pdf' })
+    const bad = new File(['b'], 'virus.exe', { type: 'application/octet-stream' })
+    Object.defineProperty(input.element, 'files', { value: [good, bad], configurable: true })
+    await input.trigger('change')
+    expect(wrapper.findAll('[data-testid="new-file-chip"]')).toHaveLength(1)
+    expect(wrapper.get('[data-testid="new-file-errors"]').text()).toMatch(/not supported/i)
+  })
+
+  it('submit uploads attached files then routes to the session', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'listSessions').mockResolvedValue([])
+    vi.spyOn(store, 'createSession').mockResolvedValue({ id: 'new-9' })
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-testid="new-topic"]').setValue('Calculus')
+    const input = wrapper.get('[data-testid="new-file-input"]')
+    const f = new File(['a'], 'ref.pdf', { type: 'application/pdf' })
+    Object.defineProperty(input.element, 'files', { value: [f], configurable: true })
+    await input.trigger('change')
+    await wrapper.get('[data-testid="new-submit"]').trigger('click')
+    await flushPromises()
+    expect(store.createSession).toHaveBeenCalled()
+    expect(uploadDocument).toHaveBeenCalledWith({ sessionId: 'new-9', file: f })
+    expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'new-9' } })
+  })
+
+  it('still routes when no files are attached', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'listSessions').mockResolvedValue([])
+    vi.spyOn(store, 'createSession').mockResolvedValue({ id: 'new-10' })
+    const wrapper = mountView()
+    await wrapper.get('[data-testid="new-topic"]').setValue('Calculus')
+    await wrapper.get('[data-testid="new-submit"]').trigger('click')
+    await flushPromises()
+    expect(uploadDocument).not.toHaveBeenCalled()
+    expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'new-10' } })
+  })
+
+  it('shows a soft warning but still routes when an upload fails', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'listSessions').mockResolvedValue([])
+    vi.spyOn(store, 'createSession').mockResolvedValue({ id: 'new-11' })
+    uploadDocument.mockRejectedValue(new Error('boom'))
+    const wrapper = mountView()
+    await wrapper.get('[data-testid="new-topic"]').setValue('Calculus')
+    const input = wrapper.get('[data-testid="new-file-input"]')
+    const f = new File(['a'], 'ref.pdf', { type: 'application/pdf' })
+    Object.defineProperty(input.element, 'files', { value: [f], configurable: true })
+    await input.trigger('change')
+    await wrapper.get('[data-testid="new-submit"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="new-file-errors"]').text()).toMatch(/failed to upload/i)
+    expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'new-11' } })
   })
 })
