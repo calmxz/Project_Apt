@@ -1,7 +1,5 @@
 <template>
   <section class="new-session">
-    <BackButton />
-
     <div class="hero">
       <span class="folio">begin</span>
       <h1 class="hero-title">What do you want to learn?</h1>
@@ -121,7 +119,6 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
-import BackButton from '../components/BackButton.vue'
 import { ACCEPT_ATTR, uploadDocument, validateFile } from '../services/uploadApi.js'
 import { useSessionStore } from '../stores/session.js'
 import { findActiveSessionByTopic, formatRelative, shortId } from '../utils/formatDate.js'

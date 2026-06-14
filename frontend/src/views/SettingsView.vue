@@ -1,7 +1,5 @@
 <template>
   <section class="settings" data-testid="settings">
-    <BackButton fallback="/" />
-
     <header class="head">
       <span class="folio">preferences</span>
       <h1 class="title">Settings</h1>
@@ -123,7 +121,6 @@
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
-import BackButton from '../components/BackButton.vue'
 import FeedbackStylePicker from '../components/FeedbackStylePicker.vue'
 import { useUserStore } from '../stores/user.js'
 import { useAuthStore } from '../stores/auth.js'

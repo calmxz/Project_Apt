@@ -8,7 +8,7 @@ import * as profileApi from '@/services/profileApi.js'
 
 const stubs = {
   RouterLink: { template: '<a><slot /></a>', props: ['to'] },
-  BackButton: { template: '<button />', props: ['label', 'fallback'] },
+  BackButton: { template: '<button data-testid="back" />', props: ['label', 'fallback'] },
 }
 
 function seedUser() {
@@ -90,5 +90,23 @@ describe('AggregateProfileView', () => {
     const err = wrapper.find('[data-testid="agg-error"]')
     expect(err.exists()).toBe(true)
     expect(err.text()).toContain('boom')
+  })
+
+  it('does not render a back button', async () => {
+    seedUser()
+    vi.spyOn(profileApi, 'getAggregateProfile').mockResolvedValue({
+      total_sessions: 0,
+      active_sessions: 0,
+      ended_sessions: 0,
+      total_learning_events: 0,
+      last_active_at: null,
+      combined_mastered_concepts: [],
+      combined_confirmed_gaps: [],
+      knowledge_level_distribution: { beginner: 0, intermediate: 0, advanced: 0, unknown: 0 },
+      recent_topics: [],
+    })
+    const wrapper = mount(AggregateProfileView, { global: { stubs } })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="back"]').exists()).toBe(false)
   })
 })

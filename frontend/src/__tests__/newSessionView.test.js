@@ -18,6 +18,9 @@ vi.mock('@/services/uploadApi.js', () => ({
   ACCEPT_ATTR: '.pdf,.pptx,.txt,.md',
 }))
 
+// BackButton was removed from NewSessionView. The stub is kept as a regression
+// guard: if BackButton is ever re-added, it renders data-testid="back" and the
+// "does not render a back button" test fails instead of silently passing.
 const stubs = {
   BackButton: { template: '<button data-testid="back" />' },
 }
@@ -207,5 +210,10 @@ describe('NewSessionView', () => {
     await flushPromises()
     expect(wrapper.get('[data-testid="new-file-errors"]').text()).toMatch(/failed to upload/i)
     expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'new-11' } })
+  })
+
+  it('does not render a back button', () => {
+    const wrapper = mountView()
+    expect(wrapper.find('[data-testid="back"]').exists()).toBe(false)
   })
 })
