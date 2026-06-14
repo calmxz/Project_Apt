@@ -1,17 +1,20 @@
-"""PDF ingestion background pipeline (Spec §4.2, §3.1).
+"""File ingestion background pipeline (Spec §4.2, §3.1).
 
 run(document_id) is invoked via FastAPI BackgroundTasks. Opens its own
 SessionLocal because the request-scoped DB session is gone by the time the
 background task fires.
 
 Pipeline:
-  1. Load Document; resolve PDF path from settings.uploads_path.
-  2. pypdf -> [(page_num, text), ...].
+  1. Load Document; resolve file path from settings.uploads_path.
+  2. _extract(path, filename) -> [(page_num | None, text), ...] by extension.
+     - .pdf  : pypdf -> [(page_num, text), ...]
+     - .pptx : python-pptx -> [(slide_num, text), ...]
+     - .txt / .md / .markdown : [(None, full_text)]
   3. lib.chunking.chunk_text (500 / 50 overlap).
   4. litellm.embedding in batches of 100.
   5. pgvector_store.insert_chunks (Postgres `chunk_embeddings` table).
   6. lib.keyword_index.merge_into_session(stems).
-  7. Document.status = ready, page_count populated.
+  7. Document.status = ready, page_count populated (None for plaintext).
 
 On exception at any step: status=failed, error=str(exc)[:1000]. Always commit.
 """
@@ -20,6 +23,7 @@ import logging
 import os
 
 import litellm
+from pptx import Presentation
 from pypdf import PdfReader
 
 from config import settings
@@ -49,12 +53,47 @@ def _extract_pages(path: str) -> list[tuple[int, str]]:
     return [(i + 1, (page.extract_text() or "")) for i, page in enumerate(reader.pages)]
 
 
+def _extract_slides(path: str) -> list[tuple[int, str]]:
+    prs = Presentation(path)
+    out: list[tuple[int, str]] = []
+    for i, slide in enumerate(prs.slides, start=1):
+        parts: list[str] = []
+        for shape in slide.shapes:
+            if getattr(shape, "has_text_frame", False):
+                parts.append(shape.text_frame.text)
+            if getattr(shape, "has_table", False):
+                for row in shape.table.rows:
+                    parts.append(" ".join(cell.text for cell in row.cells))
+        out.append((i, "\n".join(p for p in parts if p)))
+    return out
+
+
+def _extract_plaintext(path: str) -> list[tuple[None, str]]:
+    with open(path, "r", encoding="utf-8", errors="replace") as fh:
+        return [(None, fh.read())]
+
+
+def _extract(path: str, filename: str) -> list[tuple[int | None, str]]:
+    ext = os.path.splitext(filename)[1].lower()
+    if ext == ".pdf":
+        return _extract_pages(path)
+    if ext == ".pptx":
+        return _extract_slides(path)
+    if ext in (".txt", ".md", ".markdown"):
+        return _extract_plaintext(path)
+    raise ValueError(f"unsupported file type: {ext!r}")
+
+
 def _embed_all(texts: list[str]) -> list[list[float]]:
     out: list[list[float]] = []
     for i in range(0, len(texts), EMBED_BATCH):
         batch = texts[i : i + EMBED_BATCH]
         try:
-            resp = litellm.embedding(model=settings.embedding_model, input=batch)
+            resp = litellm.embedding(
+                model=settings.embedding_model,
+                input=batch,
+                dimensions=settings.embedding_dim,
+            )
         except Exception as e:
             raise RuntimeError(f"embedding api failed: {e}") from e
         for item in resp.data:
@@ -72,8 +111,11 @@ def run(document_id: int) -> None:
 
         try:
             path = _resolve_path(doc)
-            pages = _extract_pages(path)
-            doc.page_count = len(pages)
+            pages = _extract(path, doc.filename)
+            # Count only pages/slides that carry a page number; plaintext yields
+            # (None, text) so its sum is 0, which we collapse to None (no page
+            # concept). Degenerate inputs (0-slide pptx) likewise store None.
+            doc.page_count = sum(1 for p, _ in pages if p is not None) or None
 
             chunks = chunking.chunk_text(pages)
             if not chunks:

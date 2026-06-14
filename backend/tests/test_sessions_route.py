@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from contracts import TopicProfile
-from db.models import Session as SessionModel, User
+from db.models import Document, Session as SessionModel, User
 
 
 USER_ID = "u1"
@@ -419,3 +419,57 @@ def test_patch_empty_body_400(client, db_session, seeded_user):
     _make_session(db_session, "s_empty")
     r = client.patch(f"/api/sessions/s_empty?user_id={USER_ID}", json={})
     assert r.status_code == 400
+
+
+def test_get_session_ingestion_aggregates_documents(client, db_session, seeded_user):
+    db_session.add(
+        SessionModel(
+            id="s_ing",
+            user_id=USER_ID,
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.flush()
+    db_session.add(Document(session_id="s_ing", filename="a.pdf", status="ready"))
+    db_session.add(Document(session_id="s_ing", filename="b.pptx", status="pending"))
+    db_session.commit()
+
+    r = client.get(f"/api/sessions/s_ing/ingestion?user_id={USER_ID}")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["status"] == "pending"
+    assert len(body["documents"]) == 2
+    assert {d["filename"] for d in body["documents"]} == {"a.pdf", "b.pptx"}
+
+
+def test_get_session_ingestion_404_for_wrong_user(client, db_session, seeded_user):
+    db_session.add(User(id="other2"))
+    db_session.add(
+        SessionModel(
+            id="s_ing_owned",
+            user_id=USER_ID,
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.commit()
+    r = client.get("/api/sessions/s_ing_owned/ingestion?user_id=other2")
+    assert r.status_code == 404
+
+
+def test_get_session_ingestion_empty_when_no_documents(client, db_session, seeded_user):
+    db_session.add(
+        SessionModel(
+            id="s_ing_empty",
+            user_id=USER_ID,
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.commit()
+    r = client.get(f"/api/sessions/s_ing_empty/ingestion?user_id={USER_ID}")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] is None
+    assert body["documents"] == []

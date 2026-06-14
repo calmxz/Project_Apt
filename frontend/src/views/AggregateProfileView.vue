@@ -11,7 +11,6 @@
           Snapshot of everything the tutor has learned about you.
         </p>
       </div>
-      <BackButton label="Back to sessions" fallback="/" />
     </header>
 
     <p v-if="loading" class="muted" data-testid="agg-loading">Loading...</p>
@@ -166,7 +165,6 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 
-import BackButton from '../components/BackButton.vue'
 import EmptyState from '../components/EmptyState.vue'
 import { friendlyError } from '../lib/errors.js'
 import { getAggregateProfile } from '../services/profileApi.js'

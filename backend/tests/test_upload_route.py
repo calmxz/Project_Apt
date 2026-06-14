@@ -52,10 +52,34 @@ def test_upload_returns_202_and_creates_pending_document(client, seeded, db_sess
     assert doc.status == "pending"
 
 
-def test_non_pdf_content_type_400(client, seeded):
-    files = {"file": ("notes.txt", io.BytesIO(b"hello"), "text/plain")}
+def test_disallowed_extension_400(client, seeded):
+    files = {"file": ("paper.docx", io.BytesIO(b"PK\x03\x04"), "application/octet-stream")}
     r = client.post("/api/upload", data={"user_id": USER_ID, "session_id": SESSION_ID}, files=files)
     assert r.status_code == 400
+
+
+def test_extensionless_filename_400(client, seeded):
+    files = {"file": ("README", io.BytesIO(b"hello"), "text/plain")}
+    r = client.post("/api/upload", data={"user_id": USER_ID, "session_id": SESSION_ID}, files=files)
+    assert r.status_code == 400
+
+
+@pytest.mark.parametrize(
+    "name,ctype",
+    [
+        ("slides.pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"),
+        ("notes.txt", "text/plain"),
+        ("notes.md", "text/markdown"),
+        ("notes.markdown", "application/octet-stream"),
+    ],
+)
+def test_allowed_non_pdf_types_202(client, seeded, name, ctype):
+    files = {"file": (name, io.BytesIO(b"data-bytes"), ctype)}
+    r = client.post(
+        "/api/upload", data={"user_id": USER_ID, "session_id": SESSION_ID}, files=files
+    )
+    assert r.status_code == 202, r.text
+    assert r.json()["status"] == "pending"
 
 
 def test_missing_session_id_field_400(client, seeded):

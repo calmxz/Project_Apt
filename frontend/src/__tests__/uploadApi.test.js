@@ -1,8 +1,37 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
-import { uploadPdf, getUploadStatus } from '@/services/uploadApi.js'
+import { uploadPdf, getUploadStatus, validateFile, ACCEPT_ATTR, MAX_UPLOAD_BYTES } from '@/services/uploadApi.js'
 import { ApiError } from '@/services/apiClient.js'
+
+function fakeFile(name, size) {
+  return { name, size }
+}
+
+describe('validateFile', () => {
+  it('accepts pdf, pptx, txt, md by extension', () => {
+    for (const ext of ['ref.pdf', 'deck.PPTX', 'notes.txt', 'readme.md', 'readme.markdown']) {
+      expect(validateFile(fakeFile(ext, 1000)).ok).toBe(true)
+    }
+  })
+
+  it('rejects unsupported extensions', () => {
+    const r = validateFile(fakeFile('paper.docx', 1000))
+    expect(r.ok).toBe(false)
+    expect(r.reason).toMatch(/supported/i)
+  })
+
+  it('rejects oversize files', () => {
+    const r = validateFile(fakeFile('big.pdf', MAX_UPLOAD_BYTES + 1))
+    expect(r.ok).toBe(false)
+    expect(r.reason).toMatch(/too large/i)
+  })
+
+  it('exposes an accept attribute string', () => {
+    expect(ACCEPT_ATTR).toContain('.pdf')
+    expect(ACCEPT_ATTR).toContain('.pptx')
+  })
+})
 
 describe('uploadApi', () => {
   let fetchMock

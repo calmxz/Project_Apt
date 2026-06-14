@@ -20,7 +20,7 @@ vi.mock('vue-router', () => ({
 
 const stubs = {
   RouterLink: { template: '<a><slot /></a>', props: ['to'] },
-  BackButton: { template: '<button />', props: ['label', 'fallback'] },
+  BackButton: { template: '<button data-testid="back" />', props: ['label', 'fallback'] },
   Button: {
     props: ['disabled', 'label'],
     template:
@@ -102,5 +102,10 @@ describe('SettingsView', () => {
     await flushPromises()
     expect(showError).toHaveBeenCalledWith('network down')
     expect(routerPush).not.toHaveBeenCalled()
+  })
+
+  it('does not render a back button', () => {
+    const wrapper = mount(SettingsView, { global: { stubs } })
+    expect(wrapper.find('[data-testid="back"]').exists()).toBe(false)
   })
 })

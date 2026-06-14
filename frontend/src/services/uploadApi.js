@@ -8,6 +8,29 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api
 // authoritative limit and still returns 413 FILE_TOO_LARGE if bypassed.
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024 // 25 MB
 
+export const ACCEPTED_EXTENSIONS = ['.pdf', '.pptx', '.txt', '.md', '.markdown']
+
+// File-picker hint. `.markdown` is accepted by validateFile but omitted here so
+// the picker advertises the common four; derived from ACCEPTED_EXTENSIONS so the
+// two cannot silently drift when a type is added.
+export const ACCEPT_ATTR = ACCEPTED_EXTENSIONS.filter((ext) => ext !== '.markdown').join(',')
+
+// Client-side pre-check only; the backend re-validates by extension and size.
+export function validateFile(file) {
+  const name = (file?.name || '').toLowerCase()
+  if (!ACCEPTED_EXTENSIONS.some((ext) => name.endsWith(ext))) {
+    return {
+      ok: false,
+      reason: `${file?.name || 'File'} is not a supported type. Use PDF, PPTX, TXT, or MD.`,
+    }
+  }
+  if (file.size > MAX_UPLOAD_BYTES) {
+    const maxMb = Math.round(MAX_UPLOAD_BYTES / (1024 * 1024))
+    return { ok: false, reason: `${file.name} is too large (max ${maxMb} MB).` }
+  }
+  return { ok: true }
+}
+
 function _authHeaders() {
   try {
     const store = useAuthStore()
@@ -18,7 +41,7 @@ function _authHeaders() {
   }
 }
 
-export async function uploadPdf({ sessionId, file }) {
+export async function uploadDocument({ sessionId, file }) {
   const fd = new FormData()
   fd.append('session_id', sessionId)
   fd.append('file', file)
@@ -46,4 +69,9 @@ export async function uploadPdf({ sessionId, file }) {
   return parsed
 }
 
+/** @deprecated Back-compat alias for existing PDF-only call sites; use uploadDocument. */
+export const uploadPdf = uploadDocument
+
 export const getUploadStatus = (documentId) => apiGet(`/upload/${documentId}`)
+
+export const getSessionIngestion = (sessionId) => apiGet(`/sessions/${sessionId}/ingestion`)

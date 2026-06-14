@@ -1,0 +1,64 @@
+"""Session-wide document ingestion status (Spec: reference-files design 2026-06-14).
+
+Replaces the per-call-site "latest document" lookups that previously decided
+retrieval readiness and `ingestion_status`. Those keyed on the most-recent
+document only, so a newer pending/failed upload masked an older ready one.
+These helpers aggregate across all of a session's documents instead.
+"""
+
+from collections.abc import Iterable
+from typing import Literal
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from db.models import Document
+
+IngestionStatus = Literal["pending", "ready", "failed"]
+
+
+def aggregate_status(statuses: Iterable[str]) -> IngestionStatus | None:
+    """Aggregate a collection of document statuses into one session-wide status.
+
+    Priority: pending > ready > failed > None (no documents). Pure helper so the
+    route can derive the aggregate from documents it has already fetched, without
+    a second query and without duplicating the priority logic.
+    """
+    seen = set(statuses)
+    if not seen:
+        return None
+    if "pending" in seen:
+        return "pending"
+    if "ready" in seen:
+        return "ready"
+    return "failed"
+
+
+def session_ingestion_status(db: Session, session_id: str) -> IngestionStatus | None:
+    """Return aggregate ingestion status across all documents in the session."""
+    return aggregate_status(
+        db.execute(
+            select(Document.status).where(Document.session_id == session_id)
+        ).scalars().all()
+    )
+
+
+def has_ready_document(db: Session, session_id: str) -> bool:
+    """Return True if at least one document for the session has status 'ready'."""
+    return (
+        db.execute(
+            select(Document.id)
+            .where(Document.session_id == session_id, Document.status == "ready")
+            .limit(1)
+        ).first()
+        is not None
+    )
+
+
+def list_document_statuses(db: Session, session_id: str) -> list[Document]:
+    """Return all documents for the session ordered by creation time ascending."""
+    return db.execute(
+        select(Document)
+        .where(Document.session_id == session_id)
+        .order_by(Document.created_at.asc(), Document.id.asc())
+    ).scalars().all()
