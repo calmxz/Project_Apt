@@ -53,7 +53,7 @@ Most "AI tutors" today are a chat box bolted onto a generic LLM. They ask the sa
 - **Self-learners** working through a textbook who want to be quizzed adaptively, not linearly.
 - **Educators / EdTech researchers** interested in tool-augmented LLM tutors with verifiable state.
 
-**Why it exists.** As a 7-week project, AdaptLearn is a demonstration of how structured tool calls and server-side guard rails can keep an LLM honest — no hallucinated mastery, no silent context loss, no fabricated citations.
+**Why it exists.** AdaptLearn is a demonstration of how structured tool calls and server-side guard rails can keep an LLM honest — no hallucinated mastery, no silent context loss, no fabricated citations.
 
 ## Features
 
@@ -463,7 +463,6 @@ With the backend running, FastAPI's interactive docs are available at:
 Project_Apt/
 ├── docs/
 │   ├── superpowers/specs/      Design doc (source of truth)
-│   ├── superpowers/plans/      Phase implementation plans
 │   ├── api/openapi.yaml        API contract (codegen source)
 │   ├── deploy/ngrok.md         Public demo deploy guide
 │   ├── screencast/             Walkthrough script + recorded video
@@ -575,7 +574,7 @@ git commit
 
 ## Roadmap
 
-AdaptLearn v1 is feature-complete for its 7-week scope. Possible v2 directions:
+AdaptLearn v1 is feature-complete. Possible v2 directions:
 
 - **Multi-user auth.** Real accounts (OAuth, magic-link) instead of single-user local mode.
 - **Mobile-friendly redesign.** The current SPA is desktop-first; an adaptive layout for phones is on the wishlist.
@@ -665,4 +664,4 @@ AdaptLearn stands on the shoulders of a lot of excellent open-source work:
 
 Architecture inspiration: structured-state LLM tutors as discussed in recent EdTech-LLM research papers, and the broader "tool-augmented agent with verifiable state" pattern that's emerged through 2025.
 
-Built as a 7-week project. Phase plan and design rationale live in [`docs/superpowers/`](docs/superpowers/).
+Phase plan and design rationale live in [`docs/superpowers/`](docs/superpowers/).
