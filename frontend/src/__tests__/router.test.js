@@ -30,6 +30,7 @@ describe('router', () => {
         'session',
         'session-profile',
         'login',
+        'register',
       ]),
     )
   })
@@ -80,5 +81,19 @@ describe('router', () => {
   it('passes :id as a prop to the session route', () => {
     const route = router.getRoutes().find((r) => r.name === 'session')
     expect(route.props.default).toBe(true)
+  })
+
+  it('allows an unauthenticated user to reach /register', async () => {
+    setAuth(false)
+    await router.push({ name: 'register' })
+    expect(router.currentRoute.value.name).toBe('register')
+  })
+
+  it('redirects an authenticated user away from /register to home', async () => {
+    setAuth(true)
+    const user = useUserStore()
+    user.onboardingComplete = true
+    await router.push({ name: 'register' })
+    expect(router.currentRoute.value.name).toBe('home')
   })
 })
