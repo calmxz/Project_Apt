@@ -53,6 +53,15 @@ describe('RegisterView', () => {
     expect(wrapper.text()).toContain('me@example.com')
   })
 
+  it('shows the mismatch hint only when confirm differs from password', async () => {
+    const wrapper = mountView()
+    await wrapper.get('[data-testid="register-password"]').setValue('hunter2pw')
+    await wrapper.get('[data-testid="register-confirm"]').setValue('different')
+    expect(wrapper.find('[data-testid="register-mismatch"]').exists()).toBe(true)
+    await wrapper.get('[data-testid="register-confirm"]').setValue('hunter2pw')
+    expect(wrapper.find('[data-testid="register-mismatch"]').exists()).toBe(false)
+  })
+
   it('shows an error banner when register throws', async () => {
     const auth = useAuthStore()
     vi.spyOn(auth, 'register').mockRejectedValue(new Error('User already registered'))
