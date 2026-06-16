@@ -4,7 +4,7 @@
       <Logo size="lg" variant="mark-only" />
       <span class="folio">sign in</span>
       <h1 class="title">Welcome to AdaptLearn</h1>
-      <p class="lede">Enter your email — we'll send a magic-link to sign you in.</p>
+      <p class="lede">Sign in with your email and password.</p>
     </header>
 
     <form class="form" data-testid="login-form" @submit.prevent="submit">
@@ -22,9 +22,33 @@
         />
       </div>
 
+      <div class="field">
+        <label for="password" class="label">Password</label>
+        <InputText
+          id="password"
+          v-model="password"
+          type="password"
+          data-testid="login-password"
+          autocomplete="current-password"
+          placeholder="Your password"
+          required
+          class="input"
+        />
+      </div>
+
       <p v-if="error" class="error" data-testid="login-error">{{ error }}</p>
-      <p v-if="sent" class="sent" data-testid="login-sent">
-        Check your inbox at <strong>{{ sentEmail }}</strong> for a sign-in link.
+      <p v-if="needsConfirm" class="hint">
+        <button
+          type="button"
+          class="linkbtn"
+          data-testid="login-resend"
+          @click="resend"
+        >
+          Resend confirmation email
+        </button>
+      </p>
+      <p v-if="resent" class="sent" data-testid="login-resent">
+        Confirmation email re-sent to <strong>{{ email.trim() }}</strong>.
       </p>
 
       <div class="actions">
@@ -32,12 +56,17 @@
           type="submit"
           class="cta"
           data-testid="login-submit"
-          :disabled="!canSubmit || sending"
+          :disabled="!canSubmit || submitting"
         >
-          <span>{{ sending ? 'Sending…' : 'Send magic link' }}</span>
-          <i class="pi pi-envelope" aria-hidden="true" />
+          <span>{{ submitting ? 'Signing in…' : 'Sign in' }}</span>
+          <i class="pi pi-arrow-right" aria-hidden="true" />
         </button>
       </div>
+
+      <p class="swap">
+        New here?
+        <RouterLink to="/register" data-testid="login-to-register">Create an account</RouterLink>
+      </p>
     </form>
   </section>
 </template>
@@ -53,28 +82,42 @@ import { useAuthStore } from '../stores/auth.js'
 const auth = useAuthStore()
 
 const email = ref('')
-const sending = ref(false)
-const sent = ref(false)
-const sentEmail = ref('')
+const password = ref('')
+const submitting = ref(false)
 const error = ref('')
+const needsConfirm = ref(false)
+const resent = ref(false)
 
-const canSubmit = computed(() =>
-  /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.value.trim()),
+const canSubmit = computed(
+  () =>
+    /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.value.trim()) &&
+    password.value.length > 0,
 )
 
 async function submit() {
   if (!canSubmit.value) return
   error.value = ''
-  sent.value = false
-  sending.value = true
+  needsConfirm.value = false
+  resent.value = false
+  submitting.value = true
   try {
-    await auth.signInWithMagicLink(email.value.trim())
-    sentEmail.value = email.value.trim()
-    sent.value = true
+    await auth.signIn(email.value.trim(), password.value)
   } catch (e) {
-    error.value = e?.message || 'Could not send magic link. Try again.'
+    const msg = e?.message || 'Could not sign in. Try again.'
+    error.value = msg
+    if (/not confirmed/i.test(msg)) needsConfirm.value = true
   } finally {
-    sending.value = false
+    submitting.value = false
+  }
+}
+
+async function resend() {
+  resent.value = false
+  try {
+    await auth.resendConfirmation(email.value.trim())
+    resent.value = true
+  } catch (e) {
+    error.value = e?.message || 'Could not resend. Try again.'
   }
 }
 </script>
@@ -204,5 +247,27 @@ async function submit() {
   margin: 0;
   font-size: 0.875rem;
   color: var(--color-success-text);
+}
+
+.hint {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+.linkbtn {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--color-accent-text);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.swap {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  text-align: center;
 }
 </style>
