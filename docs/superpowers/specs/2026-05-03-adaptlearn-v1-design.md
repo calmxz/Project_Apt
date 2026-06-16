@@ -30,7 +30,7 @@ This document supersedes `AdaptLearn_Spec.md` and `AdaptLearn_DevPlan.md` for v1
 | Embeddings | `gemini/gemini-embedding-2` (768-dim) — was `text-embedding-004` (reconciled 2026-05-30) | Same |
 | Backend | FastAPI + Postgres (Supabase) + pgvector, dockerized — was `SQLite + ChromaDB` (reconciled 2026-05-30, Phase 7) | User said no Firebase; pgvector folds vectors into the relational store |
 | Frontend | Vue 3 + Vite + PrimeVue + Pinia | Portfolio recognizability |
-| Auth | Supabase magic-link (JWT) — was `None (localStorage userId)` pre-Phase 7 | Public-deploy retarget (Phase 7, 2026-05-23) |
+| Auth | Supabase email/password (JWT) — was `None (localStorage userId)` pre-Phase 7 | Public-deploy retarget (Phase 7, 2026-05-23) |
 | Streaming | SSE token streaming (`/api/chat/stream`) — was `None` (reconciled 2026-05-30) | Demo UX; non-streaming `/api/chat` retained |
 | CI | Full pyramid: pytest + Vitest + Playwright + GitHub Actions | Portfolio bullet + regression safety |
 
@@ -43,7 +43,7 @@ docker-compose.yml                  (reconciled 2026-05-30; was 3 services incl.
 ├── frontend  : Vue 3 + Vite (dev) / nginx static (prod). Port 5173.
 └── backend   : FastAPI + Uvicorn. Port 8000.
 
-External (Supabase-managed): Postgres 17 + pgvector, Supabase Auth (magic-link JWT).
+External (Supabase-managed): Postgres 17 + pgvector, Supabase Auth (email/password JWT).
 
 Volumes:
   ./data/uploads/     (PDFs, mounted in backend; DB + vectors live in Supabase)
@@ -435,7 +435,7 @@ Also during Week 1: docker-compose smoke test, ChromaDB integration smoke test, 
 
 ## 11. Out of scope (v2 backlog)
 
-- ~~User auth (currently localStorage userId)~~ — landed in Phase 7 (Supabase magic-link JWT). See `docs/auth/supabase-setup.md`.
+- ~~User auth (currently localStorage userId)~~ — landed in Phase 7 (Supabase email/password JWT). See `docs/auth/supabase-setup.md`.
 - Streaming responses
 - Asymmetric profile promotion
 - Canonicalization with embeddings
