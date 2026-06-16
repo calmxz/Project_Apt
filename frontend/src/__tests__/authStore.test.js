@@ -73,6 +73,12 @@ describe('auth store', () => {
     )
   })
 
+  it('register returns Supabase data on success', async () => {
+    const auth = useAuthStore()
+    const result = await auth.register('me@example.com', 'hunter2pw')
+    expect(result).toMatchObject({ user: { id: 'u-new' } })
+  })
+
   it('register throws when Supabase returns an error', async () => {
     globalThis.__supabaseAuthStub.signUp.mockResolvedValueOnce({
       data: null,
@@ -109,6 +115,15 @@ describe('auth store', () => {
     expect(globalThis.__supabaseAuthStub.resend).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'signup', email: 'me@example.com' }),
     )
+  })
+
+  it('resendConfirmation throws when Supabase returns an error', async () => {
+    globalThis.__supabaseAuthStub.resend.mockResolvedValueOnce({
+      data: null,
+      error: new Error('Email not found'),
+    })
+    const auth = useAuthStore()
+    await expect(auth.resendConfirmation('x@y.z')).rejects.toThrow('Email not found')
   })
 
   it('signOut clears session', async () => {
