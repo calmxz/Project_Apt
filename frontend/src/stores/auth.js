@@ -5,7 +5,8 @@
 //   read `isAuthenticated`.
 // - `onAuthStateChange` keeps `session` in sync with sign-in / sign-out /
 //   token-refresh events from the SDK.
-// - Magic-link is the only sign-in method configured server-side.
+// - Email + password sign-in is configured server-side. New accounts require
+//   email confirmation; `resendConfirmation` re-sends the confirmation mail.
 
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
@@ -33,15 +34,29 @@ export const useAuthStore = defineStore('auth', () => {
     ready.value = true
   }
 
-  async function signInWithMagicLink(email) {
+  async function register(email, password) {
     const sb = getSupabase()
-    const { error } = await sb.auth.signInWithOtp({
+    const { data, error } = await sb.auth.signUp({
       email,
+      password,
       options: {
         emailRedirectTo:
           typeof window !== 'undefined' ? `${window.location.origin}/` : undefined,
       },
     })
+    if (error) throw error
+    return data
+  }
+
+  async function signIn(email, password) {
+    const sb = getSupabase()
+    const { error } = await sb.auth.signInWithPassword({ email, password })
+    if (error) throw error
+  }
+
+  async function resendConfirmation(email) {
+    const sb = getSupabase()
+    const { error } = await sb.auth.resend({ type: 'signup', email })
     if (error) throw error
   }
 
@@ -66,7 +81,9 @@ export const useAuthStore = defineStore('auth', () => {
     accessToken,
     isAuthenticated,
     init,
-    signInWithMagicLink,
+    register,
+    signIn,
+    resendConfirmation,
     signOut,
     _resetForTests,
   }

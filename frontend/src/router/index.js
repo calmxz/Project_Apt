@@ -13,6 +13,12 @@ const router = createRouter({
       meta: { public: true, sidebar: false },
     },
     {
+      path: '/register',
+      name: 'register',
+      component: () => import('../views/RegisterView.vue'),
+      meta: { public: true, sidebar: false },
+    },
+    {
       path: '/',
       name: 'home',
       component: () => import('../views/HomeView.vue'),
@@ -64,10 +70,11 @@ router.beforeEach(async (to) => {
   // now so the guard has a deterministic answer.
   if (!auth.ready) await auth.init()
 
-  if (!auth.isAuthenticated && to.name !== 'login') {
+  const isPublic = to.meta?.public === true
+  if (!auth.isAuthenticated && !isPublic) {
     return { name: 'login' }
   }
-  if (auth.isAuthenticated && to.name === 'login') {
+  if (auth.isAuthenticated && (to.name === 'login' || to.name === 'register')) {
     return { name: 'home' }
   }
 

@@ -2,19 +2,19 @@
   <section class="login">
     <header class="head">
       <Logo size="lg" variant="mark-only" />
-      <span class="folio">sign in</span>
-      <h1 class="title">Welcome to AdaptLearn</h1>
-      <p class="lede">Sign in with your email and password.</p>
+      <span class="folio">create account</span>
+      <h1 class="title">Join AdaptLearn</h1>
+      <p class="lede">Register with your email and a password.</p>
     </header>
 
-    <form class="form" data-testid="login-form" @submit.prevent="submit">
+    <form v-if="!sent" class="form" data-testid="register-form" @submit.prevent="submit">
       <div class="field">
         <label for="email" class="label">Email</label>
         <InputText
           id="email"
           v-model="email"
           type="email"
-          data-testid="login-email"
+          data-testid="register-email"
           autocomplete="email"
           placeholder="you@example.com"
           required
@@ -28,46 +28,60 @@
           id="password"
           v-model="password"
           type="password"
-          data-testid="login-password"
-          autocomplete="current-password"
-          placeholder="Your password"
+          data-testid="register-password"
+          autocomplete="new-password"
+          placeholder="At least 8 characters"
           required
           class="input"
         />
       </div>
 
-      <p v-if="error" class="error" data-testid="login-error">{{ error }}</p>
-      <p v-if="needsConfirm" class="hint">
-        <button
-          type="button"
-          class="linkbtn"
-          data-testid="login-resend"
-          @click="resend"
-        >
-          Resend confirmation email
-        </button>
+      <div class="field">
+        <label for="confirm" class="label">Confirm password</label>
+        <InputText
+          id="confirm"
+          v-model="confirm"
+          type="password"
+          data-testid="register-confirm"
+          autocomplete="new-password"
+          placeholder="Re-enter password"
+          required
+          class="input"
+        />
+      </div>
+
+      <p v-if="mismatch" class="hint" data-testid="register-mismatch">
+        Passwords do not match.
       </p>
-      <p v-if="resent" class="sent" data-testid="login-resent">
-        Confirmation email re-sent to <strong>{{ email.trim() }}</strong>.
-      </p>
+      <p v-if="error" class="error" data-testid="register-error">{{ error }}</p>
 
       <div class="actions">
         <button
           type="submit"
           class="cta"
-          data-testid="login-submit"
+          data-testid="register-submit"
           :disabled="!canSubmit || submitting"
         >
-          <span>{{ submitting ? 'Signing in…' : 'Sign in' }}</span>
+          <span>{{ submitting ? 'Creating…' : 'Create account' }}</span>
           <i class="pi pi-arrow-right" aria-hidden="true" />
         </button>
       </div>
 
       <p class="swap">
-        New here?
-        <RouterLink to="/register" data-testid="login-to-register">Create an account</RouterLink>
+        Already have an account?
+        <RouterLink to="/login" data-testid="register-to-login">Sign in</RouterLink>
       </p>
     </form>
+
+    <div v-else class="form" data-testid="register-sent">
+      <p class="sent">
+        Check your inbox at <strong>{{ email.trim() }}</strong> to confirm your
+        account, then sign in.
+      </p>
+      <p class="swap">
+        <RouterLink to="/login" data-testid="register-sent-to-login">Back to sign in</RouterLink>
+      </p>
+    </div>
   </section>
 </template>
 
@@ -83,41 +97,29 @@ const auth = useAuthStore()
 
 const email = ref('')
 const password = ref('')
+const confirm = ref('')
 const submitting = ref(false)
 const error = ref('')
-const needsConfirm = ref(false)
-const resent = ref(false)
+const sent = ref(false)
 
+const emailValid = computed(() => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.value.trim()))
+const passwordValid = computed(() => password.value.length >= 8)
+const mismatch = computed(() => confirm.value.length > 0 && confirm.value !== password.value)
 const canSubmit = computed(
-  () =>
-    /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.value.trim()) &&
-    password.value.length > 0,
+  () => emailValid.value && passwordValid.value && confirm.value === password.value,
 )
 
 async function submit() {
   if (!canSubmit.value) return
   error.value = ''
-  needsConfirm.value = false
-  resent.value = false
   submitting.value = true
   try {
-    await auth.signIn(email.value.trim(), password.value)
+    await auth.register(email.value.trim(), password.value)
+    sent.value = true
   } catch (e) {
-    const msg = e?.message || 'Could not sign in. Try again.'
-    error.value = msg
-    if (/not confirmed/i.test(msg)) needsConfirm.value = true
+    error.value = e?.message || 'Could not create account. Try again.'
   } finally {
     submitting.value = false
-  }
-}
-
-async function resend() {
-  resent.value = false
-  try {
-    await auth.resendConfirmation(email.value.trim())
-    resent.value = true
-  } catch (e) {
-    error.value = e?.message || 'Could not resend. Try again.'
   }
 }
 </script>
@@ -243,25 +245,17 @@ async function resend() {
   font-size: 0.875rem;
 }
 
-.sent {
-  margin: 0;
-  font-size: 0.875rem;
-  color: var(--color-success-text);
-}
-
 .hint {
   margin: 0;
   font-size: 0.875rem;
+  color: var(--color-text-muted);
 }
 
-.linkbtn {
-  background: none;
-  border: 0;
-  padding: 0;
-  font: inherit;
-  color: var(--color-accent-text);
-  cursor: pointer;
-  text-decoration: underline;
+.sent {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--color-success-text);
+  line-height: var(--lh-body);
 }
 
 .swap {

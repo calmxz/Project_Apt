@@ -1,6 +1,6 @@
 # Supabase Auth Setup
 
-Phase 7 wires AdaptLearn to Supabase Auth (magic-link only). This doc is the
+AdaptLearn uses Supabase Auth with email + password sign-in. This doc is the
 end-to-end setup path for a fresh Supabase project, the env vars the app
 reads, and the JWT verification model.
 
@@ -13,25 +13,39 @@ reads, and the JWT verification model.
    you need it for direct `psql` access from `docs/db/postgres-pgvector-setup.md`.
 4. Wait for provisioning to finish (~1-2 min).
 
-## 2. Enable Email magic-link
+## 2. Enable Email + password
 
 `Authentication → Providers → Email`:
 
 - **Enable** Email provider.
-- **Confirm email**: ON (Supabase default — magic link doubles as confirmation).
+- **Enable** "Email + Password" sign-in (password provider ON).
+- **Confirm email**: ON — new self-service registrations must confirm via the
+  emailed link before first sign-in.
 - **Secure email change**: ON.
-- **Mailer OTP expiration**: default 3600s is fine.
-- All other Email provider toggles (password sign-in, signups): OFF for v1.
-  We only support magic-link.
+- Magic-link / OTP-only sign-in: not used by the app (the app calls
+  `signUp` / `signInWithPassword`). The OTP toggle can stay at its default.
 
 `Authentication → URL Configuration`:
 
 - **Site URL**: `http://localhost:5173` for dev. Switch to your Fly.io URL
   for Phase 8.
-- **Redirect URLs**: add `http://localhost:5173/**` for dev.
+- **Redirect URLs**: add `http://localhost:5173/**` for dev. The confirmation
+  link redirects back here and `supabase-js` (`detectSessionInUrl: true`)
+  completes the session.
 
-Disable every other provider (GitHub, Google, etc.) under `Providers` for v1.
-The Phase 7 plan locks magic-link only.
+Disable every other provider (GitHub, Google, etc.) under `Providers`.
+
+### Debug accounts (pre-confirmed)
+
+Real registrations require email confirmation. For local debugging, create
+pre-confirmed accounts that skip the inbox step:
+
+1. Copy `docs/dev/debug-accounts.example.txt` to `docs/dev/debug-accounts.txt`
+   (gitignored) and set throwaway dev credentials.
+2. From `backend/`, run `python scripts/seed_debug_accounts.py`. It calls the
+   GoTrue Admin API with `email_confirm: true` using `SUPABASE_SECRET_KEY`
+   (backend-only) and is idempotent. The seeded accounts log in via the normal
+   `/login` form.
 
 ## 3. Collect the four env vars
 
@@ -83,10 +97,10 @@ fill in real values locally, never commit.
 
 - Frontend: `frontend/src/services/supabase.js` exposes a lazy singleton
   `@supabase/supabase-js` client. `frontend/src/stores/auth.js` calls
-  `supabase.auth.signInWithOtp({ email })` from `LoginView.vue`. On magic-link
-  click, Supabase redirects back to the app with the access token in the URL
-  hash; `supabase-js` parses it and emits a `SIGNED_IN` event, which the auth
-  store consumes.
+  `supabase.auth.signUp` (registration) and `supabase.auth.signInWithPassword`
+  (login) from `RegisterView.vue` / `LoginView.vue`. On email confirmation the
+  link redirects back to the app; `supabase-js` parses the URL and emits a
+  `SIGNED_IN` event, which the auth store consumes.
 - Every API call carries `Authorization: Bearer <access_token>`, injected by
   `frontend/src/services/apiClient.js` and `uploadApi.js` from the auth store.
 - Backend: `backend/services/auth.py` fetches and caches the Supabase JWKS

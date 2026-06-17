@@ -65,21 +65,65 @@ describe('auth store', () => {
     expect(globalThis.__supabaseAuthStub.getSession).toHaveBeenCalledTimes(1)
   })
 
-  it('signInWithMagicLink calls Supabase signInWithOtp with the email', async () => {
+  it('register calls Supabase signUp with email + password', async () => {
     const auth = useAuthStore()
-    await auth.signInWithMagicLink('me@example.com')
-    expect(globalThis.__supabaseAuthStub.signInWithOtp).toHaveBeenCalledWith(
-      expect.objectContaining({ email: 'me@example.com' }),
+    await auth.register('me@example.com', 'hunter2pw')
+    expect(globalThis.__supabaseAuthStub.signUp).toHaveBeenCalledWith(
+      expect.objectContaining({ email: 'me@example.com', password: 'hunter2pw' }),
     )
   })
 
-  it('signInWithMagicLink throws when Supabase returns an error', async () => {
-    globalThis.__supabaseAuthStub.signInWithOtp.mockResolvedValueOnce({
+  it('register returns Supabase data on success', async () => {
+    const auth = useAuthStore()
+    const result = await auth.register('me@example.com', 'hunter2pw')
+    expect(result).toMatchObject({ user: { id: 'u-new' } })
+  })
+
+  it('register throws when Supabase returns an error', async () => {
+    globalThis.__supabaseAuthStub.signUp.mockResolvedValueOnce({
       data: null,
-      error: new Error('rate limited'),
+      error: new Error('User already registered'),
     })
     const auth = useAuthStore()
-    await expect(auth.signInWithMagicLink('x@y.z')).rejects.toThrow('rate limited')
+    await expect(auth.register('x@y.z', 'hunter2pw')).rejects.toThrow(
+      'User already registered',
+    )
+  })
+
+  it('signIn calls Supabase signInWithPassword with email + password', async () => {
+    const auth = useAuthStore()
+    await auth.signIn('me@example.com', 'hunter2pw')
+    expect(globalThis.__supabaseAuthStub.signInWithPassword).toHaveBeenCalledWith(
+      expect.objectContaining({ email: 'me@example.com', password: 'hunter2pw' }),
+    )
+  })
+
+  it('signIn throws when Supabase returns an error', async () => {
+    globalThis.__supabaseAuthStub.signInWithPassword.mockResolvedValueOnce({
+      data: null,
+      error: new Error('Invalid login credentials'),
+    })
+    const auth = useAuthStore()
+    await expect(auth.signIn('x@y.z', 'bad')).rejects.toThrow(
+      'Invalid login credentials',
+    )
+  })
+
+  it('resendConfirmation calls Supabase resend for signup type', async () => {
+    const auth = useAuthStore()
+    await auth.resendConfirmation('me@example.com')
+    expect(globalThis.__supabaseAuthStub.resend).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'signup', email: 'me@example.com' }),
+    )
+  })
+
+  it('resendConfirmation throws when Supabase returns an error', async () => {
+    globalThis.__supabaseAuthStub.resend.mockResolvedValueOnce({
+      data: null,
+      error: new Error('Email not found'),
+    })
+    const auth = useAuthStore()
+    await expect(auth.resendConfirmation('x@y.z')).rejects.toThrow('Email not found')
   })
 
   it('signOut clears session', async () => {
