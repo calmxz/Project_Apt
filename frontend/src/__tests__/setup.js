@@ -22,6 +22,11 @@ const authStub = {
   }),
   resend: vi.fn().mockResolvedValue({ data: {}, error: null }),
   signOut: vi.fn().mockResolvedValue({ error: null }),
+  resetPasswordForEmail: vi.fn().mockResolvedValue({ data: {}, error: null }),
+  updateUser: vi.fn().mockResolvedValue({
+    data: { user: { id: 'u-1' } },
+    error: null,
+  }),
 }
 
 vi.mock('@supabase/supabase-js', () => ({
@@ -48,4 +53,8 @@ beforeEach(() => {
   authStub.resend.mockResolvedValue({ data: {}, error: null })
   authStub.signOut.mockClear()
   authStub.signOut.mockResolvedValue({ error: null })
+  authStub.resetPasswordForEmail.mockClear()
+  authStub.resetPasswordForEmail.mockResolvedValue({ data: {}, error: null })
+  authStub.updateUser.mockClear()
+  authStub.updateUser.mockResolvedValue({ data: { user: { id: 'u-1' } }, error: null })
 })
