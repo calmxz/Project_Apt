@@ -8,6 +8,10 @@
     </header>
 
     <form class="form" data-testid="login-form" @submit.prevent="submit">
+      <p v-if="resetDone" class="sent" data-testid="login-reset-done">
+        Password updated — sign in with your new password.
+      </p>
+
       <div class="field">
         <label for="email" class="label">Email</label>
         <InputText
@@ -64,6 +68,9 @@
       </div>
 
       <p class="swap">
+        <RouterLink to="/forgot" data-testid="login-to-forgot">Forgot password?</RouterLink>
+      </p>
+      <p class="swap">
         New here?
         <RouterLink to="/register" data-testid="login-to-register">Create an account</RouterLink>
       </p>
@@ -73,11 +80,15 @@
 
 <script setup>
 import { computed, ref } from 'vue'
+import { useRoute } from 'vue-router'
 
 import InputText from 'primevue/inputtext'
 
 import Logo from '../components/Logo.vue'
 import { useAuthStore } from '../stores/auth.js'
+
+const route = useRoute()
+const resetDone = computed(() => route.query.reset === '1')
 
 const auth = useAuthStore()
 

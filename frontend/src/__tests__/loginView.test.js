@@ -5,6 +5,12 @@ import { createPinia, setActivePinia } from 'pinia'
 import LoginView from '@/views/LoginView.vue'
 import { useAuthStore } from '@/stores/auth.js'
 
+const { mockQuery } = vi.hoisted(() => ({ mockQuery: { value: {} } }))
+vi.mock('vue-router', () => ({
+  useRoute: () => ({ query: mockQuery.value }),
+  RouterLink: { props: ['to'], template: '<a><slot /></a>' },
+}))
+
 const stubs = {
   Logo: { props: ['size', 'variant'], template: '<span data-testid="logo" />' },
   InputText: {
@@ -22,6 +28,7 @@ function mountView() {
 describe('LoginView', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+    mockQuery.value = {}
   })
 
   it('disables submit until email and password are present', async () => {
@@ -73,5 +80,21 @@ describe('LoginView', () => {
     await flushPromises()
     expect(resendSpy).toHaveBeenCalledWith('me@example.com')
     expect(wrapper.find('[data-testid="login-resent"]').exists()).toBe(true)
+  })
+
+  it('links to the forgot-password page', () => {
+    const wrapper = mountView()
+    expect(wrapper.find('[data-testid="login-to-forgot"]').exists()).toBe(true)
+  })
+
+  it('shows a reset-done banner when ?reset=1 is present', () => {
+    mockQuery.value = { reset: '1' }
+    const wrapper = mountView()
+    expect(wrapper.find('[data-testid="login-reset-done"]').exists()).toBe(true)
+  })
+
+  it('hides the reset-done banner without ?reset=1', () => {
+    const wrapper = mountView()
+    expect(wrapper.find('[data-testid="login-reset-done"]').exists()).toBe(false)
   })
 })
