@@ -58,9 +58,10 @@ def create_account(client: httpx.Client, email: str, password: str) -> str:
     body = resp.text.lower()
     if resp.status_code in (422, 409, 400) and any(m in body for m in _EXISTS_MARKERS):
         return "exists"
-    raise RuntimeError(
-        f"Failed to create {email}: HTTP {resp.status_code} {resp.text}"
-    )
+    # Do not log email or the response body: both can carry the submitted
+    # password (clear-text logging of sensitive data). Status code is enough
+    # to diagnose; the caller adds the account index for context.
+    raise RuntimeError(f"Failed to create account: HTTP {resp.status_code}")
 
 
 def run(accounts_path: Path) -> int:
@@ -83,13 +84,14 @@ def run(accounts_path: Path) -> int:
         headers={"apikey": key, "Authorization": f"Bearer {key}"},
         timeout=30.0,
     ) as client:
-        for email, password in accounts:
+        total = len(accounts)
+        for index, (email, password) in enumerate(accounts, start=1):
             try:
                 result = create_account(client, email, password)
             except RuntimeError as e:
-                print(str(e), file=sys.stderr)
+                print(f"  account {index}/{total}: {e}", file=sys.stderr)
                 return 1
-            print(f"  {result:>8}  {email}")
+            print(f"  {result:>8}  account {index}/{total}")
     print(f"Done. {len(accounts)} account(s) processed.")
     return 0
 
