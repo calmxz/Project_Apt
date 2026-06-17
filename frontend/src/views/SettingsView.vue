@@ -83,6 +83,73 @@
 
     <section
       v-if="authStore.isAuthenticated"
+      class="card"
+      data-testid="settings-security"
+    >
+      <h2 class="card-title">
+        <i class="pi pi-lock card-icon" aria-hidden="true" />
+        Security
+      </h2>
+      <form class="pw-form" @submit.prevent="changePassword">
+        <div class="field">
+          <label class="lbl" for="pw-current">Current password</label>
+          <input
+            id="pw-current"
+            v-model="pwCurrent"
+            data-testid="settings-pw-current"
+            class="input"
+            type="password"
+            autocomplete="current-password"
+          />
+        </div>
+        <div class="field">
+          <label class="lbl" for="pw-new">New password</label>
+          <input
+            id="pw-new"
+            v-model="pwNew"
+            data-testid="settings-pw-new"
+            class="input"
+            type="password"
+            autocomplete="new-password"
+            placeholder="At least 8 characters"
+          />
+        </div>
+        <div class="field">
+          <label class="lbl" for="pw-confirm">Confirm new password</label>
+          <input
+            id="pw-confirm"
+            v-model="pwConfirm"
+            data-testid="settings-pw-confirm"
+            class="input"
+            type="password"
+            autocomplete="new-password"
+          />
+        </div>
+        <p v-if="pwMismatch" class="hint" data-testid="settings-pw-mismatch">
+          New passwords do not match.
+        </p>
+        <p v-if="pwError" class="pw-error" data-testid="settings-pw-error">{{ pwError }}</p>
+        <p v-if="pwSuccess" class="saved-flash" data-testid="settings-pw-success">
+          <i class="pi pi-check-circle" aria-hidden="true" />
+          Password updated.
+        </p>
+        <div class="actions">
+          <button
+            type="button"
+            class="save-btn"
+            data-testid="settings-pw-submit"
+            :disabled="!pwCanSubmit || pwSubmitting"
+            @click="changePassword"
+          >
+            <i class="pi pi-lock" aria-hidden="true" />
+            <span>{{ pwSubmitting ? 'Updating…' : 'Update password' }}</span>
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <section
+      v-if="authStore.isAuthenticated"
       class="signout"
       data-testid="settings-signout-section"
     >
@@ -161,6 +228,49 @@ function save() {
   user.updateProfile({ name: displayName.value, feedback: feedback.value })
   savedFlash.value = true
   showSuccess('Preferences saved.')
+}
+
+const pwCurrent = ref('')
+const pwNew = ref('')
+const pwConfirm = ref('')
+const pwError = ref('')
+const pwSuccess = ref(false)
+const pwSubmitting = ref(false)
+
+const pwMismatch = computed(
+  () => pwConfirm.value.length > 0 && pwConfirm.value !== pwNew.value,
+)
+const pwCanSubmit = computed(
+  () =>
+    pwCurrent.value.length > 0 &&
+    pwNew.value.length >= 8 &&
+    pwNew.value === pwConfirm.value,
+)
+
+async function changePassword() {
+  if (!pwCanSubmit.value) return
+  pwError.value = ''
+  pwSuccess.value = false
+  pwSubmitting.value = true
+  try {
+    await authStore.signIn(authStore.userEmail, pwCurrent.value)
+  } catch {
+    pwError.value = 'Current password is incorrect.'
+    pwSubmitting.value = false
+    return
+  }
+  try {
+    await authStore.updatePassword(pwNew.value)
+    pwCurrent.value = ''
+    pwNew.value = ''
+    pwConfirm.value = ''
+    pwSuccess.value = true
+    showSuccess('Password updated.')
+  } catch (e) {
+    pwError.value = e?.message || 'Could not update password. Try again.'
+  } finally {
+    pwSubmitting.value = false
+  }
 }
 
 async function signOut() {
@@ -487,5 +597,17 @@ async function signOut() {
 .signout-btn:focus-visible {
   outline: 2px solid var(--color-accent-ring);
   outline-offset: 2px;
+}
+
+.pw-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.pw-error {
+  margin: 0;
+  color: var(--color-error-text);
+  font-size: 0.875rem;
 }
 </style>
