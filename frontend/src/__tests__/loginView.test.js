@@ -5,9 +5,10 @@ import { createPinia, setActivePinia } from 'pinia'
 import LoginView from '@/views/LoginView.vue'
 import { useAuthStore } from '@/stores/auth.js'
 
-const { mockQuery } = vi.hoisted(() => ({ mockQuery: { value: {} } }))
+const { mockQuery, push } = vi.hoisted(() => ({ mockQuery: { value: {} }, push: vi.fn() }))
 vi.mock('vue-router', () => ({
   useRoute: () => ({ query: mockQuery.value }),
+  useRouter: () => ({ push }),
   RouterLink: { props: ['to'], template: '<a><slot /></a>' },
 }))
 
@@ -29,6 +30,7 @@ describe('LoginView', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     mockQuery.value = {}
+    push.mockReset()
   })
 
   it('disables submit until email and password are present', async () => {
@@ -50,6 +52,28 @@ describe('LoginView', () => {
     await wrapper.get('[data-testid="login-form"]').trigger('submit.prevent')
     await flushPromises()
     expect(spy).toHaveBeenCalledWith('me@example.com', 'hunter2pw')
+  })
+
+  it('navigates to home after a successful sign-in', async () => {
+    const auth = useAuthStore()
+    vi.spyOn(auth, 'signIn').mockResolvedValue()
+    const wrapper = mountView()
+    await wrapper.get('[data-testid="login-email"]').setValue('me@example.com')
+    await wrapper.get('[data-testid="login-password"]').setValue('hunter2pw')
+    await wrapper.get('[data-testid="login-form"]').trigger('submit.prevent')
+    await flushPromises()
+    expect(push).toHaveBeenCalledWith({ name: 'home' })
+  })
+
+  it('does not navigate when sign-in fails', async () => {
+    const auth = useAuthStore()
+    vi.spyOn(auth, 'signIn').mockRejectedValue(new Error('Invalid login credentials'))
+    const wrapper = mountView()
+    await wrapper.get('[data-testid="login-email"]').setValue('me@example.com')
+    await wrapper.get('[data-testid="login-password"]').setValue('wrongpass')
+    await wrapper.get('[data-testid="login-form"]').trigger('submit.prevent')
+    await flushPromises()
+    expect(push).not.toHaveBeenCalled()
   })
 
   it('shows an error banner when sign-in throws', async () => {

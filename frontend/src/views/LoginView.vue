@@ -80,7 +80,7 @@
 
 <script setup>
 import { computed, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 import InputText from 'primevue/inputtext'
 
@@ -88,6 +88,7 @@ import Logo from '../components/Logo.vue'
 import { useAuthStore } from '../stores/auth.js'
 
 const route = useRoute()
+const router = useRouter()
 const resetDone = computed(() => route.query.reset === '1')
 
 const auth = useAuthStore()
@@ -113,6 +114,11 @@ async function submit() {
   submitting.value = true
   try {
     await auth.signIn(email.value.trim(), password.value)
+    // signInWithPassword updates the store reactively, but the router guard
+    // only redirects on navigation. Push explicitly so the user lands on home
+    // without needing a manual refresh; the guard then bounces to onboarding
+    // if it is still incomplete.
+    await router.push({ name: 'home' })
   } catch (e) {
     const msg = e?.message || 'Could not sign in. Try again.'
     error.value = msg
