@@ -135,3 +135,25 @@ For local dev you don't strictly need a Supabase project — the frontend's
 the backend test suite injects a fake `current_user_id` via dependency
 override (`backend/tests/conftest.py`). Live auth flows obviously need real
 values from §3.
+
+## Password reset + change password
+
+The forgot-password flow uses GoTrue's recovery email. For the emailed link to
+land correctly, allowlist the redirect target in the Supabase dashboard:
+
+- Dashboard -> Authentication -> URL Configuration -> Redirect URLs, add:
+  - `http://localhost:5173/reset-password` (dev)
+  - `https://<your-prod-host>/reset-password` (prod)
+
+Flows:
+- **Forgot password:** `/forgot` calls `resetPasswordForEmail(email, { redirectTo:
+  <origin>/reset-password })`. The email link lands on `/reset-password`, where
+  `detectSessionInUrl` establishes a short-lived recovery session. The user sets
+  a new password (`updateUser`), is signed out, and is redirected to
+  `/login?reset=1`.
+- **Change password (signed in):** Settings -> Security re-verifies the current
+  password (`signInWithPassword`) then calls `updateUser({ password })`. The
+  session is retained.
+
+No backend or database change is involved -- GoTrue handles email, token, and
+password update.
