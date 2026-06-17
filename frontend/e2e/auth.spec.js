@@ -105,4 +105,22 @@ test.describe('auth gate', () => {
     await expect(page.getByTestId('register-sent')).toBeVisible()
     await expect(page.getByTestId('register-sent')).toContainText('me@example.com')
   })
+
+  test('requesting a password reset shows the sent confirmation', async ({ page }) => {
+    // Stub the recover endpoint so the flow runs offline.
+    await page.route('**/auth/v1/recover**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({}),
+      })
+    })
+
+    await page.goto('/forgot')
+    await page.getByTestId('forgot-email').fill('me@example.com')
+    await page.getByTestId('forgot-submit').click()
+
+    await expect(page.getByTestId('forgot-sent')).toBeVisible()
+    await expect(page.getByTestId('forgot-sent')).toContainText('me@example.com')
+  })
 })
