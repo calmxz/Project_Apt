@@ -108,4 +108,58 @@ describe('SettingsView', () => {
     const wrapper = mount(SettingsView, { global: { stubs } })
     expect(wrapper.find('[data-testid="back"]').exists()).toBe(false)
   })
+
+  it('change-password card is hidden when unauthenticated', () => {
+    const wrapper = mount(SettingsView, { global: { stubs } })
+    expect(wrapper.find('[data-testid="settings-security"]').exists()).toBe(false)
+  })
+
+  it('change-password submit is gated until current + matching 8+ new password', async () => {
+    const auth = useAuthStore()
+    auth.session = { user: { id: 'u-1', email: 'a@b.c' }, access_token: 't' }
+    const wrapper = mount(SettingsView, { global: { stubs } })
+    await flushPromises()
+    const btn = wrapper.get('[data-testid="settings-pw-submit"]')
+    expect(btn.attributes('disabled')).toBeDefined()
+    await wrapper.get('[data-testid="settings-pw-current"]').setValue('oldpass12')
+    await wrapper.get('[data-testid="settings-pw-new"]').setValue('newpass12')
+    await wrapper.get('[data-testid="settings-pw-confirm"]').setValue('different')
+    expect(btn.attributes('disabled')).toBeDefined()
+    await wrapper.get('[data-testid="settings-pw-confirm"]').setValue('newpass12')
+    expect(btn.attributes('disabled')).toBeUndefined()
+  })
+
+  it('wrong current password shows an error and does not update', async () => {
+    const auth = useAuthStore()
+    auth.session = { user: { id: 'u-1', email: 'a@b.c' }, access_token: 't' }
+    vi.spyOn(auth, 'signIn').mockRejectedValue(new Error('Invalid login credentials'))
+    const update = vi.spyOn(auth, 'updatePassword').mockResolvedValue()
+    const wrapper = mount(SettingsView, { global: { stubs } })
+    await flushPromises()
+    await wrapper.get('[data-testid="settings-pw-current"]').setValue('wrongpass')
+    await wrapper.get('[data-testid="settings-pw-new"]').setValue('newpass12')
+    await wrapper.get('[data-testid="settings-pw-confirm"]').setValue('newpass12')
+    await wrapper.get('[data-testid="settings-pw-submit"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="settings-pw-error"]').exists()).toBe(true)
+    expect(update).not.toHaveBeenCalled()
+  })
+
+  it('valid change verifies current password then updates and shows success', async () => {
+    const auth = useAuthStore()
+    auth.session = { user: { id: 'u-1', email: 'a@b.c' }, access_token: 't' }
+    const signIn = vi.spyOn(auth, 'signIn').mockResolvedValue()
+    const update = vi.spyOn(auth, 'updatePassword').mockResolvedValue()
+    const wrapper = mount(SettingsView, { global: { stubs } })
+    await flushPromises()
+    await wrapper.get('[data-testid="settings-pw-current"]').setValue('oldpass12')
+    await wrapper.get('[data-testid="settings-pw-new"]').setValue('newpass12')
+    await wrapper.get('[data-testid="settings-pw-confirm"]').setValue('newpass12')
+    await wrapper.get('[data-testid="settings-pw-submit"]').trigger('click')
+    await flushPromises()
+    expect(signIn).toHaveBeenCalledWith('a@b.c', 'oldpass12')
+    expect(update).toHaveBeenCalledWith('newpass12')
+    expect(wrapper.find('[data-testid="settings-pw-success"]').exists()).toBe(true)
+    expect(showSuccess).toHaveBeenCalled()
+  })
 })

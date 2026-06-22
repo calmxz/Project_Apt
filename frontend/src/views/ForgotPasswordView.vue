@@ -2,23 +2,19 @@
   <section class="login">
     <header class="head">
       <Logo size="lg" variant="mark-only" />
-      <span class="folio">sign in</span>
-      <h1 class="title">Welcome to AdaptLearn</h1>
-      <p class="lede">Sign in with your email and password.</p>
+      <span class="folio">reset password</span>
+      <h1 class="title">Forgot your password?</h1>
+      <p class="lede">Enter your email and we'll send you a reset link.</p>
     </header>
 
-    <form class="form" data-testid="login-form" @submit.prevent="submit">
-      <p v-if="resetDone" class="sent" data-testid="login-reset-done">
-        Password updated — sign in with your new password.
-      </p>
-
+    <form v-if="!sent" class="form" data-testid="forgot-form" @submit.prevent="submit">
       <div class="field">
         <label for="email" class="label">Email</label>
         <InputText
           id="email"
           v-model="email"
           type="email"
-          data-testid="login-email"
+          data-testid="forgot-email"
           autocomplete="email"
           placeholder="you@example.com"
           required
@@ -26,115 +22,66 @@
         />
       </div>
 
-      <div class="field">
-        <label for="password" class="label">Password</label>
-        <InputText
-          id="password"
-          v-model="password"
-          type="password"
-          data-testid="login-password"
-          autocomplete="current-password"
-          placeholder="Your password"
-          required
-          class="input"
-        />
-      </div>
-
-      <p v-if="error" class="error" data-testid="login-error">{{ error }}</p>
-      <p v-if="needsConfirm" class="hint">
-        <button
-          type="button"
-          class="linkbtn"
-          data-testid="login-resend"
-          @click="resend"
-        >
-          Resend confirmation email
-        </button>
-      </p>
-      <p v-if="resent" class="sent" data-testid="login-resent">
-        Confirmation email re-sent to <strong>{{ email.trim() }}</strong>.
-      </p>
+      <p v-if="error" class="error" data-testid="forgot-error">{{ error }}</p>
 
       <div class="actions">
         <button
           type="submit"
           class="cta"
-          data-testid="login-submit"
+          data-testid="forgot-submit"
           :disabled="!canSubmit || submitting"
         >
-          <span>{{ submitting ? 'Signing in…' : 'Sign in' }}</span>
+          <span>{{ submitting ? 'Sending…' : 'Send reset link' }}</span>
           <i class="pi pi-arrow-right" aria-hidden="true" />
         </button>
       </div>
 
       <p class="swap">
-        <RouterLink to="/forgot" data-testid="login-to-forgot">Forgot password?</RouterLink>
-      </p>
-      <p class="swap">
-        New here?
-        <RouterLink to="/register" data-testid="login-to-register">Create an account</RouterLink>
+        Remembered it?
+        <RouterLink to="/login" data-testid="forgot-to-login">Back to sign in</RouterLink>
       </p>
     </form>
+
+    <div v-else class="form" data-testid="forgot-sent">
+      <p class="sent">
+        If an account exists for <strong>{{ email.trim() }}</strong>, a password
+        reset link is on its way. Check your inbox.
+      </p>
+      <p class="swap">
+        <RouterLink to="/login" data-testid="forgot-sent-to-login">Back to sign in</RouterLink>
+      </p>
+    </div>
   </section>
 </template>
 
 <script setup>
 import { computed, ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
 
 import InputText from 'primevue/inputtext'
 
 import Logo from '../components/Logo.vue'
 import { useAuthStore } from '../stores/auth.js'
 
-const route = useRoute()
-const router = useRouter()
-const resetDone = computed(() => route.query.reset === '1')
-
 const auth = useAuthStore()
 
 const email = ref('')
-const password = ref('')
 const submitting = ref(false)
 const error = ref('')
-const needsConfirm = ref(false)
-const resent = ref(false)
+const sent = ref(false)
 
-const canSubmit = computed(
-  () =>
-    /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.value.trim()) &&
-    password.value.length > 0,
-)
+const canSubmit = computed(() => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.value.trim()))
 
 async function submit() {
   if (!canSubmit.value) return
   error.value = ''
-  needsConfirm.value = false
-  resent.value = false
   submitting.value = true
   try {
-    await auth.signIn(email.value.trim(), password.value)
-    // signInWithPassword updates the store reactively, but the router guard
-    // only redirects on navigation. Push explicitly so the user lands on home
-    // without needing a manual refresh; the guard then bounces to onboarding
-    // if it is still incomplete.
-    await router.push({ name: 'home' })
+    await auth.requestPasswordReset(email.value.trim())
+    sent.value = true
   } catch (e) {
-    const msg = e?.message || 'Could not sign in. Try again.'
-    error.value = msg
-    if (/not confirmed/i.test(msg)) needsConfirm.value = true
+    error.value = e?.message || 'Could not send reset link. Try again.'
   } finally {
     submitting.value = false
-  }
-}
-
-async function resend() {
-  resent.value = false
-  try {
-    await auth.resendConfirmation(email.value.trim())
-    resent.value = true
-  } catch (e) {
-    error.value = e?.message || 'Could not resend. Try again.'
   }
 }
 </script>
@@ -260,25 +207,17 @@ async function resend() {
   font-size: 0.875rem;
 }
 
-.sent {
-  margin: 0;
-  font-size: 0.875rem;
-  color: var(--color-success-text);
-}
-
 .hint {
   margin: 0;
   font-size: 0.875rem;
+  color: var(--color-text-muted);
 }
 
-.linkbtn {
-  background: none;
-  border: 0;
-  padding: 0;
-  font: inherit;
-  color: var(--color-accent-text);
-  cursor: pointer;
-  text-decoration: underline;
+.sent {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--color-success-text);
+  line-height: var(--lh-body);
 }
 
 .swap {

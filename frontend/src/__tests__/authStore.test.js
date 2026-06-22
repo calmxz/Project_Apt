@@ -141,4 +141,49 @@ describe('auth store', () => {
     const auth = useAuthStore()
     await expect(auth.signOut()).rejects.toThrow('network')
   })
+
+  it('userEmail reflects the session user email', async () => {
+    globalThis.__supabaseAuthStub.getSession.mockResolvedValueOnce({
+      data: { session: { access_token: 't', user: { id: 'u-1', email: 'a@b.c' } } },
+      error: null,
+    })
+    const auth = useAuthStore()
+    await auth.init()
+    expect(auth.userEmail).toBe('a@b.c')
+  })
+
+  it('requestPasswordReset calls resetPasswordForEmail with a redirectTo', async () => {
+    const auth = useAuthStore()
+    await auth.requestPasswordReset('me@example.com')
+    expect(globalThis.__supabaseAuthStub.resetPasswordForEmail).toHaveBeenCalledWith(
+      'me@example.com',
+      expect.objectContaining({ redirectTo: expect.stringContaining('/reset-password') }),
+    )
+  })
+
+  it('requestPasswordReset throws when Supabase returns an error', async () => {
+    globalThis.__supabaseAuthStub.resetPasswordForEmail.mockResolvedValueOnce({
+      data: null,
+      error: new Error('rate limit'),
+    })
+    const auth = useAuthStore()
+    await expect(auth.requestPasswordReset('x@y.z')).rejects.toThrow('rate limit')
+  })
+
+  it('updatePassword calls updateUser with the new password', async () => {
+    const auth = useAuthStore()
+    await auth.updatePassword('newpass12')
+    expect(globalThis.__supabaseAuthStub.updateUser).toHaveBeenCalledWith({
+      password: 'newpass12',
+    })
+  })
+
+  it('updatePassword throws when Supabase returns an error', async () => {
+    globalThis.__supabaseAuthStub.updateUser.mockResolvedValueOnce({
+      data: null,
+      error: new Error('same password'),
+    })
+    const auth = useAuthStore()
+    await expect(auth.updatePassword('newpass12')).rejects.toThrow('same password')
+  })
 })

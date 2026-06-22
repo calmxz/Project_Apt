@@ -20,6 +20,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   const userId = computed(() => session.value?.user?.id ?? null)
   const accessToken = computed(() => session.value?.access_token ?? null)
+  const userEmail = computed(() => session.value?.user?.email ?? null)
   const isAuthenticated = computed(() => Boolean(session.value?.user?.id))
 
   async function init() {
@@ -60,6 +61,23 @@ export const useAuthStore = defineStore('auth', () => {
     if (error) throw error
   }
 
+  async function requestPasswordReset(email) {
+    const sb = getSupabase()
+    const { error } = await sb.auth.resetPasswordForEmail(email, {
+      redirectTo:
+        typeof window !== 'undefined'
+          ? `${window.location.origin}/reset-password`
+          : undefined,
+    })
+    if (error) throw error
+  }
+
+  async function updatePassword(password) {
+    const sb = getSupabase()
+    const { error } = await sb.auth.updateUser({ password })
+    if (error) throw error
+  }
+
   async function signOut() {
     const sb = getSupabase()
     const { error } = await sb.auth.signOut()
@@ -79,11 +97,14 @@ export const useAuthStore = defineStore('auth', () => {
     ready,
     userId,
     accessToken,
+    userEmail,
     isAuthenticated,
     init,
     register,
     signIn,
     resendConfirmation,
+    requestPasswordReset,
+    updatePassword,
     signOut,
     _resetForTests,
   }

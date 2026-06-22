@@ -19,6 +19,18 @@ const router = createRouter({
       meta: { public: true, sidebar: false },
     },
     {
+      path: '/forgot',
+      name: 'forgot-password',
+      component: () => import('../views/ForgotPasswordView.vue'),
+      meta: { public: true, sidebar: false },
+    },
+    {
+      path: '/reset-password',
+      name: 'reset-password',
+      component: () => import('../views/ResetPasswordView.vue'),
+      meta: { public: true, sidebar: false },
+    },
+    {
       path: '/',
       name: 'home',
       component: () => import('../views/HomeView.vue'),
@@ -79,7 +91,12 @@ router.beforeEach(async (to) => {
   }
 
   const user = useUserStore()
-  if (auth.isAuthenticated && !user.onboardingComplete && to.name !== 'onboarding') {
+  if (
+    auth.isAuthenticated &&
+    !user.onboardingComplete &&
+    to.name !== 'onboarding' &&
+    to.name !== 'reset-password'
+  ) {
     return { name: 'onboarding' }
   }
   if (user.onboardingComplete && to.name === 'onboarding' && to.query.retake !== '1') {
