@@ -80,18 +80,24 @@ Assumes Supabase's documented issuer format `<project_url>/auth/v1`. This is not
 
 **Test:** unit test with a forged/mocked token carrying a wrong `iss` value — assert `verify_supabase_jwt` raises `HTTPException(401)`. Existing JWKS-mocking pattern in the current auth test file should already provide the scaffolding for this.
 
-## 3 — JWKS client fail-fast at startup
+## 3 — JWKS client fail-fast at startup (prod only)
 
-**File:** `backend/config.py` or `backend/main.py` (startup, not request path)
+**File:** `backend/main.py`, inside `lifespan()`
+
+Correction from the initial audit write-up: an unconditional startup crash on missing `SUPABASE_URL` would break every test — `backend/tests/conftest.py`'s `client` fixture imports `main.app` and triggers `lifespan()` via `with TestClient(app) as c:`, and the CI backend job (`ci.yml`) never sets `SUPABASE_URL` (tests run on sqlite + LLM stub by design). The existing per-request 500 in `services/auth.py` (`detail="auth_not_configured"`) is also not a crash — it's already a controlled, already-tested response (`test_auth_not_configured_when_jwks_url_missing`). The actual gap is narrower: a **prod** deploy with a missing `SUPABASE_URL` silently accepts traffic and 500s on the first real request instead of refusing to start.
 
 ```python
-if not settings.supabase_url:
-    raise RuntimeError("SUPABASE_URL is required")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    if settings.env == "prod" and not settings.supabase_url:
+        raise RuntimeError("SUPABASE_URL is required when ENV=prod")
+    create_tables()
+    yield
 ```
 
-Placed wherever app startup/config validation already happens (check existing patterns in `main.py` first — if there's an existing startup-validation block, add to it rather than creating a new one).
+Gated on `settings.env == "prod"` so dev/test/CI (which never set `ENV=prod`) are unaffected. The existing per-request 500 path in `auth.py` is untouched — it remains the dev/test-time behavior when `SUPABASE_URL` is blank.
 
-**Test:** unit test asserting the app fails to start / raises when `SUPABASE_URL` is unset (or mock settings and call the guard function directly, whichever matches the existing test style for config validation in this repo).
+**Test:** call `lifespan()` directly in a test with `monkeypatch.setattr(settings, "env", "prod")` and `monkeypatch.setattr(settings, "supabase_url", "")`, assert it raises `RuntimeError`. Also assert it does NOT raise when `env="dev"` and `supabase_url=""` (regression guard for the existing test suite).
 
 ## 4 — Branch protection (repo settings, not code)
 
