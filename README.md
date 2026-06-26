@@ -75,7 +75,7 @@ Most "AI tutors" today are a chat box bolted onto a generic LLM. They ask the sa
 | Backend | FastAPI, Uvicorn, Python 3.12 | Typed routes, automatic OpenAPI, async-friendly |
 | ORM / DB | SQLAlchemy + Supabase Postgres 17 | Managed Postgres + Alembic migrations; pooled connection via Supabase pgbouncer |
 | Vector store | pgvector 0.8.x in Supabase Postgres | Co-located with app schema; `ivfflat` cosine index on `chunk_embeddings` |
-| Auth | Supabase Auth (magic-link) | JWT verified server-side against Supabase JWKS |
+| Auth | Supabase Auth (email/password) | JWT verified server-side against Supabase JWKS |
 | LLM gateway | LiteLLM direct | One client, swap providers via env var (Gemini default, Anthropic fallback) |
 | LLM | `gemini/gemini-3.1-flash-lite` (chat), `gemini/gemini-embedding-2` (embeddings) | Cheap, fast, large context |
 | Tests | pytest, vitest, Playwright | Backend unit/integration, frontend unit, e2e |
@@ -247,11 +247,11 @@ The backend reads `.env` at the repo root. For the production stack, the same `.
 
 With the stack running on http://localhost:5173, here's the end-to-end happy path. Screenshots are placeholders — replace with your own captures.
 
-### 1. Onboarding
+### 1. Register and onboarding
 
 ![Onboarding view](docs/assets/screens/01-onboarding.png)
 
-On first visit you'll see a short onboarding flow. Enter a display name (it doubles as your `user_id` for local single-user use). Click **Continue**.
+First visit: register with email/password (or log in if you already have an account). Once authenticated, a short onboarding flow asks for a display name and how you like to learn (hints vs. direct answers) so the tutor can tune its style. Click **Begin**.
 
 ### 2. The home dashboard
 
@@ -376,7 +376,7 @@ python backend/scripts/gen_contracts.py
 
 CI enforces zero drift between the YAML and the generated package.
 
-> **Authentication.** Every `/api/*` route requires a Supabase magic-link JWT sent as `Authorization: Bearer <jwt>`. The backend verifies it against Supabase JWKS and reads the user id from the token's `sub` claim — `user_id` is never accepted from the request body or query string. Requests without a valid token get `401`.
+> **Authentication.** Every `/api/*` route requires a Supabase email/password JWT sent as `Authorization: Bearer <jwt>`. The backend verifies it against Supabase JWKS and reads the user id from the token's `sub` claim — `user_id` is never accepted from the request body or query string. Requests without a valid token get `401`.
 
 ### Endpoint summary
 
@@ -576,7 +576,7 @@ git commit
 
 AdaptLearn v1 is feature-complete. Possible v2 directions:
 
-- **Multi-user auth.** Real accounts (OAuth, magic-link) instead of single-user local mode.
+- **OAuth / social login.** Add Google/GitHub sign-in alongside email/password.
 - **Mobile-friendly redesign.** The current SPA is desktop-first; an adaptive layout for phones is on the wishlist.
 - **Voice mode.** STT in, TTS out — quiz yourself while walking.
 - **Spaced repetition.** Surface previously confirmed gaps for review at SR intervals.
