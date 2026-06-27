@@ -12,7 +12,7 @@ module.
 from dataclasses import dataclass
 from typing import Sequence
 
-from sqlalchemy import select
+from sqlalchemy import delete as _delete, select
 from sqlalchemy.orm import Session
 
 from db.models import ChunkEmbedding, Document
@@ -49,6 +49,19 @@ def insert_chunks(
     db.add_all(objs)
     db.commit()
     return len(objs)
+
+
+def delete_document_chunks(db: Session, document_id: int) -> int:
+    """Delete all chunk embeddings for a document. Returns rows deleted.
+
+    chunk_embeddings.document_id has no ON DELETE CASCADE, so callers deleting a
+    Document must call this first to avoid orphaned vectors.
+    """
+    result = db.execute(
+        _delete(ChunkEmbedding).where(ChunkEmbedding.document_id == document_id)
+    )
+    db.commit()
+    return result.rowcount or 0
 
 
 def query_chunks(
