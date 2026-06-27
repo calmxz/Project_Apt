@@ -3,19 +3,45 @@
     v-if="status"
     class="ref-status"
     :class="`is-${status}`"
-    role="status"
-    aria-live="polite"
     data-testid="reference-status"
   >
-    <i :class="iconClass" aria-hidden="true" />
-    <span class="ref-text">{{ message }}</span>
+    <button
+      type="button"
+      class="ref-header"
+      data-testid="ref-toggle"
+      :aria-expanded="expanded"
+      @click="expanded = !expanded"
+    >
+      <i :class="iconClass" aria-hidden="true" />
+      <span class="ref-text" role="status" aria-live="polite">{{ message }}</span>
+      <i class="pi" :class="expanded ? 'pi-chevron-up' : 'pi-chevron-down'" aria-hidden="true" />
+    </button>
+
+    <ul v-if="expanded" class="ref-file-list" data-testid="ref-file-list">
+      <li v-for="doc in documents" :key="doc.id" class="ref-file-row">
+        <span class="ref-file-name">{{ doc.filename }}</span>
+        <span class="ref-file-status" :class="`is-${doc.status}`">{{ doc.status }}</span>
+        <span v-if="doc.status === 'failed' && doc.error" class="ref-file-error">{{ doc.error }}</span>
+        <button
+          type="button"
+          class="ref-file-delete"
+          :data-testid="`ref-delete-${doc.id}`"
+          :aria-label="`Delete ${doc.filename}`"
+          @click="confirmDelete(doc)"
+        >
+          <i class="pi pi-trash" aria-hidden="true" />
+        </button>
+      </li>
+    </ul>
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useConfirm } from 'primevue/useconfirm'
 
-import { getSessionIngestion } from '../../services/uploadApi.js'
+import { getSessionIngestion, deleteDocument } from '../../services/uploadApi.js'
+import { useToast } from '../../composables/useToast.js'
 
 const props = defineProps({
   sessionId: { type: String, required: true },
@@ -23,6 +49,7 @@ const props = defineProps({
 
 const status = ref(null) // 'pending' | 'ready' | 'failed' | null
 const documents = ref([])
+const expanded = ref(false)
 
 let timer = null
 let stopped = false
@@ -75,6 +102,30 @@ function refresh() {
   poll(generation)
 }
 
+const confirm = useConfirm()
+const { showSuccess, showError } = useToast()
+
+function confirmDelete(doc) {
+  confirm.require({
+    message: `Remove "${doc.filename}" from this chat? This deletes the file and its indexed content.`,
+    header: 'Delete file',
+    icon: 'pi pi-exclamation-triangle',
+    rejectLabel: 'Cancel',
+    acceptLabel: 'Delete',
+    acceptClass: 'p-button-danger',
+    accept: async () => {
+      try {
+        await deleteDocument(doc.id)
+        showSuccess(`${doc.filename} removed.`)
+        refresh()
+      } catch {
+        showError(`Could not delete ${doc.filename}. Please try again.`)
+        refresh()
+      }
+    },
+  })
+}
+
 watch(() => props.sessionId, refresh)
 onMounted(() => poll(generation))
 onUnmounted(() => {
@@ -88,7 +139,8 @@ defineExpose({ refresh })
 <style scoped>
 .ref-status {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   gap: 0.5rem;
   padding: 0.6rem 0.9rem;
   border-radius: var(--radius-lg);
@@ -105,6 +157,67 @@ defineExpose({ refresh })
 }
 
 .ref-status.is-failed {
+  color: var(--color-error-text);
+}
+
+.ref-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+.ref-header .pi-chevron-up,
+.ref-header .pi-chevron-down {
+  margin-left: auto;
+}
+.ref-file-list {
+  list-style: none;
+  margin: 0.6rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.ref-file-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+}
+.ref-file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ref-file-status {
+  color: var(--color-text-muted);
+  text-transform: capitalize;
+}
+.ref-file-status.is-failed {
+  color: var(--color-error-text);
+}
+.ref-file-error {
+  color: var(--color-error-text);
+  font-size: 0.75rem;
+}
+.ref-file-delete {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  padding: 0.2rem;
+  border-radius: var(--radius-sm);
+}
+.ref-file-delete:hover {
   color: var(--color-error-text);
 }
 </style>
