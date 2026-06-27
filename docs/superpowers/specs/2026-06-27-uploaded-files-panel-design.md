@@ -34,6 +34,14 @@ Out of scope (YAGNI):
 - Per-file actions: view + delete.
 - Endpoint: `DELETE /api/documents/{document_id}` (new `documents` namespace).
 - Confirm dialog: PrimeVue `ConfirmDialog` (not native `window.confirm`).
+- File list shows all session files equally — no "new" badge / recency
+  distinction.
+- Default collapsed; no auto-expand on new upload. The collapsed header must
+  keep communicating aggregate status (uploading / indexing / ready / failed)
+  so progress is visible without expanding — this is the banner's current
+  behavior and must be preserved.
+- Delete allowed regardless of session state (including ended sessions).
+- Successful delete shows a confirmation toast.
 
 ## Backend
 
@@ -82,8 +90,11 @@ helpers).
 
 ### `ReferenceStatusBanner.vue`
 - Header (existing aggregate count) gains a chevron and becomes a toggle
-  (`expanded` local ref, default collapsed). Keyboard-accessible
-  (button semantics, `aria-expanded`).
+  (`expanded` local ref, default collapsed; no auto-expand on upload).
+  Keyboard-accessible (button semantics, `aria-expanded`).
+- Collapsed header keeps its current aggregate status text (uploading /
+  indexing / ready / failed) so the user sees progress without expanding.
+  Preserve existing behavior; do not regress it behind the toggle.
 - When expanded, render rows from the already-fetched `documents[]`:
   - filename
   - status pill (pending / ready / failed) reusing existing status styling
@@ -91,7 +102,8 @@ helpers).
   - trash icon button (`aria-label` includes filename)
 - Trash click -> PrimeVue `confirm.require(...)` -> on accept:
   `deleteDocument(id)`, then `refresh()` (re-fetch `getSessionIngestion`).
-  On delete failure, surface via existing toast (`useToast`).
+  On success, show a confirmation toast (`useToast`, e.g. "<file> removed").
+  On delete failure, surface the error via toast.
 - When the last document is removed, `getSessionIngestion` returns
   `status: null` -> banner hides (existing behavior, no extra logic).
 
@@ -143,8 +155,10 @@ Backend (pytest):
 Frontend (vitest):
 - Banner expand/collapse toggle renders/hides the file list.
 - File rows render filename + status (+ error on failed).
-- Trash -> confirm accept calls `deleteDocument` then `refresh`.
+- Trash -> confirm accept calls `deleteDocument` then `refresh` and fires a
+  success toast.
 - Trash -> confirm reject does not call `deleteDocument`.
+- Collapsed header still renders aggregate status text (no regression).
 
 ## Files touched
 
