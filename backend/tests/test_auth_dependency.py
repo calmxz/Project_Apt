@@ -24,6 +24,8 @@ from fastapi.testclient import TestClient
 from services import auth as auth_module
 from services.auth import current_user_id
 
+TEST_SUPABASE_URL = "https://test-project.supabase.co"
+
 
 @pytest.fixture(scope="module")
 def rsa_keys() -> dict:
@@ -42,10 +44,13 @@ def rsa_keys() -> dict:
 def patch_jwks_client(monkeypatch, rsa_keys):
     """Stub _get_jwks_client so signing-key lookup returns our test public key.
 
-    Also resets the module-level cache so a prior test's stub doesn't leak.
+    Also resets the module-level cache so a prior test's stub doesn't leak,
+    and pins settings.supabase_url so the iss check has a stable value to
+    validate against.
     """
     auth_module._JWKS_CACHE["client"] = None
     auth_module._JWKS_CACHE["fetched_at"] = 0.0
+    monkeypatch.setattr(auth_module.settings, "supabase_url", TEST_SUPABASE_URL)
 
     class _FakeSigningKey:
         def __init__(self, key):
@@ -66,11 +71,13 @@ def patch_jwks_client(monkeypatch, rsa_keys):
 
 
 def _sign(rsa_keys: dict, *, sub: str = "user-123", aud: str = "authenticated",
-          exp_offset: int = 3600, extra: dict | None = None) -> str:
+          exp_offset: int = 3600, iss: str | None = None,
+          extra: dict | None = None) -> str:
     now = int(time.time())
     payload = {
         "sub": sub,
         "aud": aud,
+        "iss": iss if iss is not None else f"{TEST_SUPABASE_URL}/auth/v1",
         "iat": now,
         "exp": now + exp_offset,
     }
@@ -133,6 +140,13 @@ def test_expired_token_returns_401(client, rsa_keys):
 
 def test_wrong_audience_returns_401(client, rsa_keys):
     token = _sign(rsa_keys, aud="some-other-service")
+    r = client.get("/whoami", headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 401
+    assert r.json()["detail"] == "invalid_token"
+
+
+def test_wrong_issuer_returns_401(client, rsa_keys):
+    token = _sign(rsa_keys, iss="https://attacker.example.com/auth/v1")
     r = client.get("/whoami", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 401
     assert r.json()["detail"] == "invalid_token"
