@@ -1,5 +1,5 @@
 import { useAuthStore } from '../stores/auth.js'
-import { ApiError, apiGet } from './apiClient.js'
+import { ApiError, apiGet, apiDelete } from './apiClient.js'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
 
@@ -75,3 +75,8 @@ export const uploadPdf = uploadDocument
 export const getUploadStatus = (documentId) => apiGet(`/upload/${documentId}`)
 
 export const getSessionIngestion = (sessionId) => apiGet(`/sessions/${sessionId}/ingestion`)
+
+// silent: true — the banner's delete handler is the sole error surface. Without
+// it, request()/errorBus would auto-toast non-404 failures AND the component's
+// catch would toast again (double toast).
+export const deleteDocument = (documentId) => apiDelete(`/documents/${documentId}`, { silent: true })
