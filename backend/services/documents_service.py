@@ -7,12 +7,15 @@ These helpers aggregate across all of a session's documents instead.
 """
 
 from collections.abc import Iterable
+from pathlib import Path
 from typing import Literal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from db.models import Document
+from config import settings
+from db.models import Document, Session as SessionModel
+from services import pgvector_store
 
 IngestionStatus = Literal["pending", "ready", "failed"]
 
@@ -62,3 +65,33 @@ def list_document_statuses(db: Session, session_id: str) -> list[Document]:
         .where(Document.session_id == session_id)
         .order_by(Document.created_at.asc(), Document.id.asc())
     ).scalars().all()
+
+
+class DocumentNotFound(Exception):
+    """Raised when a document does not exist or is not owned by the caller."""
+
+
+def delete_document(db: Session, document_id: int, user_id: str) -> None:
+    """Delete a document: its chunk embeddings, on-disk file, and DB row.
+
+    Raises DocumentNotFound if the document does not exist or its session is not
+    owned by user_id (callers map this to HTTP 404 so existence is not leaked).
+    """
+    row = db.execute(
+        select(Document, SessionModel.user_id)
+        .join(SessionModel, Document.session_id == SessionModel.id)
+        .where(Document.id == document_id)
+    ).first()
+    if row is None:
+        raise DocumentNotFound(str(document_id))
+    doc, owner_id = row
+    if owner_id != user_id:
+        raise DocumentNotFound(str(document_id))
+
+    pgvector_store.delete_document_chunks(db, document_id)
+
+    disk_path = Path(settings.uploads_path) / f"{doc.id}_{doc.filename}"
+    disk_path.unlink(missing_ok=True)
+
+    db.delete(doc)
+    db.commit()
