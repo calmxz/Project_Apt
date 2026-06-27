@@ -29,6 +29,8 @@ tags:
     description: Topic profile debug + read (Phase 2+).
   - name: upload
     description: PDF ingestion (Phase 4).
+  - name: documents
+    description: Document management (delete reference files).
 
 paths:
   /health:
@@ -283,6 +285,22 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/UploadStatus"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/documents/{document_id}:
+    delete:
+      tags: [documents]
+      summary: Delete an uploaded reference document and its embeddings.
+      operationId: deleteDocument
+      parameters:
+        - in: path
+          name: document_id
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: Document deleted.
         "404":
           $ref: "#/components/responses/NotFound"
 
