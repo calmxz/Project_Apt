@@ -1,5 +1,5 @@
 # Build stage: compile Vite bundle.
-FROM node:20.20.2-alpine AS build
+FROM node:26.4.0-alpine AS build
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
