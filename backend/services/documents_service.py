@@ -90,8 +90,13 @@ def delete_document(db: Session, document_id: int, user_id: str) -> None:
 
     pgvector_store.delete_document_chunks(db, document_id)
 
-    disk_path = Path(settings.uploads_path) / f"{doc.id}_{doc.filename}"
-    disk_path.unlink(missing_ok=True)
+    # Strip any directory components from the user-supplied filename and verify
+    # the resolved path stays inside uploads_path before unlinking (defense in
+    # depth against path traversal).
+    uploads_root = Path(settings.uploads_path).resolve()
+    candidate = (uploads_root / f"{doc.id}_{Path(doc.filename).name}").resolve()
+    if candidate.parent == uploads_root:
+        candidate.unlink(missing_ok=True)
 
     db.delete(doc)
     db.commit()

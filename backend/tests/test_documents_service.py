@@ -175,3 +175,24 @@ def test_delete_document_tolerates_missing_file(db_session, monkeypatch, tmp_pat
     # No file on disk.
     documents_service.delete_document(db_session, document_id=doc.id, user_id="u1")
     assert db_session.get(Document, doc.id) is None
+
+
+def test_delete_document_filename_traversal_is_contained(db_session, monkeypatch, tmp_path):
+    """A filename with an embedded ../ must not unlink a file outside uploads_path."""
+    monkeypatch.setattr(
+        "services.documents_service.pgvector_store.delete_document_chunks",
+        lambda db, document_id: 0,
+    )
+    uploads = tmp_path / "uploads"
+    uploads.mkdir()
+    monkeypatch.setattr("services.documents_service.settings.uploads_path", str(uploads))
+
+    # A file one level above the uploads dir that a traversal filename would target.
+    outside = tmp_path / "secret.txt"
+    outside.write_text("keep me")
+
+    doc = _seed_doc(db_session, filename="x/../../secret.txt")
+    documents_service.delete_document(db_session, document_id=doc.id, user_id="u1")
+
+    assert outside.exists(), "traversal escaped the uploads directory"
+    assert db_session.get(Document, doc.id) is None
