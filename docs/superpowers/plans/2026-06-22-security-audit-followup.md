@@ -336,7 +336,7 @@ Add this under "## 4. Still-open, not new", replacing the existing one-line bull
 
 ```markdown
 - **Branch protection / required status checks** — never applied (confirmed via CLAUDE.md's own Phase 6 status note). Manual steps for whoever has admin on the repo, in GitHub → Settings → Branches → Add branch protection rule for `main`:
-  1. Branch name pattern: `main`
+  1. Branch name pattern: `main`    
   2. Check "Require a pull request before merging"
   3. Check "Require status checks to pass before merging", then check "Require branches to be up to date before merging"
   4. Search for and select each of these as required: `Backend (pytest)`, `Frontend (Vitest + lint)`, `Security (SAST + deps + secrets + images)`, `Analyze (python)`, `Analyze (javascript-typescript)`
