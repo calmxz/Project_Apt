@@ -88,9 +88,19 @@ if not settings.supabase_url:
 
 `frontend/src/components/chat/MarkdownContent.vue:22` is the **only** `v-html`/`innerHTML` sink in the frontend (`grep -rn "v-html|innerHTML|dangerouslySetInnerHTML" frontend/src` returns exactly one hit). Per `[[project_katex_plugin_swap]]` this renders through `markdown-it` + DOMPurify (`safeHtml`), not raw model output. No new finding — recorded here because the old audit predates the chat redesign that introduced this rendering path, so it had never been checked against the current renderer until now.
 
+### PDF/PPTX parser spot-check — closed, no fix needed
+
+Reviewed `backend/services/ingestion_service.py` and `backend/lib/chunking.py`. `pypdf`/`python-pptx` are covered by `pip-audit` in CI; every extraction call runs inside `run()`'s top-level `try/except Exception`, which marks the document `failed` without crashing or leaking internals; resource-exhaustion risk is bounded by the existing 25MB upload cap (`upload.py:29`). No code change.
+
 ## 4. Still-open, not new
 
-- **Branch protection / required status checks** — `CI_INVENTORY.md` documents the intended required checks (`Backend (pytest)`, `Frontend (Vitest + lint)`, `Security (SAST + deps + secrets + images)`, both CodeQL `Analyze` jobs) and signed-commits-on-`main`. CLAUDE.md's own Phase 6 status line confirms these were documented but never applied. This is a GitHub repo-settings action, not a code fix — needs to be done in Settings → Branches by whoever has admin on the repo.
+- **Branch protection / required status checks** — never applied (confirmed via CLAUDE.md's own Phase 6 status note). Manual steps for whoever has admin on the repo, in GitHub → Settings → Branches → Add branch protection rule for `main`:
+  1. Branch name pattern: `main`
+  2. Check "Require a pull request before merging"
+  3. Check "Require status checks to pass before merging", then check "Require branches to be up to date before merging"
+  4. Search for and select each of these as required: `Backend (pytest)`, `Frontend (Vitest + lint)`, `Security (SAST + deps + secrets + images)`, `Analyze (python)`, `Analyze (javascript-typescript)`
+  5. Check "Require signed commits"
+  6. Save changes
 - **CI tool inventory unchanged** — re-grepped `.github/workflows/`: `gitleaks` (ci.yml, full-history secret scan), `npm audit --omit=dev --audit-level=high`, and `codeql.yml` (separate workflow file) are all still present and wired up, alongside the previously-confirmed bandit/semgrep/pip-audit/hadolint/trivy. All 8 tools from `CI_INVENTORY.md` are still active — no drift here.
 
 ## 5. Summary table

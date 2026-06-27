@@ -50,7 +50,8 @@ def verify_supabase_jwt(token: str) -> str:
             signing_key,
             algorithms=["RS256", "ES256"],
             audience="authenticated",
-            options={"verify_aud": True, "verify_exp": True},
+            issuer=f"{settings.supabase_url}/auth/v1",
+            options={"verify_aud": True, "verify_exp": True, "verify_iss": True},
         )
     except (jwt.InvalidTokenError, httpx.HTTPError, KeyError) as e:
         raise HTTPException(

@@ -10,6 +10,8 @@ from routes import chat, health, profile, sessions, upload
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if settings.env == "prod" and not settings.supabase_url:
+        raise RuntimeError("SUPABASE_URL is required when ENV=prod")
     create_tables()
     yield
 
