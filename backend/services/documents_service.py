@@ -6,6 +6,7 @@ document only, so a newer pending/failed upload masked an older ready one.
 These helpers aggregate across all of a session's documents instead.
 """
 
+import logging
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Literal
@@ -16,6 +17,8 @@ from sqlalchemy.orm import Session
 from config import settings
 from db.models import Document, Session as SessionModel
 from services import pgvector_store
+
+logger = logging.getLogger(__name__)
 
 IngestionStatus = Literal["pending", "ready", "failed"]
 
@@ -90,13 +93,21 @@ def delete_document(db: Session, document_id: int, user_id: str) -> None:
 
     pgvector_store.delete_document_chunks(db, document_id)
 
-    # Strip any directory components from the user-supplied filename and verify
-    # the resolved path stays inside uploads_path before unlinking (defense in
-    # depth against path traversal).
-    uploads_root = Path(settings.uploads_path).resolve()
-    candidate = (uploads_root / f"{doc.id}_{Path(doc.filename).name}").resolve()
-    if candidate.parent == uploads_root:
-        candidate.unlink(missing_ok=True)
+    # Capture identity before the row is expired by commit.
+    doc_id = doc.id
+    filename = doc.filename
 
     db.delete(doc)
     db.commit()
+
+    # Best-effort on-disk cleanup AFTER the DB + vector rows are committed, so a
+    # locked/undeletable file (e.g. Windows WinError 32 while ingestion still
+    # holds the PDF) cannot leave the request 500ing with chunks already gone.
+    # Strip directory components and verify containment first (path traversal).
+    uploads_root = Path(settings.uploads_path).resolve()
+    candidate = (uploads_root / f"{doc_id}_{Path(filename).name}").resolve()
+    if candidate.parent == uploads_root:
+        try:
+            candidate.unlink(missing_ok=True)
+        except OSError:
+            logger.warning("could not unlink file for document %s", doc_id)

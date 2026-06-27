@@ -196,3 +196,28 @@ def test_delete_document_filename_traversal_is_contained(db_session, monkeypatch
 
     assert outside.exists(), "traversal escaped the uploads directory"
     assert db_session.get(Document, doc.id) is None
+
+
+def test_delete_document_tolerates_unlink_oserror(db_session, monkeypatch, tmp_path):
+    """A locked/undeletable file (OSError on unlink) must not 500: the DB row and
+    chunks are still deleted and the call returns normally."""
+    monkeypatch.setattr(
+        "services.documents_service.pgvector_store.delete_document_chunks",
+        lambda db, document_id: 0,
+    )
+    monkeypatch.setattr("services.documents_service.settings.uploads_path", str(tmp_path))
+
+    doc = _seed_doc(db_session)
+    disk = tmp_path / f"{doc.id}_{doc.filename}"
+    disk.write_bytes(b"%PDF-fake")
+
+    import pathlib
+
+    def _raise(self, *a, **k):
+        raise PermissionError("locked")
+
+    monkeypatch.setattr(pathlib.Path, "unlink", _raise)
+
+    # Must not raise.
+    documents_service.delete_document(db_session, document_id=doc.id, user_id="u1")
+    assert db_session.get(Document, doc.id) is None
