@@ -36,18 +36,37 @@ Append to `backend/tests/test_pgvector_retrieval.py` (uses existing `db` + `seed
 
 ```python
 def test_delete_document_chunks_removes_only_that_document(db, seeded_session):
-    """delete_document_chunks deletes the doc's chunks and returns the count."""
+    """delete_document_chunks deletes the target doc's chunks (returns count) and
+    leaves a second document's chunks in the same session intact."""
     sid = seeded_session["session_id"]
     doc_id = seeded_session["doc_id"]
+
+    # Add a second document with one chunk in the SAME session.
+    other = Document(session_id=sid, filename="keep.pdf", status="ready")
+    db.add(other)
+    db.commit()
+    db.refresh(other)
+    pgvector_store.insert_chunks(
+        db, session_id=sid, document_id=other.id,
+        rows=[(0, 1, "survivor chunk", _vec(4))],
+    )
 
     # seeded_session inserts 3 chunks for doc_id.
     deleted = pgvector_store.delete_document_chunks(db, document_id=doc_id)
     assert deleted == 3
 
-    remaining = pgvector_store.query_chunks(
-        db, session_id=sid, query_embedding=_vec(1), k=10
+    # Target's chunks gone; the other document's chunk survives.
+    survivors = pgvector_store.query_chunks(
+        db, session_id=sid, query_embedding=_vec(4), k=10
     )
-    assert remaining == []
+    assert [c.doc_id for c in survivors] == [other.id]
+
+    # Teardown for the extra doc (seeded_session only cleans its own rows).
+    db.execute(
+        text("DELETE FROM chunk_embeddings WHERE document_id = :d"), {"d": other.id}
+    )
+    db.execute(text("DELETE FROM documents WHERE id = :d"), {"d": other.id})
+    db.commit()
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -508,7 +527,10 @@ In `frontend/src/services/uploadApi.js`, update the import and add the function:
 import { ApiError, apiGet, apiDelete } from './apiClient.js'
 ```
 ```javascript
-export const deleteDocument = (documentId) => apiDelete(`/documents/${documentId}`)
+// silent: true — the banner's delete handler is the sole error surface. Without
+// it, request()/errorBus would auto-toast non-404 failures AND the component's
+// catch would toast again (double toast).
+export const deleteDocument = (documentId) => apiDelete(`/documents/${documentId}`, { silent: true })
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -540,7 +562,12 @@ git commit -m "feat(frontend): add deleteDocument API client helper"
 - Consumes: `deleteDocument(documentId)` (Task 4); `getSessionIngestion` (existing); PrimeVue `useConfirm`, `useToast` (existing wrapper `@/composables/useToast.js`).
 - Produces: no new exports; behavioral changes only. The existing `defineExpose({ refresh })` contract is preserved.
 
-- [ ] **Step 1: Wire ConfirmationService + ConfirmDialog (no test; verified via Task 5 component tests + a build)**
+- [ ] **Step 1: Wire ConfirmationService + ConfirmDialog**
+
+WARNING: this wiring has NO automated gate. The Task 5 component tests mock
+`primevue/useconfirm`, so a missing `app.use(ConfirmationService)` still passes
+CI and only fails at runtime (`useConfirm().require` is undefined). Task 6
+Step 4 (manual smoke) is the only check — do not skip it.
 
 In `frontend/src/main.js`, add the import and registration next to `ToastService`:
 
@@ -642,6 +669,24 @@ it('does not delete when confirm is rejected', async () => {
   await wrapper.get('[data-testid="ref-delete-1"]').trigger('click')
   if (lastConfirm.reject) await lastConfirm.reject()
   expect(deleteDocument).not.toHaveBeenCalled()
+})
+
+it('shows an error toast and refreshes when delete fails', async () => {
+  getSessionIngestion.mockResolvedValue({
+    status: 'ready',
+    documents: [{ id: 1, filename: 'a.pdf', status: 'ready' }],
+  })
+  deleteDocument.mockRejectedValue(new Error('500'))
+  const wrapper = mount(ReferenceStatusBanner, { props: { sessionId: 's1' } })
+  await flushPromises()
+  getSessionIngestion.mockClear() // count only refresh-driven refetches below
+  await wrapper.get('[data-testid="ref-toggle"]').trigger('click')
+  await wrapper.get('[data-testid="ref-delete-1"]').trigger('click')
+  await lastConfirm.accept()
+  await flushPromises()
+  expect(showError).toHaveBeenCalled()
+  expect(showSuccess).not.toHaveBeenCalled()
+  expect(getSessionIngestion).toHaveBeenCalled() // refresh() ran in the catch
 })
 ```
 
