@@ -510,3 +510,184 @@ class ErrorResponse(BaseModel):
         extra="forbid",
     )
     detail: str
+
+
+class LessonDraft(BaseModel):
+    """
+    A single drafted/blank lesson (title + one-line goal).
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    title: constr(max_length=200)
+    goal: constr(max_length=500)
+
+
+class SubjectProgress(BaseModel):
+    """
+    Lesson completion counts for a subject card/overview.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    done_count: int
+    total_count: int
+
+
+class LessonItem(BaseModel):
+    """
+    A persisted lesson within a subject.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    id: str
+    subject_id: str
+    order_idx: int
+    title: str
+    goal: str
+    status: Literal["not_started", "in_progress", "done"]
+    session_id: str | None = None
+    created_at: datetime
+
+
+class DraftPlanRequest(BaseModel):
+    """
+    Preview-draft inputs for the wizard review step (no persistence). Carries
+    duration_mode plus exactly one of timeline_days (deadline mode) or
+    pace_per_week (pace mode) — the pinned duration field.
+
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    title: constr(max_length=200)
+    per_session_minutes: Literal[15, 30, 60]
+    duration_mode: Literal["deadline", "pace"]
+    timeline_days: int | None = None
+    pace_per_week: int | None = None
+
+
+class DraftPlanResponse(BaseModel):
+    """
+    The drafted, not-yet-persisted lesson list for the wizard to review/edit.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    lessons: list[LessonDraft]
+
+
+class SubjectCreateRequest(BaseModel):
+    """
+    Create a subject. The wizard (Spec B) sends mode=blank with the reviewed
+    lessons[] array (already drafted/edited via POST /subjects/draft-plan;
+    may be empty). mode=draft is a documented non-wizard fallback that drafts
+    and persists server-side in one call via plan_service.draft_plan. Duration
+    is a user-toggled pair: duration_mode plus exactly one of timeline_days
+    (deadline) or pace_per_week (pace); the other is derived on read.
+
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    title: constr(max_length=200)
+    per_session_minutes: Literal[15, 30, 60]
+    duration_mode: Literal["deadline", "pace"]
+    timeline_days: int | None = None
+    pace_per_week: int | None = None
+    mode: Literal["draft", "blank"]
+    lessons: list[LessonDraft] | None = []
+
+
+class SubjectUpdateRequest(BaseModel):
+    """
+    Rename, change duration, or archive/unarchive a subject (all optional).
+    Changing duration sends duration_mode plus the matching pinned field
+    (timeline_days for deadline, pace_per_week for pace).
+
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    title: constr(max_length=200) | None = None
+    duration_mode: str | None = None
+    timeline_days: int | None = None
+    pace_per_week: int | None = None
+    archived: bool | None = None
+
+
+class SubjectListItem(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    id: str
+    title: str
+    archived: bool
+    progress: SubjectProgress
+
+
+class SubjectDetail(BaseModel):
+    """
+    Subject overview with ordered lessons and progress counts. Returns
+    duration_mode plus BOTH timeline_days and pace_per_week — one is the pinned
+    value, the other is derived from the current lesson_count on read, so the
+    frontend renders the toggle without recomputing.
+
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    id: str
+    user_id: str
+    title: str
+    per_session_minutes: int
+    duration_mode: Literal["deadline", "pace"]
+    timeline_days: int
+    pace_per_week: int
+    created_at: datetime
+    archived_at: datetime | None = None
+    progress: SubjectProgress
+    lessons: list[LessonItem]
+
+
+class LessonCreateRequest(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    title: constr(max_length=200)
+    goal: constr(max_length=500)
+
+
+class LessonUpdateRequest(BaseModel):
+    """
+    Edit a lesson's title/goal/status/order_idx (all optional). Server validates status against the allowed set.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    title: constr(max_length=200) | None = None
+    goal: constr(max_length=500) | None = None
+    status: str | None = None
+    order_idx: int | None = None
+
+
+class LessonOpenResponse(BaseModel):
+    """
+    Result of opening a lesson into a chat session (idempotent).
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    session_id: str
+    status: Literal["not_started", "in_progress", "done"]

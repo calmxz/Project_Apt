@@ -31,6 +31,8 @@ tags:
     description: PDF ingestion (Phase 4).
   - name: documents
     description: Document management (delete reference files).
+  - name: subjects
+    description: Subjects and lessons (study-plan hierarchy above sessions).
 
 paths:
   /health:
@@ -230,6 +232,185 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/subjects:
+    post:
+      tags: [subjects]
+      summary: Create a subject (LLM-drafted or blank) with its lessons.
+      operationId: createSubject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubjectCreateRequest"
+      responses:
+        "201":
+          description: Subject created with lessons.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubjectDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+    get:
+      tags: [subjects]
+      summary: List the authenticated user's subjects.
+      operationId: listSubjects
+      responses:
+        "200":
+          description: Subjects with progress counts.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SubjectListItem"
+
+  /api/subjects/draft-plan:
+    post:
+      tags: [subjects]
+      summary: Preview an LLM-drafted lesson plan without persisting (wizard review step).
+      operationId: draftPlan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DraftPlanRequest"
+      responses:
+        "200":
+          description: Drafted lessons for review/edit; nothing is written to the DB.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DraftPlanResponse"
+
+  /api/subjects/{subject_id}:
+    get:
+      tags: [subjects]
+      summary: Subject overview with ordered lessons and progress.
+      operationId: getSubject
+      parameters:
+        - $ref: "#/components/parameters/SubjectId"
+      responses:
+        "200":
+          description: Subject overview.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubjectDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [subjects]
+      summary: Rename, set timeline_days, or archive a subject.
+      operationId: updateSubject
+      parameters:
+        - $ref: "#/components/parameters/SubjectId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubjectUpdateRequest"
+      responses:
+        "200":
+          description: Subject updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubjectDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/subjects/{subject_id}/lessons:
+    post:
+      tags: [subjects]
+      summary: Append a lesson to a subject (blank/manual path).
+      operationId: addLesson
+      parameters:
+        - $ref: "#/components/parameters/SubjectId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LessonCreateRequest"
+      responses:
+        "201":
+          description: Lesson appended.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LessonItem"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/lessons/{lesson_id}:
+    patch:
+      tags: [subjects]
+      summary: Edit a lesson's title/goal/status/order_idx.
+      operationId: updateLesson
+      parameters:
+        - $ref: "#/components/parameters/LessonId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LessonUpdateRequest"
+      responses:
+        "200":
+          description: Lesson updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LessonItem"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [subjects]
+      summary: Delete a lesson (only if it has no session, unless force=true).
+      operationId: deleteLesson
+      parameters:
+        - $ref: "#/components/parameters/LessonId"
+        - in: query
+          name: force
+          required: false
+          description: When true, end the lesson's session and clear its pointer before deleting (unblocks Spec C plan-revision deletes).
+          schema: { type: boolean, default: false }
+      responses:
+        "204":
+          description: Lesson deleted.
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Lesson has a session and force is not set.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+
+  /api/lessons/{lesson_id}/open:
+    post:
+      tags: [subjects]
+      summary: Open a lesson into a chat session (idempotent).
+      operationId: openLesson
+      parameters:
+        - $ref: "#/components/parameters/LessonId"
+      responses:
+        "200":
+          description: Existing or newly created session for the lesson.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LessonOpenResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /api/upload:
     post:
       tags: [upload]
@@ -352,6 +533,16 @@ components:
     SessionId:
       in: path
       name: session_id
+      required: true
+      schema: { type: string, maxLength: 64 }
+    SubjectId:
+      in: path
+      name: subject_id
+      required: true
+      schema: { type: string, maxLength: 64 }
+    LessonId:
+      in: path
+      name: lesson_id
       required: true
       schema: { type: string, maxLength: 64 }
 
@@ -965,6 +1156,162 @@ components:
       required: [detail]
       properties:
         detail: { type: string }
+
+    LessonDraft:
+      type: object
+      additionalProperties: false
+      required: [title, goal]
+      description: A single drafted/blank lesson (title + one-line goal).
+      properties:
+        title: { type: string, maxLength: 200 }
+        goal:  { type: string, maxLength: 500 }
+
+    SubjectProgress:
+      type: object
+      additionalProperties: false
+      required: [done_count, total_count]
+      description: Lesson completion counts for a subject card/overview.
+      properties:
+        done_count:  { type: integer, default: 0 }
+        total_count: { type: integer, default: 0 }
+
+    LessonItem:
+      type: object
+      additionalProperties: false
+      required: [id, subject_id, order_idx, title, goal, status, created_at]
+      description: A persisted lesson within a subject.
+      properties:
+        id:         { type: string }
+        subject_id: { type: string }
+        order_idx:  { type: integer }
+        title:      { type: string }
+        goal:       { type: string }
+        status:     { type: string, enum: [not_started, in_progress, done] }
+        session_id: { type: [string, "null"], default: null }
+        created_at: { type: string, format: date-time }
+
+    DraftPlanRequest:
+      type: object
+      additionalProperties: false
+      required: [title, per_session_minutes, duration_mode]
+      description: |
+        Preview-draft inputs for the wizard review step (no persistence). Carries
+        duration_mode plus exactly one of timeline_days (deadline mode) or
+        pace_per_week (pace mode) — the pinned duration field.
+      properties:
+        title:               { type: string, maxLength: 200 }
+        per_session_minutes: { type: integer, enum: [15, 30, 60] }
+        duration_mode:       { type: string, enum: [deadline, pace] }
+        timeline_days:       { type: [integer, "null"], default: null }
+        pace_per_week:       { type: [integer, "null"], default: null }
+
+    DraftPlanResponse:
+      type: object
+      additionalProperties: false
+      required: [lessons]
+      description: The drafted, not-yet-persisted lesson list for the wizard to review/edit.
+      properties:
+        lessons:
+          type: array
+          items: { $ref: "#/components/schemas/LessonDraft" }
+
+    SubjectCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [title, per_session_minutes, mode, duration_mode]
+      description: |
+        Create a subject. The wizard (Spec B) sends mode=blank with the reviewed
+        lessons[] array (already drafted/edited via POST /subjects/draft-plan;
+        may be empty). mode=draft is a documented non-wizard fallback that drafts
+        and persists server-side in one call via plan_service.draft_plan. Duration
+        is a user-toggled pair: duration_mode plus exactly one of timeline_days
+        (deadline) or pace_per_week (pace); the other is derived on read.
+      properties:
+        title:               { type: string, maxLength: 200 }
+        per_session_minutes: { type: integer, enum: [15, 30, 60] }
+        duration_mode:       { type: string, enum: [deadline, pace] }
+        timeline_days:       { type: [integer, "null"], default: null }
+        pace_per_week:       { type: [integer, "null"], default: null }
+        mode:                { type: string, enum: [draft, blank] }
+        lessons:
+          type: array
+          default: []
+          items: { $ref: "#/components/schemas/LessonDraft" }
+
+    SubjectUpdateRequest:
+      type: object
+      additionalProperties: false
+      description: |
+        Rename, change duration, or archive/unarchive a subject (all optional).
+        Changing duration sends duration_mode plus the matching pinned field
+        (timeline_days for deadline, pace_per_week for pace).
+      properties:
+        title:         { type: [string, "null"], maxLength: 200, default: null }
+        duration_mode: { type: [string, "null"], default: null }
+        timeline_days: { type: [integer, "null"], default: null }
+        pace_per_week: { type: [integer, "null"], default: null }
+        archived:      { type: [boolean, "null"], default: null }
+
+    SubjectListItem:
+      type: object
+      additionalProperties: false
+      required: [id, title, archived, progress]
+      properties:
+        id:       { type: string }
+        title:    { type: string }
+        archived: { type: boolean, default: false }
+        progress: { $ref: "#/components/schemas/SubjectProgress" }
+
+    SubjectDetail:
+      type: object
+      additionalProperties: false
+      required: [id, user_id, title, per_session_minutes, duration_mode, timeline_days, pace_per_week, created_at, progress, lessons]
+      description: |
+        Subject overview with ordered lessons and progress counts. Returns
+        duration_mode plus BOTH timeline_days and pace_per_week — one is the pinned
+        value, the other is derived from the current lesson_count on read, so the
+        frontend renders the toggle without recomputing.
+      properties:
+        id:                  { type: string }
+        user_id:             { type: string }
+        title:               { type: string }
+        per_session_minutes: { type: integer }
+        duration_mode:       { type: string, enum: [deadline, pace] }
+        timeline_days:       { type: integer }
+        pace_per_week:       { type: integer }
+        created_at:          { type: string, format: date-time }
+        archived_at:         { type: [string, "null"], format: date-time, default: null }
+        progress:            { $ref: "#/components/schemas/SubjectProgress" }
+        lessons:
+          type: array
+          items: { $ref: "#/components/schemas/LessonItem" }
+
+    LessonCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [title, goal]
+      properties:
+        title: { type: string, maxLength: 200 }
+        goal:  { type: string, maxLength: 500 }
+
+    LessonUpdateRequest:
+      type: object
+      additionalProperties: false
+      description: Edit a lesson's title/goal/status/order_idx (all optional). Server validates status against the allowed set.
+      properties:
+        title:     { type: [string, "null"], maxLength: 200, default: null }
+        goal:      { type: [string, "null"], maxLength: 500, default: null }
+        status:    { type: [string, "null"], default: null }
+        order_idx: { type: [integer, "null"], default: null }
+
+    LessonOpenResponse:
+      type: object
+      additionalProperties: false
+      required: [session_id, status]
+      description: Result of opening a lesson into a chat session (idempotent).
+      properties:
+        session_id: { type: string }
+        status:     { type: string, enum: [not_started, in_progress, done] }
 
 # ---------------------------------------------------------------------------
 # SSE event contract reference (vendor extension — not processed by codegen)
