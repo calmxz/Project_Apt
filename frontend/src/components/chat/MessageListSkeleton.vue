@@ -7,9 +7,11 @@ defineProps({
 <template>
   <!--
     Mirrors the real MessageList geometry (UserBubble / AssistantBubble) so the
-    swap to live content is shift-free: assistant rows carry the avatar + role
-    tag + a raised content block (left, 95%); user rows are right-aligned with
-    no avatar (88%). aria-hidden: purely decorative loading state.
+    swap to live content is shift-free: both rows span the full column at a
+    fixed width (content block = column minus the 2.6rem avatar gutter).
+    Assistant rows carry the avatar + role tag + a raised content block (left);
+    user rows are right-aligned with no avatar. aria-hidden: purely decorative
+    loading state.
   -->
   <div class="msg-skel" aria-hidden="true" data-testid="session-messages-skeleton">
     <div
@@ -50,14 +52,16 @@ defineProps({
 }
 
 .msg-skel-row--assistant {
-  align-self: flex-start;
-  max-width: 95%;
+  align-self: stretch;
+  width: 100%;
+  max-width: 100%;
 }
 
 .msg-skel-row--user {
   flex-direction: row-reverse;
-  align-self: flex-end;
-  max-width: 88%;
+  align-self: stretch;
+  width: 100%;
+  max-width: 100%;
 }
 
 .msg-skel-avatar {
@@ -74,6 +78,7 @@ defineProps({
   flex-direction: column;
   gap: 0.3rem;
   min-width: 0;
+  flex: 1 1 auto;
   max-width: calc(100% - 2.6rem);
 }
 
@@ -96,14 +101,13 @@ defineProps({
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
-  min-width: 11rem;
+  width: 100%;
   padding: 0.875rem 1.125rem;
   border-radius: var(--radius-sm) var(--radius-lg) var(--radius-lg) var(--radius-lg);
   background: var(--color-surface-raised);
 }
 
 .msg-skel-row--user .msg-skel-bubble {
-  min-width: 7rem;
   border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-lg);
   background: var(--color-surface-soft);
 }
