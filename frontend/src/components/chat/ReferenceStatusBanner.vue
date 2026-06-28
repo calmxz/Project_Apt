@@ -112,7 +112,10 @@ function confirmDelete(doc) {
     icon: 'pi pi-exclamation-triangle',
     rejectLabel: 'Cancel',
     acceptLabel: 'Delete',
-    acceptClass: 'p-button-danger',
+    // Neutral cancel (drops the default primary/coral fill); darker destructive
+    // accept via the global .confirm-delete-strong rule in base.css.
+    rejectClass: 'p-button-text p-button-secondary',
+    acceptClass: 'p-button-danger confirm-delete-strong',
     accept: async () => {
       try {
         await deleteDocument(doc.id)
