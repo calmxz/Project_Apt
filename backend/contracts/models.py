@@ -271,6 +271,7 @@ class SessionResponse(BaseModel):
     ended_at: datetime | None = None
     ingestion_status: Literal["pending", "ready", "failed"] | None = None
     pinned: bool | None = False
+    subject_id: str | None = None
 
 
 class SessionProgress(BaseModel):
@@ -299,6 +300,7 @@ class SessionListItem(BaseModel):
     last_message_preview: str | None = None
     last_session_summary: str | None = None
     progress: SessionProgress | None = None
+    subject_id: str | None = None
 
 
 class Message(BaseModel):
@@ -334,6 +336,7 @@ class SessionDetail(BaseModel):
     ended_at: datetime | None = None
     ingestion_status: Literal["pending", "ready", "failed"] | None = None
     pinned: bool | None = False
+    subject_id: str | None = None
     pending_check: PendingCheck | None = None
     messages: list[Message]
 

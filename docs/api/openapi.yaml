@@ -892,6 +892,7 @@ components:
             - type: "null"
           default: null
         pinned:            { type: boolean, default: false }
+        subject_id:        { type: [string, "null"], default: null }
 
     SessionProgress:
       type: object
@@ -921,6 +922,7 @@ components:
             - $ref: "#/components/schemas/SessionProgress"
             - type: "null"
           default: null
+        subject_id:           { type: [string, "null"], default: null }
 
     Message:
       type: object
@@ -964,6 +966,7 @@ components:
             - type: "null"
           default: null
         pinned:            { type: boolean, default: false }
+        subject_id:        { type: [string, "null"], default: null }
         pending_check:
           oneOf:
             - $ref: "#/components/schemas/PendingCheck"
