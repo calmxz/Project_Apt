@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
 from db.database import create_tables
-from routes import chat, health, profile, sessions, upload
+from routes import chat, documents, health, profile, sessions, upload
 
 
 @asynccontextmanager
@@ -31,3 +31,4 @@ app.include_router(chat.router)
 app.include_router(profile.router)
 app.include_router(sessions.router)
 app.include_router(upload.router)
+app.include_router(documents.router)

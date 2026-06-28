@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 import Toast from 'primevue/toast'
+import ConfirmDialog from 'primevue/confirmdialog'
 import { useToast } from './composables/useToast.js'
 import { useSidebar } from './composables/useSidebar.js'
 import { errorBus } from './services/errorBus.js'
@@ -69,6 +70,7 @@ onBeforeUnmount(() => errorBus.removeEventListener('api-error', onApiError))
     </transition>
   </RouterView>
   <Toast position="top-right" />
+  <ConfirmDialog />
 </template>
 
 <style>

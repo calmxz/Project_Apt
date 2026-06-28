@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
-import { uploadPdf, getUploadStatus, validateFile, ACCEPT_ATTR, MAX_UPLOAD_BYTES } from '@/services/uploadApi.js'
+import { uploadPdf, getUploadStatus, validateFile, ACCEPT_ATTR, MAX_UPLOAD_BYTES, deleteDocument } from '@/services/uploadApi.js'
 import { ApiError } from '@/services/apiClient.js'
 
 function fakeFile(name, size) {
@@ -105,5 +105,22 @@ describe('uploadApi', () => {
     expect(out.status).toBe('ready')
     expect(fetchMock.mock.calls[0][0]).toContain('/upload/d1')
     expect(fetchMock.mock.calls[0][0]).not.toContain('user_id=')
+  })
+
+  it('issues DELETE to /documents/{id}', async () => {
+    fetchMock.mockResolvedValue(
+      Promise.resolve({ ok: true, status: 204, text: () => Promise.resolve('') }),
+    )
+    await deleteDocument(7)
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toMatch(/\/documents\/7$/)
+    expect(init.method).toBe('DELETE')
+  })
+
+  it('throws ApiError on non-ok response', async () => {
+    fetchMock.mockResolvedValue(
+      Promise.resolve({ ok: false, status: 404, text: () => Promise.resolve('') }),
+    )
+    await expect(deleteDocument(7)).rejects.toThrow(/404/)
   })
 })

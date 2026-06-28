@@ -6,13 +6,19 @@ document only, so a newer pending/failed upload masked an older ready one.
 These helpers aggregate across all of a session's documents instead.
 """
 
+import logging
 from collections.abc import Iterable
+from pathlib import Path
 from typing import Literal
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from db.models import Document
+from config import settings
+from db.models import Document, Session as SessionModel
+from services import pgvector_store
+
+logger = logging.getLogger(__name__)
 
 IngestionStatus = Literal["pending", "ready", "failed"]
 
@@ -62,3 +68,46 @@ def list_document_statuses(db: Session, session_id: str) -> list[Document]:
         .where(Document.session_id == session_id)
         .order_by(Document.created_at.asc(), Document.id.asc())
     ).scalars().all()
+
+
+class DocumentNotFound(Exception):
+    """Raised when a document does not exist or is not owned by the caller."""
+
+
+def delete_document(db: Session, document_id: int, user_id: str) -> None:
+    """Delete a document: its chunk embeddings, on-disk file, and DB row.
+
+    Raises DocumentNotFound if the document does not exist or its session is not
+    owned by user_id (callers map this to HTTP 404 so existence is not leaked).
+    """
+    row = db.execute(
+        select(Document, SessionModel.user_id)
+        .join(SessionModel, Document.session_id == SessionModel.id)
+        .where(Document.id == document_id)
+    ).first()
+    if row is None:
+        raise DocumentNotFound(str(document_id))
+    doc, owner_id = row
+    if owner_id != user_id:
+        raise DocumentNotFound(str(document_id))
+
+    pgvector_store.delete_document_chunks(db, document_id)
+
+    # Capture identity before the row is expired by commit.
+    doc_id = doc.id
+    filename = doc.filename
+
+    db.delete(doc)
+    db.commit()
+
+    # Best-effort on-disk cleanup AFTER the DB + vector rows are committed, so a
+    # locked/undeletable file (e.g. Windows WinError 32 while ingestion still
+    # holds the PDF) cannot leave the request 500ing with chunks already gone.
+    # Strip directory components and verify containment first (path traversal).
+    uploads_root = Path(settings.uploads_path).resolve()
+    candidate = (uploads_root / f"{doc_id}_{Path(filename).name}").resolve()
+    if candidate.parent == uploads_root:
+        try:
+            candidate.unlink(missing_ok=True)
+        except OSError:
+            logger.warning("could not unlink file for document %s", doc_id)

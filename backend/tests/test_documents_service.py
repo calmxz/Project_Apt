@@ -1,5 +1,7 @@
 """TDD: services.documents_service aggregate status + ready gate."""
 
+import pytest
+
 from contracts import TopicProfile
 from db.models import Document, Session as SessionModel, User
 from services import documents_service
@@ -107,3 +109,115 @@ def test_retrieval_gate_uses_any_ready_not_latest(db_session, monkeypatch):
     # the newer pending doc masked the ready one -> error="ingestion_status=pending".
     assert result.ok is True
     assert result.error is None
+
+
+def _seed_doc(db, *, user_id="u1", session_id="s1", filename="notes.pdf"):
+    db.add(User(id=user_id))
+    db.flush()
+    db.add(SessionModel(id=session_id, user_id=user_id, topic="t", topic_profile_json="{}"))
+    db.flush()
+    doc = Document(session_id=session_id, filename=filename, status="ready")
+    db.add(doc)
+    db.commit()
+    db.refresh(doc)
+    return doc
+
+
+def test_delete_document_removes_row_chunks_and_file(db_session, monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr(
+        "services.documents_service.pgvector_store.delete_document_chunks",
+        lambda db, document_id: calls.append(document_id) or 3,
+    )
+    monkeypatch.setattr("services.documents_service.settings.uploads_path", str(tmp_path))
+
+    doc = _seed_doc(db_session)
+    disk = tmp_path / f"{doc.id}_{doc.filename}"
+    disk.write_bytes(b"%PDF-fake")
+
+    documents_service.delete_document(db_session, document_id=doc.id, user_id="u1")
+
+    assert calls == [doc.id]
+    assert db_session.get(Document, doc.id) is None
+    assert not disk.exists()
+
+
+def test_delete_document_missing_raises_not_found(db_session, monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "services.documents_service.pgvector_store.delete_document_chunks",
+        lambda db, document_id: 0,
+    )
+    monkeypatch.setattr("services.documents_service.settings.uploads_path", str(tmp_path))
+    with pytest.raises(documents_service.DocumentNotFound):
+        documents_service.delete_document(db_session, document_id=999, user_id="u1")
+
+
+def test_delete_document_other_user_raises_not_found(db_session, monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "services.documents_service.pgvector_store.delete_document_chunks",
+        lambda db, document_id: 0,
+    )
+    monkeypatch.setattr("services.documents_service.settings.uploads_path", str(tmp_path))
+    doc = _seed_doc(db_session, user_id="owner", session_id="s_owner")
+    with pytest.raises(documents_service.DocumentNotFound):
+        documents_service.delete_document(db_session, document_id=doc.id, user_id="intruder")
+    # Row must remain intact.
+    assert db_session.get(Document, doc.id) is not None
+
+
+def test_delete_document_tolerates_missing_file(db_session, monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "services.documents_service.pgvector_store.delete_document_chunks",
+        lambda db, document_id: 0,
+    )
+    monkeypatch.setattr("services.documents_service.settings.uploads_path", str(tmp_path))
+    doc = _seed_doc(db_session)
+    # No file on disk.
+    documents_service.delete_document(db_session, document_id=doc.id, user_id="u1")
+    assert db_session.get(Document, doc.id) is None
+
+
+def test_delete_document_filename_traversal_is_contained(db_session, monkeypatch, tmp_path):
+    """A filename with an embedded ../ must not unlink a file outside uploads_path."""
+    monkeypatch.setattr(
+        "services.documents_service.pgvector_store.delete_document_chunks",
+        lambda db, document_id: 0,
+    )
+    uploads = tmp_path / "uploads"
+    uploads.mkdir()
+    monkeypatch.setattr("services.documents_service.settings.uploads_path", str(uploads))
+
+    # A file one level above the uploads dir that a traversal filename would target.
+    outside = tmp_path / "secret.txt"
+    outside.write_text("keep me")
+
+    doc = _seed_doc(db_session, filename="x/../../secret.txt")
+    documents_service.delete_document(db_session, document_id=doc.id, user_id="u1")
+
+    assert outside.exists(), "traversal escaped the uploads directory"
+    assert db_session.get(Document, doc.id) is None
+
+
+def test_delete_document_tolerates_unlink_oserror(db_session, monkeypatch, tmp_path):
+    """A locked/undeletable file (OSError on unlink) must not 500: the DB row and
+    chunks are still deleted and the call returns normally."""
+    monkeypatch.setattr(
+        "services.documents_service.pgvector_store.delete_document_chunks",
+        lambda db, document_id: 0,
+    )
+    monkeypatch.setattr("services.documents_service.settings.uploads_path", str(tmp_path))
+
+    doc = _seed_doc(db_session)
+    disk = tmp_path / f"{doc.id}_{doc.filename}"
+    disk.write_bytes(b"%PDF-fake")
+
+    import pathlib
+
+    def _raise(self, *a, **k):
+        raise PermissionError("locked")
+
+    monkeypatch.setattr(pathlib.Path, "unlink", _raise)
+
+    # Must not raise.
+    documents_service.delete_document(db_session, document_id=doc.id, user_id="u1")
+    assert db_session.get(Document, doc.id) is None
