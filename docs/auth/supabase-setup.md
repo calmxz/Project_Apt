@@ -157,3 +157,26 @@ Flows:
 
 No backend or database change is involved -- GoTrue handles email, token, and
 password update.
+
+## 8. Session lifetime (token expiry)
+
+The app uses short-lived access tokens (JWT, ~1hr default) backed by a
+long-lived refresh token. `persistSession: true` + `autoRefreshToken: true`
+(in `frontend/src/services/supabase.js`) keep the user logged in across app
+restarts and silently refresh the access token while a tab is open. Explicit
+sign-out clears the local session.
+
+To make a session eventually expire (low-sensitivity-app behavior) instead of
+living forever while it keeps refreshing, configure the Supabase dashboard:
+
+1. Supabase Dashboard -> Authentication -> Sessions.
+2. Set **Inactivity timeout** to **30 days**. A session not refreshed within
+   30 days expires. Adjust the value to taste.
+3. Leave **Time-box user sessions** (absolute max session duration) **unset**,
+   so an actively-used session is never force-logged-out mid-work.
+4. Keep **refresh token rotation** enabled (the Supabase default).
+5. Leave the **access token (JWT) expiry** at its default (~1hr).
+
+This is dashboard configuration only; there is no corresponding frontend code.
+The dashboard state is not version-controlled, so these steps are the
+reproducible record.
