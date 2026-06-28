@@ -18,6 +18,7 @@ from contracts import (
 )
 from db.database import get_db
 from db.models import Lesson, Subject
+from lib.error_codes import LESSON_HAS_SESSION, LESSON_NOT_FOUND, SUBJECT_NOT_FOUND
 from services import plan_service, subject_service
 from services.auth import current_user_id
 from services.session_enrichment import aware_utc as _aware_utc
@@ -126,7 +127,7 @@ def get_subject(
 ):
     subject = subject_service.get_subject(db, user_id, subject_id)
     if subject is None:
-        raise HTTPException(status_code=404, detail="subject not found")
+        raise HTTPException(status_code=404, detail=SUBJECT_NOT_FOUND)
     return _subject_detail(db, subject)
 
 
@@ -145,11 +146,12 @@ def update_subject(
         and req.archived is None
     ):
         raise HTTPException(status_code=400, detail="at least one field required")
+    # Defense-in-depth; the contract Literal already rejects bad values with 422.
     if req.duration_mode is not None and req.duration_mode not in ALLOWED_DURATION_MODE:
         raise HTTPException(status_code=400, detail="invalid duration_mode")
     subject = subject_service.get_subject(db, user_id, subject_id)
     if subject is None:
-        raise HTTPException(status_code=404, detail="subject not found")
+        raise HTTPException(status_code=404, detail=SUBJECT_NOT_FOUND)
     if req.title is not None:
         subject.title = req.title
     # Changing duration: the new mode pins one field; clear the other so exactly
@@ -189,7 +191,7 @@ def add_lesson(
 ):
     subject = subject_service.get_subject(db, user_id, subject_id)
     if subject is None:
-        raise HTTPException(status_code=404, detail="subject not found")
+        raise HTTPException(status_code=404, detail=SUBJECT_NOT_FOUND)
     lesson = subject_service.add_lesson(db, subject, req.title, req.goal)
     return _lesson_item(lesson)
 
@@ -207,7 +209,7 @@ def update_lesson(
         raise HTTPException(status_code=400, detail="invalid status")
     lesson = subject_service.get_lesson(db, user_id, lesson_id)
     if lesson is None:
-        raise HTTPException(status_code=404, detail="lesson not found")
+        raise HTTPException(status_code=404, detail=LESSON_NOT_FOUND)
     lesson = subject_service.patch_lesson(
         db, lesson, title=req.title, goal=req.goal, status=req.status, order_idx=req.order_idx
     )
@@ -223,11 +225,11 @@ def delete_lesson(
 ):
     lesson = subject_service.get_lesson(db, user_id, lesson_id)
     if lesson is None:
-        raise HTTPException(status_code=404, detail="lesson not found")
+        raise HTTPException(status_code=404, detail=LESSON_NOT_FOUND)
     try:
         subject_service.delete_lesson(db, lesson, force=force)
     except subject_service.LessonHasSessionError:
-        raise HTTPException(status_code=409, detail="lesson has a session")
+        raise HTTPException(status_code=409, detail=LESSON_HAS_SESSION)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -239,6 +241,7 @@ def open_lesson(
 ):
     lesson = subject_service.get_lesson(db, user_id, lesson_id)
     if lesson is None:
-        raise HTTPException(status_code=404, detail="lesson not found")
+        raise HTTPException(status_code=404, detail=LESSON_NOT_FOUND)
     session = subject_service.open_lesson(db, user_id, lesson)
+    db.refresh(lesson)
     return LessonOpenResponse(session_id=session.id, status=lesson.status)

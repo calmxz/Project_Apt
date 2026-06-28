@@ -237,3 +237,11 @@ def test_lesson_routes_404_cross_user(client, seeded_user, db_session):
     db_session.commit()
     assert client.patch(f"/api/lessons/{lid}?user_id=other", json={"status": "done"}).status_code == 404
     assert client.post(f"/api/lessons/{lid}/open?user_id=other").status_code == 404
+    assert client.delete(f"/api/lessons/{lid}?user_id=other").status_code == 404
+
+
+def test_patch_subject_404_cross_user(client, seeded_user, db_session):
+    sid = _create_blank(client).json()["id"]
+    db_session.add(User(id="other"))
+    db_session.commit()
+    assert client.patch(f"/api/subjects/{sid}?user_id=other", json={"archived": True}).status_code == 404

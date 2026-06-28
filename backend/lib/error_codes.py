@@ -7,3 +7,7 @@ toast copy).
 
 DAILY_CAP_REACHED = "daily_cap_reached"
 DAILY_COST_CAP_REACHED = "daily_cost_cap_reached"
+
+SUBJECT_NOT_FOUND = "subject_not_found"
+LESSON_NOT_FOUND = "lesson_not_found"
+LESSON_HAS_SESSION = "lesson_has_session"
