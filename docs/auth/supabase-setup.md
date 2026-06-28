@@ -1,6 +1,6 @@
 # Supabase Auth Setup
 
-AdaptLearn uses Supabase Auth with email + password sign-in. This doc is the
+Crux uses Supabase Auth with email + password sign-in. This doc is the
 end-to-end setup path for a fresh Supabase project, the env vars the app
 reads, and the JWT verification model.
 
@@ -49,7 +49,7 @@ pre-confirmed accounts that skip the inbox step:
 
 ## 3. Collect the four env vars
 
-AdaptLearn uses Supabase's **2025+ API key model** — `publishable` (frontend)
+Crux uses Supabase's **2025+ API key model** — `publishable` (frontend)
 + `secret` (backend). Legacy `anon` + `service_role` keys are not used.
 Enable the new keys at `Project Settings → API Keys` and rotate the legacy
 keys off after migration.
@@ -113,7 +113,7 @@ fill in real values locally, never commit.
 
 ## 6. RLS — not used
 
-Supabase Postgres ships with Row Level Security available. AdaptLearn does
+Supabase Postgres ships with Row Level Security available. Crux does
 **not** enable RLS. The backend uses `SUPABASE_SECRET_KEY` (or a direct
 `DATABASE_URL`) which bypasses RLS, and enforces ownership in application
 code via the `current_user_id` dependency + `session.user_id` checks already

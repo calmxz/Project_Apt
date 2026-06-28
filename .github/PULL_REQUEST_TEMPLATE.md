@@ -1,6 +1,6 @@
 # Phase N — Short Slug
 
-<!-- Replace N with the phase number from docs/AdaptLearn_DevPlan.md -->
+<!-- Replace N with the phase number from docs/Crux_DevPlan.md -->
 
 ## Summary
 
@@ -8,7 +8,7 @@
 
 ## DevPlan section
 
-Link or quote the relevant phase header from `docs/AdaptLearn_DevPlan.md`.
+Link or quote the relevant phase header from `docs/Crux_DevPlan.md`.
 
 ## Verification checklist
 
@@ -50,7 +50,7 @@ State the outcome: **Pass / Knowledge-only / First-turn-only / Fail** (Phase 0),
 - [ ] `npm run build` clean
 - [ ] No secrets committed (grep `.env`, API keys)
 - [ ] `CLAUDE.md` updated if architecture or commands changed
-- [ ] `docs/AdaptLearn_DevPlan.md` / `docs/AdaptLearn_Spec.md` updated if scope shifted
+- [ ] `docs/Crux_DevPlan.md` / `docs/Crux_Spec.md` updated if scope shifted
 - [ ] Memory observations recorded for surprising findings
 
 ## Notes

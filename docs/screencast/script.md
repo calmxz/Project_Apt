@@ -1,6 +1,6 @@
-# AdaptLearn screencast — 2 to 3 min walkthrough script
+# Crux screencast — 2 to 3 min walkthrough script
 
-Goal: show that AdaptLearn adapts. The hook is the profile view: at the end
+Goal: show that Crux adapts. The hook is the profile view: at the end
 the viewer sees concrete evidence the system learned something about the
 learner (mastered concepts, confirmed gaps, focus target).
 
@@ -19,7 +19,7 @@ Total target: **150-180 seconds**. Run a stopwatch.
 
 ### 1 (~10s) — Title
 
-> "AdaptLearn is an AI study companion that remembers what you've learned
+> "Crux is an AI study companion that remembers what you've learned
 > across sessions. Here's a two-minute tour."
 
 Card on screen: project name + "Phase 5 v1 walkthrough".

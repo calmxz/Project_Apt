@@ -1,4 +1,4 @@
-# CI Security Inventory — AdaptLearn
+# CI Security Inventory — Crux
 
 **Audience:** future maintainers ("why is this CI job here?")
 **Companion to:** [`SECURITY_REVIEW.md`](SECURITY_REVIEW.md) and `.github/workflows/ci.yml`.

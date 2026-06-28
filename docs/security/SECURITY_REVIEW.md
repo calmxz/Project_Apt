@@ -1,4 +1,4 @@
-# Security Review — AdaptLearn
+# Security Review — Crux
 
 **Date:** 2026-05-23
 **Branch:** `security/audit-2026-05-23`

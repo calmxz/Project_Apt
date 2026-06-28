@@ -1,4 +1,4 @@
-# Security Fix Plan — AdaptLearn
+# Security Fix Plan — Crux
 
 **Date:** 2026-05-23
 **Branch (this audit):** `security/audit-2026-05-23`

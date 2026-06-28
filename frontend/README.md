@@ -1,6 +1,6 @@
-# AdaptLearn frontend
+# Crux frontend
 
-The AdaptLearn web client: a Vue 3 + Vite + PrimeVue + Pinia single-page app.
+The Crux web client: a Vue 3 + Vite + PrimeVue + Pinia single-page app.
 See [`../README.md`](../README.md) for the full project (backend, API, deployment).
 
 ## Recommended IDE Setup

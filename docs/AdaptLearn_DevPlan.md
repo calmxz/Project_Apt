@@ -1,6 +1,6 @@
-# AdaptLearn — Development Plan
+# Crux — Development Plan
 
-Build plan for Claude Code. Sequential phases with verifiable checkpoints. Read this and `AdaptLearn_Spec.md` before starting any phase.
+Build plan for Claude Code. Sequential phases with verifiable checkpoints. Read this and `Crux_Spec.md` before starting any phase.
 
 ## Ground Rules
 

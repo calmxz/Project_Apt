@@ -1,10 +1,10 @@
 openapi: 3.1.0
 info:
-  title: AdaptLearn API
+  title: Crux API
   version: 0.1.0
-  summary: Backend contract for AdaptLearn v1 (Phases 2-5).
+  summary: Backend contract for Crux v1 (Phases 2-5).
   description: |
-    Source of truth for AdaptLearn HTTP contracts. Pydantic models under
+    Source of truth for Crux HTTP contracts. Pydantic models under
     `backend/contracts/` are generated from this document via
     `backend/scripts/gen_contracts.py`. Edit YAML, then regen.
 
