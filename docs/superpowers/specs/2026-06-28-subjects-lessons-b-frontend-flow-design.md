@@ -47,8 +47,14 @@ quick path. `/sessions` library view unchanged.
 A short multi-step flow (single view with steps, not separate routes):
 
 1. **Title** — "What subject do you want to learn?"
-2. **Duration** — `per_session_minutes` chips (15 / 30 / 60) + `timeline_days`
-   (e.g. 1 week / 2 weeks / 1 month). Show derived pace live ("~3 lessons/week").
+2. **Duration** — `per_session_minutes` chips (15 / 30 / 60), then a **toggle** that pins
+   either knob (`duration_mode`):
+   - *By deadline* → `timeline_days` chips (1 week / 2 weeks / 1 month); derived pace shown
+     live ("~3 lessons/week").
+   - *By pace* → `pace_per_week` stepper (e.g. 1-5 / week); derived finish horizon shown
+     live ("~3 weeks").
+   Only the pinned field is sent. The derived value is display-only and recomputes from
+   the lesson count (so it updates after the review/edit step changes the lesson list).
 3. **Plan source** — two buttons: *Draft a plan for me* (LLM) | *I'll add my own* (blank).
 4. **Review/edit plan**:
    - Draft path: show the LLM-proposed ordered lessons (title + goal). User can edit

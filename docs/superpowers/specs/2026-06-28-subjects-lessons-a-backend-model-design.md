@@ -41,14 +41,28 @@ Two new tables; one nullable column added to `sessions`.
 | `user_id` | str FK → users.id | not null |
 | `title` | str | the subject name, e.g. "Organic Chemistry" |
 | `per_session_minutes` | int | 15 / 30 / 60 — depth of a single sitting |
-| `timeline_days` | int NULL | study horizon; pace is **derived**, not stored |
+| `duration_mode` | str | `deadline` \| `pace` — which knob the user pinned (CheckConstraint) |
+| `timeline_days` | int NULL | set when `duration_mode='deadline'`; else NULL (derived) |
+| `pace_per_week` | int NULL | set when `duration_mode='pace'`; else NULL (derived) |
 | `created_at` | datetime(tz) | default now |
 | `archived_at` | datetime(tz) NULL | soft-archive; mirrors `sessions.ended_at` semantics |
 
-`pace_per_week` is **not stored** — it is computed for display as
-`ceil(lesson_count / max(timeline_days / 7, 1))`. Timeline is the primary knob.
-(If the user later prefers pace-primary, this flips to storing `pace_per_week` and
-deriving timeline; noted as a one-line change, not a redesign.)
+**Duration is a user-toggled pair.** The wizard lets the user pin *either* a deadline
+*or* a cadence; `duration_mode` records which. Exactly one of `timeline_days` /
+`pace_per_week` is populated (the pinned one); the other is **derived on read** from the
+**current** `lesson_count`, so it stays correct as Spec C plan-revision adds/removes
+lessons:
+
+```
+deadline mode (timeline_days pinned):
+    pace_per_week  = ceil(lesson_count / max(timeline_days / 7, 1))
+pace mode (pace_per_week pinned):
+    timeline_days  = ceil(lesson_count / max(pace_per_week, 1)) * 7
+```
+
+`per_session_minutes` is independent of this pair and always set. `GET /subjects/{id}`
+returns both the pinned and the derived value (plus `duration_mode`) so the frontend
+renders the toggle without recomputing.
 
 ### `lessons`
 
@@ -93,12 +107,15 @@ One Alembic migration: create `subjects`, create `lessons`, add `sessions.subjec
 
 ### `plan_service.py` (new)
 
-`draft_plan(db, user_id, title, per_session_minutes, timeline_days) -> list[LessonDraft]`
+`draft_plan(db, user_id, title, per_session_minutes, duration_mode, timeline_days, pace_per_week) -> list[LessonDraft]`
 
 - Takes the DB session (`db`) because the cost meter (`check_cap` / `record_cost`)
   requires it.
-- One LiteLLM call. Prompt asks for an ordered lesson list sized to the timeline and
-  per-session depth: each lesson = `{title, goal}`. Bounded (e.g. 3–12 lessons).
+- One LiteLLM call. Prompt sizes an ordered lesson list by `per_session_minutes` plus the
+  duration intent: in **deadline mode** it fits the lessons to `timeline_days`; in **pace
+  mode** there is no hard horizon, so it sizes by the subject's natural breadth (pace does
+  not cap total lessons — it only sets cadence). Each lesson = `{title, goal}`. Bounded
+  (e.g. 3–12 lessons) in both modes.
 - Routed through the existing **cost meter** (`services/cost_meter.py`) and daily cap —
   a draft is a metered LLM call like any tutor turn.
 - Returns drafts only; the route persists them. Deterministic fallback so **creation
@@ -125,11 +142,11 @@ New router `routes/subjects.py`:
 
 | Method + Path | Purpose |
 |---|---|
-| `POST /subjects/draft-plan` | **Preview only, no persist.** Body: `{title, per_session_minutes, timeline_days}`. Calls `plan_service.draft_plan` and returns `{lessons: [{title, goal}]}` for the wizard to review/edit before committing. Metered (counts against the cap like any LLM call). This is what powers Spec B's "review/edit plan" step. |
-| `POST /subjects` | Create subject. Body: `{title, per_session_minutes, timeline_days, lessons[]}`. Persists the subject and the supplied (already-reviewed) lessons; `lessons` may be empty (blank path). The wizard always sends the reviewed list — drafted-then-edited or hand-entered. (`mode=draft` server-side persist is retained as a non-wizard convenience/fallback that calls `draft_plan` itself.) |
+| `POST /subjects/draft-plan` | **Preview only, no persist.** Body: `{title, per_session_minutes, duration_mode, timeline_days?, pace_per_week?}` (the pinned duration field per mode). Calls `plan_service.draft_plan` and returns `{lessons: [{title, goal}]}` for the wizard to review/edit before committing. Metered (counts against the cap like any LLM call). Powers Spec B's "review/edit plan" step. |
+| `POST /subjects` | Create subject. Body: `{title, per_session_minutes, duration_mode, timeline_days?, pace_per_week?, lessons[]}` — exactly one of `timeline_days`/`pace_per_week` set per `duration_mode`. Persists the subject and the supplied (already-reviewed) lessons; `lessons` may be empty (blank path). The wizard always sends the reviewed list. (`mode=draft` server-side persist is retained as a non-wizard convenience/fallback that calls `draft_plan` itself.) |
 | `GET /subjects` | List the user's subjects (id, title, progress, archived). |
-| `GET /subjects/{id}` | Overview: subject fields + ordered lessons (with status + session_id) + progress counts. |
-| `PATCH /subjects/{id}` | Rename / set `timeline_days` / archive (`archived_at`). |
+| `GET /subjects/{id}` | Overview: subject fields (incl. `duration_mode` + both pinned and **derived** duration values) + ordered lessons (with status + session_id) + progress counts. |
+| `PATCH /subjects/{id}` | Rename / change duration (`duration_mode` + the matching pinned field) / archive (`archived_at`). |
 | `POST /subjects/{id}/lessons` | Add a lesson (blank/manual path, and Spec C plan-revision). Body: `{title, goal}`. Appends at end. |
 | `PATCH /lessons/{id}` | Edit `title`/`goal`/`status`/`order_idx`. Status→`done` is the "mark done" write. |
 | `DELETE /lessons/{id}` | Remove a lesson. If `session_id IS NULL` → delete. If it has a session → **409 by default** (don't silently orphan a chat); with `?force=true` the session is ended (`ended_at` set) and `session_id` cleared before the lesson is deleted. The `force` path is what makes Spec C's plan-revision delete-a-started-lesson achievable. |
