@@ -132,3 +132,28 @@ def test_delete_lesson_force_ends_session_and_deletes(db_session, seeded_user):
 def test_get_subject_cross_user_none(db_session, seeded_user):
     subj = _subject(db_session, [])
     assert subject_service.get_subject(db_session, "other", subj.id) is None
+
+
+def test_create_subject_auto_creates_user(db_session):
+    """Verify create_subject auto-creates the User row when it doesn't exist."""
+    fresh_user = "fresh_user"
+    # Ensure user does not exist
+    assert db_session.get(User, fresh_user) is None
+    # Call create_subject with a non-existent user
+    subj = subject_service.create_subject(
+        db_session, fresh_user, "T", 30, "deadline", 14, None, []
+    )
+    # Assert subject belongs to the fresh user
+    assert subj.user_id == fresh_user
+    # Assert user was auto-created
+    assert db_session.get(User, fresh_user) is not None
+
+
+def test_get_lesson_cross_user_none(db_session, seeded_user):
+    """Verify get_lesson returns None on cross-user access."""
+    subj = _subject(db_session, [LessonDraft(title="Test Lesson", goal="goal")])
+    lesson = subject_service.list_lessons(db_session, subj.id)[0]
+    # Cross-user access should return None
+    assert subject_service.get_lesson(db_session, "other_user", lesson.id) is None
+    # Same-user access should return the lesson
+    assert subject_service.get_lesson(db_session, USER_ID, lesson.id) is not None
