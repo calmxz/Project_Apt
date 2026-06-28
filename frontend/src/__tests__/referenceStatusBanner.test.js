@@ -111,6 +111,22 @@ describe('ReferenceStatusBanner', () => {
     expect(showSuccess).toHaveBeenCalled()
   })
 
+  it('styles confirm buttons: a darker destructive accept and a neutral, non-coral cancel', async () => {
+    getSessionIngestion.mockResolvedValue({
+      status: 'ready',
+      documents: [{ id: 1, filename: 'a.pdf', status: 'ready' }],
+    })
+    const wrapper = mount(ReferenceStatusBanner, { props: { sessionId: 's1' } })
+    await flushPromises()
+    await wrapper.get('[data-testid="ref-toggle"]').trigger('click')
+    await wrapper.get('[data-testid="ref-delete-1"]').trigger('click')
+    // Accept carries the darker-delete hook class (styled globally).
+    expect(lastConfirm.acceptClass).toContain('confirm-delete-strong')
+    // Cancel must opt out of the default primary (coral) fill.
+    expect(lastConfirm.rejectClass).toContain('p-button-secondary')
+    expect(lastConfirm.rejectClass).not.toContain('p-button-danger')
+  })
+
   it('does not delete when confirm is rejected', async () => {
     getSessionIngestion.mockResolvedValue({
       status: 'ready',

@@ -316,3 +316,16 @@ body.sb-scroll-lock {
     scroll-behavior: auto !important;
   }
 }
+
+/* Destructive confirm accept (delete-file dialog). A touch darker than the
+   default danger red so it reads as the heavier action. ConfirmDialog teleports
+   to <body>, so this must be global, not scoped to the banner. base.css sits
+   outside PrimeVue's cascade layer, so it wins without !important. */
+.p-button.confirm-delete-strong {
+  background: #dc2626;
+  border-color: #dc2626;
+}
+.p-button.confirm-delete-strong:hover {
+  background: #b91c1c;
+  border-color: #b91c1c;
+}

@@ -24,12 +24,12 @@ function persist(value) {
 
 function applyAttribute(resolved) {
   if (typeof document === 'undefined') return
-  const root = document.documentElement
-  if (override.value === 'auto') {
-    root.removeAttribute('data-theme')
-  } else {
-    root.setAttribute('data-theme', resolved)
-  }
+  // Always pin data-theme to the resolved value, including in auto mode.
+  // PrimeVue overlays (ConfirmDialog/Toast, teleported to <body>) only adopt
+  // dark styling via the [data-theme="dark"] selector. Stripping the attribute
+  // in auto mode left those overlays light while the app tokens went dark via
+  // the prefers-color-scheme fallback in base.css.
+  document.documentElement.setAttribute('data-theme', resolved)
 }
 
 const resolved = computed(() => {
