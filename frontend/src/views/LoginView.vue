@@ -3,7 +3,7 @@
     <header class="head">
       <Logo size="lg" variant="mark-only" />
       <span class="folio">sign in</span>
-      <h1 class="title">Welcome to AdaptLearn</h1>
+      <h1 class="title">Welcome to Crux</h1>
       <p class="lede">Sign in with your email and password.</p>
     </header>
 

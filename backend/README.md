@@ -1,4 +1,4 @@
-# AdaptLearn Backend
+# Crux Backend
 
 FastAPI + Supabase Postgres (pgvector). Python 3.12+.
 

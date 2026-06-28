@@ -1,6 +1,6 @@
 <div align="center">
 
-# AdaptLearn
+# Crux
 
 **An adaptive AI study companion that learns how _you_ learn.**
 
@@ -13,9 +13,9 @@ Pick a topic, drop in your course PDFs, and chat with a tutor that builds a live
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
 [![pgvector](https://img.shields.io/badge/pgvector-0.8.x-336791.svg)](https://github.com/pgvector/pgvector)
 
-[**Screencast walkthrough**](docs/screencast/adaptlearn-walkthrough.mp4) · [**Design doc**](docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md) · [**API spec**](docs/api/openapi.yaml)
+[**Screencast walkthrough**](docs/screencast/crux-walkthrough.mp4) · [**Design doc**](docs/superpowers/specs/2026-05-03-crux-v1-design.md) · [**API spec**](docs/api/openapi.yaml)
 
-![AdaptLearn hero](docs/assets/hero.png)
+![Crux hero](docs/assets/hero.png)
 
 </div>
 
@@ -44,7 +44,7 @@ Pick a topic, drop in your course PDFs, and chat with a tutor that builds a live
 
 ## About
 
-Most "AI tutors" today are a chat box bolted onto a generic LLM. They ask the same opening question on turn 1 and turn 100, and they have no idea what you've already mastered. AdaptLearn is different.
+Most "AI tutors" today are a chat box bolted onto a generic LLM. They ask the same opening question on turn 1 and turn 100, and they have no idea what you've already mastered. Crux is different.
 
 **What it does.** You pick a topic ("Discrete Math", "Photosynthesis", "Vector Calculus") and have an ongoing conversation with a tutor agent. Every turn, the agent updates a structured profile of your knowledge — your current level, the gaps you've confirmed, the concepts you've demonstrated mastery of, and the one gap it's currently focused on. The next question is conditioned on that profile, not a blank slate.
 
@@ -53,7 +53,7 @@ Most "AI tutors" today are a chat box bolted onto a generic LLM. They ask the sa
 - **Self-learners** working through a textbook who want to be quizzed adaptively, not linearly.
 - **Educators / EdTech researchers** interested in tool-augmented LLM tutors with verifiable state.
 
-**Why it exists.** AdaptLearn is a demonstration of how structured tool calls and server-side guard rails can keep an LLM honest — no hallucinated mastery, no silent context loss, no fabricated citations.
+**Why it exists.** Crux is a demonstration of how structured tool calls and server-side guard rails can keep an LLM honest — no hallucinated mastery, no silent context loss, no fabricated citations.
 
 ## Features
 
@@ -127,7 +127,7 @@ The agent has three tools, no more:
 | `update_topic_profile(...)` | Patch the learner's topic profile; clearing `focus_target_gap` requires `focus_clear_reason` |
 | `record_learning_event(session_id, gap_tested, question, correct)` | Logs check-question outcomes; incorrect retest on a mastered concept demotes it server-side |
 
-The system prompt is split: an immutable rules block (`backend/agent/prompts.py`) plus dynamic context rebuilt per turn. Splitting keeps the immutable half cache-friendly. Full detail in [the design doc §3.3](docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md).
+The system prompt is split: an immutable rules block (`backend/agent/prompts.py`) plus dynamic context rebuilt per turn. Splitting keeps the immutable half cache-friendly. Full detail in [the design doc §3.3](docs/superpowers/specs/2026-05-03-crux-v1-design.md).
 
 ## Prerequisites
 
@@ -466,8 +466,8 @@ Project_Apt/
 │   ├── api/openapi.yaml        API contract (codegen source)
 │   ├── deploy/ngrok.md         Public demo deploy guide
 │   ├── screencast/             Walkthrough script + recorded video
-│   ├── AdaptLearn_Spec.md      Original spec (v2 reference)
-│   └── AdaptLearn_DevPlan.md   Original dev plan (v2 reference)
+│   ├── Crux_Spec.md      Original spec (v2 reference)
+│   └── Crux_DevPlan.md   Original dev plan (v2 reference)
 ├── spike/                      Phase 0 validation spike (preserved)
 ├── frontend/
 │   ├── src/
@@ -574,7 +574,7 @@ git commit
 
 ## Roadmap
 
-AdaptLearn v1 is feature-complete. Possible v2 directions:
+Crux v1 is feature-complete. Possible v2 directions:
 
 - **OAuth / social login.** Add Google/GitHub sign-in alongside email/password.
 - **Mobile-friendly redesign.** The current SPA is desktop-first; an adaptive layout for phones is on the wishlist.
@@ -652,7 +652,7 @@ Distributed under the **MIT License**. See [LICENSE](LICENSE) for the full text.
 
 ## Acknowledgements
 
-AdaptLearn stands on the shoulders of a lot of excellent open-source work:
+Crux stands on the shoulders of a lot of excellent open-source work:
 
 - [**FastAPI**](https://fastapi.tiangolo.com/) — backend framework.
 - [**Vue 3**](https://vuejs.org/) + [**Vite**](https://vitejs.dev/) + [**Pinia**](https://pinia.vuejs.org/) + [**PrimeVue**](https://primevue.org/) — frontend stack.

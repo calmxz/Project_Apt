@@ -1,10 +1,10 @@
-# AdaptLearn v1 — Design
+# Crux v1 — Design
 
 **Date:** 2026-05-03
 **Status:** Approved (brainstorm phase)
 **Goal:** Portfolio-grade adaptive AI tutor with RAG. Full app + recorded walkthrough. 6-week public deadline.
 
-This document supersedes `AdaptLearn_Spec.md` and `AdaptLearn_DevPlan.md` for v1 scope. The originals remain as reference for v2 features.
+This document supersedes `Crux_Spec.md` and `Crux_DevPlan.md` for v1 scope. The originals remain as reference for v2 features.
 
 > **Infrastructure reconciled 2026-05-30 (factual, not design-intent):** the
 > shipped code diverges from this doc's original stack. Current truth: vector

@@ -1,4 +1,4 @@
-# AdaptLearn debug accounts — TEMPLATE (committed, placeholders only).
+# Crux debug accounts — TEMPLATE (committed, placeholders only).
 #
 # Copy this file to docs/dev/debug-accounts.txt (gitignored) and replace the
 # values with throwaway dev credentials, then seed them into Supabase Auth:
@@ -12,5 +12,5 @@
 # Format: one account per line as  email,password
 # Blank lines and lines starting with # are ignored.
 
-debug1@adaptlearn.test,ChangeMe-Dev1
-debug2@adaptlearn.test,ChangeMe-Dev2
+debug1@crux.test,ChangeMe-Dev1
+debug2@crux.test,ChangeMe-Dev2

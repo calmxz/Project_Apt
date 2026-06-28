@@ -491,6 +491,7 @@ function goHome() {
 }
 
 .session {
+  width: 100%;
   max-width: 64rem;
   margin: 0 auto;
   display: flex;
@@ -529,6 +530,10 @@ function goHome() {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  /* Reserve the scrollbar gutter whether or not the chat overflows, so the
+     message column is the same fixed width in every session. Without this, a
+     scrolling session loses ~10px to the scrollbar that a short one keeps. */
+  scrollbar-gutter: stable;
   padding: 0.5rem 0.25rem;
   scrollbar-width: thin;
   scrollbar-color: var(--color-border-strong) transparent;

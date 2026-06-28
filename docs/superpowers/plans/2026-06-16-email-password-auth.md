@@ -34,7 +34,7 @@
 - `frontend/src/__tests__/router.test.js` — add `/register` route + public-access cases.
 - `.gitignore` — ignore `docs/dev/debug-accounts.txt`.
 - `docs/auth/supabase-setup.md` — provider section: password + confirm-email; document seed + debug files.
-- `docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md` — Auth constraint line magic-link -> email/password.
+- `docs/superpowers/specs/2026-05-03-crux-v1-design.md` — Auth constraint line magic-link -> email/password.
 
 **Created:**
 - `frontend/src/views/RegisterView.vue` — registration form.
@@ -343,7 +343,7 @@ Replace the whole `frontend/src/views/LoginView.vue` with:
     <header class="head">
       <Logo size="lg" variant="mark-only" />
       <span class="folio">sign in</span>
-      <h1 class="title">Welcome to AdaptLearn</h1>
+      <h1 class="title">Welcome to Crux</h1>
       <p class="lede">Sign in with your email and password.</p>
     </header>
 
@@ -725,7 +725,7 @@ Create `frontend/src/views/RegisterView.vue`:
     <header class="head">
       <Logo size="lg" variant="mark-only" />
       <span class="folio">create account</span>
-      <h1 class="title">Join AdaptLearn</h1>
+      <h1 class="title">Join Crux</h1>
       <p class="lede">Register with your email and a password.</p>
     </header>
 
@@ -1316,7 +1316,7 @@ docs/dev/debug-accounts.txt
 Create `docs/dev/debug-accounts.example.txt`:
 
 ```text
-# AdaptLearn debug accounts — TEMPLATE (committed, placeholders only).
+# Crux debug accounts — TEMPLATE (committed, placeholders only).
 #
 # Copy this file to docs/dev/debug-accounts.txt (gitignored) and replace the
 # values with throwaway dev credentials, then seed them into Supabase Auth:
@@ -1330,8 +1330,8 @@ Create `docs/dev/debug-accounts.example.txt`:
 # Format: one account per line as  email,password
 # Blank lines and lines starting with # are ignored.
 
-debug1@adaptlearn.test,ChangeMe-Dev1
-debug2@adaptlearn.test,ChangeMe-Dev2
+debug1@crux.test,ChangeMe-Dev1
+debug2@crux.test,ChangeMe-Dev2
 ```
 
 - [ ] **Step 3: Create the local (gitignored) real file**
@@ -1339,10 +1339,10 @@ debug2@adaptlearn.test,ChangeMe-Dev2
 Create `docs/dev/debug-accounts.txt` with the same two lines as the example (these are throwaway dev creds; edit later as needed):
 
 ```text
-# AdaptLearn debug accounts — LOCAL, gitignored. DEV ONLY, throwaway creds.
+# Crux debug accounts — LOCAL, gitignored. DEV ONLY, throwaway creds.
 # Format: email,password  (blank lines and # comments ignored)
-debug1@adaptlearn.test,ChangeMe-Dev1
-debug2@adaptlearn.test,ChangeMe-Dev2
+debug1@crux.test,ChangeMe-Dev1
+debug2@crux.test,ChangeMe-Dev2
 ```
 
 - [ ] **Step 4: Verify the real file is ignored**
@@ -1366,7 +1366,7 @@ git commit -m "chore(auth): debug-accounts template + gitignore real creds file"
 
 **Files:**
 - Modify: `docs/auth/supabase-setup.md`
-- Modify: `docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md`
+- Modify: `docs/superpowers/specs/2026-05-03-crux-v1-design.md`
 
 - [ ] **Step 1: Update the Supabase provider section**
 
@@ -1426,23 +1426,23 @@ In `docs/auth/supabase-setup.md`, in `## 5. How verification works`, replace the
 In `docs/auth/supabase-setup.md`, replace line 3:
 
 ```markdown
-Phase 7 wires AdaptLearn to Supabase Auth (magic-link only). This doc is the
+Phase 7 wires Crux to Supabase Auth (magic-link only). This doc is the
 ```
 
 with:
 
 ```markdown
-AdaptLearn uses Supabase Auth with email + password sign-in. This doc is the
+Crux uses Supabase Auth with email + password sign-in. This doc is the
 ```
 
 - [ ] **Step 4: Update the design spec constraint line**
 
-In `docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md`, find the Auth constraint row containing `Supabase magic-link (JWT)` and replace `Supabase magic-link (JWT)` with `Supabase email/password (JWT)`. Find the out-of-scope note referencing `Supabase magic-link JWT` and replace `magic-link JWT` with `email/password JWT`.
+In `docs/superpowers/specs/2026-05-03-crux-v1-design.md`, find the Auth constraint row containing `Supabase magic-link (JWT)` and replace `Supabase magic-link (JWT)` with `Supabase email/password (JWT)`. Find the out-of-scope note referencing `Supabase magic-link JWT` and replace `magic-link JWT` with `email/password JWT`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add docs/auth/supabase-setup.md docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md
+git add docs/auth/supabase-setup.md docs/superpowers/specs/2026-05-03-crux-v1-design.md
 git commit -m "docs(auth): document email/password provider + debug account seeding"
 ```
 

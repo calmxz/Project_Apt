@@ -1,6 +1,6 @@
 import { computed, readonly, ref } from 'vue'
 
-const STORAGE_KEY = 'adaptlearn:theme:v1'
+const STORAGE_KEY = 'crux:theme:v1'
 const VALID = ['light', 'dark', 'auto']
 
 const override = ref(loadInitial())

@@ -33,7 +33,7 @@ defineProps({
         opacity="0.55"
       />
     </svg>
-    <span v-if="variant === 'full'" class="logo-name">AdaptLearn</span>
+    <span v-if="variant === 'full'" class="logo-name">Crux</span>
   </span>
 </template>
 

@@ -1,7 +1,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
 const BREAKPOINT = 1280
-const LS_KEY = 'adaptlearn.sidebar.expanded'
+const LS_KEY = 'crux.sidebar.expanded'
 
 const viewport = ref(typeof window !== 'undefined' ? window.innerWidth : BREAKPOINT)
 const desktopExpanded = ref(_readPersisted())

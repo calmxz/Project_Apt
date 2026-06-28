@@ -6,7 +6,7 @@ import { defineStore } from 'pinia'
 // completion — keyed off Supabase userId at the auth-store boundary, not
 // here. The legacy `userId` field has been removed.
 
-const STORAGE_KEY = 'adaptlearn:user:v1'
+const STORAGE_KEY = 'crux:user:v1'
 
 export const useUserStore = defineStore('user', () => {
   const name = ref(null)

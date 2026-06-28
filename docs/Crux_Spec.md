@@ -1,4 +1,4 @@
-# AdaptLearn
+# Crux
 
 **Adaptive AI Study Companion — Project Specification**
 

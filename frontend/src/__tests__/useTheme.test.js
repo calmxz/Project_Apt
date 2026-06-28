@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
-const STORAGE_KEY = 'adaptlearn:theme:v1'
+const STORAGE_KEY = 'crux:theme:v1'
 
 describe('useTheme', () => {
   beforeEach(() => {

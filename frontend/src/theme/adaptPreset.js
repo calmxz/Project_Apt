@@ -1,4 +1,4 @@
-// AdaptLearn PrimeVue theme preset.
+// Crux PrimeVue theme preset.
 //
 // Extracted from main.js so the configuration is importable/testable without
 // booting the app (main.js calls bootstrap() at module load).

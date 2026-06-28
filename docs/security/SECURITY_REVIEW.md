@@ -1,11 +1,11 @@
-# Security Review — AdaptLearn
+# Security Review — Crux
 
 **Date:** 2026-05-23
 **Branch:** `security/audit-2026-05-23`
 **Scope:** Backend (FastAPI + SQLite + ChromaDB + LiteLLM), frontend (Vue 3 + Vite + Pinia + PrimeVue), Docker compose, CI workflows, configs.
 **Threat model:** Personal project, 5-10 trusted friends. Realistic risks = secret leakage, cross-user data exposure, prompt injection, and unauthenticated/unbounded endpoints that run up paid LLM/embedding bills. Enterprise-scale concerns (DDoS, multi-region, SOC2) are out of scope.
 
-> **Important context:** the v1 design (`docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md:23`) explicitly locks `Auth | None (localStorage userId) | v1 scope`. Findings therefore down-rank or omit "Firebase ID-token verification missing" as such; the audit instead targets cost-abuse, input bounds, soft cross-user data hygiene, CORS, path traversal, and error leakage. See `Notes on scope calibration` at the end.
+> **Important context:** the v1 design (`docs/superpowers/specs/2026-05-03-crux-v1-design.md:23`) explicitly locks `Auth | None (localStorage userId) | v1 scope`. Findings therefore down-rank or omit "Firebase ID-token verification missing" as such; the audit instead targets cost-abuse, input bounds, soft cross-user data hygiene, CORS, path traversal, and error leakage. See `Notes on scope calibration` at the end.
 
 > **Scope recalibration (2026-05-23, Phase 6):** v1 release-target shifted from
 > trusted-friends to public deploy after the audit landed. Phase 6 hardens CI;
@@ -167,7 +167,7 @@ The following were inspected and no issue was found.
 - **Tracked secrets** — repo-wide grep for `sk-ant-`, `sk-proj-`, `sk-`, `AIza`, `-----BEGIN PRIVATE KEY-----`, `-----BEGIN RSA PRIVATE KEY-----`, `eyJ` returned only documentation/placeholders (e.g. `README.md` teaches the `AIza...` prefix shape but contains no real key). `git ls-files` for `.env*`, `*.key`, `*.pem`, `*.crt`, `service-account*.json`, `firebase-*.json` returned nothing tracked.
 - **Frontend secret bundle** — no Firebase SDK in `frontend/package.json` (no `@firebase/*`); only `VITE_API_BASE_URL` is read on the client (`frontend/src/services/apiClient.js:5`, `frontend/src/services/uploadApi.js:3`); `frontend/vite.config.js` has no `define` or `envPrefix` override.
 - **XSS** — no `v-html`, `innerHTML`, `dangerouslySetInnerHTML`, `eval`, or `new Function` anywhere in `frontend/src/`. Chat content rendered via `{{ m.content }}` (`frontend/src/views/SessionView.vue:120`), auto-escaped. No markdown / HTML renderer (no `marked` / `markdown-it` / `DOMPurify` in `package.json`) so no sanitization gap to plug.
-- **Token storage** — `frontend/src/stores/user.js:20-61` stores only display state (`userId`, `name`, `interactionPreferences`, `onboardingComplete`) in `localStorage` under `adaptlearn:user:v1`. No API token stored anywhere. `resetOnboarding()` clears the key on logout.
+- **Token storage** — `frontend/src/stores/user.js:20-61` stores only display state (`userId`, `name`, `interactionPreferences`, `onboardingComplete`) in `localStorage` under `crux:user:v1`. No API token stored anywhere. `resetOnboarding()` clears the key on logout.
 - **ChromaDB exposure (prod)** — `docker-compose.prod.yml:45-49` uses `expose:` (network-only), no host port binding. ChromaDB unreachable from outside the docker network.
 - **Per-session ChromaDB isolation** — `backend/services/chroma_client.py:11-16` creates `session_{session_id}` collections. Retrieval (`backend/services/retrieval_service.py:54-55`) and ingestion (`backend/services/ingestion_service.py:82-90`) both scope by session — no cross-session retrieval bleed by design.
 - **Backend port exposure (prod)** — `docker-compose.prod.yml:17` uses `expose: ["8000"]`. Backend not reachable from host; only via nginx reverse proxy.

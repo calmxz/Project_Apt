@@ -1,4 +1,4 @@
-# Deploying AdaptLearn locally + exposing via ngrok
+# Deploying Crux locally + exposing via ngrok
 
 The Phase 5 deploy story is intentionally tiny: a production-style Docker stack
 on your laptop, optionally exposed to the public internet through ngrok. No

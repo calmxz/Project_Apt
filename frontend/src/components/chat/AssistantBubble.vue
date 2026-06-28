@@ -76,6 +76,7 @@ defineProps({
   flex-direction: column;
   gap: 0.3rem;
   min-width: 0;
+  flex: 1 1 auto;
   max-width: calc(100% - 2.6rem);
 }
 
@@ -98,8 +99,9 @@ defineProps({
 }
 
 .msg.assistant {
-  align-self: flex-start;
-  max-width: 95%;
+  align-self: stretch;
+  width: 100%;
+  max-width: 100%;
 }
 
 .msg.assistant .content {
