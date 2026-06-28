@@ -22,7 +22,7 @@ test.describe.skip('onboarding to chat', () => {
 
     // Router guard should bounce / -> /onboarding for unauth'd user.
     await expect(page).toHaveURL(/\/onboarding$/)
-    await expect(page.getByText('Welcome to AdaptLearn')).toBeVisible()
+    await expect(page.getByText('Welcome to Crux')).toBeVisible()
 
     await page.getByTestId('onboarding-name').fill('Eddy')
     await page.getByTestId('onboarding-submit').click()

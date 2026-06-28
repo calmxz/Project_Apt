@@ -3,7 +3,7 @@
     <header class="head">
       <Logo size="lg" variant="mark-only" />
       <span class="folio">create account</span>
-      <h1 class="title">Join AdaptLearn</h1>
+      <h1 class="title">Join Crux</h1>
       <p class="lede">Register with your email and a password.</p>
     </header>
 

@@ -3,7 +3,7 @@
     <header class="head">
       <Logo size="lg" variant="mark-only" />
       <span class="folio">welcome</span>
-      <h1 class="title">Welcome to AdaptLearn.</h1>
+      <h1 class="title">Welcome to Crux.</h1>
       <p class="lede">Tell us how you like to learn — we'll tune the tutor before you begin.</p>
     </header>
 

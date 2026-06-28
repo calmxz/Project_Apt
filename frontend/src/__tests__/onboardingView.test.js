@@ -30,7 +30,7 @@ describe('OnboardingView', () => {
   it('renders the welcome heading', () => {
     const wrapper = mount(OnboardingView, { global: { stubs } })
     expect(wrapper.text()).toContain('Welcome to')
-    expect(wrapper.text()).toContain('AdaptLearn')
+    expect(wrapper.text()).toContain('Crux')
   })
 
   it('submit completes onboarding and routes home', async () => {

@@ -170,7 +170,7 @@ function onNewSession() {
         v-if="isExpanded"
         to="/"
         class="sb-brand"
-        aria-label="AdaptLearn home"
+        aria-label="Crux home"
         @click="closeDrawer"
       >
         <Logo size="md" variant="full" />

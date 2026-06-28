@@ -18,7 +18,7 @@ const { openDrawer } = useSidebar()
     >
       <i class="pi pi-bars" />
     </button>
-    <RouterLink to="/" class="sb-strip-brand" aria-label="AdaptLearn home">
+    <RouterLink to="/" class="sb-strip-brand" aria-label="Crux home">
       <Logo size="sm" variant="full" />
     </RouterLink>
     <div class="sb-strip-actions">
