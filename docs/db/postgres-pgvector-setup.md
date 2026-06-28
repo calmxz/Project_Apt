@@ -123,16 +123,16 @@ straight off this table.
 For backend pytest against a real Postgres (instead of mocked):
 
 ```bash
-docker run -d --name adaptlearn-test-pg \
+docker run -d --name crux-test-pg \
   -e POSTGRES_PASSWORD=test \
-  -e POSTGRES_DB=adaptlearn_test \
+  -e POSTGRES_DB=crux_test \
   -p 55432:5432 \
   pgvector/pgvector:pg16
 
-DATABASE_URL=postgresql+psycopg://postgres:test@127.0.0.1:55432/adaptlearn_test \
+DATABASE_URL=postgresql+psycopg://postgres:test@127.0.0.1:55432/crux_test \
   alembic upgrade head
 
-DATABASE_URL=postgresql+psycopg://postgres:test@127.0.0.1:55432/adaptlearn_test \
+DATABASE_URL=postgresql+psycopg://postgres:test@127.0.0.1:55432/crux_test \
   pytest
 ```
 

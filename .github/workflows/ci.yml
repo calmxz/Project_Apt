@@ -152,15 +152,15 @@ jobs:
           SEMGREP_RULES: "p/owasp-top-ten p/security-audit"
 
       - name: Build backend image (for trivy)
-        run: docker build -t adaptlearn-backend:ci backend
+        run: docker build -t crux-backend:ci backend
 
       - name: Build frontend image (for trivy)
-        run: docker build -t adaptlearn-frontend:ci frontend
+        run: docker build -t crux-frontend:ci frontend
 
       - name: trivy (backend image, CRITICAL only)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: adaptlearn-backend:ci
+          image-ref: crux-backend:ci
           format: table
           exit-code: '1'
           severity: CRITICAL
@@ -169,7 +169,7 @@ jobs:
       - name: trivy (frontend image, CRITICAL only)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: adaptlearn-frontend:ci
+          image-ref: crux-frontend:ci
           format: table
           exit-code: '1'
           severity: CRITICAL

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { defineComponent, h } from 'vue'
 import { mount } from '@vue/test-utils'
 
-const LS_KEY = 'adaptlearn.sidebar.expanded'
+const LS_KEY = 'crux.sidebar.expanded'
 const BREAKPOINT = 1280
 
 function setViewport(width) {

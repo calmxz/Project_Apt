@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useUserStore } from '@/stores/user.js'
 
-const STORAGE_KEY = 'adaptlearn:user:v1'
+const STORAGE_KEY = 'crux:user:v1'
 
 describe('user store', () => {
   beforeEach(() => {

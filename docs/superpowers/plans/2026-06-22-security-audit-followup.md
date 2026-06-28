@@ -41,15 +41,15 @@ Read the current file first (`frontend/nginx.conf`) to find the `server {` block
 ```bash
 cd frontend
 npm run build
-docker build -t adaptlearn-frontend-csp .
+docker build -t crux-frontend-csp .
 cd ..
 ```
-Expected: both commands exit 0. The `docker build` produces an image tagged `adaptlearn-frontend-csp`.
+Expected: both commands exit 0. The `docker build` produces an image tagged `crux-frontend-csp`.
 
 - [ ] **Step 3: Run the image standalone and confirm headers are present**
 
 ```bash
-docker run -d --name csp-test -p 8090:8080 adaptlearn-frontend-csp
+docker run -d --name csp-test -p 8090:8080 crux-frontend-csp
 sleep 1
 curl -sI http://localhost:8090/ | grep -iE "content-security-policy|x-frame-options|x-content-type-options|referrer-policy|strict-transport-security"
 ```
@@ -69,8 +69,8 @@ If Step 4 found violations, edit the `Content-Security-Policy` line in `frontend
 
 ```bash
 docker stop csp-test && docker rm csp-test
-cd frontend && docker build -t adaptlearn-frontend-csp . && cd ..
-docker run -d --name csp-test -p 8090:8080 adaptlearn-frontend-csp
+cd frontend && docker build -t crux-frontend-csp . && cd ..
+docker run -d --name csp-test -p 8090:8080 crux-frontend-csp
 ```
 
 Repeat Step 4 until the console is clean.
@@ -79,7 +79,7 @@ Repeat Step 4 until the console is clean.
 
 ```bash
 docker stop csp-test && docker rm csp-test
-docker image rm adaptlearn-frontend-csp
+docker image rm crux-frontend-csp
 ```
 
 - [ ] **Step 7: Commit**

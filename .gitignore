@@ -56,7 +56,7 @@ frontend/playwright-report/
 frontend/.auth/
 
 # Orphaned old scaffold dir (node_modules lock prevents deletion while VS Code is open)
-adaptlearn/
+crux/
 
 # Editors / OS
 .vscode/*

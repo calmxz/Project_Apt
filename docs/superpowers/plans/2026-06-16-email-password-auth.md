@@ -1330,8 +1330,8 @@ Create `docs/dev/debug-accounts.example.txt`:
 # Format: one account per line as  email,password
 # Blank lines and lines starting with # are ignored.
 
-debug1@adaptlearn.test,ChangeMe-Dev1
-debug2@adaptlearn.test,ChangeMe-Dev2
+debug1@crux.test,ChangeMe-Dev1
+debug2@crux.test,ChangeMe-Dev2
 ```
 
 - [ ] **Step 3: Create the local (gitignored) real file**
@@ -1341,8 +1341,8 @@ Create `docs/dev/debug-accounts.txt` with the same two lines as the example (the
 ```text
 # Crux debug accounts — LOCAL, gitignored. DEV ONLY, throwaway creds.
 # Format: email,password  (blank lines and # comments ignored)
-debug1@adaptlearn.test,ChangeMe-Dev1
-debug2@adaptlearn.test,ChangeMe-Dev2
+debug1@crux.test,ChangeMe-Dev1
+debug2@crux.test,ChangeMe-Dev2
 ```
 
 - [ ] **Step 4: Verify the real file is ignored**

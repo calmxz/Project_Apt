@@ -56,11 +56,11 @@ Zero infrastructure. Just a Python script calling the LLM API with the tutor pro
 ### Tasks
 
 1. Phase 0 spike is deferred (see §Phase 0). Don't delete `spike/` — it isn't there.
-2. `npm create vue@latest adaptlearn -- --router --pinia --vitest --eslint --prettier` (no TypeScript).
-3. `cd adaptlearn && npm install`.
+2. `npm create vue@latest crux -- --router --pinia --vitest --eslint --prettier` (no TypeScript).
+3. `cd crux && npm install`.
 4. `npm install firebase primevue primeicons @primeuix/themes`.
 5. `src/firebase.js` initializes from `.env.local` and connects to emulators when `VITE_USE_EMULATOR=true`. Exports `db`, `storage`, `functions`.
-6. `.env.local` (gitignored) with `VITE_USE_EMULATOR=true`, `VITE_FIREBASE_PROJECT_ID=demo-adaptlearn`. `.env.example` checked in.
+6. `.env.local` (gitignored) with `VITE_USE_EMULATOR=true`, `VITE_FIREBASE_PROJECT_ID=demo-crux`. `.env.example` checked in.
 7. Set up PrimeVue (Aura preset) in `src/main.js`.
 8. `src/App.vue` with top nav (title + settings icon) + `<router-view />`.
 9. Route stubs in `src/router/index.js`: `/`, `/onboarding`, `/settings`, `/new`, `/session/:id`, `/session/:id/profile`. Stub views in `src/views/`.
@@ -75,7 +75,7 @@ Zero infrastructure. Just a Python script calling the LLM API with the tutor pro
 
 - `npm run dev` clean; route stubs render placeholders. No console errors.
 - `docker compose up emulator` starts the suite; UI reachable at `localhost:4000`.
-- `curl http://localhost:5001/demo-adaptlearn/us-central1/health_check` returns 200 with ADK version.
+- `curl http://localhost:5001/demo-crux/us-central1/health_check` returns 200 with ADK version.
 - `npm run test:unit -- --run` passes (frontend smoke).
 - `pytest functions/tests` passes (functions smoke).
 - GitHub Actions CI green on the initial commit.
@@ -426,8 +426,8 @@ Entry condition: Phase 10 produced "go." This phase is genuinely optional. Don't
 
 CI gates every push from Phase 1 onward. Two suites:
 
-- **Frontend (Vitest):** unit + component tests in `adaptlearn/src/__tests__/` and `adaptlearn/src/**/*.test.js`. Required to pass before merge.
-- **Functions (pytest):** unit tests in `adaptlearn/functions/tests/`. Smoke tier runs on every push (no heavy deps); full tier runs once Phase 2 is complete and `firebase-functions` becomes a real dependency.
+- **Frontend (Vitest):** unit + component tests in `crux/src/__tests__/` and `crux/src/**/*.test.js`. Required to pass before merge.
+- **Functions (pytest):** unit tests in `crux/functions/tests/`. Smoke tier runs on every push (no heavy deps); full tier runs once Phase 2 is complete and `firebase-functions` becomes a real dependency.
 
 GitHub Actions workflow at `.github/workflows/ci.yml`. Phase verification (manual end-to-end) is still the primary correctness check; CI catches regressions and import-time breakage.
 
@@ -454,7 +454,7 @@ Test pyramid expectations per phase:
 ## File Structure Target
 
 ```
-adaptlearn/
+crux/
   .env.local (gitignored)
   .gitignore
   firebase.json

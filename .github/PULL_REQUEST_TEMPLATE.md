@@ -30,7 +30,7 @@ $ npm run test:unit -- --run
 $ pytest functions/tests
 ... summary ...
 
-$ curl http://localhost:5001/demo-adaptlearn/us-central1/<fn>
+$ curl http://localhost:5001/demo-crux/us-central1/<fn>
 ... response ...
 ```
 
