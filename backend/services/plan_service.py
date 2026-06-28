@@ -1,6 +1,6 @@
 """Metered LLM study-plan drafting.
 
-One LiteLLM call produces an ordered, bounded (3-12) lesson list for a subject.
+One LiteLLM call produces an ordered lesson list, bounded 3-12 on LLM success; a single-lesson fallback is returned otherwise.
 Routed through the existing cost meter and daily cap exactly like a tutor turn
 (see agent/tutor.py). Returns drafts only; the route persists them. Any LLM
 failure, parse failure, or cap-reached condition falls back to a single lesson

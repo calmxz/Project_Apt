@@ -114,3 +114,31 @@ def test_cap_reached_returns_fallback_without_llm(db_session, seeded_user, monke
     )
     assert len(drafts) == 1
     assert drafts[0].title == "Statistics"
+
+
+def test_parse_failure_returns_fallback(db_session, seeded_user, monkeypatch):
+    async def fake_acompletion(**kwargs):
+        return _resp("not valid json")
+
+    monkeypatch.setattr(plan_service.litellm, "acompletion", fake_acompletion)
+    monkeypatch.setattr(plan_service.litellm, "completion_cost", lambda **kw: 0.0)
+
+    drafts = asyncio.run(
+        plan_service.draft_plan(db_session, USER_ID, "Medieval History", 45, "deadline", 10, None)
+    )
+    assert len(drafts) == 1
+    assert drafts[0].title == "Medieval History"
+
+
+def test_parse_failure_too_few_lessons_returns_fallback(db_session, seeded_user, monkeypatch):
+    async def fake_acompletion(**kwargs):
+        return _resp(json.dumps([{"title": "L1", "goal": "g1"}]))
+
+    monkeypatch.setattr(plan_service.litellm, "acompletion", fake_acompletion)
+    monkeypatch.setattr(plan_service.litellm, "completion_cost", lambda **kw: 0.0)
+
+    drafts = asyncio.run(
+        plan_service.draft_plan(db_session, USER_ID, "Philosophy", 60, "pace", None, 3)
+    )
+    assert len(drafts) == 1
+    assert drafts[0].title == "Philosophy"
