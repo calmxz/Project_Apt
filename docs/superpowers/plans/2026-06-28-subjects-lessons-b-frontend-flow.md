@@ -38,7 +38,7 @@ Spec A defines DB columns, not JSON bodies. This plan fixes the following shapes
 |---|---|
 | `frontend/src/services/subjectsApi.js` | Thin wrappers over Spec A `/subjects` + `/lessons` routes (mirrors `sessionsApi.js`). |
 | `frontend/src/stores/subject.js` | Pinia store `useSubjectStore`: subjects list, current overview, lesson mutations (mirrors `session.js`). |
-| `frontend/src/utils/pace.js` | `derivePace(lessonCount, timelineDays)` = `ceil(count / max(days/7, 1))`; timeline-primary. |
+| `frontend/src/utils/pace.js` | `derivePace(lessonCount, timelineDays)` = `ceil(count / max(days/7, 1))` (lessons/week, "By deadline"); `deriveHorizonWeeks(lessonCount, pacePerWeek)` = `ceil(count / max(pacePerWeek, 1))` (finish weeks, "By pace"). Both display-only. |
 | `frontend/src/views/SubjectWizardView.vue` | Multi-step subject creation (title -> duration -> plan source -> editor/create). Route `subject-new`. |
 | `frontend/src/views/SubjectOverview.vue` | `/subjects/:id` overview: lessons + status + next highlight + progress + open + relocated dupe banner. Route `subject-overview`. |
 | `frontend/src/components/sidebar/SidebarSubjectNode.vue` | Expandable subject node header (title + `n/m`) that lists its opened lesson rows. |
@@ -71,8 +71,8 @@ Spec A defines DB columns, not JSON bodies. This plan fixes the following shapes
 - Test: `frontend/src/__tests__/subjectsApi.test.js`
 
 **Interfaces:**
-- Consumes (Spec A, verbatim): `POST /subjects/draft-plan {title, per_session_minutes, timeline_days}` -> `{ lessons: [{title, goal}] }` (preview only, persists nothing; server guarantees >=1 lesson via its single-lesson fallback); `POST /subjects {title, per_session_minutes, timeline_days, mode, lessons?}`; `GET /subjects`; `GET /subjects/{id}`; `PATCH /subjects/{id} {title?|timeline_days?|archived_at?}`; `POST /subjects/{id}/lessons {title, goal}`; `PATCH /lessons/{id} {title?|goal?|status?|order_idx?}`; `DELETE /lessons/{id}`; `POST /lessons/{id}/open` -> `{ session_id }`.
-- Produces (named exports used by Task 2): `draftPlan`, `createSubject`, `listSubjects`, `getSubject`, `patchSubject`, `addLesson`, `patchLesson`, `deleteLesson`, `openLesson`.
+- Consumes (Spec A, verbatim): `POST /subjects/draft-plan {title, per_session_minutes, duration_mode, timeline_days? | pace_per_week?}` -> `{ lessons: [{title, goal}] }` (preview only, persists nothing; server guarantees >=1 lesson via its single-lesson fallback); `POST /subjects {title, per_session_minutes, duration_mode, timeline_days? | pace_per_week?, mode, lessons?}`; `GET /subjects`; `GET /subjects/{id}`; `PATCH /subjects/{id} {title?|timeline_days?|pace_per_week?|archived_at?}`; `POST /subjects/{id}/lessons {title, goal}`; `PATCH /lessons/{id} {title?|goal?|status?|order_idx?}`; `DELETE /lessons/{id}`; `POST /lessons/{id}/open` -> `{ session_id }`. Per the duration toggle, exactly ONE of `timeline_days` / `pace_per_week` is sent (the pinned knob), alongside `duration_mode`.
+- Produces (named exports used by Task 2): `draftPlan`, `createSubject`, `listSubjects`, `getSubject`, `patchSubject`, `addLesson`, `patchLesson`, `deleteLesson`, `openLesson`. `draftPlan` and `createSubject` forward the caller's payload verbatim (pass-through) so the wizard owns which duration knob is included.
 
 - [ ] **Step 1** Write the failing test `frontend/src/__tests__/subjectsApi.test.js`. Mirror `apiWrappers.test.js`: mock `apiClient.js` and assert each wrapper calls the right verb/path/body.
 
@@ -97,17 +97,17 @@ describe('subjectsApi', () => {
     apiGet.mockReset(); apiPost.mockReset(); apiPatch.mockReset(); apiDelete.mockReset()
   })
 
-  it('draftPlan posts to /subjects/draft-plan (preview, no mode/lessons)', () => {
-    api.draftPlan({ title: 'Organic Chemistry', per_session_minutes: 30, timeline_days: 14 })
+  it('draftPlan posts the deadline-mode payload verbatim (no mode/lessons)', () => {
+    api.draftPlan({ title: 'Organic Chemistry', per_session_minutes: 30, duration_mode: 'deadline', timeline_days: 14 })
     expect(apiPost).toHaveBeenCalledWith('/subjects/draft-plan', {
-      title: 'Organic Chemistry', per_session_minutes: 30, timeline_days: 14,
+      title: 'Organic Chemistry', per_session_minutes: 30, duration_mode: 'deadline', timeline_days: 14,
     })
   })
 
-  it('createSubject posts the full body', () => {
-    api.createSubject({ title: 'Organic Chemistry', per_session_minutes: 30, timeline_days: 14, mode: 'blank', lessons: [{ title: 'Bonding', goal: 'Get bonds' }] })
+  it('createSubject posts the pace-mode body verbatim (pace_per_week, no timeline_days)', () => {
+    api.createSubject({ title: 'Organic Chemistry', per_session_minutes: 30, duration_mode: 'pace', pace_per_week: 3, mode: 'blank', lessons: [{ title: 'Bonding', goal: 'Get bonds' }] })
     expect(apiPost).toHaveBeenCalledWith('/subjects', {
-      title: 'Organic Chemistry', per_session_minutes: 30, timeline_days: 14, mode: 'blank', lessons: [{ title: 'Bonding', goal: 'Get bonds' }],
+      title: 'Organic Chemistry', per_session_minutes: 30, duration_mode: 'pace', pace_per_week: 3, mode: 'blank', lessons: [{ title: 'Bonding', goal: 'Get bonds' }],
     })
   })
 
@@ -159,11 +159,11 @@ import { apiGet, apiPost, apiPatch, apiDelete } from './apiClient.js'
 
 // Preview-only: generates a draft lesson list without persisting. The wizard
 // loads the result into the same in-memory review/edit step the blank path uses.
-export const draftPlan = ({ title, per_session_minutes, timeline_days }) =>
-  apiPost('/subjects/draft-plan', { title, per_session_minutes, timeline_days })
+// Pass-through: the wizard builds the body (duration_mode + exactly one of
+// timeline_days / pace_per_week), so this forwards it verbatim.
+export const draftPlan = (payload) => apiPost('/subjects/draft-plan', payload)
 
-export const createSubject = ({ title, per_session_minutes, timeline_days, mode, lessons }) =>
-  apiPost('/subjects', { title, per_session_minutes, timeline_days, mode, lessons })
+export const createSubject = (payload) => apiPost('/subjects', payload)
 
 export const listSubjects = () => apiGet('/subjects')
 
@@ -194,7 +194,7 @@ export const openLesson = (lessonId) => apiPost(`/lessons/${lessonId}/open`, {})
 
 **Interfaces:**
 - Consumes: `subjectsApi.*` (Task 1); shapes from Global Constraints.
-- Produces (used by Tasks 3-9): store `useSubjectStore` with state `subjects`, `currentSubject`, `loading`, `error`; actions `draftPlan(payload) -> lessons[]`, `listSubjects()`, `loadSubject(id)`, `createSubject(payload)`, `addLesson(subjectId, {title, goal})`, `patchLesson(lessonId, patch)`, `deleteLesson(lessonId)`, `openLesson(lessonId) -> session_id`, `markLessonDone(lessonId)`; getters `nextLesson` (first non-`done` lesson of `currentSubject`), `currentPace`. Util `derivePace(lessonCount, timelineDays)`.
+- Produces (used by Tasks 3-9): store `useSubjectStore` with state `subjects`, `currentSubject`, `loading`, `error`; actions `draftPlan(payload) -> lessons[]`, `listSubjects()`, `loadSubject(id)`, `createSubject(payload)`, `addLesson(subjectId, {title, goal})`, `patchLesson(lessonId, patch)`, `deleteLesson(lessonId)`, `openLesson(lessonId) -> session_id`, `markLessonDone(lessonId)`; getter `nextLesson` (first non-`done` lesson of `currentSubject`). Utils `derivePace(lessonCount, timelineDays)` + `deriveHorizonWeeks(lessonCount, pacePerWeek)` (both display-only, used by the wizard; the overview reads pinned+derived from the backend and does not recompute).
 
 - [ ] **Step 1** Failing test `frontend/src/__tests__/subjectStore.test.js` (mirror `sessionStore.test.js` setup):
 
@@ -209,10 +209,11 @@ const api = {
 vi.mock('@/services/subjectsApi.js', () => api)
 
 import { useSubjectStore } from '@/stores/subject.js'
-import { derivePace } from '@/utils/pace.js'
+import { derivePace, deriveHorizonWeeks } from '@/utils/pace.js'
 
 const overview = {
-  id: 's1', title: 'Organic Chemistry', per_session_minutes: 30, timeline_days: 14,
+  id: 's1', title: 'Organic Chemistry', per_session_minutes: 30,
+  duration_mode: 'deadline', timeline_days: 14, pace_per_week: 3,
   archived_at: null, progress: { done_count: 2, total_count: 6 },
   lessons: [
     { id: 'l1', subject_id: 's1', order_idx: 0, title: 'Bonding', goal: 'g', status: 'done', session_id: 'sess1' },
@@ -233,14 +234,6 @@ describe('subject store', () => {
     await store.loadSubject('s1')
     expect(store.currentSubject.title).toBe('Organic Chemistry')
     expect(store.nextLesson.id).toBe('l3')
-  })
-
-  it('currentPace derives ceil(total / weeks)', async () => {
-    api.getSubject.mockResolvedValue(overview)
-    const store = useSubjectStore()
-    await store.loadSubject('s1')
-    // 6 lessons / (14/7=2 weeks) = 3
-    expect(store.currentPace).toBe(3)
   })
 
   it('openLesson returns session_id', async () => {
@@ -270,9 +263,16 @@ describe('subject store', () => {
     expect(lessons[0].title).toBe('Bonding')
   })
 
-  it('derivePace floors weeks at 1', () => {
+  it('derivePace floors weeks at 1 (By deadline)', () => {
     expect(derivePace(4, 3)).toBe(4) // 3 days -> weeks clamped to 1
+    expect(derivePace(6, 14)).toBe(3) // 6 lessons / 2 weeks
     expect(derivePace(0, 14)).toBe(0)
+  })
+
+  it('deriveHorizonWeeks floors pace at 1 (By pace)', () => {
+    expect(deriveHorizonWeeks(6, 3)).toBe(2) // 6 lessons at 3/week -> 2 weeks
+    expect(deriveHorizonWeeks(5, 0)).toBe(5) // pace clamped to 1
+    expect(deriveHorizonWeeks(0, 3)).toBe(0)
   })
 })
 ```
@@ -281,10 +281,16 @@ describe('subject store', () => {
 - [ ] **Step 3** Create `frontend/src/utils/pace.js`:
 
 ```js
-// Timeline-primary pace: lessons per week, derived (never stored). Spec A.
+// Display-only duration derivations (never stored). Spec A/B.
+// "By deadline": pin timeline_days, derive lessons-per-week.
 export function derivePace(lessonCount, timelineDays) {
   const weeks = Math.max((timelineDays || 0) / 7, 1)
   return Math.ceil((lessonCount || 0) / weeks)
+}
+
+// "By pace": pin pace_per_week, derive finish horizon in weeks.
+export function deriveHorizonWeeks(lessonCount, pacePerWeek) {
+  return Math.ceil((lessonCount || 0) / Math.max(pacePerWeek || 0, 1))
 }
 ```
 
@@ -296,7 +302,6 @@ import { defineStore } from 'pinia'
 
 import * as subjectsApi from '../services/subjectsApi.js'
 import { friendlyError } from '../lib/errors.js'
-import { derivePace } from '../utils/pace.js'
 
 export const useSubjectStore = defineStore('subject', () => {
   const subjects = ref([])
@@ -312,12 +317,6 @@ export const useSubjectStore = defineStore('subject', () => {
   const nextLesson = computed(() => {
     const lessons = currentSubject.value?.lessons || []
     return lessons.find((l) => l.status !== 'done') || null
-  })
-
-  const currentPace = computed(() => {
-    const s = currentSubject.value
-    if (!s) return 0
-    return derivePace((s.lessons || []).length, s.timeline_days)
   })
 
   async function listSubjects() {
@@ -411,7 +410,7 @@ export const useSubjectStore = defineStore('subject', () => {
 
   return {
     subjects, currentSubject, loading, error,
-    nextLesson, currentPace,
+    nextLesson,
     draftPlan, listSubjects, loadSubject, createSubject,
     addLesson, patchLesson, deleteLesson, openLesson, markLessonDone, reset,
   }
@@ -572,9 +571,9 @@ Template skeleton (cards + resume + an "add reference files" link to `/new` for 
 
 **Interfaces:**
 - Consumes: `useSubjectStore.createSubject`; `derivePace`.
-- Produces (testids for Task 5 + e2e): `wizard-title-input`, `wizard-next`, `wizard-back`, `wizard-minutes-15|30|60`, `wizard-timeline-7|14|30`, `wizard-pace`, `wizard-mode-draft`, `wizard-mode-blank`, plus a `step` state machine `'title' | 'duration' | 'source' | 'editor'`.
+- Produces (testids for Task 5 + e2e): `wizard-title-input`, `wizard-next`, `wizard-back`, `wizard-minutes-15|30|60`, `wizard-duration-mode-deadline`, `wizard-duration-mode-pace`, `wizard-timeline-7|14|30` (deadline), `wizard-pace-stepper` / `wizard-pace-dec` / `wizard-pace-inc` / `wizard-pace-value` (pace), `wizard-derived` (display-only derived value), `wizard-mode-draft`, `wizard-mode-blank`, plus a `step` state machine `'title' | 'duration' | 'source' | 'editor'` and state `durationMode` (`'deadline' | 'pace'`), `selectedTimeline` (default 14), `pacePerWeek` (default 3).
 
-Pace note: `derivePace` needs a lesson count, which does not exist until the editor step. On the duration step the wizard displays the chosen timeline as weeks and a live pace **estimate keyed to the in-editor lesson count once lessons exist** (`wizard-pace` shows weeks-only until then). The authoritative pace renders on the overview (Task 6). Resolved ambiguity — Spec B mock shows pace on the duration step but pace is undefined without lessons.
+Duration toggle (Spec B §2 step 2): after the `per_session_minutes` chips, a `duration_mode` toggle pins ONE knob. *By deadline* shows `timeline_days` chips and a live derived **pace** (`derivePace(lessons.length, selectedTimeline)` -> "~N/week"). *By pace* shows a `pace_per_week` stepper (clamp 1-5) and a live derived **finish horizon** (`deriveHorizonWeeks(lessons.length, pacePerWeek)` -> "~N weeks"). The derived value is display-only and recomputes from the current lesson count, so it stays "~0" until the review/edit step adds lessons, then updates (`wizard-derived` is rendered on both the duration and editor steps, bound to the same computed). Only the pinned knob is sent in payloads (Task 5).
 
 - [ ] **Step 1** Register routes in `router/index.js` (add after the `new-session` block, before `session`):
 
@@ -626,12 +625,31 @@ describe('SubjectWizardView steps 1-3', () => {
     expect(wrapper.get('[data-testid="wizard-next"]').attributes('disabled')).toBeDefined()
   })
 
-  it('duration step shows the timeline in weeks', async () => {
+  it('duration step defaults to By deadline and shows timeline chips', async () => {
     const wrapper = mountView()
     await wrapper.get('[data-testid="wizard-title-input"]').setValue('Chem')
     await wrapper.get('[data-testid="wizard-next"]').trigger('click')
-    await wrapper.get('[data-testid="wizard-timeline-14"]').trigger('click')
-    expect(wrapper.get('[data-testid="wizard-pace"]').text()).toContain('2-week')
+    expect(wrapper.find('[data-testid="wizard-timeline-14"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="wizard-pace-stepper"]').exists()).toBe(false)
+  })
+
+  it('toggling to By pace swaps timeline chips for the pace stepper', async () => {
+    const wrapper = mountView()
+    await wrapper.get('[data-testid="wizard-title-input"]').setValue('Chem')
+    await wrapper.get('[data-testid="wizard-next"]').trigger('click')
+    await wrapper.get('[data-testid="wizard-duration-mode-pace"]').trigger('click')
+    expect(wrapper.find('[data-testid="wizard-pace-stepper"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="wizard-timeline-14"]').exists()).toBe(false)
+  })
+
+  it('pace stepper increments and clamps within 1-5', async () => {
+    const wrapper = mountView()
+    await wrapper.get('[data-testid="wizard-title-input"]').setValue('Chem')
+    await wrapper.get('[data-testid="wizard-next"]').trigger('click')
+    await wrapper.get('[data-testid="wizard-duration-mode-pace"]').trigger('click')
+    expect(wrapper.get('[data-testid="wizard-pace-value"]').text()).toContain('3')
+    await wrapper.get('[data-testid="wizard-pace-inc"]').trigger('click')
+    expect(wrapper.get('[data-testid="wizard-pace-value"]').text()).toContain('4')
   })
 
   it('reaches the plan-source step with two buttons', async () => {
@@ -646,9 +664,9 @@ describe('SubjectWizardView steps 1-3', () => {
 ```
 
 - [ ] **Step 3** Run `npm run test:unit -- --run subjectWizardView` — expect FAIL.
-- [ ] **Step 4** Create `SubjectWizardView.vue` with a `step` ref machine (`'title' | 'duration' | 'source' | 'editor'`) and the title/duration/source steps. Wire `selectedMinutes` (default 30), `selectedTimeline` (default 14), and a `weeksLabel` computed (`Math.round(timeline_days/7)`-week). Use design tokens (`--color-accent-soft`/`--color-accent` for selected chips, `--radius-pill`). The plan-source step renders `wizard-mode-draft` + `wizard-mode-blank`; both advance to the shared `editor` step (draft populates it via the preview call, blank starts it empty — wired in Task 5). Leave the `editor` step as a placeholder `<div data-testid="wizard-editor-placeholder" />` to be filled in Task 5. Chips selected state mirrors `sb-status-btn.active` styling.
+- [ ] **Step 4** Create `SubjectWizardView.vue` with a `step` ref machine (`'title' | 'duration' | 'source' | 'editor'`) and the title/duration/source steps. Wire `selectedMinutes` (default 30); the duration toggle `durationMode` ref (default `'deadline'`); `selectedTimeline` ref (default 14) for deadline; `pacePerWeek` ref (default 3) for pace with `incPace`/`decPace` clamping to `[1, 5]`. Import `derivePace`, `deriveHorizonWeeks`. Add a `derivedLabel` computed: deadline -> `~${derivePace(lessons.length, selectedTimeline)}/week`, pace -> `~${deriveHorizonWeeks(lessons.length, pacePerWeek)} weeks` (rendered as `wizard-derived` on duration + editor steps; `lessons` is the Task 5 ref, 0 until then). Use design tokens (`--color-accent-soft`/`--color-accent` for selected chips + active toggle, `--radius-pill`). The duration step: `per_session_minutes` chips, then the `wizard-duration-mode-deadline` / `wizard-duration-mode-pace` toggle gating `wizard-timeline-*` chips vs the `wizard-pace-stepper` (`wizard-pace-dec`, `wizard-pace-value`, `wizard-pace-inc`). The plan-source step renders `wizard-mode-draft` + `wizard-mode-blank`; both advance to the shared `editor` step (wired in Task 5). Leave the `editor` step as a placeholder `<div data-testid="wizard-editor-placeholder" />` to be filled in Task 5. Toggle + chip active state mirrors `sb-status-btn.active` styling.
 
-- [ ] **Step 5** Run `npm run test:unit -- --run subjectWizardView` — expect PASS (4 passing). Also run `npm run test:unit -- --run router` and confirm a new assertion you add — `expect(names).toContain('subject-new')` and `'subject-overview'` — passes. `npm run lint`. Commit: `feat(subjects): subject wizard steps 1-3 (title, duration, plan source) + routes`.
+- [ ] **Step 5** Run `npm run test:unit -- --run subjectWizardView` — expect PASS (6 passing). Also run `npm run test:unit -- --run router` and confirm a new assertion you add — `expect(names).toContain('subject-new')` and `'subject-overview'` — passes. `npm run lint`. Commit: `feat(subjects): subject wizard steps 1-3 (title, duration, plan source) + routes`.
 
 ---
 
@@ -688,7 +706,7 @@ it('blank path: add a lesson then commit with the reviewed lessons', async () =>
   await wrapper.get('[data-testid="wizard-create"]').trigger('click')
   await flushPromises()
   expect(store.createSubject).toHaveBeenCalledWith({
-    title: 'Chem', per_session_minutes: 30, timeline_days: 14, mode: 'blank',
+    title: 'Chem', per_session_minutes: 30, duration_mode: 'deadline', timeline_days: 14, mode: 'blank',
     lessons: [{ title: 'Bonding', goal: 'Understand bonds' }],
   })
   expect(push).toHaveBeenCalledWith({ name: 'subject-overview', params: { id: 's9' } })
@@ -707,16 +725,37 @@ it('draft path: preview populates the editor; the reviewed (edited) lessons are 
   await wrapper.get('[data-testid="wizard-next"]').trigger('click')
   await wrapper.get('[data-testid="wizard-mode-draft"]').trigger('click')
   await flushPromises()
-  expect(store.draftPlan).toHaveBeenCalledWith({ title: 'Chem', per_session_minutes: 30, timeline_days: 14 })
+  expect(store.draftPlan).toHaveBeenCalledWith({ title: 'Chem', per_session_minutes: 30, duration_mode: 'deadline', timeline_days: 14 })
   expect(wrapper.findAll('[data-testid^="wizard-lesson-row-"]')).toHaveLength(2)
+  // derived pace recomputes from the now-populated lesson list: ceil(2 / (14/7)) = 1
+  expect(wrapper.get('[data-testid="wizard-derived"]').text()).toContain('1')
   await wrapper.get('[data-testid="wizard-row-title-0"]').setValue('Bonding basics')
   await wrapper.get('[data-testid="wizard-create"]').trigger('click')
   await flushPromises()
   expect(store.createSubject).toHaveBeenCalledWith({
-    title: 'Chem', per_session_minutes: 30, timeline_days: 14, mode: 'blank',
+    title: 'Chem', per_session_minutes: 30, duration_mode: 'deadline', timeline_days: 14, mode: 'blank',
     lessons: [{ title: 'Bonding basics', goal: 'g1' }, { title: 'Alkanes', goal: 'g2' }],
   })
   expect(push).toHaveBeenCalledWith({ name: 'subject-overview', params: { id: 's7' } })
+})
+
+it('pace mode commits pace_per_week and omits timeline_days', async () => {
+  const wrapper = mountView()
+  const store = useSubjectStore()
+  vi.spyOn(store, 'createSubject').mockResolvedValue({ id: 's5' })
+  await wrapper.get('[data-testid="wizard-title-input"]').setValue('Chem')
+  await wrapper.get('[data-testid="wizard-next"]').trigger('click')          // -> duration
+  await wrapper.get('[data-testid="wizard-duration-mode-pace"]').trigger('click')
+  await wrapper.get('[data-testid="wizard-next"]').trigger('click')          // -> source
+  await wrapper.get('[data-testid="wizard-mode-blank"]').trigger('click')    // -> editor
+  await wrapper.get('[data-testid="wizard-lesson-title"]').setValue('Intro')
+  await wrapper.get('[data-testid="wizard-add-lesson"]').trigger('click')
+  await wrapper.get('[data-testid="wizard-create"]').trigger('click')
+  await flushPromises()
+  expect(store.createSubject).toHaveBeenCalledWith({
+    title: 'Chem', per_session_minutes: 30, duration_mode: 'pace', pace_per_week: 3, mode: 'blank',
+    lessons: [{ title: 'Intro', goal: '' }],
+  })
 })
 
 it('reorder: move-down swaps adjacent drafted lessons', async () => {
@@ -771,8 +810,14 @@ function moveLesson(i, delta) {
   ;[arr[i], arr[j]] = [arr[j], arr[i]]
 }
 
+// Only the pinned duration knob is sent (Spec B §2 step 2).
+function durationPayload() {
+  return durationMode.value === 'deadline'
+    ? { duration_mode: 'deadline', timeline_days: selectedTimeline.value }
+    : { duration_mode: 'pace', pace_per_week: pacePerWeek.value }
+}
 function basePayload() {
-  return { title: title.value.trim(), per_session_minutes: selectedMinutes.value, timeline_days: selectedTimeline.value }
+  return { title: title.value.trim(), per_session_minutes: selectedMinutes.value, ...durationPayload() }
 }
 
 async function chooseDraft() {
@@ -799,9 +844,9 @@ async function commitCreate() {
 }
 ```
 
-Wire the source-step buttons: `wizard-mode-draft` -> `chooseDraft`, `wizard-mode-blank` -> `chooseBlank`. While `drafting`, render a `wizard-drafting` spinner on the source step. The editor renders: a `wizard-draft-error` notice when set; the editable lesson list — each `wizard-lesson-row-<i>` with `<input data-testid="wizard-row-title-<i>" v-model="lessons[i].title">`, `<input data-testid="wizard-row-goal-<i>" v-model="lessons[i].goal">`, `wizard-lesson-up-<i>` (`@click="moveLesson(i, -1)"`), `wizard-lesson-down-<i>` (`@click="moveLesson(i, 1)"`), `wizard-lesson-remove-<i>` (`@click="removeLessonRow(i)"`); an add row (`wizard-lesson-title`, `wizard-lesson-goal`, `wizard-add-lesson` -> `addLessonRow`); and `wizard-create` -> `commitCreate`. Show live `derivePace(lessons.length, selectedTimeline)` ("~N/week") in the editor. Tokens: selected/active via `--color-accent`, rows on `--color-surface` + `--color-border`, `--radius-md`.
+Wire the source-step buttons: `wizard-mode-draft` -> `chooseDraft`, `wizard-mode-blank` -> `chooseBlank`. While `drafting`, render a `wizard-drafting` spinner on the source step. The editor renders: a `wizard-draft-error` notice when set; the editable lesson list — each `wizard-lesson-row-<i>` with `<input data-testid="wizard-row-title-<i>" v-model="lessons[i].title">`, `<input data-testid="wizard-row-goal-<i>" v-model="lessons[i].goal">`, `wizard-lesson-up-<i>` (`@click="moveLesson(i, -1)"`), `wizard-lesson-down-<i>` (`@click="moveLesson(i, 1)"`), `wizard-lesson-remove-<i>` (`@click="removeLessonRow(i)"`); an add row (`wizard-lesson-title`, `wizard-lesson-goal`, `wizard-add-lesson` -> `addLessonRow`); the `wizard-derived` label (the `derivedLabel` computed from Task 4, now live because `lessons` is populated); and `wizard-create` -> `commitCreate`. Tokens: selected/active via `--color-accent`, rows on `--color-surface` + `--color-border`, `--radius-md`.
 
-- [ ] **Step 4** Run `npm run test:unit -- --run subjectWizardView` — expect PASS (8 passing). `npm run lint`. Commit: `feat(subjects): wizard shared review/edit editor + draft-plan preview + commit`.
+- [ ] **Step 4** Run `npm run test:unit -- --run subjectWizardView` — expect PASS (11 passing: 6 from Task 4 + 5 here). `npm run lint`. Commit: `feat(subjects): wizard shared review/edit editor + draft-plan preview + commit`.
 
 ---
 
@@ -812,7 +857,7 @@ Wire the source-step buttons: `wizard-mode-draft` -> `chooseDraft`, `wizard-mode
 - Test: `frontend/src/__tests__/subjectOverview.test.js`
 
 **Interfaces:**
-- Consumes: `useSubjectStore` (`loadSubject`, `currentSubject`, `nextLesson`, `currentPace`, `openLesson`); router `session`.
+- Consumes: `useSubjectStore` (`loadSubject`, `currentSubject`, `nextLesson`, `openLesson`); `currentSubject` now carries `duration_mode`, `timeline_days`, `pace_per_week` (both pinned + derived populated by the backend — display only, no recompute); router `session`.
 - Produces (testids): `subject-overview`, `subject-progress-bar`, `subject-meta`, `subject-lesson-<id>`, `subject-lesson-status-<id>`, `subject-lesson-next` (the highlighted row), `subject-open-next`, `subject-dupe-banner`, `subject-dupe-cleanup`.
 
 Decisions: no gating — every lesson row is clickable. "Next" = first non-`done` lesson (`store.nextLesson`), highlighted as a suggestion only. Progress bar from `progress.done_count / progress.total_count`. The duplicate-cleanup banner relocates here (shown when this subject has two opened lesson-sessions sharing a topic — reuse `normalizeTopicKey` from `utils/formatDate.js`).
@@ -836,7 +881,8 @@ import SubjectOverview from '@/views/SubjectOverview.vue'
 import { useSubjectStore } from '@/stores/subject.js'
 
 const overview = {
-  id: 's1', title: 'Organic Chemistry', per_session_minutes: 30, timeline_days: 14,
+  id: 's1', title: 'Organic Chemistry', per_session_minutes: 30,
+  duration_mode: 'deadline', timeline_days: 14, pace_per_week: 3,
   archived_at: null, progress: { done_count: 2, total_count: 3 },
   lessons: [
     { id: 'l1', subject_id: 's1', order_idx: 0, title: 'Bonding', goal: 'g', status: 'done', session_id: 'sess1' },
@@ -891,6 +937,28 @@ describe('SubjectOverview', () => {
     await flushPromises()
     expect(store.openLesson).toHaveBeenCalledWith('l3')
   })
+
+  it('meta line reads duration_mode + pinned + derived from the backend (deadline)', async () => {
+    const store = useSubjectStore()
+    vi.spyOn(store, 'loadSubject').mockImplementation(async () => { store.currentSubject = overview })
+    const wrapper = mountView()
+    await flushPromises()
+    const meta = wrapper.get('[data-testid="subject-meta"]').text()
+    expect(meta).toContain('30 min')   // per_session_minutes
+    expect(meta).toContain('2-week')   // timeline_days/7 (pinned)
+    expect(meta).toContain('3/week')   // pace_per_week (backend-derived, not recomputed)
+  })
+
+  it('meta line leads with pace when duration_mode is pace', async () => {
+    const store = useSubjectStore()
+    const paced = { ...overview, duration_mode: 'pace' }
+    vi.spyOn(store, 'loadSubject').mockImplementation(async () => { store.currentSubject = paced })
+    const wrapper = mountView()
+    await flushPromises()
+    const meta = wrapper.get('[data-testid="subject-meta"]').text()
+    expect(meta).toContain('3/week')   // pace_per_week (pinned)
+    expect(meta).toContain('2 weeks')  // derived finish horizon from backend
+  })
 })
 ```
 
@@ -907,6 +975,19 @@ const subject = computed(() => store.currentSubject)
 const lessons = computed(() => subject.value?.lessons || [])
 const nextId = computed(() => store.nextLesson?.id || null)
 
+// Duration meta is display-only: the backend returns duration_mode + BOTH
+// pinned and derived knobs, so render them — never recompute here.
+const meta = computed(() => {
+  const s = subject.value
+  if (!s) return ''
+  const min = `per session ~${s.per_session_minutes} min`
+  const weeks = Math.round((s.timeline_days || 0) / 7)
+  const pace = `~${s.pace_per_week}/week`
+  return s.duration_mode === 'pace'
+    ? `${min} · ${pace} · ~${weeks} weeks`     // pinned pace, derived horizon
+    : `${min} · ${weeks}-week plan · ${pace}`  // pinned timeline, derived pace
+})
+
 const STATUS_LABEL = { done: 'done', in_progress: 'in progress', not_started: 'not started' }
 
 async function open(lessonId) {
@@ -916,9 +997,9 @@ async function open(lessonId) {
 function openNext() { if (nextId.value) open(nextId.value) }
 ```
 
-Template: header (title + progress bar `role="progressbar"` with `aria-valuenow="progress.done_count"`, `aria-valuemax="progress.total_count"`), meta line (`per session ~{{ per_session_minutes }} min · {{ weeks }}-week plan · ~{{ store.currentPace }}/week`), lesson list (each row a `<button data-testid="subject-lesson-<id>">`, an extra `:data-testid="id === nextId ? 'subject-lesson-next' : undefined"`, status `subject-lesson-status-<id>`, highlight class when `id === nextId` via `--color-accent-soft`), `subject-open-next` button, and the relocated dupe banner (port `dupe-banner` markup + `cleanupDuplicates` from old HomeView, scoped to this subject's opened lessons). Use tokens: `--color-surface`, `--color-border`, `--color-accent`, `--signal-success` for done check, `--radius-card`.
+Template: header (title + progress bar `role="progressbar"` with `aria-valuenow="progress.done_count"`, `aria-valuemax="progress.total_count"`), meta line `<p data-testid="subject-meta">{{ meta }}</p>`, lesson list (each row a `<button data-testid="subject-lesson-<id>">`, an extra `:data-testid="id === nextId ? 'subject-lesson-next' : undefined"`, status `subject-lesson-status-<id>`, highlight class when `id === nextId` via `--color-accent-soft`), `subject-open-next` button, and the relocated dupe banner (port `dupe-banner` markup + `cleanupDuplicates` from old HomeView, scoped to this subject's opened lessons). Use tokens: `--color-surface`, `--color-border`, `--color-accent`, `--signal-success` for done check, `--radius-card`.
 
-- [ ] **Step 4** Run `npm run test:unit -- --run subjectOverview` — expect PASS (4 passing). `npm run lint`. Commit: `feat(subjects): subject overview with lesson states, next highlight, open + dupe banner`.
+- [ ] **Step 4** Run `npm run test:unit -- --run subjectOverview` — expect PASS (6 passing). `npm run lint`. Commit: `feat(subjects): subject overview with lesson states, next highlight, open + dupe banner`.
 
 ---
 
@@ -1200,7 +1281,8 @@ test.describe.skip('subject blank create', () => {
 ## Self-review checklist (done while writing)
 
 - Every Spec B section maps to a task: §1 Homepage -> Task 3; §2 Wizard -> Tasks 4-5; §3 Overview -> Task 6; §4 Sidebar -> Task 7; §5 Lesson-aware session -> Tasks 8-9; State/Stores -> Tasks 1-2; Testing (unit) -> Tasks 1-9; Testing (e2e) -> Task 10.
-- No placeholders: every code step is real Vue/JS using the verified tokens (`--color-accent-strong`, `--color-accent-soft`, `--radius-card`, `--signal-success`, `--font-display`) and Spec A field names (`per_session_minutes`, `timeline_days`, `order_idx`, `status`, `session_id`, `done_count`, `total_count`).
+- No placeholders: every code step is real Vue/JS using the verified tokens (`--color-accent-strong`, `--color-accent-soft`, `--radius-card`, `--signal-success`, `--font-display`) and Spec A field names (`per_session_minutes`, `duration_mode`, `timeline_days`, `pace_per_week`, `order_idx`, `status`, `session_id`, `done_count`, `total_count`).
+- Duration toggle (Spec B §2 step 2) landed: wizard `duration_mode` toggle pins one knob — *By deadline* (`timeline_days` chips, live derived pace via `derivePace`) or *By pace* (`pace_per_week` stepper, live derived horizon via `deriveHorizonWeeks`); only the pinned knob is sent in `draftPlan`/`createSubject` payloads; the overview reads `duration_mode` + both knobs from `GET /subjects/{id}` and never recomputes.
 - Names consistent across tasks: store `useSubjectStore` actions (`loadSubject`, `openLesson`, `markLessonDone`), components (`SubjectWizardView`, `SubjectOverview`, `SidebarSubjectNode`, `LessonContextBar`, `MarkDoneConfirm`), route names (`subject-new`, `subject-overview`), and testids are reused verbatim downstream.
 - Wizard review/edit ambiguity is CLOSED: Spec A's reconciled `POST /subjects/draft-plan` preview means both paths review/edit lessons in one shared editor before a single `POST /subjects` commit (Spec B §2 step 4 honored); the earlier "overview is the review surface" resolution is removed.
 - Open items flagged in-plan: response-shape assumptions (reconcile with `openapi.yaml`), session->lesson resolution via `GET /subjects/{id}` match, and mastery-signal source (prefer a direct cleared-gap field if the check flow exposes one).

@@ -4,7 +4,7 @@
 
 **Goal:** Add a Subject → Lessons → Session hierarchy above the existing session model — backend data model, migration, services, and user-scoped API routes — so a user can create LLM-drafted or blank subjects, manage lessons, and lazily open a lesson into a chat session, all behind the existing auth + cost-cap machinery.
 
-**Architecture:** Two new tables (`subjects`, `lessons`) plus one nullable `sessions.subject_id` column. CRUD lives in `services/subject_service.py`; the metered LLM draft lives in `services/plan_service.py` (mirrors `agent/tutor.py` cost-metering). A new `routes/subjects.py` router exposes eight routes; all Pydantic request/response models are codegen'd from `docs/api/openapi.yaml`. Quick lessons (`subject_id IS NULL`, no lesson row) are unchanged from today.
+**Architecture:** Two new tables (`subjects`, `lessons`) plus one nullable `sessions.subject_id` column. CRUD lives in `services/subject_service.py`; the metered LLM draft lives in `services/plan_service.py` (mirrors `agent/tutor.py` cost-metering). A new `routes/subjects.py` router exposes nine routes; all Pydantic request/response models are codegen'd from `docs/api/openapi.yaml`. Subject duration is a user-toggled pair (`duration_mode` plus exactly one of `timeline_days`/`pace_per_week` pinned; the complement is derived on read from the current lesson_count). Quick lessons (`subject_id IS NULL`, no lesson row) are unchanged from today.
 
 **Tech Stack:** FastAPI, SQLAlchemy 2.0 (Mapped/mapped_column), Alembic, Supabase Postgres + pgvector (SQLite in-memory for tests), LiteLLM, Pydantic v2 (datamodel-code-generator), pytest.
 
@@ -75,7 +75,13 @@ def seeded_user(db_session):
 
 
 def test_create_subject_with_lesson(db_session, seeded_user):
-    subj = Subject(user_id=USER_ID, title="Organic Chemistry", per_session_minutes=30)
+    subj = Subject(
+        user_id=USER_ID,
+        title="Organic Chemistry",
+        per_session_minutes=30,
+        duration_mode="deadline",
+        timeline_days=14,
+    )
     db_session.add(subj)
     db_session.flush()
     lesson = Lesson(subject_id=subj.id, order_idx=0, title="Bonding", goal="learn bonds")
@@ -84,16 +90,28 @@ def test_create_subject_with_lesson(db_session, seeded_user):
     db_session.refresh(lesson)
     assert lesson.status == "not_started"
     assert lesson.session_id is None
-    assert subj.timeline_days is None
+    assert subj.duration_mode == "deadline"
+    assert subj.timeline_days == 14
+    assert subj.pace_per_week is None  # pace is derived in deadline mode
     assert subj.archived_at is None
     assert lesson.subject_id == subj.id
 
 
 def test_lesson_status_check_constraint(db_session, seeded_user):
-    subj = Subject(user_id=USER_ID, title="X", per_session_minutes=15)
+    subj = Subject(
+        user_id=USER_ID, title="X", per_session_minutes=15, duration_mode="pace", pace_per_week=3
+    )
     db_session.add(subj)
     db_session.flush()
     db_session.add(Lesson(subject_id=subj.id, order_idx=0, title="bad", goal="g", status="nope"))
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+
+
+def test_subject_duration_mode_check_constraint(db_session, seeded_user):
+    db_session.add(
+        Subject(user_id=USER_ID, title="bad", per_session_minutes=30, duration_mode="whenever")
+    )
     with pytest.raises(IntegrityError):
         db_session.commit()
 
@@ -105,7 +123,9 @@ def test_session_subject_id_nullable_and_settable(db_session, seeded_user):
     db_session.commit()
     assert quick.subject_id is None
 
-    subj = Subject(user_id=USER_ID, title="Y", per_session_minutes=60)
+    subj = Subject(
+        user_id=USER_ID, title="Y", per_session_minutes=60, duration_mode="pace", pace_per_week=2
+    )
     db_session.add(subj)
     db_session.flush()
     linked = SessionModel(id="s_linked", user_id=USER_ID, topic="bonds", subject_id=subj.id)
@@ -133,12 +153,22 @@ And add this column after the `pinned` column (L39-41):
 ```python
 class Subject(Base):
     __tablename__ = "subjects"
+    __table_args__ = (
+        CheckConstraint(
+            "duration_mode IN ('deadline', 'pace')",
+            name="subjects_duration_mode_check",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: uuid4().hex)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
     title: Mapped[str] = mapped_column(String, nullable=False)
     per_session_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Duration is a user-toggled pair: duration_mode records which knob is pinned;
+    # exactly one of timeline_days / pace_per_week is set, the other is derived on read.
+    duration_mode: Mapped[str] = mapped_column(String, nullable=False)
     timeline_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    pace_per_week: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
@@ -169,7 +199,7 @@ class Lesson(Base):
     subject: Mapped["Subject"] = relationship("Subject", back_populates="lessons")
 ```
 
-- [ ] **Step 5: Run the test — expect PASS.** Command: `cd backend && pytest tests/test_subject_model.py -q`. Expected: `3 passed`.
+- [ ] **Step 5: Run the test — expect PASS.** Command: `cd backend && pytest tests/test_subject_model.py -q`. Expected: `4 passed`.
 
 - [ ] **Step 6: Commit.** `git add backend/db/models.py backend/tests/test_subject_model.py && git commit -m "feat(models): add Subject and Lesson models + sessions.subject_id"`
 
@@ -248,9 +278,15 @@ def upgrade() -> None:
         sa.Column("user_id", sa.String(), sa.ForeignKey("users.id"), nullable=False),
         sa.Column("title", sa.String(), nullable=False),
         sa.Column("per_session_minutes", sa.Integer(), nullable=False),
+        sa.Column("duration_mode", sa.String(), nullable=False),
         sa.Column("timeline_days", sa.Integer(), nullable=True),
+        sa.Column("pace_per_week", sa.Integer(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("archived_at", sa.DateTime(timezone=True), nullable=True),
+        sa.CheckConstraint(
+            "duration_mode IN ('deadline', 'pace')",
+            name="subjects_duration_mode_check",
+        ),
     )
     op.create_table(
         "lessons",
@@ -334,9 +370,13 @@ def test_subject_contracts_import():
 
     req = SubjectCreateRequest(
         title="Organic Chemistry", per_session_minutes=30, mode="blank",
+        duration_mode="deadline", timeline_days=14,
         lessons=[LessonDraft(title="Bonding", goal="learn bonds")],
     )
     assert req.mode == "blank"
+    assert req.duration_mode == "deadline"
+    assert req.timeline_days == 14
+    assert req.pace_per_week is None
     assert req.lessons[0].title == "Bonding"
 
     prog = SubjectProgress(done_count=1, total_count=3)
@@ -344,7 +384,12 @@ def test_subject_contracts_import():
     open_resp = LessonOpenResponse(session_id="s1", status="in_progress")
     assert open_resp.session_id == "s1"
 
-    draft_req = DraftPlanRequest(title="Organic Chemistry", per_session_minutes=30)
+    draft_req = DraftPlanRequest(
+        title="Organic Chemistry", per_session_minutes=30,
+        duration_mode="pace", pace_per_week=3,
+    )
+    assert draft_req.duration_mode == "pace"
+    assert draft_req.pace_per_week == 3
     assert draft_req.timeline_days is None
     draft_resp = DraftPlanResponse(lessons=[LessonDraft(title="Bonding", goal="g")])
     assert draft_resp.lessons[0].title == "Bonding"
@@ -592,12 +637,17 @@ def test_subject_contracts_import():
     DraftPlanRequest:
       type: object
       additionalProperties: false
-      required: [title, per_session_minutes]
-      description: Preview-draft inputs for the wizard review step (no persistence).
+      required: [title, per_session_minutes, duration_mode]
+      description: |
+        Preview-draft inputs for the wizard review step (no persistence). Carries
+        duration_mode plus exactly one of timeline_days (deadline mode) or
+        pace_per_week (pace mode) — the pinned duration field.
       properties:
         title:               { type: string, maxLength: 200 }
         per_session_minutes: { type: integer, enum: [15, 30, 60] }
+        duration_mode:       { type: string, enum: [deadline, pace] }
         timeline_days:       { type: [integer, "null"], default: null }
+        pace_per_week:       { type: [integer, "null"], default: null }
 
     DraftPlanResponse:
       type: object
@@ -612,16 +662,20 @@ def test_subject_contracts_import():
     SubjectCreateRequest:
       type: object
       additionalProperties: false
-      required: [title, per_session_minutes, mode]
+      required: [title, per_session_minutes, mode, duration_mode]
       description: |
         Create a subject. The wizard (Spec B) sends mode=blank with the reviewed
         lessons[] array (already drafted/edited via POST /subjects/draft-plan;
         may be empty). mode=draft is a documented non-wizard fallback that drafts
-        and persists server-side in one call via plan_service.draft_plan.
+        and persists server-side in one call via plan_service.draft_plan. Duration
+        is a user-toggled pair: duration_mode plus exactly one of timeline_days
+        (deadline) or pace_per_week (pace); the other is derived on read.
       properties:
         title:               { type: string, maxLength: 200 }
         per_session_minutes: { type: integer, enum: [15, 30, 60] }
+        duration_mode:       { type: string, enum: [deadline, pace] }
         timeline_days:       { type: [integer, "null"], default: null }
+        pace_per_week:       { type: [integer, "null"], default: null }
         mode:                { type: string, enum: [draft, blank] }
         lessons:
           type: array
@@ -631,10 +685,15 @@ def test_subject_contracts_import():
     SubjectUpdateRequest:
       type: object
       additionalProperties: false
-      description: Rename, set timeline_days, or archive/unarchive a subject (all optional).
+      description: |
+        Rename, change duration, or archive/unarchive a subject (all optional).
+        Changing duration sends duration_mode plus the matching pinned field
+        (timeline_days for deadline, pace_per_week for pace).
       properties:
         title:         { type: [string, "null"], maxLength: 200, default: null }
+        duration_mode: { type: [string, "null"], default: null }
         timeline_days: { type: [integer, "null"], default: null }
+        pace_per_week: { type: [integer, "null"], default: null }
         archived:      { type: [boolean, "null"], default: null }
 
     SubjectListItem:
@@ -650,14 +709,19 @@ def test_subject_contracts_import():
     SubjectDetail:
       type: object
       additionalProperties: false
-      required: [id, user_id, title, per_session_minutes, pace_per_week, created_at, progress, lessons]
-      description: Subject overview with ordered lessons and progress counts.
+      required: [id, user_id, title, per_session_minutes, duration_mode, timeline_days, pace_per_week, created_at, progress, lessons]
+      description: |
+        Subject overview with ordered lessons and progress counts. Returns
+        duration_mode plus BOTH timeline_days and pace_per_week — one is the pinned
+        value, the other is derived from the current lesson_count on read, so the
+        frontend renders the toggle without recomputing.
       properties:
         id:                  { type: string }
         user_id:             { type: string }
         title:               { type: string }
         per_session_minutes: { type: integer }
-        timeline_days:       { type: [integer, "null"], default: null }
+        duration_mode:       { type: string, enum: [deadline, pace] }
+        timeline_days:       { type: integer }
         pace_per_week:       { type: integer }
         created_at:          { type: string, format: date-time }
         archived_at:         { type: [string, "null"], format: date-time, default: null }
@@ -711,12 +775,12 @@ def test_subject_contracts_import():
 **Interfaces:**
 - Consumes: `db.models.{Lesson, Session as SessionModel, Subject, User}`, `contracts.{LessonDraft, TopicProfile}`, `sqlalchemy.{select, func}`.
 - Produces:
-  - `create_subject(db, user_id: str, title: str, per_session_minutes: int, timeline_days: int | None, lessons: list[LessonDraft]) -> Subject`
+  - `create_subject(db, user_id: str, title: str, per_session_minutes: int, duration_mode: str, timeline_days: int | None, pace_per_week: int | None, lessons: list[LessonDraft]) -> Subject`
   - `list_subjects(db, user_id: str) -> list[Subject]`
   - `get_subject(db, user_id: str, subject_id: str) -> Subject | None`
   - `list_lessons(db, subject_id: str) -> list[Lesson]`
   - `progress_counts(db, subject_id: str) -> tuple[int, int]`  (done, total)
-  - `pace_per_week(lesson_count: int, timeline_days: int | None) -> int`
+  - `derive_duration(duration_mode: str, lesson_count: int, timeline_days: int | None, pace_per_week: int | None) -> tuple[int, int]`  (pure; returns the full `(timeline_days, pace_per_week)` pair with the complementary value derived from the current `lesson_count`)
   - `add_lesson(db, subject: Subject, title: str, goal: str) -> Lesson`
   - `get_lesson(db, user_id: str, lesson_id: str) -> Lesson | None`
   - `patch_lesson(db, lesson: Lesson, title=None, goal=None, status=None, order_idx=None) -> Lesson`
@@ -744,9 +808,10 @@ def seeded_user(db_session):
     db_session.commit()
 
 
-def _subject(db_session, drafts):
+def _subject(db_session, drafts, duration_mode="deadline", timeline_days=14, pace_per_week=None):
     return subject_service.create_subject(
-        db_session, USER_ID, "Organic Chem", 30, 14, drafts
+        db_session, USER_ID, "Organic Chem", 30,
+        duration_mode, timeline_days, pace_per_week, drafts,
     )
 
 
@@ -767,10 +832,31 @@ def test_progress_counts(db_session, seeded_user):
     assert (done, total) == (1, 2)
 
 
-def test_pace_per_week_derived():
-    assert subject_service.pace_per_week(6, 14) == 3   # ceil(6 / 2 weeks)
-    assert subject_service.pace_per_week(6, None) == 6  # no timeline -> count
-    assert subject_service.pace_per_week(2, 3) == 2     # weeks floored to 1
+def test_derive_duration_deadline_mode():
+    # deadline pinned: pace_per_week = ceil(lesson_count / max(timeline_days/7, 1))
+    td, pace = subject_service.derive_duration("deadline", 6, 14, None)
+    assert (td, pace) == (14, 3)            # ceil(6 / 2 weeks)
+    td, pace = subject_service.derive_duration("deadline", 2, 3, None)
+    assert (td, pace) == (3, 2)             # weeks floored to 1 -> ceil(2/1)
+    td, pace = subject_service.derive_duration("deadline", 0, 14, None)
+    assert (td, pace) == (14, 0)            # lesson_count=0 -> derived pace 0
+
+
+def test_derive_duration_pace_mode():
+    # pace pinned: timeline_days = ceil(lesson_count / max(pace_per_week, 1)) * 7
+    td, pace = subject_service.derive_duration("pace", 6, None, 2)
+    assert (td, pace) == (21, 2)            # ceil(6/2)=3 weeks -> 21 days
+    td, pace = subject_service.derive_duration("pace", 0, None, 3)
+    assert (td, pace) == (0, 3)            # lesson_count=0 -> derived days 0
+
+
+def test_derive_duration_divide_by_zero_guards():
+    # pace_per_week=0 must not raise (guarded by max(..., 1))
+    td, pace = subject_service.derive_duration("pace", 5, None, 0)
+    assert td == 35 and pace == 0          # ceil(5/1)=5 weeks -> 35 days
+    # timeline_days=0 must not raise (weeks floored to 1)
+    td, pace = subject_service.derive_duration("deadline", 5, 0, None)
+    assert td == 0 and pace == 5           # ceil(5/1)
 
 
 def test_add_lesson_appends_at_end(db_session, seeded_user):
@@ -871,7 +957,9 @@ def create_subject(
     user_id: str,
     title: str,
     per_session_minutes: int,
+    duration_mode: str,
     timeline_days: int | None,
+    pace_per_week: int | None,
     lessons: list[LessonDraft],
 ) -> Subject:
     if not db.get(User, user_id):
@@ -882,7 +970,9 @@ def create_subject(
         user_id=user_id,
         title=title,
         per_session_minutes=per_session_minutes,
+        duration_mode=duration_mode,
         timeline_days=timeline_days,
+        pace_per_week=pace_per_week,
     )
     db.add(subject)
     db.flush()
@@ -940,11 +1030,28 @@ def progress_counts(db: Session, subject_id: str) -> tuple[int, int]:
     return by_status.get("done", 0), total
 
 
-def pace_per_week(lesson_count: int, timeline_days: int | None) -> int:
-    if not timeline_days:
-        return lesson_count
-    weeks = max(timeline_days / 7, 1)
-    return math.ceil(lesson_count / weeks)
+def derive_duration(
+    duration_mode: str,
+    lesson_count: int,
+    timeline_days: int | None,
+    pace_per_week: int | None,
+) -> tuple[int, int]:
+    """Return the full (timeline_days, pace_per_week) pair, deriving the
+    complementary value from the CURRENT lesson_count so it stays correct as
+    plan-revision (Spec C) adds/removes lessons. Pure; no DB access.
+
+    deadline mode (timeline_days pinned):
+        pace_per_week = ceil(lesson_count / max(timeline_days / 7, 1))
+    pace mode (pace_per_week pinned):
+        timeline_days = ceil(lesson_count / max(pace_per_week, 1)) * 7
+    """
+    if duration_mode == "deadline":
+        weeks = max((timeline_days or 0) / 7, 1)
+        derived_pace = math.ceil(lesson_count / weeks)
+        return timeline_days or 0, derived_pace
+    # pace mode
+    derived_days = math.ceil(lesson_count / max(pace_per_week or 0, 1)) * 7
+    return derived_days, pace_per_week or 0
 
 
 def add_lesson(db: Session, subject: Subject, title: str, goal: str) -> Lesson:
@@ -1037,7 +1144,7 @@ def open_lesson(db: Session, user_id: str, lesson: Lesson) -> SessionModel:
     return session
 ```
 
-- [ ] **Step 4: Run — expect PASS.** Command: `cd backend && pytest tests/test_subject_service.py -q`. Expected: `10 passed`.
+- [ ] **Step 4: Run — expect PASS.** Command: `cd backend && pytest tests/test_subject_service.py -q`. Expected: `12 passed`.
 
 - [ ] **Step 5: Commit.** `git add backend/services/subject_service.py backend/tests/test_subject_service.py && git commit -m "feat(service): subject_service CRUD + reorder + open-lesson"`
 
@@ -1051,8 +1158,9 @@ def open_lesson(db: Session, user_id: str, lesson: Lesson) -> SessionModel:
 
 **Interfaces:**
 - Consumes: `litellm`, `config.settings`, `contracts.LessonDraft`, `services.cost_meter` (`check_cap`, `record_cost`, `current_spend`).
-- Produces: `async def draft_plan(db, user_id: str, title: str, per_session_minutes: int, timeline_days: int | None) -> list[LessonDraft]`.
-- Cost-metering mirrors `agent/tutor.py` (`cost_meter.check_cap` before; `litellm.completion_cost(completion_response=resp)` + `cost_meter.record_cost` after) — NOT `summary_service` (which does not meter). The spec's signature omits `db`; it is added here because `check_cap`/`record_cost` require a session. On cap-reached the service returns the deterministic fallback (creation must never hard-fail); on any LLM/parse failure it also returns the fallback.
+- Produces: `async def draft_plan(db, user_id: str, title: str, per_session_minutes: int, duration_mode: str, timeline_days: int | None, pace_per_week: int | None) -> list[LessonDraft]`.
+- The prompt branches on `duration_mode`: in `deadline` mode it fits the lessons to `timeline_days`; in `pace` mode there is no hard horizon, so it sizes by the subject's natural breadth (pace sets cadence only and does NOT cap lesson count). Both modes stay bounded 3-12.
+- Cost-metering mirrors `agent/tutor.py` (`cost_meter.check_cap` before; `litellm.completion_cost(completion_response=resp)` + `cost_meter.record_cost` after) — NOT `summary_service` (which does not meter). `db` is the first param because `check_cap`/`record_cost` require a session. On cap-reached the service returns the deterministic fallback (creation must never hard-fail); on any LLM/parse failure it also returns the fallback.
 
 - [ ] **Step 1: Write failing tests.** Create `backend/tests/test_plan_service.py`:
 ```python
@@ -1103,10 +1211,31 @@ def test_drafts_parsed_into_bounded_list(db_session, seeded_user, monkeypatch):
     monkeypatch.setattr(plan_service.litellm, "completion_cost", lambda **kw: 0.0)
 
     drafts = asyncio.run(
-        plan_service.draft_plan(db_session, USER_ID, "Organic Chem", 30, 14)
+        plan_service.draft_plan(db_session, USER_ID, "Organic Chem", 30, "deadline", 14, None)
     )
     assert all(isinstance(d, LessonDraft) for d in drafts)
     assert [d.title for d in drafts] == ["Lesson 0", "Lesson 1", "Lesson 2", "Lesson 3"]
+
+
+def test_prompt_branches_by_duration_mode(db_session, seeded_user, monkeypatch):
+    captured = {}
+    payload = json.dumps([{"title": f"L{i}", "goal": "g"} for i in range(3)])
+
+    async def capture(**kwargs):
+        captured["messages"] = kwargs["messages"]
+        return _resp(payload)
+
+    monkeypatch.setattr(plan_service.litellm, "acompletion", capture)
+    monkeypatch.setattr(plan_service.litellm, "completion_cost", lambda **kw: 0.0)
+
+    asyncio.run(plan_service.draft_plan(db_session, USER_ID, "Calc", 30, "deadline", 21, None))
+    deadline_prompt = captured["messages"][-1]["content"]
+    assert "deadline of 21 days" in deadline_prompt
+
+    asyncio.run(plan_service.draft_plan(db_session, USER_ID, "Calc", 30, "pace", None, 2))
+    pace_prompt = captured["messages"][-1]["content"]
+    assert "2 lessons per week" in pace_prompt
+    assert "does NOT cap" in pace_prompt
 
 
 def test_llm_failure_returns_fallback(db_session, seeded_user, monkeypatch):
@@ -1115,7 +1244,7 @@ def test_llm_failure_returns_fallback(db_session, seeded_user, monkeypatch):
 
     monkeypatch.setattr(plan_service.litellm, "acompletion", boom)
     drafts = asyncio.run(
-        plan_service.draft_plan(db_session, USER_ID, "Quantum Physics", 60, None)
+        plan_service.draft_plan(db_session, USER_ID, "Quantum Physics", 60, "pace", None, 2)
     )
     assert len(drafts) == 1
     assert drafts[0].title == "Quantum Physics"
@@ -1133,7 +1262,7 @@ def test_cost_meter_invoked(db_session, seeded_user, monkeypatch):
     monkeypatch.setattr(plan_service.litellm, "completion_cost", lambda **kw: 0.01)
 
     assert cost_meter.current_spend(db_session, USER_ID) == 0
-    asyncio.run(plan_service.draft_plan(db_session, USER_ID, "Algebra", 30, 7))
+    asyncio.run(plan_service.draft_plan(db_session, USER_ID, "Algebra", 30, "deadline", 7, None))
     assert cost_meter.current_spend(db_session, USER_ID) > 0
 
 
@@ -1147,7 +1276,7 @@ def test_cap_reached_returns_fallback_without_llm(db_session, seeded_user, monke
 
     monkeypatch.setattr(plan_service.litellm, "acompletion", must_not_call)
     drafts = asyncio.run(
-        plan_service.draft_plan(db_session, USER_ID, "Statistics", 15, None)
+        plan_service.draft_plan(db_session, USER_ID, "Statistics", 15, "pace", None, 1)
     )
     assert len(drafts) == 1
     assert drafts[0].title == "Statistics"
@@ -1189,6 +1318,22 @@ DRAFT_SYSTEM = (
 )
 
 
+def _duration_instruction(
+    duration_mode: str, timeline_days: int | None, pace_per_week: int | None
+) -> str:
+    if duration_mode == "deadline":
+        return (
+            f"The learner has a deadline of {timeline_days} days. Fit the lessons "
+            "to that horizon: fewer, broader lessons for a short deadline; more, "
+            "finer lessons for a long one. Stay within 3-12 lessons."
+        )
+    return (
+        f"The learner wants a steady cadence of about {pace_per_week} lessons per "
+        "week with no fixed deadline. Size the list by the subject's natural "
+        "breadth (cadence does NOT cap the total). Stay within 3-12 lessons."
+    )
+
+
 def _fallback(title: str) -> list[LessonDraft]:
     return [LessonDraft(title=title, goal=f"Introduction to {title}.")]
 
@@ -1213,7 +1358,9 @@ async def draft_plan(
     user_id: str,
     title: str,
     per_session_minutes: int,
+    duration_mode: str,
     timeline_days: int | None,
+    pace_per_week: int | None,
 ) -> list[LessonDraft]:
     if settings.llm_stub_enabled:
         return _fallback(title)
@@ -1226,8 +1373,7 @@ async def draft_plan(
     user_prompt = (
         f"Subject: {title}\n"
         f"Minutes per session: {per_session_minutes}\n"
-        f"Timeline (days): {timeline_days if timeline_days else 'unspecified'}\n"
-        "Size the list to the timeline and per-session depth."
+        f"{_duration_instruction(duration_mode, timeline_days, pace_per_week)}"
     )
     try:
         resp = await litellm.acompletion(
@@ -1260,7 +1406,7 @@ async def draft_plan(
         return _fallback(title)
 ```
 
-- [ ] **Step 4: Run — expect PASS.** Command: `cd backend && pytest tests/test_plan_service.py -q`. Expected: `4 passed`.
+- [ ] **Step 4: Run — expect PASS.** Command: `cd backend && pytest tests/test_plan_service.py -q`. Expected: `5 passed`.
 
 - [ ] **Step 5: Commit.** `git add backend/services/plan_service.py backend/tests/test_plan_service.py && git commit -m "feat(service): plan_service metered LLM draft with fallback"`
 
@@ -1312,6 +1458,7 @@ def _create_blank(client, lessons=None):
             "user_id": USER_ID,
             "title": "Organic Chem",
             "per_session_minutes": 30,
+            "duration_mode": "deadline",
             "timeline_days": 14,
             "mode": "blank",
             "lessons": lessons or [{"title": "Bonding", "goal": "learn bonds"}],
@@ -1325,13 +1472,17 @@ def test_create_blank_persists_body_lessons(client, seeded_user):
     body = r.json()
     assert [l["title"] for l in body["lessons"]] == ["A", "B"]
     assert body["progress"] == {"done_count": 0, "total_count": 2}
-    assert body["pace_per_week"] == 1  # ceil(2 / 2 weeks)
+    assert body["duration_mode"] == "deadline"
+    assert body["timeline_days"] == 14            # pinned
+    assert body["pace_per_week"] == 1             # derived: ceil(2 / 2 weeks)
 
 
 def test_create_draft_calls_plan_service(client, seeded_user, monkeypatch):
     from contracts import LessonDraft
 
-    async def fake_draft(db, user_id, title, per_session_minutes, timeline_days):
+    async def fake_draft(db, user_id, title, per_session_minutes, duration_mode, timeline_days, pace_per_week):
+        assert duration_mode == "pace"
+        assert pace_per_week == 2
         return [LessonDraft(title="Drafted 1", goal="g"), LessonDraft(title="Drafted 2", goal="g")]
 
     monkeypatch.setattr(plan_service, "draft_plan", fake_draft)
@@ -1341,7 +1492,8 @@ def test_create_draft_calls_plan_service(client, seeded_user, monkeypatch):
             "user_id": USER_ID,
             "title": "Quantum",
             "per_session_minutes": 60,
-            "timeline_days": None,
+            "duration_mode": "pace",
+            "pace_per_week": 2,
             "mode": "draft",
         },
     )
@@ -1377,6 +1529,7 @@ def test_draft_plan_preview_returns_lessons_metered_no_persist(
             "user_id": USER_ID,
             "title": "Organic Chem",
             "per_session_minutes": 30,
+            "duration_mode": "deadline",
             "timeline_days": 14,
         },
     )
@@ -1419,6 +1572,41 @@ def test_patch_subject_archive(client, seeded_user):
 def test_patch_subject_empty_body_400(client, seeded_user):
     sid = _create_blank(client).json()["id"]
     assert client.patch(f"/api/subjects/{sid}?user_id={USER_ID}", json={}).status_code == 400
+
+
+def test_get_subject_returns_pinned_and_derived_duration(client, seeded_user):
+    # deadline mode, 14-day timeline, 4 lessons -> derived pace = ceil(4/2) = 2.
+    sid = _create_blank(
+        client, lessons=[{"title": t, "goal": "g"} for t in ["a", "b", "c", "d"]]
+    ).json()["id"]
+    body = client.get(f"/api/subjects/{sid}?user_id={USER_ID}").json()
+    assert body["duration_mode"] == "deadline"
+    assert body["timeline_days"] == 14   # pinned
+    assert body["pace_per_week"] == 2    # derived from current lesson_count
+
+
+def test_patch_subject_change_duration_to_pace(client, seeded_user):
+    # 4 lessons; switch to pace mode pinned at 1/week -> derived timeline = 4*7 = 28.
+    sid = _create_blank(
+        client, lessons=[{"title": t, "goal": "g"} for t in ["a", "b", "c", "d"]]
+    ).json()["id"]
+    r = client.patch(
+        f"/api/subjects/{sid}?user_id={USER_ID}",
+        json={"duration_mode": "pace", "pace_per_week": 1},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["duration_mode"] == "pace"
+    assert body["pace_per_week"] == 1    # pinned
+    assert body["timeline_days"] == 28   # derived: ceil(4/1) * 7
+
+
+def test_patch_subject_invalid_duration_mode_400(client, seeded_user):
+    sid = _create_blank(client).json()["id"]
+    r = client.patch(
+        f"/api/subjects/{sid}?user_id={USER_ID}", json={"duration_mode": "whenever"}
+    )
+    assert r.status_code == 400
 
 
 def test_add_lesson_appends(client, seeded_user):
@@ -1515,6 +1703,7 @@ from services.session_enrichment import aware_utc as _aware_utc
 router = APIRouter(prefix="/api")
 
 ALLOWED_STATUS = {"not_started", "in_progress", "done"}
+ALLOWED_DURATION_MODE = {"deadline", "pace"}
 
 
 def _lesson_item(lesson: Lesson) -> LessonItem:
@@ -1533,13 +1722,19 @@ def _lesson_item(lesson: Lesson) -> LessonItem:
 def _subject_detail(db: Session, subject: Subject) -> SubjectDetail:
     lessons = subject_service.list_lessons(db, subject.id)
     done, total = subject_service.progress_counts(db, subject.id)
+    # Derive the complementary duration value from the current lesson_count so the
+    # response carries both the pinned and the derived value plus duration_mode.
+    timeline_days, pace_per_week = subject_service.derive_duration(
+        subject.duration_mode, total, subject.timeline_days, subject.pace_per_week
+    )
     return SubjectDetail(
         id=subject.id,
         user_id=subject.user_id,
         title=subject.title,
         per_session_minutes=subject.per_session_minutes,
-        timeline_days=subject.timeline_days,
-        pace_per_week=subject_service.pace_per_week(total, subject.timeline_days),
+        duration_mode=subject.duration_mode,
+        timeline_days=timeline_days,
+        pace_per_week=pace_per_week,
         created_at=_aware_utc(subject.created_at),
         archived_at=_aware_utc(subject.archived_at),
         progress=SubjectProgress(done_count=done, total_count=total),
@@ -1555,12 +1750,14 @@ async def create_subject(
 ):
     if req.mode == "draft":
         drafts = await plan_service.draft_plan(
-            db, user_id, req.title, req.per_session_minutes, req.timeline_days
+            db, user_id, req.title, req.per_session_minutes,
+            req.duration_mode, req.timeline_days, req.pace_per_week,
         )
     else:
         drafts = req.lessons or []
     subject = subject_service.create_subject(
-        db, user_id, req.title, req.per_session_minutes, req.timeline_days, drafts
+        db, user_id, req.title, req.per_session_minutes,
+        req.duration_mode, req.timeline_days, req.pace_per_week, drafts,
     )
     return _subject_detail(db, subject)
 
@@ -1593,7 +1790,8 @@ async def draft_plan_preview(
     # Metered exactly like the persist path (plan_service handles cost meter +
     # fallback); writes nothing to the DB. Powers the Spec B wizard review step.
     drafts = await plan_service.draft_plan(
-        db, user_id, req.title, req.per_session_minutes, req.timeline_days
+        db, user_id, req.title, req.per_session_minutes,
+        req.duration_mode, req.timeline_days, req.pace_per_week,
     )
     return DraftPlanResponse(lessons=drafts)
 
@@ -1617,15 +1815,38 @@ def update_subject(
     user_id: str = Depends(current_user_id),
     db: Session = Depends(get_db),
 ):
-    if req.title is None and req.timeline_days is None and req.archived is None:
+    if (
+        req.title is None
+        and req.duration_mode is None
+        and req.timeline_days is None
+        and req.pace_per_week is None
+        and req.archived is None
+    ):
         raise HTTPException(status_code=400, detail="at least one field required")
+    if req.duration_mode is not None and req.duration_mode not in ALLOWED_DURATION_MODE:
+        raise HTTPException(status_code=400, detail="invalid duration_mode")
     subject = subject_service.get_subject(db, user_id, subject_id)
     if subject is None:
         raise HTTPException(status_code=404, detail="subject not found")
     if req.title is not None:
         subject.title = req.title
-    if req.timeline_days is not None:
-        subject.timeline_days = req.timeline_days
+    # Changing duration: the new mode pins one field; clear the other so exactly
+    # one stays populated (the complement is derived on read).
+    if req.duration_mode is not None:
+        subject.duration_mode = req.duration_mode
+        if req.duration_mode == "deadline":
+            if req.timeline_days is not None:
+                subject.timeline_days = req.timeline_days
+            subject.pace_per_week = None
+        else:  # pace
+            if req.pace_per_week is not None:
+                subject.pace_per_week = req.pace_per_week
+            subject.timeline_days = None
+    else:
+        if req.timeline_days is not None:
+            subject.timeline_days = req.timeline_days
+        if req.pace_per_week is not None:
+            subject.pace_per_week = req.pace_per_week
     if req.archived is not None:
         subject.archived_at = datetime.now(timezone.utc) if req.archived else None
     db.commit()
@@ -1710,7 +1931,7 @@ Then add after `app.include_router(sessions.router)` (L32):
 app.include_router(subjects.router)
 ```
 
-- [ ] **Step 5: Run — expect PASS.** Command: `cd backend && pytest tests/test_subjects_route.py -q`. Expected: `15 passed` (includes the draft-plan preview route and the force-delete path).
+- [ ] **Step 5: Run — expect PASS.** Command: `cd backend && pytest tests/test_subjects_route.py -q`. Expected: `18 passed` (includes the draft-plan preview route, the force-delete path, and the duration-toggle GET/PATCH paths).
 
 - [ ] **Step 6: Commit.** `git add backend/routes/subjects.py backend/main.py backend/tests/test_subjects_route.py && git commit -m "feat(routes): subjects + lessons API, draft-plan preview, force-delete"`
 
@@ -1828,7 +2049,7 @@ In the `SessionDetail` schema's `properties`, add the same `subject_id` nullable
 
 ## Self-Review
 
-- **Every Spec A section has a task:** Data Model (subjects/lessons/sessions.subject_id) → Tasks 1-2; Migrations → Task 2; `plan_service.py` (LLM + cost meter + fallback) → Task 5; Subject/lesson persistence → Task 4; API Routes (9 routes) → Tasks 3 (contract) + 6 (handlers); reconciled `POST /subjects/draft-plan` metered preview (no persist) → Task 3 (schema/path) + Task 6 (handler + `test_draft_plan_preview_returns_lessons_metered_no_persist`); reconciled `DELETE /lessons/{id}?force=true` → Task 4 (`delete_lesson(force=...)` + `test_delete_lesson_force_ends_session_and_deletes`) + Task 6 (route force param + force test); reviewed `lessons[]` on `POST /subjects` with `mode=draft` documented fallback → Task 3 `SubjectCreateRequest` description; Duplicate-guard fix → Task 7; Lesson Completion (`PATCH /lessons/{id}` status=done) → covered by Task 6 `test_patch_lesson_status_done`; Testing bullets → distributed across Tasks 1,4,5,6,7; Contract drift → Task 8.
+- **Every Spec A section has a task:** Data Model (subjects/lessons/sessions.subject_id) → Tasks 1-2; the duration-toggle pair (`duration_mode` + `timeline_days`/`pace_per_week` with CheckConstraint) → Task 1 (model + `test_subject_duration_mode_check_constraint`) + Task 2 (migration); derive-complement helper → Task 4 (`derive_duration` + `test_derive_duration_deadline_mode`/`_pace_mode`/`_divide_by_zero_guards`); Migrations → Task 2; `plan_service.py` (mode-branching LLM + cost meter + fallback) → Task 5; Subject/lesson persistence → Task 4; API Routes (9 routes) → Tasks 3 (contract) + 6 (handlers); reconciled `POST /subjects/draft-plan` metered preview (no persist) → Task 3 (schema/path) + Task 6 (handler + `test_draft_plan_preview_returns_lessons_metered_no_persist`); reconciled `DELETE /lessons/{id}?force=true` → Task 4 (`delete_lesson(force=...)` + `test_delete_lesson_force_ends_session_and_deletes`) + Task 6 (route force param + force test); duration on `POST /subjects` / `POST /subjects/draft-plan` bodies + `GET`/`PATCH` toggle → Task 3 (schemas) + Task 6 (`test_get_subject_returns_pinned_and_derived_duration`, `test_patch_subject_change_duration_to_pace`, `test_patch_subject_invalid_duration_mode_400`); reviewed `lessons[]` on `POST /subjects` with `mode=draft` documented fallback → Task 3 `SubjectCreateRequest` description; Duplicate-guard fix → Task 7; Lesson Completion (`PATCH /lessons/{id}` status=done) → covered by Task 6 `test_patch_lesson_status_done`; Testing bullets → distributed across Tasks 1,4,5,6,7; Contract drift → Task 8.
 - **No placeholders:** every code and test step shows real imports, real field names matching the Spec A Data Model and the generated contract signatures.
-- **Type/name consistency:** `SubjectProgress{done_count,total_count}`, `LessonItem` status `Literal["not_started","in_progress","done"]`, `LessonOpenResponse{session_id,status}`, `DraftPlanRequest{title,per_session_minutes,timeline_days}` / `DraftPlanResponse{lessons:[LessonDraft]}`, and `subject_id` nullable are used identically across openapi schemas (Task 3/7), service returns (Task 4), and route mappers (Task 6/7). `draft_plan` signature (with added `db`) matches between Task 5 impl, the Task 6 `/subjects` caller, and the Task 6 `/subjects/draft-plan` caller. `delete_lesson(db, lesson, force=False)` matches between Task 4 impl/tests and the Task 6 route.
+- **Type/name consistency:** `SubjectProgress{done_count,total_count}`, `LessonItem` status `Literal["not_started","in_progress","done"]`, `LessonOpenResponse{session_id,status}`, `DraftPlanRequest{title,per_session_minutes,duration_mode,timeline_days,pace_per_week}` / `DraftPlanResponse{lessons:[LessonDraft]}`, and `subject_id` nullable are used identically across openapi schemas (Task 3/7), service returns (Task 4), and route mappers (Task 6/7). The duration triple (`duration_mode`, nullable `timeline_days`, nullable `pace_per_week`) is consistent across the `Subject` model (Task 1), migration (Task 2), `create_subject`/`derive_duration` (Task 4), `draft_plan` (Task 5), `SubjectCreateRequest`/`SubjectUpdateRequest`/`SubjectDetail`/`DraftPlanRequest` (Task 3), and the `_subject_detail`/`update_subject` route mappers (Task 6). `draft_plan(db, ..., duration_mode, timeline_days, pace_per_week)` matches between Task 5 impl, the Task 6 `/subjects` caller, and the Task 6 `/subjects/draft-plan` caller. `delete_lesson(db, lesson, force=False)` matches between Task 4 impl/tests and the Task 6 route.
 - **Build order verified:** models → migration → contracts → service → plan_service → routes → dupe-guard enabler → zero-drift. Contracts (Task 3) precede every consumer; the final zero-drift check (Task 8) runs after both openapi edits (Tasks 3 and 7).
