@@ -104,14 +104,9 @@ defineProps({
   color: var(--color-text-faint);
 }
 
-/*
-  Typing indicator only. Scoped to .msg.typing so it does NOT leak onto the
-  AssistantBubble child root (which carries this component's scope attribute);
-  AssistantBubble owns its own full-column width.
-*/
-.msg.typing {
+.msg.assistant {
   align-self: flex-start;
-  max-width: 100%;
+  max-width: 95%;
 }
 
 .msg.typing .content {

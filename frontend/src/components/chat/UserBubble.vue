@@ -28,7 +28,6 @@ defineProps({
   flex-direction: column;
   gap: 0.3rem;
   min-width: 0;
-  flex: 1 1 auto;
   max-width: calc(100% - 2.6rem);
 }
 
@@ -52,15 +51,14 @@ defineProps({
 
 .msg.user {
   flex-direction: row-reverse;
-  align-self: stretch;
-  width: 100%;
-  max-width: 100%;
+  align-self: flex-end;
+  max-width: 88%;
 }
 
 .msg.user .msg-body {
   align-items: flex-end;
   text-align: left;
-  max-width: calc(100% - 2.6rem);
+  max-width: 100%;
 }
 
 .msg.user .role-tag {
@@ -68,8 +66,7 @@ defineProps({
 }
 
 .msg.user .content {
-  display: block;
-  width: 100%;
+  display: inline-block;
   background: var(--color-accent-strong);
   color: #FFFFFF;
   padding: 0.875rem 1.125rem;
