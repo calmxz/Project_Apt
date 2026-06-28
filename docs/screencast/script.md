@@ -118,7 +118,7 @@ Title card: GitHub URL + name.
 
 ## Output
 
-- File: `docs/screencast/adaptlearn-walkthrough.mp4`
+- File: `docs/screencast/crux-walkthrough.mp4`
 - Embed in `README.md` (or link to YouTube/Loom).
 - Keep raw OBS project file out of the repo (large).
 

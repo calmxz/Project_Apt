@@ -13,7 +13,7 @@ Pick a topic, drop in your course PDFs, and chat with a tutor that builds a live
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
 [![pgvector](https://img.shields.io/badge/pgvector-0.8.x-336791.svg)](https://github.com/pgvector/pgvector)
 
-[**Screencast walkthrough**](docs/screencast/adaptlearn-walkthrough.mp4) · [**Design doc**](docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md) · [**API spec**](docs/api/openapi.yaml)
+[**Screencast walkthrough**](docs/screencast/crux-walkthrough.mp4) · [**Design doc**](docs/superpowers/specs/2026-05-03-crux-v1-design.md) · [**API spec**](docs/api/openapi.yaml)
 
 ![Crux hero](docs/assets/hero.png)
 
@@ -127,7 +127,7 @@ The agent has three tools, no more:
 | `update_topic_profile(...)` | Patch the learner's topic profile; clearing `focus_target_gap` requires `focus_clear_reason` |
 | `record_learning_event(session_id, gap_tested, question, correct)` | Logs check-question outcomes; incorrect retest on a mastered concept demotes it server-side |
 
-The system prompt is split: an immutable rules block (`backend/agent/prompts.py`) plus dynamic context rebuilt per turn. Splitting keeps the immutable half cache-friendly. Full detail in [the design doc §3.3](docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md).
+The system prompt is split: an immutable rules block (`backend/agent/prompts.py`) plus dynamic context rebuilt per turn. Splitting keeps the immutable half cache-friendly. Full detail in [the design doc §3.3](docs/superpowers/specs/2026-05-03-crux-v1-design.md).
 
 ## Prerequisites
 

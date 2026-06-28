@@ -7,7 +7,7 @@
 ## Why this supersedes the pasted doc-review
 
 The review prompt that triggered this pass audited the three **design docs**
-(`Crux_Spec.md`, `Crux_DevPlan.md`, `2026-05-03-adaptlearn-v1-design.md`).
+(`Crux_Spec.md`, `Crux_DevPlan.md`, `2026-05-03-crux-v1-design.md`).
 The user flagged "details here could be outdated" — they are. The code has moved
 well past those docs:
 
@@ -254,7 +254,7 @@ Per Source-of-Truth Discipline: update factual records the code has settled;
 **do not** rewrite design *intent* to match code. The mastery-gate fork (B.1/B.2)
 is intent — flagged above, left for the user to decide, not rewritten.
 
-**Applied** to `docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md`
+**Applied** to `docs/superpowers/specs/2026-05-03-crux-v1-design.md`
 (matching the doc's existing inline "— was X (Phase/date)" convention): a dated
 reconciliation banner after the supersession line, plus corrections to the §1
 stack table and §2 architecture diagram/rationale/latency —

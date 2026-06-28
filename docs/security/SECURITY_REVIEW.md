@@ -5,7 +5,7 @@
 **Scope:** Backend (FastAPI + SQLite + ChromaDB + LiteLLM), frontend (Vue 3 + Vite + Pinia + PrimeVue), Docker compose, CI workflows, configs.
 **Threat model:** Personal project, 5-10 trusted friends. Realistic risks = secret leakage, cross-user data exposure, prompt injection, and unauthenticated/unbounded endpoints that run up paid LLM/embedding bills. Enterprise-scale concerns (DDoS, multi-region, SOC2) are out of scope.
 
-> **Important context:** the v1 design (`docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md:23`) explicitly locks `Auth | None (localStorage userId) | v1 scope`. Findings therefore down-rank or omit "Firebase ID-token verification missing" as such; the audit instead targets cost-abuse, input bounds, soft cross-user data hygiene, CORS, path traversal, and error leakage. See `Notes on scope calibration` at the end.
+> **Important context:** the v1 design (`docs/superpowers/specs/2026-05-03-crux-v1-design.md:23`) explicitly locks `Auth | None (localStorage userId) | v1 scope`. Findings therefore down-rank or omit "Firebase ID-token verification missing" as such; the audit instead targets cost-abuse, input bounds, soft cross-user data hygiene, CORS, path traversal, and error leakage. See `Notes on scope calibration` at the end.
 
 > **Scope recalibration (2026-05-23, Phase 6):** v1 release-target shifted from
 > trusted-friends to public deploy after the audit landed. Phase 6 hardens CI;

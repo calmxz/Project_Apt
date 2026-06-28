@@ -9,7 +9,7 @@ This plan executes in 4 phases, ordered by risk-reduced-per-effort. **Each phase
 Constraints (all phases):
 - Smallest viable change. No refactors, no new abstractions.
 - No new dependencies unless a fix genuinely requires one — none do.
-- No Firebase / no ID-token verification — design-locked out for v1 (see `docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md:23`).
+- No Firebase / no ID-token verification — design-locked out for v1 (see `docs/superpowers/specs/2026-05-03-crux-v1-design.md:23`).
 - `backend/contracts/` is **codegen** from `docs/api/openapi.yaml` (see `CLAUDE.md`). Any change to request/response shape edits the YAML first, then runs `python backend/scripts/gen_contracts.py`. CI enforces zero drift.
 
 Decision flags marked `[DECISION]` need user input before that item starts.

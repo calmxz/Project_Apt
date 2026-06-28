@@ -144,7 +144,7 @@ visual consistency (no new design system).
 - `docs/auth/supabase-setup.md`: update the provider section — Password ON,
   Confirm email ON, magic-link-only off, redirect URLs unchanged; document the
   seed script and the debug-accounts files.
-- `docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md`: update the Auth
+- `docs/superpowers/specs/2026-05-03-crux-v1-design.md`: update the Auth
   constraint line and Phase 7 note (`magic-link` → `email/password`).
 
 ## 10. Out of scope

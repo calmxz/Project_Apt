@@ -34,7 +34,7 @@
 - `frontend/src/__tests__/router.test.js` — add `/register` route + public-access cases.
 - `.gitignore` — ignore `docs/dev/debug-accounts.txt`.
 - `docs/auth/supabase-setup.md` — provider section: password + confirm-email; document seed + debug files.
-- `docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md` — Auth constraint line magic-link -> email/password.
+- `docs/superpowers/specs/2026-05-03-crux-v1-design.md` — Auth constraint line magic-link -> email/password.
 
 **Created:**
 - `frontend/src/views/RegisterView.vue` — registration form.
@@ -1366,7 +1366,7 @@ git commit -m "chore(auth): debug-accounts template + gitignore real creds file"
 
 **Files:**
 - Modify: `docs/auth/supabase-setup.md`
-- Modify: `docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md`
+- Modify: `docs/superpowers/specs/2026-05-03-crux-v1-design.md`
 
 - [ ] **Step 1: Update the Supabase provider section**
 
@@ -1437,12 +1437,12 @@ Crux uses Supabase Auth with email + password sign-in. This doc is the
 
 - [ ] **Step 4: Update the design spec constraint line**
 
-In `docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md`, find the Auth constraint row containing `Supabase magic-link (JWT)` and replace `Supabase magic-link (JWT)` with `Supabase email/password (JWT)`. Find the out-of-scope note referencing `Supabase magic-link JWT` and replace `magic-link JWT` with `email/password JWT`.
+In `docs/superpowers/specs/2026-05-03-crux-v1-design.md`, find the Auth constraint row containing `Supabase magic-link (JWT)` and replace `Supabase magic-link (JWT)` with `Supabase email/password (JWT)`. Find the out-of-scope note referencing `Supabase magic-link JWT` and replace `magic-link JWT` with `email/password JWT`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add docs/auth/supabase-setup.md docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md
+git add docs/auth/supabase-setup.md docs/superpowers/specs/2026-05-03-crux-v1-design.md
 git commit -m "docs(auth): document email/password provider + debug account seeding"
 ```
 
