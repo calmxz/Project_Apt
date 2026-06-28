@@ -18,7 +18,12 @@ from contracts import (
 )
 from db.database import get_db
 from db.models import Lesson, Subject
-from lib.error_codes import LESSON_HAS_SESSION, LESSON_NOT_FOUND, SUBJECT_NOT_FOUND
+from lib.error_codes import (
+    DURATION_FIELD_REQUIRED,
+    LESSON_HAS_SESSION,
+    LESSON_NOT_FOUND,
+    SUBJECT_NOT_FOUND,
+)
 from services import plan_service, subject_service
 from services.auth import current_user_id
 from services.session_enrichment import aware_utc as _aware_utc
@@ -71,16 +76,24 @@ async def create_subject(
     user_id: str = Depends(current_user_id),
     db: Session = Depends(get_db),
 ):
+    # Enforce duration invariant: the mode's pinned field must be provided.
+    if req.duration_mode == "deadline" and req.timeline_days is None:
+        raise HTTPException(status_code=400, detail=DURATION_FIELD_REQUIRED)
+    if req.duration_mode == "pace" and req.pace_per_week is None:
+        raise HTTPException(status_code=400, detail=DURATION_FIELD_REQUIRED)
+    # Null the complement so only the pinned field is stored.
+    timeline_days = req.timeline_days if req.duration_mode == "deadline" else None
+    pace_per_week = req.pace_per_week if req.duration_mode == "pace" else None
     if req.mode == "draft":
         drafts = await plan_service.draft_plan(
             db, user_id, req.title, req.per_session_minutes,
-            req.duration_mode, req.timeline_days, req.pace_per_week,
+            req.duration_mode, timeline_days, pace_per_week,
         )
     else:
         drafts = req.lessons or []
     subject = subject_service.create_subject(
         db, user_id, req.title, req.per_session_minutes,
-        req.duration_mode, req.timeline_days, req.pace_per_week, drafts,
+        req.duration_mode, timeline_days, pace_per_week, drafts,
     )
     return _subject_detail(db, subject)
 
@@ -166,6 +179,12 @@ def update_subject(
             if req.pace_per_week is not None:
                 subject.pace_per_week = req.pace_per_week
             subject.timeline_days = None
+        # Guard: the new mode must have its pinned field populated (from the
+        # request or from the existing row if mode is unchanged).
+        if req.duration_mode == "deadline" and subject.timeline_days is None:
+            raise HTTPException(status_code=400, detail=DURATION_FIELD_REQUIRED)
+        if req.duration_mode == "pace" and subject.pace_per_week is None:
+            raise HTTPException(status_code=400, detail=DURATION_FIELD_REQUIRED)
     else:
         if req.timeline_days is not None:
             subject.timeline_days = req.timeline_days

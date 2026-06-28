@@ -245,3 +245,71 @@ def test_patch_subject_404_cross_user(client, seeded_user, db_session):
     db_session.add(User(id="other"))
     db_session.commit()
     assert client.patch(f"/api/subjects/{sid}?user_id=other", json={"archived": True}).status_code == 404
+
+
+# --- Fix 2: cross-user 404 for addLesson ---
+
+def test_add_lesson_404_cross_user(client, seeded_user, db_session):
+    sid = _create_blank(client).json()["id"]
+    db_session.add(User(id="other"))
+    db_session.commit()
+    r = client.post(
+        f"/api/subjects/{sid}/lessons?user_id=other",
+        json={"title": "Sneaky", "goal": "g"},
+    )
+    assert r.status_code == 404
+
+
+# --- Fix 3: duration invariant validation on create ---
+
+def test_create_deadline_missing_timeline_days_400(client, seeded_user):
+    r = client.post(
+        "/api/subjects",
+        json={
+            "user_id": USER_ID,
+            "title": "Bad Deadline",
+            "per_session_minutes": 30,
+            "duration_mode": "deadline",
+            "mode": "blank",
+            "lessons": [{"title": "L1", "goal": "g"}],
+        },
+    )
+    assert r.status_code == 400
+
+
+def test_create_pace_missing_pace_per_week_400(client, seeded_user):
+    r = client.post(
+        "/api/subjects",
+        json={
+            "user_id": USER_ID,
+            "title": "Bad Pace",
+            "per_session_minutes": 30,
+            "duration_mode": "pace",
+            "mode": "blank",
+            "lessons": [{"title": "L1", "goal": "g"}],
+        },
+    )
+    assert r.status_code == 400
+
+
+def test_create_deadline_complement_nulled(client, seeded_user):
+    # Sending both fields: complement (pace_per_week) must be nulled in storage;
+    # the response derives it from lesson_count, not from stored dead data.
+    r = client.post(
+        "/api/subjects",
+        json={
+            "user_id": USER_ID,
+            "title": "Deadline Both",
+            "per_session_minutes": 30,
+            "duration_mode": "deadline",
+            "timeline_days": 7,
+            "pace_per_week": 99,          # complement — must be ignored/nulled
+            "mode": "blank",
+            "lessons": [{"title": "L1", "goal": "g"}, {"title": "L2", "goal": "g"}],
+        },
+    )
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["duration_mode"] == "deadline"
+    assert body["timeline_days"] == 7                # pinned
+    assert body["pace_per_week"] == 2                # derived: ceil(2 / 1 week), not the 99 we sent
