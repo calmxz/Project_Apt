@@ -618,7 +618,7 @@ class SubjectUpdateRequest(BaseModel):
         extra="forbid",
     )
     title: constr(max_length=200) | None = None
-    duration_mode: str | None = None
+    duration_mode: Literal["deadline", "pace"] | None = None
     timeline_days: int | None = None
     pace_per_week: int | None = None
     archived: bool | None = None

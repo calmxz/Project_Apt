@@ -1247,7 +1247,7 @@ components:
         (timeline_days for deadline, pace_per_week for pace).
       properties:
         title:         { type: [string, "null"], maxLength: 200, default: null }
-        duration_mode: { type: [string, "null"], default: null }
+        duration_mode: { type: [string, "null"], enum: [deadline, pace, null], default: null }
         timeline_days: { type: [integer, "null"], default: null }
         pace_per_week: { type: [integer, "null"], default: null }
         archived:      { type: [boolean, "null"], default: null }

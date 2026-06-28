@@ -1,5 +1,8 @@
 """TDD: subjects/lessons contracts are generated from openapi.yaml."""
 
+import pytest
+from pydantic import ValidationError
+
 
 def test_subject_contracts_import():
     from contracts import (
@@ -42,3 +45,21 @@ def test_subject_contracts_import():
     assert draft_req.timeline_days is None
     draft_resp = DraftPlanResponse(lessons=[LessonDraft(title="Bonding", goal="g")])
     assert draft_resp.lessons[0].title == "Bonding"
+
+
+def test_subject_update_duration_mode_enum():
+    from contracts import SubjectUpdateRequest
+
+    # valid values pass
+    req_deadline = SubjectUpdateRequest(duration_mode="deadline")
+    assert req_deadline.duration_mode == "deadline"
+
+    req_pace = SubjectUpdateRequest(duration_mode="pace")
+    assert req_pace.duration_mode == "pace"
+
+    req_none = SubjectUpdateRequest(duration_mode=None)
+    assert req_none.duration_mode is None
+
+    # invalid value is rejected
+    with pytest.raises(ValidationError):
+        SubjectUpdateRequest(duration_mode="whenever")
