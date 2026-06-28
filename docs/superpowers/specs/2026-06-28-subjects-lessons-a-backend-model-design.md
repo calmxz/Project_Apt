@@ -93,14 +93,17 @@ One Alembic migration: create `subjects`, create `lessons`, add `sessions.subjec
 
 ### `plan_service.py` (new)
 
-`draft_plan(user_id, title, per_session_minutes, timeline_days) -> list[LessonDraft]`
+`draft_plan(db, user_id, title, per_session_minutes, timeline_days) -> list[LessonDraft]`
 
+- Takes the DB session (`db`) because the cost meter (`check_cap` / `record_cost`)
+  requires it.
 - One LiteLLM call. Prompt asks for an ordered lesson list sized to the timeline and
   per-session depth: each lesson = `{title, goal}`. Bounded (e.g. 3–12 lessons).
 - Routed through the existing **cost meter** (`services/cost_meter.py`) and daily cap —
   a draft is a metered LLM call like any tutor turn.
-- Returns drafts only; the route persists them. Deterministic fallback on LLM failure:
-  return a single lesson titled after the subject so creation never hard-fails.
+- Returns drafts only; the route persists them. Deterministic fallback so **creation
+  never hard-fails**: on LLM failure **or daily-cap reached**, return a single lesson
+  titled after the subject (no 429 from the draft path).
 - New prompt lives in `agent/prompts.py` (or a sibling) to keep the immutable-rules /
   dynamic-context split intact.
 
@@ -122,13 +125,14 @@ New router `routes/subjects.py`:
 
 | Method + Path | Purpose |
 |---|---|
-| `POST /subjects` | Create subject. Body: `{title, per_session_minutes, timeline_days, mode, lessons?}`. `mode=draft` → call `plan_service.draft_plan`, persist result. `mode=blank` → persist with `lessons` from body (may be empty). |
+| `POST /subjects/draft-plan` | **Preview only, no persist.** Body: `{title, per_session_minutes, timeline_days}`. Calls `plan_service.draft_plan` and returns `{lessons: [{title, goal}]}` for the wizard to review/edit before committing. Metered (counts against the cap like any LLM call). This is what powers Spec B's "review/edit plan" step. |
+| `POST /subjects` | Create subject. Body: `{title, per_session_minutes, timeline_days, lessons[]}`. Persists the subject and the supplied (already-reviewed) lessons; `lessons` may be empty (blank path). The wizard always sends the reviewed list — drafted-then-edited or hand-entered. (`mode=draft` server-side persist is retained as a non-wizard convenience/fallback that calls `draft_plan` itself.) |
 | `GET /subjects` | List the user's subjects (id, title, progress, archived). |
 | `GET /subjects/{id}` | Overview: subject fields + ordered lessons (with status + session_id) + progress counts. |
 | `PATCH /subjects/{id}` | Rename / set `timeline_days` / archive (`archived_at`). |
-| `POST /subjects/{id}/lessons` | Add a lesson (blank/manual path). Body: `{title, goal}`. Appends at end. |
+| `POST /subjects/{id}/lessons` | Add a lesson (blank/manual path, and Spec C plan-revision). Body: `{title, goal}`. Appends at end. |
 | `PATCH /lessons/{id}` | Edit `title`/`goal`/`status`/`order_idx`. Status→`done` is the "mark done" write. |
-| `DELETE /lessons/{id}` | Remove a lesson (only if `session_id IS NULL`, else 409 — don't orphan a chat). |
+| `DELETE /lessons/{id}` | Remove a lesson. If `session_id IS NULL` → delete. If it has a session → **409 by default** (don't silently orphan a chat); with `?force=true` the session is ended (`ended_at` set) and `session_id` cleared before the lesson is deleted. The `force` path is what makes Spec C's plan-revision delete-a-started-lesson achievable. |
 | `POST /lessons/{id}/open` | Idempotent: if lesson has a session, return it; else create a session (`subject_id` set, `topic = lesson.title`), link `lessons.session_id`, set status `in_progress`, return `session_id`. |
 
 All routes: auth required (existing dependency), scoped to `user_id`, return 404 on
@@ -136,10 +140,13 @@ cross-user access. Reuse existing error-code conventions (`lib/error_codes.py`).
 
 ### Duplicate-guard fix
 
-Today's duplicate-topic guard (NewSessionView / sessions service) is **global per user**.
-Re-scope the active-session-by-topic check so it only considers sessions **within the
-same subject** (or among subject-less quick sessions). Prevents a false "duplicate" when
-two different subjects each have a lesson titled, e.g., "Introduction".
+The duplicate-topic guard is **frontend-only** — `findActiveSessionByTopic` in
+`frontend/src/utils/formatDate.js`; the backend has no such guard. Spec A's deliverable
+here is just to **expose `subject_id` on session response payloads** (`SessionListItem` /
+`SessionResponse` / `SessionDetail`) so Spec B can re-scope the JS check to **within the
+same subject** (or among subject-less quick sessions). The re-scope of
+`findActiveSessionByTopic` itself is a **Spec B** task. This prevents a false "duplicate"
+when two different subjects each have a lesson titled, e.g., "Introduction".
 
 ## Lesson Completion (server side)
 
