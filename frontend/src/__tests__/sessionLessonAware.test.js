@@ -12,8 +12,15 @@ describe('LessonContextBar', () => {
     expect(wrapper.get('[data-testid="session-lesson-back"]')).toBeTruthy()
   })
 
-  it('renders nothing when there is no goal', () => {
+  it('shows the subject back-link even when the lesson has no goal', () => {
     const wrapper = mount(LessonContextBar, { props: { goal: '', subjectId: 's1' } })
+    expect(wrapper.find('[data-testid="session-lesson-goal"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="session-lesson-back"]').exists()).toBe(true)
+  })
+
+  it('renders nothing when there is neither a goal nor a subject', () => {
+    const wrapper = mount(LessonContextBar, { props: { goal: '', subjectId: '' } })
+    expect(wrapper.find('[data-testid="session-lesson-back"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="session-lesson-goal"]').exists()).toBe(false)
   })
 })

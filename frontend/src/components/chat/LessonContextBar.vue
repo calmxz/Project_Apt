@@ -2,12 +2,12 @@
 defineProps({ goal: { type: String, default: '' }, subjectId: { type: String, default: '' } })
 </script>
 <template>
-  <div v-if="goal" class="lesson-bar">
+  <div v-if="subjectId || goal" class="lesson-bar">
     <RouterLink v-if="subjectId" class="lesson-back" data-testid="session-lesson-back"
                 :to="{ name: 'subject-overview', params: { id: subjectId } }">
       <i class="pi pi-arrow-left" aria-hidden="true" /> Subject
     </RouterLink>
-    <p class="lesson-goal" data-testid="session-lesson-goal">{{ goal }}</p>
+    <p v-if="goal" class="lesson-goal" data-testid="session-lesson-goal">{{ goal }}</p>
   </div>
 </template>
 <style scoped>
