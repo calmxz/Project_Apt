@@ -84,7 +84,7 @@
         v-if="showMarkDone && lesson"
         :lesson-title="lesson.title"
         @confirm="onMarkDone"
-        @dismiss="showMarkDone = false"
+        @dismiss="onDismissMarkDone"
       />
 
       <Composer
@@ -153,6 +153,7 @@ import { useToast } from '../composables/useToast.js'
 import { costBus } from '../services/costBus.js'
 import { getUploadStatus, uploadDocument, validateFile } from '../services/uploadApi.js'
 import { formatShortDateTime } from '../utils/formatDate.js'
+import { checkBatchAllCorrect } from '../utils/checkBatch.js'
 
 const props = defineProps({ id: { type: String, required: true } })
 
@@ -345,6 +346,14 @@ async function resolveLessonContext(id) {
     if (match) {
       lesson.value = { id: match.id, title: match.title, goal: match.goal }
       lessonSubjectId.value = subjectId
+      // Resume path: returning to a session whose latest check batch was already
+      // cleared all-correct. That batch lives in store.messages (rebuilt by
+      // loadSession), not pendingCheck, so the live watcher never sees it. Skip
+      // when the lesson is already done -- no point nagging.
+      if (match.status !== 'done') {
+        const graded = [...store.messages].reverse().find((m) => m.check_batch)
+        if (graded && checkBatchAllCorrect(graded.check_batch.items)) maybeSuggestMarkDone()
+      }
     }
   } catch {
     // Lesson context is non-essential; leave the bar hidden on failure.
@@ -515,24 +524,22 @@ async function onDoneCheck() {
   }
 }
 
-// Mark-done suggestion trigger. Reuses the EXISTING mastery signal: a check
-// batch the store already graded all-correct. The graded batch lives transiently
-// in store.pendingCheck (completeCheck nulls it and never lands it in
-// store.messages mid-session), so we watch pendingCheck deeply and read the
-// all-answered-correct state before it clears. No new scoring pass.
-function batchAllCorrect(pc) {
-  return Boolean(
-    pc &&
-      pc.items?.length &&
-      pc.items.every((it) => it.status === 'answered' && it.correct === true),
-  )
+// Mark-done suggestion. Reuses the EXISTING mastery signal: a check batch the
+// store already graded all-correct (checkBatchAllCorrect). Fires once per lesson
+// per mount (suggestedLessons guard; navigating session->session reuses this
+// component so the guard survives in-app, resetting only on a full reload).
+function maybeSuggestMarkDone() {
+  if (!lesson.value || suggestedLessons.has(lesson.value.id)) return
+  showMarkDone.value = true
 }
+
+// Live path: the graded batch lives transiently in store.pendingCheck
+// (completeCheck nulls it and never lands it in store.messages mid-session), so
+// watch it deeply and read the all-correct state before it clears.
 watch(
   () => store.pendingCheck,
   (pc) => {
-    if (!batchAllCorrect(pc)) return
-    if (!lesson.value || suggestedLessons.has(lesson.value.id)) return
-    showMarkDone.value = true
+    if (pc && checkBatchAllCorrect(pc.items)) maybeSuggestMarkDone()
   },
   { deep: true },
 )
@@ -547,6 +554,13 @@ async function onMarkDone() {
   } catch (e) {
     lastError.value = e
   }
+}
+
+// Dismiss is sticky for this mount: "Keep going" suppresses re-prompts for the
+// same lesson until a full reload, so a later batch does not re-nag.
+function onDismissMarkDone() {
+  showMarkDone.value = false
+  if (lesson.value) suggestedLessons.add(lesson.value.id)
 }
 
 function goHome() {
