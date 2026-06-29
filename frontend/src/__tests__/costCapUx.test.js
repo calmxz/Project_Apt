@@ -146,9 +146,9 @@ vi.mock('@/services/uploadApi.js', () => ({
 }))
 
 const showError = vi.fn()
-const showInfo = vi.fn()
+const showWarn = vi.fn()
 vi.mock('@/composables/useToast.js', () => ({
-  useToast: () => ({ showError, showInfo, showSuccess: vi.fn() }),
+  useToast: () => ({ showError, showWarn, showSuccess: vi.fn() }),
 }))
 
 describe('SessionView cost-cap UX', () => {
@@ -156,7 +156,7 @@ describe('SessionView cost-cap UX', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     showError.mockClear()
-    showInfo.mockClear()
+    showWarn.mockClear()
   })
   afterEach(() => {
     if (lastWrapper) {
@@ -201,6 +201,6 @@ describe('SessionView cost-cap UX', () => {
     costBus.dispatchEvent(new CustomEvent('cost-warning', { detail: { header: 'x' } }))
     costBus.dispatchEvent(new CustomEvent('cost-warning', { detail: { header: 'x' } }))
     await flushPromises()
-    expect(showInfo).toHaveBeenCalledTimes(1)
+    expect(showWarn).toHaveBeenCalledTimes(1)
   })
 })

@@ -231,7 +231,7 @@ const capDescribedby = computed(() => {
   return ids.length ? ids.join(' ') : null
 })
 
-const { showError, showInfo } = useToast()
+const { showError, showWarn, showSuccess } = useToast()
 watch(
   () => store.dailyCapReached,
   (now) => {
@@ -260,7 +260,7 @@ const softCapShown = ref(false)
 function onCostWarning() {
   if (softCapShown.value) return
   softCapShown.value = true
-  showInfo(
+  showWarn(
     'You’re approaching the daily cost limit for this session.',
     { summary: 'Cost warning', life: 6000 },
   )
@@ -550,7 +550,7 @@ async function onMarkDone() {
   suggestedLessons.add(lesson.value.id)
   try {
     await subjectStore.markLessonDone(lesson.value.id)
-    showInfo('Lesson marked done. Progress updates on your next visit to the subject.', { summary: 'Marked done', life: 5000 })
+    showSuccess('Lesson marked done. Progress updates on your next visit to the subject.', { summary: 'Marked done', life: 5000 })
   } catch (e) {
     lastError.value = e
   }

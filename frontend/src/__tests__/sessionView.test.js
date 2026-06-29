@@ -18,7 +18,7 @@ vi.mock('vue-router', () => ({
 
 const showError = vi.fn()
 vi.mock('@/composables/useToast.js', () => ({
-  useToast: () => ({ showError, showInfo: vi.fn(), showSuccess: vi.fn() }),
+  useToast: () => ({ showError, showWarn: vi.fn(), showSuccess: vi.fn() }),
 }))
 
 const uploadDocument = vi.fn()
