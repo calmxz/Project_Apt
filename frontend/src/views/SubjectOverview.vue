@@ -6,6 +6,7 @@
         <div
           role="progressbar"
           data-testid="subject-progress-bar"
+          aria-valuemin="0"
           :aria-valuenow="subject.progress?.done_count"
           :aria-valuemax="subject.progress?.total_count"
           class="progress-track"
@@ -81,15 +82,19 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
-import * as sessionsApi from '../services/sessionsApi.js'
+import { useSessionStore } from '../stores/session.js'
 import { useSubjectStore } from '../stores/subject.js'
 import { normalizeTopicKey } from '../utils/formatDate.js'
 
 const props = defineProps({ id: { type: String, required: true } })
 const router = useRouter()
 const store = useSubjectStore()
+const sessionStore = useSessionStore()
 
-onMounted(() => store.loadSubject(props.id).catch(() => {}))
+onMounted(() => {
+  store.loadSubject(props.id).catch(() => {})
+  sessionStore.listSessions().catch(() => {})
+})
 
 const subject = computed(() => store.currentSubject)
 const lessons = computed(() => subject.value?.lessons || [])
@@ -130,14 +135,22 @@ function openNext() {
   if (nextId.value) goToLesson(nextId.value)
 }
 
-// Dupe-banner: opened lessons (session_id != null) sharing a normalized title.
+// Dupe-banner: active opened lessons sharing a normalized title.
+// "Active" = session_id is set AND the linked session has no ended_at.
+// Cross-references sessionStore.sessions so ending a duplicate session
+// drops it from the active set and clears the banner once all are resolved.
 // Scoped to this subject; sorts by order_idx (ascending) — keeps first, ends rest.
-// Semantic shift vs old HomeView: topic key is lesson.title (lessons lack a topic
-// field), and "newest" is "lowest order_idx" since lessons have no created_at.
 const duplicateSessionIds = computed(() => {
-  const opened = lessons.value.filter((l) => l.session_id)
+  // Build lookup: session_id -> ended_at (undefined for sessions not in list = treated as active)
+  const endedAt = new Map(sessionStore.sessions.map((s) => [s.id, s.ended_at]))
+
+  // Only consider opened lessons whose linked session is NOT ended
+  const active = lessons.value.filter(
+    (l) => l.session_id && !endedAt.get(l.session_id),
+  )
+
   const byTopic = new Map()
-  for (const l of opened) {
+  for (const l of active) {
     const key = normalizeTopicKey(l.title)
     const list = byTopic.get(key) || []
     list.push(l)
@@ -160,8 +173,8 @@ async function cleanupDuplicates() {
   if (!ids.length) return
   cleaning.value = true
   try {
-    await Promise.all(ids.map((id) => sessionsApi.endSession(id)))
-    await store.loadSubject(props.id)
+    await Promise.all(ids.map((id) => sessionStore.endSession(id)))
+    await Promise.all([store.loadSubject(props.id), sessionStore.listSessions()])
   } catch {
     // surface nothing — banner will update if reload succeeds
   } finally {
@@ -208,7 +221,7 @@ async function cleanupDuplicates() {
 
 .subject-meta {
   font-size: 0.875rem;
-  color: var(--color-border);
+  color: var(--color-text-muted);
   margin: 0;
 }
 
@@ -266,7 +279,7 @@ async function cleanupDuplicates() {
   align-self: flex-start;
   padding: 0.6rem 1.25rem;
   background: var(--color-accent);
-  color: #fff;
+  color: var(--color-text-on-accent);
   border: none;
   border-radius: var(--radius-card);
   font-size: 0.9rem;
@@ -307,7 +320,7 @@ async function cleanupDuplicates() {
   gap: 0.4rem;
   padding: 0.4rem 0.9rem;
   background: var(--color-accent);
-  color: #fff;
+  color: var(--color-text-on-accent);
   border: none;
   border-radius: var(--radius-card);
   font-size: 0.875rem;

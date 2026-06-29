@@ -9,9 +9,14 @@ vi.mock('vue-router', () => ({
   RouterLink: { props: ['to'], template: '<a><slot /></a>' },
 }))
 vi.mock('@/services/subjectsApi.js', () => ({ getSubject: vi.fn(), openLesson: vi.fn() }))
+vi.mock('@/services/sessionsApi.js', () => ({
+  listSessions: vi.fn().mockResolvedValue([]),
+  endSession: vi.fn().mockResolvedValue({ ended_at: '2026-06-29T00:00:00Z', summary: null }),
+}))
 
 import SubjectOverview from '@/views/SubjectOverview.vue'
 import { useSubjectStore } from '@/stores/subject.js'
+import { useSessionStore } from '@/stores/session.js'
 
 const overview = {
   id: 's1', title: 'Organic Chemistry', per_session_minutes: 30,
@@ -91,5 +96,84 @@ describe('SubjectOverview', () => {
     const meta = wrapper.get('[data-testid="subject-meta"]').text()
     expect(meta).toContain('3/week')   // pace_per_week (pinned)
     expect(meta).toContain('2 weeks')  // derived finish horizon from backend
+  })
+
+  // --- dupe-banner session-state cross-ref tests ---
+
+  it('dupe banner shows when two opened lessons share a title and both sessions are active', async () => {
+    const subjectStore = useSubjectStore()
+    const sessionStore = useSessionStore()
+    const dupOverview = {
+      ...overview,
+      lessons: [
+        { id: 'l1', subject_id: 's1', order_idx: 0, title: 'Bonding', goal: 'g', status: 'done', session_id: 'sess1' },
+        { id: 'l2', subject_id: 's1', order_idx: 1, title: 'Bonding', goal: 'g', status: 'done', session_id: 'sess2' },
+        { id: 'l3', subject_id: 's1', order_idx: 2, title: 'Reactions', goal: 'g', status: 'not_started', session_id: null },
+      ],
+    }
+    vi.spyOn(subjectStore, 'loadSubject').mockImplementation(async () => { subjectStore.currentSubject = dupOverview })
+    vi.spyOn(sessionStore, 'listSessions').mockImplementation(async () => {
+      sessionStore.sessions = [{ id: 'sess1', ended_at: null }, { id: 'sess2', ended_at: null }]
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="subject-dupe-banner"]').exists()).toBe(true)
+  })
+
+  it('dupe banner is hidden when one of the two duplicate sessions is ended', async () => {
+    const subjectStore = useSubjectStore()
+    const sessionStore = useSessionStore()
+    const dupOverview = {
+      ...overview,
+      lessons: [
+        { id: 'l1', subject_id: 's1', order_idx: 0, title: 'Bonding', goal: 'g', status: 'done', session_id: 'sess1' },
+        { id: 'l2', subject_id: 's1', order_idx: 1, title: 'Bonding', goal: 'g', status: 'done', session_id: 'sess2' },
+      ],
+    }
+    vi.spyOn(subjectStore, 'loadSubject').mockImplementation(async () => { subjectStore.currentSubject = dupOverview })
+    vi.spyOn(sessionStore, 'listSessions').mockImplementation(async () => {
+      // sess2 is ended — only one active per topic, so no duplicate
+      sessionStore.sessions = [
+        { id: 'sess1', ended_at: null },
+        { id: 'sess2', ended_at: '2026-06-29T00:00:00Z' },
+      ]
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="subject-dupe-banner"]').exists()).toBe(false)
+  })
+
+  it('clicking dupe cleanup calls endSession for removable duplicate and reloads', async () => {
+    const subjectStore = useSubjectStore()
+    const sessionStore = useSessionStore()
+    const dupOverview = {
+      ...overview,
+      lessons: [
+        { id: 'l1', subject_id: 's1', order_idx: 0, title: 'Bonding', goal: 'g', status: 'done', session_id: 'sess1' },
+        { id: 'l2', subject_id: 's1', order_idx: 1, title: 'Bonding', goal: 'g', status: 'done', session_id: 'sess2' },
+      ],
+    }
+    const loadSubjectSpy = vi.spyOn(subjectStore, 'loadSubject').mockImplementation(async () => {
+      subjectStore.currentSubject = dupOverview
+    })
+    const listSpy = vi.spyOn(sessionStore, 'listSessions').mockImplementation(async () => {
+      sessionStore.sessions = [{ id: 'sess1', ended_at: null }, { id: 'sess2', ended_at: null }]
+    })
+    const endSpy = vi.spyOn(sessionStore, 'endSession').mockResolvedValue({})
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    // Clear onMounted call counts before triggering cleanup
+    loadSubjectSpy.mockClear()
+    listSpy.mockClear()
+
+    await wrapper.get('[data-testid="subject-dupe-cleanup"]').trigger('click')
+    await flushPromises()
+
+    // l2 (order_idx 1) is the removable duplicate; l1 (order_idx 0) is kept
+    expect(endSpy).toHaveBeenCalledWith('sess2')
+    expect(loadSubjectSpy).toHaveBeenCalled()
+    expect(listSpy).toHaveBeenCalled()
   })
 })
