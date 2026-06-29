@@ -53,6 +53,17 @@ describe('subject store', () => {
     expect(store.currentSubject.lessons.find((l) => l.id === 'l3').status).toBe('done')
   })
 
+  it('createSubject prepends the created subject to subjects (sidebar reactivity)', async () => {
+    const created = { id: 's9', title: 'New Subject', progress: { done_count: 0, total_count: 1 }, lessons: [] }
+    api.createSubject.mockResolvedValue(created)
+    const store = useSubjectStore()
+    expect(store.subjects).toHaveLength(0)
+    const ret = await store.createSubject({ title: 'New Subject' })
+    expect(ret).toBe(created)
+    expect(store.subjects).toHaveLength(1)
+    expect(store.subjects[0].id).toBe('s9')
+  })
+
   it('draftPlan returns the lessons array from the preview response', async () => {
     api.draftPlan.mockResolvedValue({ lessons: [{ title: 'Bonding', goal: 'g' }, { title: 'Alkanes', goal: 'g' }] })
     const store = useSubjectStore()

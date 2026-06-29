@@ -63,7 +63,14 @@ export const useSubjectStore = defineStore('subject', () => {
     loading.value = true
     error.value = null
     try {
-      return await subjectsApi.createSubject(payload)
+      const created = await subjectsApi.createSubject(payload)
+      // Reflect the new subject in the sidebar immediately. The sidebar renders
+      // from `subjects` (bootstrapped once on mount), so without this the node
+      // does not appear until a full reload. POST /subjects returns a
+      // SubjectDetail, a superset of the SubjectListItem shape the node reads
+      // (id, title, progress), so it slots in directly.
+      if (created) subjects.value = [created, ...subjects.value]
+      return created
     } catch (e) {
       _setError(e)
     } finally {
