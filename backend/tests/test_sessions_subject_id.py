@@ -55,5 +55,7 @@ def test_detail_carries_subject_id(client, db_session, seeded_user):
         )
     )
     db_session.commit()
-    assert client.get(f"/api/sessions/s_linked?user_id={USER_ID}").json()["subject_id"] == subj.id
-    assert client.get(f"/api/sessions/s_quick?user_id={USER_ID}").json()["subject_id"] is None
+    r = client.get(f"/api/sessions/s_linked?user_id={USER_ID}")
+    assert r.json()["subject_id"] == subj.id
+    r = client.get(f"/api/sessions/s_quick?user_id={USER_ID}")
+    assert r.json()["subject_id"] is None

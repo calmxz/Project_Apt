@@ -19,6 +19,12 @@ from services import cost_meter
 
 log = logging.getLogger(__name__)
 
+
+def _sanitize_for_log(value: object) -> str:
+    """Strip CR/LF so a user-derived value cannot forge extra log lines."""
+    return str(value).replace("\r", "").replace("\n", "")
+
+
 MIN_LESSONS = 3
 MAX_LESSONS = 12
 
@@ -79,7 +85,7 @@ async def draft_plan(
 
     cap = cost_meter.check_cap(db, user_id)
     if not cap.allowed:
-        log.warning("draft_plan: daily cost cap reached for %s; using fallback", user_id)
+        log.warning("draft_plan: daily cost cap reached for %s; using fallback", _sanitize_for_log(user_id))
         return _fallback(title)
 
     user_prompt = (

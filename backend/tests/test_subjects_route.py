@@ -113,14 +113,16 @@ def test_list_subjects_scoped(client, seeded_user, db_session):
     assert r.status_code == 200
     assert len(r.json()) == 1
     # cross-user sees none
-    assert client.get("/api/subjects?user_id=other").json() == []
+    r = client.get("/api/subjects?user_id=other")
+    assert r.json() == []
 
 
 def test_get_subject_404_cross_user(client, seeded_user, db_session):
     sid = _create_blank(client).json()["id"]
     db_session.add(User(id="other"))
     db_session.commit()
-    assert client.get(f"/api/subjects/{sid}?user_id=other").status_code == 404
+    r = client.get(f"/api/subjects/{sid}?user_id=other")
+    assert r.status_code == 404
 
 
 def test_patch_subject_archive(client, seeded_user):
@@ -135,7 +137,8 @@ def test_patch_subject_archive(client, seeded_user):
 
 def test_patch_subject_empty_body_400(client, seeded_user):
     sid = _create_blank(client).json()["id"]
-    assert client.patch(f"/api/subjects/{sid}?user_id={USER_ID}", json={}).status_code == 400
+    r = client.patch(f"/api/subjects/{sid}?user_id={USER_ID}", json={})
+    assert r.status_code == 400
 
 
 def test_get_subject_returns_pinned_and_derived_duration(client, seeded_user):
@@ -193,7 +196,8 @@ def test_patch_lesson_status_done(client, seeded_user):
 
 def test_patch_lesson_invalid_status_400(client, seeded_user):
     lid = _create_blank(client).json()["lessons"][0]["id"]
-    assert client.patch(f"/api/lessons/{lid}?user_id={USER_ID}", json={"status": "bogus"}).status_code == 400
+    r = client.patch(f"/api/lessons/{lid}?user_id={USER_ID}", json={"status": "bogus"})
+    assert r.status_code == 400
 
 
 def test_open_lesson_idempotent(client, seeded_user):
@@ -209,12 +213,14 @@ def test_open_lesson_idempotent(client, seeded_user):
 def test_delete_lesson_with_session_409(client, seeded_user):
     lid = _create_blank(client).json()["lessons"][0]["id"]
     client.post(f"/api/lessons/{lid}/open?user_id={USER_ID}")
-    assert client.delete(f"/api/lessons/{lid}?user_id={USER_ID}").status_code == 409
+    r = client.delete(f"/api/lessons/{lid}?user_id={USER_ID}")
+    assert r.status_code == 409
 
 
 def test_delete_lesson_without_session_204(client, seeded_user):
     lid = _create_blank(client).json()["lessons"][0]["id"]
-    assert client.delete(f"/api/lessons/{lid}?user_id={USER_ID}").status_code == 204
+    r = client.delete(f"/api/lessons/{lid}?user_id={USER_ID}")
+    assert r.status_code == 204
 
 
 def test_delete_lesson_force_ends_session_and_deletes(client, db_session, seeded_user):
@@ -235,16 +241,20 @@ def test_lesson_routes_404_cross_user(client, seeded_user, db_session):
     lid = _create_blank(client).json()["lessons"][0]["id"]
     db_session.add(User(id="other"))
     db_session.commit()
-    assert client.patch(f"/api/lessons/{lid}?user_id=other", json={"status": "done"}).status_code == 404
-    assert client.post(f"/api/lessons/{lid}/open?user_id=other").status_code == 404
-    assert client.delete(f"/api/lessons/{lid}?user_id=other").status_code == 404
+    r = client.patch(f"/api/lessons/{lid}?user_id=other", json={"status": "done"})
+    assert r.status_code == 404
+    r = client.post(f"/api/lessons/{lid}/open?user_id=other")
+    assert r.status_code == 404
+    r = client.delete(f"/api/lessons/{lid}?user_id=other")
+    assert r.status_code == 404
 
 
 def test_patch_subject_404_cross_user(client, seeded_user, db_session):
     sid = _create_blank(client).json()["id"]
     db_session.add(User(id="other"))
     db_session.commit()
-    assert client.patch(f"/api/subjects/{sid}?user_id=other", json={"archived": True}).status_code == 404
+    r = client.patch(f"/api/subjects/{sid}?user_id=other", json={"archived": True})
+    assert r.status_code == 404
 
 
 # --- Fix 2: cross-user 404 for addLesson ---

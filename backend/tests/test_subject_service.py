@@ -3,7 +3,7 @@
 import pytest
 
 from contracts import LessonDraft
-from db.models import Lesson, Session as SessionModel, Subject, User
+from db.models import Lesson, Session as SessionModel, User
 from services import subject_service
 
 
