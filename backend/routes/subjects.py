@@ -14,6 +14,7 @@ from contracts import (
     SubjectDetail,
     SubjectListItem,
     SubjectProgress,
+    SubjectProfileResponse,
     SubjectUpdateRequest,
 )
 from db.database import get_db
@@ -24,7 +25,7 @@ from lib.error_codes import (
     LESSON_NOT_FOUND,
     SUBJECT_NOT_FOUND,
 )
-from services import plan_service, subject_service
+from services import plan_service, subject_profile_service, subject_service
 from services.auth import current_user_id
 from services.session_enrichment import aware_utc as _aware_utc
 
@@ -142,6 +143,21 @@ def get_subject(
     if subject is None:
         raise HTTPException(status_code=404, detail=SUBJECT_NOT_FOUND)
     return _subject_detail(db, subject)
+
+
+@router.get("/subjects/{subject_id}/profile", response_model=SubjectProfileResponse)
+def get_subject_profile(
+    subject_id: str,
+    user_id: str = Depends(current_user_id),
+    db: Session = Depends(get_db),
+):
+    subject = db.get(Subject, subject_id)
+    if subject is None or subject.user_id != user_id:
+        raise HTTPException(status_code=404, detail=SUBJECT_NOT_FOUND)
+    result = subject_profile_service.aggregate_for_subject(db, subject_id)
+    if result is None:  # defensive; ownership already checked above
+        raise HTTPException(status_code=404, detail=SUBJECT_NOT_FOUND)
+    return result
 
 
 @router.patch("/subjects/{subject_id}", response_model=SubjectDetail)
