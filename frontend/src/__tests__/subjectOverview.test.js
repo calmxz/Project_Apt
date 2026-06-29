@@ -34,6 +34,23 @@ function mountView() { return mount(SubjectOverview, { props: { id: 's1' } }) }
 describe('SubjectOverview', () => {
   beforeEach(() => { setActivePinia(createPinia()); push.mockClear() })
 
+  it('shows a loading skeleton until the subject resolves (no blank flash)', async () => {
+    const store = useSubjectStore()
+    vi.spyOn(store, 'loadSubject').mockImplementation(async () => {}) // never sets currentSubject
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="subject-overview-loading"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="subject-meta"]').exists()).toBe(false)
+  })
+
+  it('hides the loading skeleton once the subject is loaded', async () => {
+    const store = useSubjectStore()
+    vi.spyOn(store, 'loadSubject').mockImplementation(async () => { store.currentSubject = overview })
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="subject-overview-loading"]').exists()).toBe(false)
+  })
+
   it('renders lesson rows with status and highlights the first non-done as next', async () => {
     const store = useSubjectStore()
     vi.spyOn(store, 'loadSubject').mockImplementation(async () => { store.currentSubject = overview })

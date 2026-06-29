@@ -75,6 +75,20 @@
         </button>
       </div>
     </template>
+
+    <div
+      v-else
+      data-testid="subject-overview-loading"
+      class="overview-loading"
+      aria-busy="true"
+      aria-label="Loading subject"
+    >
+      <div class="skeleton skeleton-title" />
+      <div class="skeleton skeleton-bar" />
+      <div class="skeleton skeleton-row" />
+      <div class="skeleton skeleton-row" />
+      <div class="skeleton skeleton-row" />
+    </div>
   </section>
 </template>
 
@@ -197,6 +211,33 @@ async function cleanupDuplicates() {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+}
+
+/* Loading skeleton: shown while the subject overview is in flight so the route
+   paints structure immediately instead of a blank flash. */
+.overview-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.skeleton {
+  background: var(--color-surface);
+  border-radius: var(--radius-card);
+  animation: overview-pulse 1.2s ease-in-out infinite;
+}
+
+.skeleton-title { height: 1.75rem; width: 14rem; }
+.skeleton-bar { height: 6px; width: 100%; border-radius: 3px; }
+.skeleton-row { height: 3rem; width: 100%; }
+
+@keyframes overview-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; }
 }
 
 .overview-title {
