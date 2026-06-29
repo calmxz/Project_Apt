@@ -17,6 +17,8 @@
 
       <SessionHeader :topic="headerTopic" />
 
+      <LessonContextBar :goal="lesson?.goal || ''" :subject-id="lessonSubjectId || ''" />
+
       <CapBanners />
 
       <SessionEndedBanner
@@ -129,6 +131,7 @@ import CapBanners from '../components/chat/CapBanners.vue'
 import ChatEmptyState from '../components/chat/EmptyState.vue'
 import CheckQuestion from '../components/chat/CheckQuestion.vue'
 import Composer from '../components/chat/Composer.vue'
+import LessonContextBar from '../components/chat/LessonContextBar.vue'
 import MessageList from '../components/chat/MessageList.vue'
 import MessageListSkeleton from '../components/chat/MessageListSkeleton.vue'
 import SessionHeader from '../components/chat/SessionHeader.vue'
@@ -137,6 +140,7 @@ import ReferenceStatusBanner from '../components/chat/ReferenceStatusBanner.vue'
 import UploadStatus from '../components/chat/UploadStatus.vue'
 import { friendlyError } from '../lib/errors.js'
 import { useSessionStore } from '../stores/session.js'
+import { useSubjectStore } from '../stores/subject.js'
 import { useToast } from '../composables/useToast.js'
 import { costBus } from '../services/costBus.js'
 import { getUploadStatus, uploadDocument, validateFile } from '../services/uploadApi.js'
@@ -146,6 +150,7 @@ const props = defineProps({ id: { type: String, required: true } })
 
 const router = useRouter()
 const store = useSessionStore()
+const subjectStore = useSubjectStore()
 
 // Streaming (SSE) is the default chat path. Set VITE_CHAT_STREAM=false to fall
 // back to the JSON POST /api/chat endpoint.
@@ -165,6 +170,12 @@ const uploading = ref(false)
 const uploadStatus = ref(null)
 const lastError = ref(null)
 const referenceBannerRef = ref(null)
+
+// Lesson context (Subjects/Lessons flow). When a session is linked to a lesson
+// (currentSession.subject_id present), resolve the owning lesson so the context
+// bar can show its goal + back-link. Best-effort: never blocks chat.
+const lesson = ref(null)
+const lessonSubjectId = ref('')
 
 // Use the same target-id discriminator as headerTopic so the ended-banner /
 // composer / resume action agree with the optimistic header during a switch.
@@ -279,9 +290,13 @@ async function loadCurrent(id) {
   // loadSession entry. loadCurrent only runs on mount + id-change, so a same-
   // session send-error stays retryable.
   lastError.value = null
+  // Clear prior lesson context so a non-lesson session never inherits it.
+  lesson.value = null
+  lessonSubjectId.value = ''
   const startedAt = import.meta.env.DEV ? performance.now() : 0
   try {
     await store.loadSession(id)
+    void resolveLessonContext(id)
     if (import.meta.env.DEV) {
       await nextTick()
       // Dev-only WS3 gate measurement: navigate -> detail painted. This number
@@ -300,6 +315,26 @@ async function loadCurrent(id) {
     }
   }
   if (!isEnded.value && !notFound.value) focusComposer()
+}
+
+// Best-effort lesson resolution: if the loaded session is linked to a subject,
+// pull the subject overview and match the lesson by session_id. Never throws to
+// the caller (chat must load even if the subject fetch fails), and bails on a
+// superseded navigation so a late result can't paint over a newer session.
+async function resolveLessonContext(id) {
+  const subjectId = store.currentSession?.id === id ? store.currentSession.subject_id : null
+  if (!subjectId) return
+  try {
+    const subject = await subjectStore.loadSubject(subjectId)
+    if (id !== props.id) return
+    const match = (subject?.lessons || []).find((l) => l.session_id === id)
+    if (match) {
+      lesson.value = { id: match.id, title: match.title, goal: match.goal }
+      lessonSubjectId.value = subjectId
+    }
+  } catch {
+    // Lesson context is non-essential; leave the bar hidden on failure.
+  }
 }
 
 onMounted(() => loadCurrent(props.id))
