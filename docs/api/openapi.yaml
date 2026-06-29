@@ -325,6 +325,27 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /api/subjects/{id}/profile:
+    get:
+      operationId: getSubjectProfile
+      summary: Subject-level mastery map (aggregated lesson profiles).
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Aggregated subject profile.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SubjectProfileResponse' }
+        '404':
+          description: Subject not found for this user.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+
   /api/subjects/{subject_id}/lessons:
     post:
       tags: [subjects]
@@ -1288,6 +1309,41 @@ components:
         lessons:
           type: array
           items: { $ref: "#/components/schemas/LessonItem" }
+
+    SubjectLessonRollup:
+      type: object
+      additionalProperties: false
+      required: [lesson_id, lesson_title, mastered, gaps]
+      properties:
+        lesson_id: { type: string }
+        lesson_title: { type: string }
+        mastered:
+          type: array
+          items: { type: string }
+        gaps:
+          type: array
+          items: { type: string }
+
+    SubjectProfileResponse:
+      description: >-
+        Subject-level mastery map. mastered_concepts and open_gaps are unions
+        across the subject's opened lessons; open_gaps excludes anything in
+        mastered_concepts (disjoint). lessons is the per-lesson drill-down.
+      type: object
+      additionalProperties: false
+      required: [subject_id, subject_title, mastered_concepts, open_gaps, lessons]
+      properties:
+        subject_id: { type: string }
+        subject_title: { type: string }
+        mastered_concepts:
+          type: array
+          items: { type: string }
+        open_gaps:
+          type: array
+          items: { type: string }
+        lessons:
+          type: array
+          items: { $ref: '#/components/schemas/SubjectLessonRollup' }
 
     LessonCreateRequest:
       type: object

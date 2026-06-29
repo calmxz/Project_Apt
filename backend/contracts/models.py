@@ -662,6 +662,31 @@ class SubjectDetail(BaseModel):
     lessons: list[LessonItem]
 
 
+class SubjectLessonRollup(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    lesson_id: str
+    lesson_title: str
+    mastered: list[str]
+    gaps: list[str]
+
+
+class SubjectProfileResponse(BaseModel):
+    """
+    Subject-level mastery map. mastered_concepts and open_gaps are unions across the subject's opened lessons; open_gaps excludes anything in mastered_concepts (disjoint). lessons is the per-lesson drill-down.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    subject_id: str
+    subject_title: str
+    mastered_concepts: list[str]
+    open_gaps: list[str]
+    lessons: list[SubjectLessonRollup]
+
+
 class LessonCreateRequest(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
