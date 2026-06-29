@@ -5,3 +5,5 @@ import { apiGet } from './apiClient.js'
 export const getSessionProfile = (sessionId) => apiGet(`/profile/${sessionId}`)
 
 export const getAggregateProfile = () => apiGet('/profile/aggregate')
+
+export const getSubjectProfile = (subjectId) => apiGet(`/subjects/${subjectId}/profile`)

@@ -84,6 +84,12 @@ const router = createRouter({
       component: () => import('../views/ProfileView.vue'),
       props: true,
     },
+    {
+      path: '/subjects/:id/profile',
+      name: 'subject-mastery',
+      component: () => import('../views/SubjectProfileView.vue'),
+      props: true,
+    },
   ],
 })
 
