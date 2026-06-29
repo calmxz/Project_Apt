@@ -1,19 +1,6 @@
 <template>
   <section class="home">
-    <header class="head">
-      <div class="head-text">
-        <span class="folio">your shelf</span>
-        <h1 class="title">Sessions</h1>
-        <p class="lede" data-testid="home-lede">
-          <template v-if="activeCount">
-            {{ activeCount }} active {{ activeCount === 1 ? 'session' : 'sessions' }}. Pick one from the sidebar, or start a new one.
-          </template>
-          <template v-else>
-            A study session is one conversation about one topic. Begin one.
-          </template>
-        </p>
-      </div>
-    </header>
+    <h1 class="title">What do you want to learn?</h1>
 
     <p v-if="store.loading" class="muted">Loading...</p>
     <p
@@ -25,125 +12,58 @@
     </p>
 
     <template v-else>
-      <div
-        v-if="duplicateCount > 0"
-        class="dupe-banner"
-        data-testid="home-dupe-banner"
-      >
-        <div class="dupe-text">
-          <i class="pi pi-exclamation-triangle dupe-icon" aria-hidden="true" />
-          <p class="dupe-line">
-            {{ duplicateCount }} duplicate active {{ duplicateCount === 1 ? 'session' : 'sessions' }} detected.
-            Keep the newest per topic, end the rest?
-          </p>
-        </div>
-        <button
-          type="button"
-          class="dupe-btn"
-          :disabled="cleaning"
-          data-testid="home-dupe-cleanup"
-          @click="cleanupDuplicates"
-        >
-          <span>{{ cleaning ? 'Cleaning…' : 'Clean up' }}</span>
-          <i class="pi pi-broom" aria-hidden="true" />
-        </button>
-      </div>
-
-      <section
-        v-if="sortedRecent.length"
-        class="recent"
-        data-testid="home-recent"
-      >
-        <h2 class="recent-label">Recent activity</h2>
-        <ul class="recent-list">
-          <li
-            v-for="s in sortedRecent"
-            :key="s.id"
-            class="recent-row"
-            :data-testid="`home-recent-${s.id}`"
-          >
-            <RouterLink
-              class="recent-link"
-              :to="{ name: 'session', params: { id: s.id } }"
-            >
-              <span
-                class="recent-dot"
-                :class="{ 'recent-dot-active': !s.ended_at }"
-                aria-hidden="true"
-              />
-              <div class="recent-body">
-                <div class="recent-head">
-                  <span class="recent-topic">{{ s.topic || 'untitled' }}</span>
-                  <span class="recent-when">{{ formatRelative(s.created_at) }}</span>
-                </div>
-                <p
-                  class="recent-snippet"
-                  :class="{
-                    'recent-snippet-muted': !cardStory(s),
-                    'recent-snippet-quote': !s.ended_at && !!cardStory(s),
-                  }"
-                >
-                  {{ cardStory(s) || 'No activity yet' }}
-                </p>
-                <SessionChips
-                  v-if="cardChips(s).length"
-                  class="recent-chips"
-                  :chips="cardChips(s)"
-                  variant="card"
-                />
-                <p class="recent-meta">{{ cardMeta(s) }}</p>
-              </div>
-              <i class="pi pi-arrow-right recent-arrow" aria-hidden="true" />
-            </RouterLink>
-            <button
-              v-if="s.ended_at"
-              type="button"
-              class="recent-continue"
-              :data-testid="`home-continue-${s.id}`"
-              @click="continueSession(s.id)"
-            >
-              Continue
-            </button>
-          </li>
-        </ul>
-        <RouterLink to="/sessions" class="recent-view-all" data-testid="home-view-all">
-          View all sessions
-          <i class="pi pi-arrow-right" aria-hidden="true" />
-        </RouterLink>
-      </section>
-
-      <EmptyState
-        v-if="!store.sessions.length"
-        data-testid="home-empty-active"
-        tone="celebrate"
-        eyebrow="page 01"
-        headline="No sessions yet"
-        subtext="Start your first one — the tutor adapts as you go."
-      >
-        <template #cta>
+      <div class="modes">
+        <div class="mode-card" data-testid="home-mode-quick">
+          <h2 class="mode-title">Quick lesson</h2>
+          <p class="mode-sub">One topic. Type and go.</p>
+          <input
+            v-model="quickTopic"
+            class="quick-input"
+            data-testid="home-quick-topic"
+            placeholder="e.g. Recursion"
+            @keydown.enter="startQuick"
+          />
           <button
             type="button"
             class="cta-primary"
-            data-testid="home-new-session"
-            @click="goNew"
+            data-testid="home-quick-go"
+            @click="startQuick"
           >
-            <span>Start your first session</span>
-            <i class="pi pi-arrow-right" aria-hidden="true" />
+            <span>Start</span><i class="pi pi-arrow-right" aria-hidden="true" />
           </button>
-        </template>
-      </EmptyState>
-
-      <div v-if="store.sessions.length" class="cta-center">
-        <button
-          type="button"
-          class="cta-primary"
-          data-testid="home-new-session"
-          @click="goNew"
-        >
-          <span>New session</span>
-          <i class="pi pi-plus" aria-hidden="true" />
-        </button>
+          <RouterLink to="/new" class="quick-more">Add reference files</RouterLink>
+        </div>
+        <div class="mode-card" data-testid="home-mode-subject">
+          <h2 class="mode-title">Build a subject</h2>
+          <p class="mode-sub">Multiple lessons, a guided plan.</p>
+          <button
+            type="button"
+            class="cta-secondary"
+            data-testid="home-build-start"
+            @click="buildSubject"
+          >
+            <span>Start a plan</span><i class="pi pi-arrow-right" aria-hidden="true" />
+          </button>
+        </div>
       </div>
+
+      <RouterLink
+        v-if="resumeSession"
+        class="resume"
+        data-testid="home-resume"
+        :to="{ name: 'session', params: { id: resumeSession.id } }"
+      >
+        <span>Continue where you left off — {{ resumeSession.topic || 'untitled' }}</span>
+      </RouterLink>
+      <button
+        v-if="resumeSession"
+        type="button"
+        class="resume-btn"
+        data-testid="home-resume-continue"
+        @click="continueResume"
+      >
+        Continue
+      </button>
     </template>
   </section>
 </template>
@@ -151,86 +71,34 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-
-import EmptyState from '../components/EmptyState.vue'
-
-import { friendlyError } from '../lib/errors.js'
-import * as sessionsApi from '../services/sessionsApi.js'
 import { useSessionStore } from '../stores/session.js'
-import { formatRelative, normalizeTopicKey } from '../utils/formatDate.js'
-import { cardStory, cardChips, cardMeta } from '../utils/sessionCard.js'
-import SessionChips from '../components/SessionChips.vue'
-import { getAggregateProfile } from '../services/profileApi.js'
+import { friendlyError } from '../lib/errors.js'
 
 const router = useRouter()
 const store = useSessionStore()
+const quickTopic = ref('')
 
-const cleaning = ref(false)
-const recentTopics = ref([])
+onMounted(() => store.listSessions().catch(() => {}))
 
-onMounted(async () => {
-  await store.listSessions().catch(() => {})
-  // Feed degrades to empty if the aggregate fetch fails; listSessions errors surface via store.error.
-  await getAggregateProfile()
-    .then((d) => {
-      recentTopics.value = d?.recent_topics || []
-    })
-    .catch(() => {})
+const resumeSession = computed(() => {
+  const active = store.sessions.filter((s) => !s.ended_at)
+  if (!active.length) return null
+  return [...active].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0]
 })
 
-const activeSessions = computed(() =>
-  store.sessions.filter((s) => !s.ended_at),
-)
-const activeCount = computed(() => activeSessions.value.length)
-
-const duplicateActiveIds = computed(() => {
-  const byTopic = new Map()
-  for (const s of activeSessions.value) {
-    const key = normalizeTopicKey(s.topic)
-    const list = byTopic.get(key) || []
-    list.push(s)
-    byTopic.set(key, list)
-  }
-  const dupes = []
-  for (const list of byTopic.values()) {
-    if (list.length <= 1) continue
-    list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-    for (let i = 1; i < list.length; i++) dupes.push(list[i].id)
-  }
-  return dupes
-})
-
-const duplicateCount = computed(() => duplicateActiveIds.value.length)
-
-const sortedRecent = computed(() =>
-  [...recentTopics.value].sort(
-    (a, b) =>
-      Number(a.ended_at != null) - Number(b.ended_at != null) ||
-      new Date(b.created_at) - new Date(a.created_at),
-  ),
-)
-
-async function continueSession(id) {
-  await store.reopenSession(id)
-  router.push({ name: 'session', params: { id } })
+async function startQuick() {
+  const topic = quickTopic.value.trim()
+  if (!topic) return
+  const created = await store.createSession({ topic, seedMode: 'fresh', priorSessionId: null })
+  if (created) router.push({ name: 'session', params: { id: created.id } })
 }
 
-function goNew() {
-  router.push({ name: 'new-session' })
+function buildSubject() {
+  router.push({ name: 'subject-new' })
 }
 
-async function cleanupDuplicates() {
-  const ids = duplicateActiveIds.value
-  if (!ids.length) return
-  cleaning.value = true
-  try {
-    await Promise.all(ids.map((id) => sessionsApi.endSession(id)))
-    await store.listSessions()
-  } catch (e) {
-    store.setError(e?.message || 'Cleanup failed.')
-  } finally {
-    cleaning.value = false
-  }
+function continueResume() {
+  if (resumeSession.value) router.push({ name: 'session', params: { id: resumeSession.value.id } })
 }
 </script>
 
@@ -243,29 +111,6 @@ async function cleanupDuplicates() {
   gap: 1.5rem;
 }
 
-.head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 2rem;
-  flex-wrap: wrap;
-}
-
-.head-text {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.folio {
-  font-family: var(--font-sans);
-  font-size: var(--fs-label);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  font-weight: 600;
-  color: var(--color-accent-text);
-}
-
 .title {
   font-family: var(--font-display);
   font-size: clamp(2.25rem, 4vw, 2.75rem);
@@ -276,11 +121,66 @@ async function cleanupDuplicates() {
   margin: 0;
 }
 
-.lede {
-  margin: 0;
+.muted {
   color: var(--color-text-muted);
-  max-width: 32rem;
-  font-size: 1.0625rem;
+}
+
+.error {
+  color: var(--color-error-text);
+}
+
+/* Mode cards */
+.modes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  gap: 1rem;
+}
+
+.mode-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 2rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-pop);
+}
+
+.mode-title {
+  font-family: var(--font-display);
+  font-size: 1.375rem;
+  font-weight: 600;
+  letter-spacing: var(--tracking-tight);
+  color: var(--color-heading);
+  margin: 0;
+}
+
+.mode-sub {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
+.quick-input {
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  transition: border-color var(--motion-fast) ease;
+}
+
+.quick-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.quick-input::placeholder {
+  color: var(--color-text-muted);
 }
 
 .cta-primary {
@@ -314,271 +214,109 @@ async function cleanupDuplicates() {
   outline-offset: 3px;
 }
 
-.muted {
-  color: var(--color-text-muted);
-}
-
-.error {
-  color: var(--color-error-text);
-}
-
-/* Duplicate banner */
-.dupe-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.875rem 1rem 0.875rem 1.125rem;
-  background: rgba(255, 176, 32, 0.12);
-  border: 1px solid rgba(255, 176, 32, 0.35);
-  border-radius: var(--radius-lg);
-  flex-wrap: wrap;
-}
-
-.dupe-text {
+.cta-secondary {
   display: inline-flex;
   align-items: center;
-  gap: 0.625rem;
-  flex: 1;
-  min-width: 14rem;
-}
-
-.dupe-icon {
-  color: var(--color-warning-text);
-  font-size: 1.125rem;
-}
-
-.dupe-line {
-  margin: 0;
-  color: var(--color-text);
-  font-size: 0.9375rem;
-  line-height: 1.4;
-}
-
-.dupe-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.5rem 1rem;
+  gap: 0.5rem;
+  padding: 0.75rem 1.375rem;
   border-radius: var(--radius-pill);
-  background: var(--signal-warning);
-  color: #2A1F00;
+  background: var(--color-accent-soft);
+  color: var(--color-accent-text);
   border: 0;
   font-family: var(--font-sans);
   font-weight: 600;
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   cursor: pointer;
-  transition: transform var(--motion-fast) var(--motion-bounce), filter var(--motion-fast) ease;
+  box-shadow: var(--shadow-pop);
+  transition: transform var(--motion-fast) var(--motion-bounce), box-shadow var(--motion-fast) ease;
 }
 
-.dupe-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  filter: brightness(1.05);
+.cta-secondary:hover {
+  transform: translateY(-2px);
 }
 
-.dupe-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+.cta-secondary:active {
+  transform: translateY(4px);
+  box-shadow: var(--shadow-pop-pressed);
 }
 
-/* Recent activity feed */
-.recent {
+.cta-secondary:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 3px;
+}
+
+.quick-more {
+  font-size: 0.9rem;
+  color: var(--color-accent);
+  text-decoration: none;
+  transition: text-decoration var(--motion-fast) ease;
+}
+
+.quick-more:hover {
+  text-decoration: underline;
+}
+
+.quick-more:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Resume nudge */
+.resume {
   display: flex;
-  flex-direction: column;
-  gap: 0.875rem;
-}
-
-.recent-label {
-  font-family: var(--font-sans);
-  font-size: var(--fs-label);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  font-weight: 600;
-  color: var(--color-text-muted);
-  margin: 0;
-}
-
-.recent-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.recent-row {
-  position: relative;
-  border-radius: var(--radius-md);
+  align-items: center;
+  padding: 1rem 1.25rem;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
   transition: border-color var(--motion-fast) ease, transform var(--motion-fast) var(--motion-bounce);
 }
 
-.recent-row:hover {
+.resume:hover {
   border-color: var(--color-accent-soft);
   transform: translateY(-1px);
 }
 
-.recent-link {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-  padding: 0.875rem 1.125rem;
-  color: inherit;
-  text-decoration: none;
-  cursor: pointer;
-}
-
-.recent-link:focus-visible {
+.resume:focus-visible {
   outline: 2px solid var(--color-accent-ring);
   outline-offset: 2px;
 }
 
-.recent-dot {
-  margin-top: 0.4rem;
-  width: 0.6rem;
-  height: 0.6rem;
-  border-radius: 999px;
-  border: 1.5px solid var(--color-border-strong);
-  flex-shrink: 0;
-}
-
-.recent-dot-active {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-}
-
-.recent-body {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.recent-head {
-  display: flex;
-  align-items: center;
-  gap: 0.625rem;
-}
-
-.recent-topic {
-  font-family: var(--font-display);
-  font-weight: 600;
+.resume span {
   font-size: 1rem;
-  color: var(--color-heading);
-  letter-spacing: var(--tracking-tight);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.4;
 }
 
-.recent-when {
-  font-family: var(--font-sans);
-  font-size: 0.8125rem;
-  color: var(--color-text-muted);
-  flex-shrink: 0;
-}
-
-.recent-continue {
-  position: absolute;
-  top: 0.75rem;
-  right: 0.75rem;
-  flex-shrink: 0;
-  padding: 0.3rem 0.75rem;
+.resume-btn {
+  align-self: flex-start;
+  padding: 0.5rem 1rem;
   border-radius: var(--radius-pill);
-  background: var(--color-surface);
+  background: var(--color-accent-soft);
   border: 1px solid var(--color-accent-soft);
   color: var(--color-accent-text);
   font-family: var(--font-sans);
   font-weight: 600;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   cursor: pointer;
-  transition: background var(--motion-fast) ease;
+  transition: background var(--motion-fast) ease, transform var(--motion-fast) var(--motion-bounce);
 }
 
-.recent-continue:hover {
-  background: var(--color-accent-soft);
+.resume-btn:hover {
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+  transform: translateY(-1px);
 }
 
-.recent-continue:focus-visible {
+.resume-btn:active {
+  transform: translateY(2px);
+}
+
+.resume-btn:focus-visible {
   outline: 2px solid var(--color-accent-ring);
   outline-offset: 2px;
-}
-
-/* On ended rows the de-nested Continue occupies the top-right; drop the
-   decorative arrow there so they do not collide. */
-.recent-row:has(.recent-continue) .recent-arrow {
-  display: none;
-}
-
-.recent-snippet {
-  margin: 0;
-  font-size: 0.875rem;
-  color: var(--color-text);
-  line-height: 1.4;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.recent-snippet-muted {
-  color: var(--color-text-muted);
-  font-style: italic;
-}
-
-.recent-snippet-quote {
-  font-style: italic;
-}
-
-.recent-snippet-quote::before {
-  content: '\201C';
-}
-
-.recent-snippet-quote::after {
-  content: '\201D';
-}
-
-.recent-chips {
-  margin-top: 0.125rem;
-}
-
-.recent-meta {
-  margin: 2px 0 0;
-  font-size: 0.8rem;
-  color: var(--color-text-muted);
-}
-
-.recent-view-all {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 14px;
-  font-size: 0.9rem;
-  color: var(--color-accent);
-  text-decoration: none;
-}
-
-.recent-view-all:hover { text-decoration: underline; }
-
-.recent-arrow {
-  margin-top: 0.25rem;
-  color: var(--color-text-faint);
-  font-size: 0.9rem;
-  flex-shrink: 0;
-  transition: transform var(--motion-fast) var(--motion-bounce), color var(--motion-fast) ease;
-}
-
-.recent-row:hover .recent-arrow {
-  color: var(--color-accent-text);
-  transform: translateX(3px);
-}
-
-.cta-center {
-  display: flex;
-  justify-content: center;
-  padding-top: 0.5rem;
 }
 </style>

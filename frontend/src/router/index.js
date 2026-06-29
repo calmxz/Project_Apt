@@ -57,6 +57,17 @@ const router = createRouter({
       component: () => import('../views/NewSessionView.vue'),
     },
     {
+      path: '/subjects/new',
+      name: 'subject-new',
+      component: () => import('../views/SubjectWizardView.vue'),
+    },
+    {
+      path: '/subjects/:id',
+      name: 'subject-overview',
+      component: () => import('../views/SubjectOverview.vue'),
+      props: true,
+    },
+    {
       path: '/sessions',
       name: 'sessions-library',
       component: () => import('../views/SessionsLibraryView.vue'),

@@ -17,6 +17,8 @@
 
       <SessionHeader :topic="headerTopic" />
 
+      <LessonContextBar :goal="lesson?.goal || ''" :subject-id="lessonSubjectId || ''" />
+
       <CapBanners />
 
       <SessionEndedBanner
@@ -78,6 +80,13 @@
         @done="onDoneCheck"
       />
 
+      <MarkDoneConfirm
+        v-if="showMarkDone && lesson"
+        :lesson-title="lesson.title"
+        @confirm="onMarkDone"
+        @dismiss="onDismissMarkDone"
+      />
+
       <Composer
         v-if="!isEnded"
         ref="composerRef"
@@ -129,6 +138,8 @@ import CapBanners from '../components/chat/CapBanners.vue'
 import ChatEmptyState from '../components/chat/EmptyState.vue'
 import CheckQuestion from '../components/chat/CheckQuestion.vue'
 import Composer from '../components/chat/Composer.vue'
+import LessonContextBar from '../components/chat/LessonContextBar.vue'
+import MarkDoneConfirm from '../components/chat/MarkDoneConfirm.vue'
 import MessageList from '../components/chat/MessageList.vue'
 import MessageListSkeleton from '../components/chat/MessageListSkeleton.vue'
 import SessionHeader from '../components/chat/SessionHeader.vue'
@@ -137,15 +148,18 @@ import ReferenceStatusBanner from '../components/chat/ReferenceStatusBanner.vue'
 import UploadStatus from '../components/chat/UploadStatus.vue'
 import { friendlyError } from '../lib/errors.js'
 import { useSessionStore } from '../stores/session.js'
+import { useSubjectStore } from '../stores/subject.js'
 import { useToast } from '../composables/useToast.js'
 import { costBus } from '../services/costBus.js'
 import { getUploadStatus, uploadDocument, validateFile } from '../services/uploadApi.js'
 import { formatShortDateTime } from '../utils/formatDate.js'
+import { checkBatchAllCorrect } from '../utils/checkBatch.js'
 
 const props = defineProps({ id: { type: String, required: true } })
 
 const router = useRouter()
 const store = useSessionStore()
+const subjectStore = useSubjectStore()
 
 // Streaming (SSE) is the default chat path. Set VITE_CHAT_STREAM=false to fall
 // back to the JSON POST /api/chat endpoint.
@@ -165,6 +179,18 @@ const uploading = ref(false)
 const uploadStatus = ref(null)
 const lastError = ref(null)
 const referenceBannerRef = ref(null)
+
+// Lesson context (Subjects/Lessons flow). When a session is linked to a lesson
+// (currentSession.subject_id present), resolve the owning lesson so the context
+// bar can show its goal + back-link. Best-effort: never blocks chat.
+const lesson = ref(null)
+const lessonSubjectId = ref('')
+
+// Mark-lesson-done suggestion. Fired once per lesson per session when a check
+// batch is completed all-correct (the existing mastery signal). suggestedLessons
+// guards against re-prompting after the user acts.
+const showMarkDone = ref(false)
+const suggestedLessons = new Set()
 
 // Use the same target-id discriminator as headerTopic so the ended-banner /
 // composer / resume action agree with the optimistic header during a switch.
@@ -205,7 +231,7 @@ const capDescribedby = computed(() => {
   return ids.length ? ids.join(' ') : null
 })
 
-const { showError, showInfo } = useToast()
+const { showError, showWarn, showSuccess } = useToast()
 watch(
   () => store.dailyCapReached,
   (now) => {
@@ -234,7 +260,7 @@ const softCapShown = ref(false)
 function onCostWarning() {
   if (softCapShown.value) return
   softCapShown.value = true
-  showInfo(
+  showWarn(
     'You’re approaching the daily cost limit for this session.',
     { summary: 'Cost warning', life: 6000 },
   )
@@ -279,9 +305,13 @@ async function loadCurrent(id) {
   // loadSession entry. loadCurrent only runs on mount + id-change, so a same-
   // session send-error stays retryable.
   lastError.value = null
+  // Clear prior lesson context so a non-lesson session never inherits it.
+  lesson.value = null
+  lessonSubjectId.value = ''
   const startedAt = import.meta.env.DEV ? performance.now() : 0
   try {
     await store.loadSession(id)
+    void resolveLessonContext(id)
     if (import.meta.env.DEV) {
       await nextTick()
       // Dev-only WS3 gate measurement: navigate -> detail painted. This number
@@ -300,6 +330,34 @@ async function loadCurrent(id) {
     }
   }
   if (!isEnded.value && !notFound.value) focusComposer()
+}
+
+// Best-effort lesson resolution: if the loaded session is linked to a subject,
+// pull the subject overview and match the lesson by session_id. Never throws to
+// the caller (chat must load even if the subject fetch fails), and bails on a
+// superseded navigation so a late result can't paint over a newer session.
+async function resolveLessonContext(id) {
+  const subjectId = store.currentSession?.id === id ? store.currentSession.subject_id : null
+  if (!subjectId) return
+  try {
+    const subject = await subjectStore.loadSubject(subjectId)
+    if (id !== props.id) return
+    const match = (subject?.lessons || []).find((l) => l.session_id === id)
+    if (match) {
+      lesson.value = { id: match.id, title: match.title, goal: match.goal }
+      lessonSubjectId.value = subjectId
+      // Resume path: returning to a session whose latest check batch was already
+      // cleared all-correct. That batch lives in store.messages (rebuilt by
+      // loadSession), not pendingCheck, so the live watcher never sees it. Skip
+      // when the lesson is already done -- no point nagging.
+      if (match.status !== 'done') {
+        const graded = [...store.messages].reverse().find((m) => m.check_batch)
+        if (graded && checkBatchAllCorrect(graded.check_batch.items)) maybeSuggestMarkDone()
+      }
+    }
+  } catch {
+    // Lesson context is non-essential; leave the bar hidden on failure.
+  }
 }
 
 onMounted(() => loadCurrent(props.id))
@@ -464,6 +522,45 @@ async function onDoneCheck() {
   } catch (e) {
     lastError.value = e
   }
+}
+
+// Mark-done suggestion. Reuses the EXISTING mastery signal: a check batch the
+// store already graded all-correct (checkBatchAllCorrect). Fires once per lesson
+// per mount (suggestedLessons guard; navigating session->session reuses this
+// component so the guard survives in-app, resetting only on a full reload).
+function maybeSuggestMarkDone() {
+  if (!lesson.value || suggestedLessons.has(lesson.value.id)) return
+  showMarkDone.value = true
+}
+
+// Live path: the graded batch lives transiently in store.pendingCheck
+// (completeCheck nulls it and never lands it in store.messages mid-session), so
+// watch it deeply and read the all-correct state before it clears.
+watch(
+  () => store.pendingCheck,
+  (pc) => {
+    if (pc && checkBatchAllCorrect(pc.items)) maybeSuggestMarkDone()
+  },
+  { deep: true },
+)
+
+async function onMarkDone() {
+  showMarkDone.value = false
+  if (!lesson.value) return
+  suggestedLessons.add(lesson.value.id)
+  try {
+    await subjectStore.markLessonDone(lesson.value.id)
+    showSuccess('Lesson marked done. Progress updates on your next visit to the subject.', { summary: 'Marked done', life: 5000 })
+  } catch (e) {
+    lastError.value = e
+  }
+}
+
+// Dismiss is sticky for this mount: "Keep going" suppresses re-prompts for the
+// same lesson until a full reload, so a later batch does not re-nag.
+function onDismissMarkDone() {
+  showMarkDone.value = false
+  if (lesson.value) suggestedLessons.add(lesson.value.id)
 }
 
 function goHome() {
