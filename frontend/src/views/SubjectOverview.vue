@@ -17,28 +17,115 @@
 
       <p data-testid="subject-meta" class="subject-meta">{{ meta }}</p>
 
-      <ul class="lesson-list">
-        <li
-          v-for="lesson in lessons"
-          :key="lesson.id"
-          :data-testid="lesson.id === nextId ? 'subject-lesson-next' : undefined"
-          :class="['lesson-row', { 'lesson-row--next': lesson.id === nextId }]"
+      <div class="lesson-list-controls">
+        <button
+          type="button"
+          data-testid="overview-edit-toggle"
+          :class="['edit-toggle-btn', { 'edit-toggle-btn--active': editMode }]"
+          @click="toggleEditMode"
         >
-          <button
-            :data-testid="`subject-lesson-${lesson.id}`"
-            type="button"
-            class="lesson-btn"
-            @click="goToLesson(lesson.id)"
+          {{ editMode ? 'Done editing' : 'Edit plan' }}
+        </button>
+      </div>
+
+      <ul class="lesson-list">
+        <template v-for="(lesson, idx) in lessons" :key="lesson.id">
+          <li
+            :data-testid="lesson.id === nextId ? 'subject-lesson-next' : undefined"
+            :class="['lesson-row', { 'lesson-row--next': lesson.id === nextId }]"
           >
-            <span
-              :data-testid="`subject-lesson-status-${lesson.id}`"
-              :class="['lesson-status', `lesson-status--${lesson.status}`]"
+            <!-- Open lesson button — always accessible in both view and edit modes -->
+            <button
+              :data-testid="`subject-lesson-${lesson.id}`"
+              type="button"
+              class="lesson-btn"
+              @click="goToLesson(lesson.id)"
             >
-              {{ STATUS_LABEL[lesson.status] || lesson.status }}
-            </span>
-            <span class="lesson-title">{{ lesson.title }}</span>
-          </button>
-        </li>
+              <span
+                :data-testid="`subject-lesson-status-${lesson.id}`"
+                :class="['lesson-status', `lesson-status--${lesson.status}`]"
+              >
+                {{ STATUS_LABEL[lesson.status] || lesson.status }}
+              </span>
+              <span class="lesson-title">{{ lesson.title }}</span>
+            </button>
+
+            <!-- Edit controls: visible only when edit mode is active -->
+            <div v-if="editMode" class="lesson-edit-bar">
+              <!-- Inline edit form for title and goal -->
+              <div v-if="editingLessonId === lesson.id" class="lesson-inline-edit">
+                <input
+                  v-model="editTitleInput"
+                  type="text"
+                  class="edit-input"
+                  aria-label="Lesson title"
+                  @keydown.escape="editingLessonId = null"
+                />
+                <input
+                  v-model="editGoalInput"
+                  type="text"
+                  class="edit-input"
+                  aria-label="Lesson goal"
+                  @keydown.escape="editingLessonId = null"
+                />
+                <button type="button" class="edit-action-btn" @click="saveEdit(lesson.id)">Save</button>
+                <button type="button" class="edit-action-btn edit-action-btn--ghost" @click="editingLessonId = null">Cancel</button>
+              </div>
+              <!-- Per-lesson action buttons -->
+              <div v-else class="lesson-edit-actions">
+                <button type="button" class="edit-action-btn" @click="startEdit(lesson)">Rename</button>
+                <button
+                  type="button"
+                  class="reorder-btn"
+                  :disabled="idx === 0"
+                  aria-label="Move up"
+                  @click="store.moveLesson(lesson.id, idx - 1)"
+                >
+                  <i class="pi pi-angle-up" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  class="reorder-btn"
+                  :disabled="idx === lessons.length - 1"
+                  aria-label="Move down"
+                  @click="store.moveLesson(lesson.id, idx + 1)"
+                >
+                  <i class="pi pi-angle-down" aria-hidden="true" />
+                </button>
+                <button type="button" class="edit-action-btn" @click="openAddAfter(idx)">+ Add here</button>
+              </div>
+            </div>
+          </li>
+
+          <!-- Add lesson form — renders inline after the lesson at addingAfterIdx -->
+          <li v-if="editMode && addingAfterIdx === idx" class="lesson-add-row">
+            <form
+              data-testid="overview-add-lesson"
+              class="add-lesson-form"
+              @submit.prevent="submitAdd(idx)"
+            >
+              <input
+                v-model="addTitle"
+                type="text"
+                class="edit-input"
+                placeholder="Lesson title"
+                required
+                aria-label="New lesson title"
+              />
+              <input
+                v-model="addGoal"
+                type="text"
+                class="edit-input"
+                placeholder="Goal (optional)"
+                aria-label="New lesson goal"
+              />
+              <div class="add-lesson-actions">
+                <button type="submit" class="edit-action-btn">Add lesson</button>
+                <button type="button" class="edit-action-btn edit-action-btn--ghost" @click="addingAfterIdx = null">Cancel</button>
+              </div>
+            </form>
+          </li>
+        </template>
       </ul>
 
       <button
@@ -203,6 +290,50 @@ async function cleanupDuplicates() {
     cleaning.value = false
   }
 }
+
+// --- Plan revision edit mode ---
+const editMode = ref(false)
+const addingAfterIdx = ref(null)
+const addTitle = ref('')
+const addGoal = ref('')
+const editingLessonId = ref(null)
+const editTitleInput = ref('')
+const editGoalInput = ref('')
+
+function toggleEditMode() {
+  editMode.value = !editMode.value
+  addingAfterIdx.value = null
+  editingLessonId.value = null
+}
+
+function startEdit(lesson) {
+  editingLessonId.value = lesson.id
+  editTitleInput.value = lesson.title
+  editGoalInput.value = lesson.goal || ''
+}
+
+async function saveEdit(lessonId) {
+  const title = editTitleInput.value.trim()
+  const goal = editGoalInput.value.trim()
+  if (title) await store.renameLesson(lessonId, title)
+  await store.editLessonGoal(lessonId, goal)
+  editingLessonId.value = null
+}
+
+function openAddAfter(idx) {
+  addingAfterIdx.value = idx
+  addTitle.value = ''
+  addGoal.value = ''
+}
+
+async function submitAdd(afterIdx) {
+  const title = addTitle.value.trim()
+  if (!title) return
+  await store.addLessonAfter(props.id, afterIdx, { title, goal: addGoal.value.trim() })
+  addingAfterIdx.value = null
+  addTitle.value = ''
+  addGoal.value = ''
+}
 </script>
 
 <style scoped>
@@ -274,6 +405,28 @@ async function cleanupDuplicates() {
   margin: 0;
 }
 
+.lesson-list-controls {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.edit-toggle-btn {
+  padding: 0.4rem 0.9rem;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  color: var(--color-accent);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.edit-toggle-btn--active {
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+  border-color: var(--color-accent);
+}
+
 .lesson-list {
   list-style: none;
   padding: 0;
@@ -322,6 +475,95 @@ async function cleanupDuplicates() {
 
 .lesson-title {
   flex: 1;
+}
+
+.lesson-edit-bar {
+  border-top: 1px solid var(--color-border);
+  padding: 0.5rem 1rem;
+}
+
+.lesson-inline-edit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.lesson-edit-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.edit-input {
+  padding: 0.375rem 0.625rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  color: inherit;
+  font-size: 0.875rem;
+  flex: 1;
+  min-width: 8rem;
+}
+
+.edit-input:focus {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.edit-action-btn {
+  padding: 0.375rem 0.75rem;
+  background: var(--color-accent);
+  color: var(--color-text-on-accent);
+  border: none;
+  border-radius: var(--radius-card);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.edit-action-btn--ghost {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: inherit;
+}
+
+.reorder-btn {
+  padding: 0.375rem 0.5rem;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.875rem;
+  line-height: 1;
+}
+
+.reorder-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.lesson-add-row {
+  background: var(--color-surface);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-card);
+  list-style: none;
+}
+
+.add-lesson-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  align-items: center;
+}
+
+.add-lesson-actions {
+  display: flex;
+  gap: 0.5rem;
 }
 
 .open-next-btn {

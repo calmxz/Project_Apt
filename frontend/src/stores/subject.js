@@ -131,6 +131,63 @@ export const useSubjectStore = defineStore('subject', () => {
     return patchLesson(lessonId, { status: 'done' })
   }
 
+  // Private helper: rewrite order_idx to contiguous 0-based sequence in-place.
+  // Returns only the rows whose order_idx changed (callers PATCH those rows).
+  // Kept as a named closure so Task 8 removeLesson can reuse it.
+  function _reindex(lessons) {
+    const changed = []
+    lessons.forEach((l, i) => {
+      if (l.order_idx !== i) {
+        l.order_idx = i
+        changed.push(l)
+      }
+    })
+    return changed
+  }
+
+  // Insert a new lesson after the lesson at afterIdx, then reindex so
+  // order_idx stays contiguous. Changes lesson count -> sync sidebar progress.
+  async function addLessonAfter(subjectId, afterIdx, { title, goal }) {
+    const lessons = currentSubject.value.lessons
+    const created = await subjectsApi.addLesson(subjectId, { title, goal })
+    // Append at the end then splice into the target position
+    lessons.push(created)
+    const fromIdx = lessons.length - 1
+    const toIdx = Math.min(afterIdx + 1, fromIdx)
+    lessons.splice(fromIdx, 1)
+    lessons.splice(toIdx, 0, created)
+    const changed = _reindex(lessons)
+    await Promise.all(changed.map((l) => subjectsApi.patchLesson(l.id, { order_idx: l.order_idx })))
+    _syncSubjectListProgress()
+  }
+
+  // Move lessonId to toIdx (0-based target position), reindex, persist changed rows.
+  async function moveLesson(lessonId, toIdx) {
+    const lessons = currentSubject.value.lessons
+    const fromIdx = lessons.findIndex((l) => l.id === lessonId)
+    if (fromIdx === -1 || fromIdx === toIdx) return
+    const [lesson] = lessons.splice(fromIdx, 1)
+    lessons.splice(toIdx, 0, lesson)
+    const changed = _reindex(lessons)
+    await Promise.all(changed.map((l) => subjectsApi.patchLesson(l.id, { order_idx: l.order_idx })))
+  }
+
+  // Rename a lesson: patch title on server and update local state.
+  async function renameLesson(lessonId, title) {
+    await subjectsApi.patchLesson(lessonId, { title })
+    const lessons = currentSubject.value?.lessons || []
+    const lesson = lessons.find((l) => l.id === lessonId)
+    if (lesson) lesson.title = title
+  }
+
+  // Edit a lesson's goal: patch goal on server and update local state.
+  async function editLessonGoal(lessonId, goal) {
+    await subjectsApi.patchLesson(lessonId, { goal })
+    const lessons = currentSubject.value?.lessons || []
+    const lesson = lessons.find((l) => l.id === lessonId)
+    if (lesson) lesson.goal = goal
+  }
+
   function reset() {
     subjects.value = []
     currentSubject.value = null
@@ -142,5 +199,6 @@ export const useSubjectStore = defineStore('subject', () => {
     nextLesson,
     draftPlan, listSubjects, loadSubject, createSubject,
     addLesson, patchLesson, deleteLesson, openLesson, markLessonDone, reset,
+    addLessonAfter, moveLesson, renameLesson, editLessonGoal,
   }
 })
