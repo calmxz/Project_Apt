@@ -17,6 +17,7 @@ vi.mock('@/services/sessionsApi.js', () => ({
 import SubjectOverview from '@/views/SubjectOverview.vue'
 import { useSubjectStore } from '@/stores/subject.js'
 import { useSessionStore } from '@/stores/session.js'
+import { RouterLink } from 'vue-router'
 
 const overview = {
   id: 's1', title: 'Organic Chemistry', per_session_minutes: 30,
@@ -29,7 +30,12 @@ const overview = {
   ],
 }
 
-function mountView() { return mount(SubjectOverview, { props: { id: 's1' } }) }
+function mountView() {
+  return mount(SubjectOverview, {
+    props: { id: 's1' },
+    global: { components: { RouterLink } },
+  })
+}
 
 describe('SubjectOverview', () => {
   beforeEach(() => { setActivePinia(createPinia()); push.mockClear() })
@@ -158,6 +164,20 @@ describe('SubjectOverview', () => {
     const wrapper = mountView()
     await flushPromises()
     expect(wrapper.find('[data-testid="subject-dupe-banner"]').exists()).toBe(false)
+  })
+
+  it('renders a mastery map link targeting the subject-mastery route', async () => {
+    const store = useSubjectStore()
+    vi.spyOn(store, 'loadSubject').mockImplementation(async () => { store.currentSubject = overview })
+    const wrapper = mountView()
+    await flushPromises()
+    const link = wrapper.find('[data-testid="overview-mastery-link"]')
+    expect(link.exists()).toBe(true)
+    expect(link.text()).toBe('View mastery map')
+    // Check the to prop via findAllComponents — stub declares props: ['to']
+    const masteryComp = wrapper.findAllComponents(RouterLink)
+      .find(c => c.attributes('data-testid') === 'overview-mastery-link')
+    expect(masteryComp?.props('to')).toEqual({ name: 'subject-mastery', params: { id: 's1' } })
   })
 
   it('clicking dupe cleanup calls endSession for removable duplicate and reloads', async () => {

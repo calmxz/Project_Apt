@@ -51,6 +51,14 @@
         Open next lesson
       </button>
 
+      <router-link
+        :to="{ name: 'subject-mastery', params: { id: props.id } }"
+        class="mastery-link"
+        data-testid="overview-mastery-link"
+      >
+        View mastery map
+      </router-link>
+
       <div
         v-if="duplicateCount > 0"
         class="dupe-banner"
@@ -326,6 +334,17 @@ async function cleanupDuplicates() {
   font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
+}
+
+.mastery-link {
+  align-self: flex-start;
+  font-size: 0.875rem;
+  color: var(--color-accent);
+  text-decoration: none;
+}
+
+.mastery-link:hover {
+  text-decoration: underline;
 }
 
 .dupe-banner {
