@@ -31,8 +31,12 @@ describe('router', () => {
         'session-profile',
         'login',
         'register',
+        'subject-new',
+        'subject-overview',
       ]),
     )
+    expect(names).toContain('subject-new')
+    expect(names).toContain('subject-overview')
   })
 
   it('redirects unauthenticated user to /login', async () => {
