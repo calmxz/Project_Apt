@@ -80,6 +80,13 @@
         @done="onDoneCheck"
       />
 
+      <MarkDoneConfirm
+        v-if="showMarkDone && lesson"
+        :lesson-title="lesson.title"
+        @confirm="onMarkDone"
+        @dismiss="showMarkDone = false"
+      />
+
       <Composer
         v-if="!isEnded"
         ref="composerRef"
@@ -132,6 +139,7 @@ import ChatEmptyState from '../components/chat/EmptyState.vue'
 import CheckQuestion from '../components/chat/CheckQuestion.vue'
 import Composer from '../components/chat/Composer.vue'
 import LessonContextBar from '../components/chat/LessonContextBar.vue'
+import MarkDoneConfirm from '../components/chat/MarkDoneConfirm.vue'
 import MessageList from '../components/chat/MessageList.vue'
 import MessageListSkeleton from '../components/chat/MessageListSkeleton.vue'
 import SessionHeader from '../components/chat/SessionHeader.vue'
@@ -176,6 +184,12 @@ const referenceBannerRef = ref(null)
 // bar can show its goal + back-link. Best-effort: never blocks chat.
 const lesson = ref(null)
 const lessonSubjectId = ref('')
+
+// Mark-lesson-done suggestion. Fired once per lesson per session when a check
+// batch is completed all-correct (the existing mastery signal). suggestedLessons
+// guards against re-prompting after the user acts.
+const showMarkDone = ref(false)
+const suggestedLessons = new Set()
 
 // Use the same target-id discriminator as headerTopic so the ended-banner /
 // composer / resume action agree with the optimistic header during a switch.
@@ -496,6 +510,40 @@ async function onSkipCheck() {
 async function onDoneCheck() {
   try {
     await store.completeCheck()
+  } catch (e) {
+    lastError.value = e
+  }
+}
+
+// Mark-done suggestion trigger. Reuses the EXISTING mastery signal: a check
+// batch the store already graded all-correct. The graded batch lives transiently
+// in store.pendingCheck (completeCheck nulls it and never lands it in
+// store.messages mid-session), so we watch pendingCheck deeply and read the
+// all-answered-correct state before it clears. No new scoring pass.
+function batchAllCorrect(pc) {
+  return Boolean(
+    pc &&
+      pc.items?.length &&
+      pc.items.every((it) => it.status === 'answered' && it.correct === true),
+  )
+}
+watch(
+  () => store.pendingCheck,
+  (pc) => {
+    if (!batchAllCorrect(pc)) return
+    if (!lesson.value || suggestedLessons.has(lesson.value.id)) return
+    showMarkDone.value = true
+  },
+  { deep: true },
+)
+
+async function onMarkDone() {
+  showMarkDone.value = false
+  if (!lesson.value) return
+  suggestedLessons.add(lesson.value.id)
+  try {
+    await subjectStore.markLessonDone(lesson.value.id)
+    showInfo('Lesson marked done. Progress updates on your next visit to the subject.', { summary: 'Marked done', life: 5000 })
   } catch (e) {
     lastError.value = e
   }
