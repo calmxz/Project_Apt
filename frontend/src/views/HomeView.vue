@@ -307,7 +307,7 @@ function continueResume() {
 
 .resume-btn:hover {
   background: var(--color-accent);
-  color: #FFFFFF;
+  color: var(--color-text-on-accent);
   transform: translateY(-1px);
 }
 
