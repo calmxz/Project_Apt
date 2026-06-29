@@ -78,10 +78,27 @@ export const useSubjectStore = defineStore('subject', () => {
     }
   }
 
+  // Keep the sidebar's subjects list-item progress in step with currentSubject's
+  // lessons after an in-place lesson mutation. The sidebar node reads
+  // subjects[].progress, which loadSubject does not touch, so without this the
+  // n/m count lags (e.g. stays 0/1 after a mark-done) until a full reload.
+  function _syncSubjectListProgress() {
+    const cs = currentSubject.value
+    if (!cs) return
+    const item = subjects.value.find((s) => s.id === cs.id)
+    if (!item) return
+    const lessons = cs.lessons || []
+    item.progress = {
+      done_count: lessons.filter((l) => l.status === 'done').length,
+      total_count: lessons.length,
+    }
+  }
+
   async function addLesson(subjectId, lesson) {
     const created = await subjectsApi.addLesson(subjectId, lesson)
     if (currentSubject.value?.id === subjectId) {
       currentSubject.value.lessons = [...(currentSubject.value.lessons || []), created]
+      _syncSubjectListProgress()
     }
     return created
   }
@@ -90,7 +107,10 @@ export const useSubjectStore = defineStore('subject', () => {
     const updated = await subjectsApi.patchLesson(lessonId, patch)
     const lessons = currentSubject.value?.lessons || []
     const idx = lessons.findIndex((l) => l.id === lessonId)
-    if (idx !== -1) lessons[idx] = { ...lessons[idx], ...patch, ...updated }
+    if (idx !== -1) {
+      lessons[idx] = { ...lessons[idx], ...patch, ...updated }
+      _syncSubjectListProgress()
+    }
     return updated
   }
 
@@ -98,6 +118,7 @@ export const useSubjectStore = defineStore('subject', () => {
     await subjectsApi.deleteLesson(lessonId)
     if (currentSubject.value?.lessons) {
       currentSubject.value.lessons = currentSubject.value.lessons.filter((l) => l.id !== lessonId)
+      _syncSubjectListProgress()
     }
   }
 

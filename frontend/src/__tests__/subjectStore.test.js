@@ -64,6 +64,17 @@ describe('subject store', () => {
     expect(store.subjects[0].id).toBe('s9')
   })
 
+  it('markLessonDone syncs the matching subjects list-item progress (sidebar count)', async () => {
+    api.getSubject.mockResolvedValue(overview) // l1+l2 done, l3 not_started -> 2/3
+    api.patchLesson.mockResolvedValue({ id: 'l3', status: 'done' })
+    const store = useSubjectStore()
+    store.subjects = [{ id: 's1', title: 'Organic Chemistry', progress: { done_count: 2, total_count: 3 } }]
+    await store.loadSubject('s1')
+    await store.markLessonDone('l3')
+    expect(store.subjects[0].progress.done_count).toBe(3)
+    expect(store.subjects[0].progress.total_count).toBe(3)
+  })
+
   it('draftPlan returns the lessons array from the preview response', async () => {
     api.draftPlan.mockResolvedValue({ lessons: [{ title: 'Bonding', goal: 'g' }, { title: 'Alkanes', goal: 'g' }] })
     const store = useSubjectStore()
