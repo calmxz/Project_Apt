@@ -303,9 +303,14 @@ async function cleanupDuplicates() {
 }
 
 // --- Lesson delete ---
-function handleDeleteLesson(lesson) {
+async function handleDeleteLesson(lesson) {
   if (lesson.session_id == null) {
-    store.removeLesson(lesson.id)
+    try {
+      await store.removeLesson(lesson.id)
+    } catch {
+      // removeLesson re-throws on API failure; the store captured the error
+      // state. Swallow here so a failed delete is not an unhandled rejection.
+    }
   } else {
     confirm.require({
       message: "End this lesson's chat and remove it? This ends the session and deletes the lesson.",
