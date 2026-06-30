@@ -86,4 +86,14 @@ describe('SubjectWizardView (title -> duration -> Create)', () => {
     })
     expect(push).toHaveBeenCalledWith({ name: 'subject-overview', params: { id: 's5' } })
   })
+
+  it('Back on the duration step returns to the title step', async () => {
+    const wrapper = mountView()
+    await wrapper.get('[data-testid="wizard-title-input"]').setValue('Chem')
+    await wrapper.get('[data-testid="wizard-next"]').trigger('click')
+    expect(wrapper.find('[data-testid="wizard-minutes-30"]').exists()).toBe(true)
+    await wrapper.get('[data-testid="wizard-back"]').trigger('click')
+    expect(wrapper.find('[data-testid="wizard-title-input"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="wizard-minutes-30"]').exists()).toBe(false)
+  })
 })
