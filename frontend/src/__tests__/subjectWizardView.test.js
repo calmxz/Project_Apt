@@ -8,7 +8,7 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ push }),
   RouterLink: { props: ['to'], template: '<a><slot /></a>' },
 }))
-vi.mock('@/services/subjectsApi.js', () => ({ draftPlan: vi.fn(), createSubject: vi.fn() }))
+vi.mock('@/services/subjectsApi.js', () => ({ createSubject: vi.fn() }))
 
 import SubjectWizardView from '@/views/SubjectWizardView.vue'
 
@@ -87,33 +87,6 @@ describe('SubjectWizardView steps 1-3', () => {
     expect(push).toHaveBeenCalledWith({ name: 'subject-overview', params: { id: 's9' } })
   })
 
-  it('draft path: preview populates the editor; the reviewed (edited) lessons are committed', async () => {
-    const wrapper = mountView()
-    const store = useSubjectStore()
-    vi.spyOn(store, 'draftPlan').mockResolvedValue([
-      { title: 'Bonding', goal: 'g1' }, { title: 'Alkanes', goal: 'g2' },
-    ])
-    vi.spyOn(store, 'createSubject').mockResolvedValue({ id: 's7' })
-    await wrapper.get('[data-testid="wizard-title-input"]').setValue('Chem')
-    await wrapper.get('[data-testid="wizard-next"]').trigger('click')
-    await wrapper.get('[data-testid="wizard-timeline-14"]').trigger('click')
-    await wrapper.get('[data-testid="wizard-next"]').trigger('click')
-    await wrapper.get('[data-testid="wizard-mode-draft"]').trigger('click')
-    await flushPromises()
-    expect(store.draftPlan).toHaveBeenCalledWith({ title: 'Chem', per_session_minutes: 30, duration_mode: 'deadline', timeline_days: 14 })
-    expect(wrapper.findAll('[data-testid^="wizard-lesson-row-"]')).toHaveLength(2)
-    // derived pace recomputes from the now-populated lesson list: ceil(2 / (14/7)) = 1
-    expect(wrapper.get('[data-testid="wizard-derived"]').text()).toContain('1')
-    await wrapper.get('[data-testid="wizard-row-title-0"]').setValue('Bonding basics')
-    await wrapper.get('[data-testid="wizard-create"]').trigger('click')
-    await flushPromises()
-    expect(store.createSubject).toHaveBeenCalledWith({
-      title: 'Chem', per_session_minutes: 30, duration_mode: 'deadline', timeline_days: 14, mode: 'blank',
-      lessons: [{ title: 'Bonding basics', goal: 'g1' }, { title: 'Alkanes', goal: 'g2' }],
-    })
-    expect(push).toHaveBeenCalledWith({ name: 'subject-overview', params: { id: 's7' } })
-  })
-
   it('pace mode commits pace_per_week and omits timeline_days', async () => {
     const wrapper = mountView()
     const store = useSubjectStore()
@@ -133,30 +106,4 @@ describe('SubjectWizardView steps 1-3', () => {
     })
   })
 
-  it('reorder: move-down swaps adjacent drafted lessons', async () => {
-    const wrapper = mountView()
-    const store = useSubjectStore()
-    vi.spyOn(store, 'draftPlan').mockResolvedValue([{ title: 'A', goal: '' }, { title: 'B', goal: '' }])
-    await wrapper.get('[data-testid="wizard-title-input"]').setValue('Chem')
-    await wrapper.get('[data-testid="wizard-next"]').trigger('click')
-    await wrapper.get('[data-testid="wizard-next"]').trigger('click')
-    await wrapper.get('[data-testid="wizard-mode-draft"]').trigger('click')
-    await flushPromises()
-    await wrapper.get('[data-testid="wizard-lesson-down-0"]').trigger('click')
-    expect(wrapper.get('[data-testid="wizard-row-title-0"]').element.value).toBe('B')
-  })
-
-  it('draft failure falls back to an empty editor with a notice', async () => {
-    const wrapper = mountView()
-    const store = useSubjectStore()
-    vi.spyOn(store, 'draftPlan').mockRejectedValueOnce(new Error('429'))
-    await wrapper.get('[data-testid="wizard-title-input"]').setValue('Chem')
-    await wrapper.get('[data-testid="wizard-next"]').trigger('click')
-    await wrapper.get('[data-testid="wizard-next"]').trigger('click')
-    await wrapper.get('[data-testid="wizard-mode-draft"]').trigger('click')
-    await flushPromises()
-    expect(wrapper.find('[data-testid="wizard-draft-error"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="wizard-lesson-title"]').exists()).toBe(true) // empty add-row editor visible
-    expect(wrapper.findAll('[data-testid^="wizard-lesson-row-"]')).toHaveLength(0)
-  })
 })

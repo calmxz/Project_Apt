@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
 vi.mock('@/services/subjectsApi.js', () => ({
-  draftPlan: vi.fn(), listSubjects: vi.fn(), getSubject: vi.fn(), createSubject: vi.fn(),
+  listSubjects: vi.fn(), getSubject: vi.fn(), createSubject: vi.fn(),
   addLesson: vi.fn(), patchLesson: vi.fn(), deleteLesson: vi.fn(), openLesson: vi.fn(),
 }))
 
@@ -73,15 +73,6 @@ describe('subject store', () => {
     await store.markLessonDone('l3')
     expect(store.subjects[0].progress.done_count).toBe(3)
     expect(store.subjects[0].progress.total_count).toBe(3)
-  })
-
-  it('draftPlan returns the lessons array from the preview response', async () => {
-    api.draftPlan.mockResolvedValue({ lessons: [{ title: 'Bonding', goal: 'g' }, { title: 'Alkanes', goal: 'g' }] })
-    const store = useSubjectStore()
-    const lessons = await store.draftPlan({ title: 'Chem', per_session_minutes: 30, timeline_days: 14 })
-    expect(api.draftPlan).toHaveBeenCalledWith({ title: 'Chem', per_session_minutes: 30, timeline_days: 14 })
-    expect(lessons).toHaveLength(2)
-    expect(lessons[0].title).toBe('Bonding')
   })
 
   it('derivePace floors weeks at 1 (By deadline)', () => {

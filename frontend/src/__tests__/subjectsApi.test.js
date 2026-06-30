@@ -18,17 +18,10 @@ describe('subjectsApi', () => {
     apiGet.mockReset(); apiPost.mockReset(); apiPatch.mockReset(); apiDelete.mockReset()
   })
 
-  it('draftPlan posts the deadline-mode payload verbatim (no mode/lessons)', () => {
-    api.draftPlan({ title: 'Organic Chemistry', per_session_minutes: 30, duration_mode: 'deadline', timeline_days: 14 })
-    expect(apiPost).toHaveBeenCalledWith('/subjects/draft-plan', {
-      title: 'Organic Chemistry', per_session_minutes: 30, duration_mode: 'deadline', timeline_days: 14,
-    })
-  })
-
-  it('createSubject posts the pace-mode body verbatim (pace_per_week, no timeline_days)', () => {
-    api.createSubject({ title: 'Organic Chemistry', per_session_minutes: 30, duration_mode: 'pace', pace_per_week: 3, mode: 'blank', lessons: [{ title: 'Bonding', goal: 'Get bonds' }] })
+  it('createSubject posts the pace-mode body verbatim (no mode/lessons)', () => {
+    api.createSubject({ title: 'Organic Chemistry', per_session_minutes: 30, duration_mode: 'pace', pace_per_week: 3 })
     expect(apiPost).toHaveBeenCalledWith('/subjects', {
-      title: 'Organic Chemistry', per_session_minutes: 30, duration_mode: 'pace', pace_per_week: 3, mode: 'blank', lessons: [{ title: 'Bonding', goal: 'Get bonds' }],
+      title: 'Organic Chemistry', per_session_minutes: 30, duration_mode: 'pace', pace_per_week: 3,
     })
   })
 

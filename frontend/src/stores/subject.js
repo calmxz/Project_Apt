@@ -46,19 +46,6 @@ export const useSubjectStore = defineStore('subject', () => {
     }
   }
 
-  async function draftPlan(payload) {
-    loading.value = true
-    error.value = null
-    try {
-      const resp = await subjectsApi.draftPlan(payload)
-      return resp?.lessons || []
-    } catch (e) {
-      _setError(e)
-    } finally {
-      loading.value = false
-    }
-  }
-
   async function createSubject(payload) {
     loading.value = true
     error.value = null
@@ -232,7 +219,7 @@ export const useSubjectStore = defineStore('subject', () => {
   return {
     subjects, currentSubject, loading, error,
     nextLesson,
-    draftPlan, listSubjects, loadSubject, createSubject,
+    listSubjects, loadSubject, createSubject,
     addLesson, patchLesson, deleteLesson, removeLesson, openLesson, markLessonDone, reset,
     addLessonAfter, moveLesson, renameLesson, editLessonGoal,
   }
