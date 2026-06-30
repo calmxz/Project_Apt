@@ -37,9 +37,17 @@ deterministic tutor suggestion on repeated check misses.
   goal `"Introduction to <title>."` (mirrors the old single-lesson fallback).
 - **Duration step:** kept, as pace/tracking metadata. It no longer drives any
   generation; the overview already renders and edits it.
-- **LessonDraft contract:** dropped entirely. `subject_service.create_subject`
-  seeds the one lesson from plain `title`/`goal` args, so no schema is left
-  unreferenced at codegen time.
+- **LessonDraft contract:** kept. `datamodel-code-generator` emits a model for
+  every schema under `components/schemas` regardless of path references, so an
+  unreferenced `LessonDraft` survives codegen — no import break. Keeping it also
+  spares `test_subject_service.py` (which builds `LessonDraft` directly) any
+  churn.
+- **Seed-one policy lives in the route, not the service.**
+  `subject_service.create_subject(..., lessons)` stays generic (persist the
+  given lessons). `routes/subjects.py create_subject` builds the single seed
+  `[LessonDraft(title=req.title, goal=f"Introduction to {req.title}.")]` and
+  passes it. Service-level tests (multi-lesson reorder/progress fixtures) keep
+  passing unchanged.
 - **No new migration.** The Subject/Lesson schema is unchanged; no Alembic
   revision, `test_migration_chain.py` untouched.
 
@@ -48,7 +56,8 @@ deterministic tutor suggestion on repeated check misses.
 ### Contracts (`docs/api/openapi.yaml`, then `python backend/scripts/gen_contracts.py`)
 
 - Delete path `POST /subjects/draft-plan`.
-- Delete schemas `DraftPlanRequest`, `DraftPlanResponse`, `LessonDraft`.
+- Delete schemas `DraftPlanRequest`, `DraftPlanResponse`.
+- Keep schema `LessonDraft` (now only used internally by the route/service).
 - `SubjectCreateRequest`: remove `mode` and `lessons`; new `required`
   is `[title, per_session_minutes, duration_mode]` (+ the duration fields).
 - Regenerate `backend/contracts/models.py`; CI enforces zero drift.
@@ -61,19 +70,25 @@ deterministic tutor suggestion on repeated check misses.
 - `backend/routes/subjects.py`:
   - Delete the `draft_plan_preview` route (`POST /subjects/draft-plan`).
   - In `create_subject`: drop the `if req.mode == "draft"` branch and the
-    `req.lessons` handling. Call `subject_service.create_subject(...)` with the
-    duration args only; the service seeds the one lesson.
-  - Drop now-unused imports (`DraftPlanRequest`, `DraftPlanResponse`,
-    `plan_service`).
-- `backend/services/subject_service.py`:
-  - `create_subject` signature drops the `lessons` param; it always seeds one
-    lesson titled after the subject (goal `"Introduction to <title>."`).
-  - Drop the `LessonDraft` import.
-- Delete `backend/tests/test_plan_service.py`. Update `test_subjects_route.py`
-  / `test_subject_service.py` cases that pass `mode`/`lessons` or assert
-  multi-lesson creation; assert a freshly created subject has exactly one
-  lesson titled after the subject. Contract tests
-  (`test_contracts_subjects.py`) updated for the new `SubjectCreateRequest`.
+    `req.lessons` handling. Build the single seed
+    `[LessonDraft(title=req.title, goal=f"Introduction to {req.title}.")]` and
+    pass it to `subject_service.create_subject(...)`.
+  - Swap imports: drop `DraftPlanRequest`, `DraftPlanResponse`, `plan_service`;
+    add `LessonDraft`.
+- `backend/services/subject_service.py`: unchanged. `create_subject` keeps its
+  generic `lessons: list[LessonDraft]` param; the route now always passes a
+  one-element list.
+- Delete `backend/tests/test_plan_service.py`. `test_subject_service.py`
+  stays unchanged (it drives the service directly with explicit `LessonDraft`
+  fixtures, still valid). Update `test_subjects_route.py`: drop the draft-path
+  cases (`test_create_draft_calls_plan_service`,
+  `test_draft_plan_preview_returns_lessons_metered_no_persist`); the create
+  helper drops `mode`/`lessons`; assert a freshly created subject has exactly
+  one lesson titled after the subject; multi-lesson route cases (duration
+  derivation) build the extra lessons via `POST /subjects/{id}/lessons` after
+  create. Update `test_contracts_subjects.py` for the new
+  `SubjectCreateRequest` (drop `DraftPlan*` imports/asserts and `mode`/`lessons`;
+  keep the `LessonDraft` import).
 
 ### Frontend
 
