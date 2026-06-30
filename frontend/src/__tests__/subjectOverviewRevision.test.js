@@ -51,6 +51,19 @@ describe('subject store — plan revision', () => {
     expect(patch).toHaveBeenCalledWith('l1', { order_idx: 0 })
   })
 
+  it('moveLesson is a no-op for an out-of-range toIdx', async () => {
+    const store = useSubjectStore()
+    seed(store)
+    const patch = vi.spyOn(subjectsApi, 'patchLesson').mockResolvedValue({})
+
+    await store.moveLesson('l0', -1)
+    await store.moveLesson('l0', 5)
+
+    expect(store.currentSubject.lessons.map((l) => l.id)).toEqual(['l0', 'l1'])
+    expect(store.currentSubject.lessons.map((l) => l.order_idx)).toEqual([0, 1])
+    expect(patch).not.toHaveBeenCalled()
+  })
+
   it('renameLesson and editLessonGoal patch and update local state', async () => {
     const store = useSubjectStore()
     seed(store)

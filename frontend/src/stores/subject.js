@@ -148,7 +148,7 @@ export const useSubjectStore = defineStore('subject', () => {
   // Insert a new lesson after the lesson at afterIdx, then reindex so
   // order_idx stays contiguous. Changes lesson count -> sync sidebar progress.
   async function addLessonAfter(subjectId, afterIdx, { title, goal }) {
-    const lessons = currentSubject.value.lessons
+    const lessons = currentSubject.value?.lessons || []
     const created = await subjectsApi.addLesson(subjectId, { title, goal })
     // Append at the end then splice into the target position
     lessons.push(created)
@@ -159,13 +159,14 @@ export const useSubjectStore = defineStore('subject', () => {
     const changed = _reindex(lessons)
     await Promise.all(changed.map((l) => subjectsApi.patchLesson(l.id, { order_idx: l.order_idx })))
     _syncSubjectListProgress()
+    return created
   }
 
   // Move lessonId to toIdx (0-based target position), reindex, persist changed rows.
   async function moveLesson(lessonId, toIdx) {
-    const lessons = currentSubject.value.lessons
+    const lessons = currentSubject.value?.lessons || []
     const fromIdx = lessons.findIndex((l) => l.id === lessonId)
-    if (fromIdx === -1 || fromIdx === toIdx) return
+    if (fromIdx === -1 || toIdx < 0 || toIdx >= lessons.length || fromIdx === toIdx) return
     const [lesson] = lessons.splice(fromIdx, 1)
     lessons.splice(toIdx, 0, lesson)
     const changed = _reindex(lessons)
