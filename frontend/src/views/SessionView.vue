@@ -574,7 +574,7 @@ function onDismissMarkDone() {
 
 // Add-lesson suggestion (Spec C). Fires when the user clicks [Add] on the inline
 // suggestion card. Appends the lesson via the API, then clears the active
-// suggestion. Route: subject-overview (params.id = subject_id).
+// suggestion.
 async function onAddSuggestedLesson(suggestion) {
   try {
     await subjectsApi.addLesson(suggestion.subject_id, {

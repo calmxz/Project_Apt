@@ -353,7 +353,8 @@ async function saveEdit(lessonId) {
   const title = editTitleInput.value.trim()
   const goal = editGoalInput.value.trim()
   if (title) await store.renameLesson(lessonId, title)
-  await store.editLessonGoal(lessonId, goal)
+  const lesson = lessons.value.find((l) => l.id === lessonId)
+  if (goal !== (lesson?.goal || '')) await store.editLessonGoal(lessonId, goal)
   editingLessonId.value = null
 }
 

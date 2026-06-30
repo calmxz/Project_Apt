@@ -165,6 +165,14 @@ export const useSubjectStore = defineStore('subject', () => {
 
   // Insert a new lesson after the lesson at afterIdx, then reindex so
   // order_idx stays contiguous. Changes lesson count -> sync sidebar progress.
+  //
+  // OPTIMISTIC REORDER: local array mutation (splice + _reindex) happens before
+  // the PATCH calls below. A failed order_idx PATCH leaves the server briefly
+  // inconsistent but self-heals on the next loadSubject call. This is safe only
+  // because Lesson has NO unique constraint on (subject_id, order_idx) — transient
+  // overlapping indices during parallel PATCHes cannot raise a DB violation.
+  // If a future migration adds that constraint, switch to sequential or
+  // transactional reorder.
   async function addLessonAfter(subjectId, afterIdx, { title, goal }) {
     const lessons = currentSubject.value?.lessons || []
     const created = await subjectsApi.addLesson(subjectId, { title, goal })
@@ -181,6 +189,14 @@ export const useSubjectStore = defineStore('subject', () => {
   }
 
   // Move lessonId to toIdx (0-based target position), reindex, persist changed rows.
+  //
+  // OPTIMISTIC REORDER: local array mutation (splice + _reindex) happens before
+  // the PATCH calls below. A failed order_idx PATCH leaves the server briefly
+  // inconsistent but self-heals on the next loadSubject call. This is safe only
+  // because Lesson has NO unique constraint on (subject_id, order_idx) — transient
+  // overlapping indices during parallel PATCHes cannot raise a DB violation.
+  // If a future migration adds that constraint, switch to sequential or
+  // transactional reorder.
   async function moveLesson(lessonId, toIdx) {
     const lessons = currentSubject.value?.lessons || []
     const fromIdx = lessons.findIndex((l) => l.id === lessonId)
