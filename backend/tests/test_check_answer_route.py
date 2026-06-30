@@ -8,7 +8,7 @@ import pytest
 from contracts import AskCheckQuestionsArgs, TopicProfile
 from agent.types import ToolContext
 from db.models import ChatMessage, Lesson, Session as SessionModel, Subject, User
-from services import check_question_service, plan_revision_service, profile_service
+from services import check_question_service, profile_service
 from services.plan_revision_service import STRUGGLE_THRESHOLD
 
 
