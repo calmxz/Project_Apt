@@ -4,8 +4,6 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from contracts import (
-    DraftPlanRequest,
-    DraftPlanResponse,
     LessonCreateRequest,
     LessonItem,
     LessonOpenResponse,
@@ -117,20 +115,6 @@ def list_subjects(
         )
     return out
 
-
-@router.post("/subjects/draft-plan", response_model=DraftPlanResponse)
-async def draft_plan_preview(
-    req: DraftPlanRequest,
-    user_id: str = Depends(current_user_id),
-    db: Session = Depends(get_db),
-):
-    # Metered exactly like the persist path (plan_service handles cost meter +
-    # fallback); writes nothing to the DB. Powers the Spec B wizard review step.
-    drafts = await plan_service.draft_plan(
-        db, user_id, req.title, req.per_session_minutes,
-        req.duration_mode, req.timeline_days, req.pace_per_week,
-    )
-    return DraftPlanResponse(lessons=drafts)
 
 
 @router.get("/subjects/{subject_id}", response_model=SubjectDetail)

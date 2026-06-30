@@ -573,43 +573,13 @@ class LessonItem(BaseModel):
     created_at: datetime
 
 
-class DraftPlanRequest(BaseModel):
-    """
-    Preview-draft inputs for the wizard review step (no persistence). Carries
-    duration_mode plus exactly one of timeline_days (deadline mode) or
-    pace_per_week (pace mode) — the pinned duration field.
-
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    title: constr(max_length=200)
-    per_session_minutes: Literal[15, 30, 60]
-    duration_mode: Literal["deadline", "pace"]
-    timeline_days: int | None = None
-    pace_per_week: int | None = None
-
-
-class DraftPlanResponse(BaseModel):
-    """
-    The drafted, not-yet-persisted lesson list for the wizard to review/edit.
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    lessons: list[LessonDraft]
-
-
 class SubjectCreateRequest(BaseModel):
     """
-    Create a subject. The wizard (Spec B) sends mode=blank with the reviewed
-    lessons[] array (already drafted/edited via POST /subjects/draft-plan;
-    may be empty). mode=draft is a documented non-wizard fallback that drafts
-    and persists server-side in one call via plan_service.draft_plan. Duration
-    is a user-toggled pair: duration_mode plus exactly one of timeline_days
-    (deadline) or pace_per_week (pace); the other is derived on read.
+    Create a subject. The server seeds exactly one lesson titled after the
+    subject; more lessons are added later via POST /subjects/{id}/lessons or
+    the tutor practice-lesson suggestion. Duration is a user-toggled pair:
+    duration_mode plus exactly one of timeline_days (deadline) or
+    pace_per_week (pace); the other is derived on read.
 
     """
 
@@ -621,8 +591,6 @@ class SubjectCreateRequest(BaseModel):
     duration_mode: Literal["deadline", "pace"]
     timeline_days: int | None = None
     pace_per_week: int | None = None
-    mode: Literal["draft", "blank"]
-    lessons: list[LessonDraft] | None = []
 
 
 class SubjectUpdateRequest(BaseModel):

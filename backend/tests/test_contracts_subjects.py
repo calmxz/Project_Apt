@@ -6,8 +6,6 @@ from pydantic import ValidationError
 
 def test_subject_contracts_import():
     from contracts import (
-        DraftPlanRequest,
-        DraftPlanResponse,
         LessonCreateRequest,
         LessonDraft,
         LessonItem,
@@ -21,36 +19,44 @@ def test_subject_contracts_import():
     )
 
     req = SubjectCreateRequest(
-        title="Organic Chemistry", per_session_minutes=30, mode="blank",
+        title="Organic Chemistry", per_session_minutes=30,
         duration_mode="deadline", timeline_days=14,
-        lessons=[LessonDraft(title="Bonding", goal="learn bonds")],
     )
-    assert req.mode == "blank"
     assert req.duration_mode == "deadline"
     assert req.timeline_days == 14
     assert req.pace_per_week is None
-    assert req.lessons[0].title == "Bonding"
+
+    # LessonDraft survives codegen (used internally by the create route/service).
+    draft = LessonDraft(title="Bonding", goal="learn bonds")
+    assert draft.title == "Bonding"
 
     prog = SubjectProgress(done_count=1, total_count=3)
     assert prog.total_count == 3
     open_resp = LessonOpenResponse(session_id="s1", status="in_progress")
     assert open_resp.session_id == "s1"
 
-    draft_req = DraftPlanRequest(
-        title="Organic Chemistry", per_session_minutes=30,
-        duration_mode="pace", pace_per_week=3,
-    )
-    assert draft_req.duration_mode == "pace"
-    assert draft_req.pace_per_week == 3
-    assert draft_req.timeline_days is None
-    draft_resp = DraftPlanResponse(lessons=[LessonDraft(title="Bonding", goal="g")])
-    assert draft_resp.lessons[0].title == "Bonding"
+
+def test_subject_create_rejects_removed_fields():
+    from contracts import SubjectCreateRequest
+
+    # `mode` and `lessons` were removed; additionalProperties:false -> rejected.
+    with pytest.raises(ValidationError):
+        SubjectCreateRequest(
+            title="X", per_session_minutes=30, duration_mode="deadline",
+            timeline_days=14, mode="blank",
+        )
+
+
+def test_draft_plan_contracts_removed():
+    import contracts
+
+    assert not hasattr(contracts, "DraftPlanRequest")
+    assert not hasattr(contracts, "DraftPlanResponse")
 
 
 def test_subject_update_duration_mode_enum():
     from contracts import SubjectUpdateRequest
 
-    # valid values pass
     req_deadline = SubjectUpdateRequest(duration_mode="deadline")
     assert req_deadline.duration_mode == "deadline"
 
@@ -60,6 +66,5 @@ def test_subject_update_duration_mode_enum():
     req_none = SubjectUpdateRequest(duration_mode=None)
     assert req_none.duration_mode is None
 
-    # invalid value is rejected
     with pytest.raises(ValidationError):
         SubjectUpdateRequest(duration_mode="whenever")

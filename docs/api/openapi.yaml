@@ -266,25 +266,6 @@ paths:
                 items:
                   $ref: "#/components/schemas/SubjectListItem"
 
-  /api/subjects/draft-plan:
-    post:
-      tags: [subjects]
-      summary: Preview an LLM-drafted lesson plan without persisting (wizard review step).
-      operationId: draftPlan
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/DraftPlanRequest"
-      responses:
-        "200":
-          description: Drafted lessons for review/edit; nothing is written to the DB.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/DraftPlanResponse"
-
   /api/subjects/{subject_id}:
     get:
       tags: [subjects]
@@ -1234,53 +1215,22 @@ components:
         session_id: { type: [string, "null"], default: null }
         created_at: { type: string, format: date-time }
 
-    DraftPlanRequest:
+    SubjectCreateRequest:
       type: object
       additionalProperties: false
       required: [title, per_session_minutes, duration_mode]
       description: |
-        Preview-draft inputs for the wizard review step (no persistence). Carries
-        duration_mode plus exactly one of timeline_days (deadline mode) or
-        pace_per_week (pace mode) — the pinned duration field.
+        Create a subject. The server seeds exactly one lesson titled after the
+        subject; more lessons are added later via POST /subjects/{id}/lessons or
+        the tutor practice-lesson suggestion. Duration is a user-toggled pair:
+        duration_mode plus exactly one of timeline_days (deadline) or
+        pace_per_week (pace); the other is derived on read.
       properties:
         title:               { type: string, maxLength: 200 }
         per_session_minutes: { type: integer, enum: [15, 30, 60] }
         duration_mode:       { type: string, enum: [deadline, pace] }
         timeline_days:       { type: [integer, "null"], default: null }
         pace_per_week:       { type: [integer, "null"], default: null }
-
-    DraftPlanResponse:
-      type: object
-      additionalProperties: false
-      required: [lessons]
-      description: The drafted, not-yet-persisted lesson list for the wizard to review/edit.
-      properties:
-        lessons:
-          type: array
-          items: { $ref: "#/components/schemas/LessonDraft" }
-
-    SubjectCreateRequest:
-      type: object
-      additionalProperties: false
-      required: [title, per_session_minutes, mode, duration_mode]
-      description: |
-        Create a subject. The wizard (Spec B) sends mode=blank with the reviewed
-        lessons[] array (already drafted/edited via POST /subjects/draft-plan;
-        may be empty). mode=draft is a documented non-wizard fallback that drafts
-        and persists server-side in one call via plan_service.draft_plan. Duration
-        is a user-toggled pair: duration_mode plus exactly one of timeline_days
-        (deadline) or pace_per_week (pace); the other is derived on read.
-      properties:
-        title:               { type: string, maxLength: 200 }
-        per_session_minutes: { type: integer, enum: [15, 30, 60] }
-        duration_mode:       { type: string, enum: [deadline, pace] }
-        timeline_days:       { type: [integer, "null"], default: null }
-        pace_per_week:       { type: [integer, "null"], default: null }
-        mode:                { type: string, enum: [draft, blank] }
-        lessons:
-          type: array
-          default: []
-          items: { $ref: "#/components/schemas/LessonDraft" }
 
     SubjectUpdateRequest:
       type: object
