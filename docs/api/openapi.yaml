@@ -787,6 +787,21 @@ components:
               correct:        { type: [boolean, "null"], default: null }
               explanation:    { type: [string, "null"],  default: null }
 
+    AddLessonSuggestion:
+      description: >-
+        Deterministic server hint, emitted on a check answer when the learner
+        has repeatedly missed a gap inside a lesson-backed (subject) session.
+        The client offers Add / No thanks; Add POSTs a practice lesson.
+      type: object
+      additionalProperties: false
+      required: [subject_id, lesson_id, gap, suggested_title, suggested_goal]
+      properties:
+        subject_id: { type: string }
+        lesson_id: { type: string }
+        gap: { type: string }
+        suggested_title: { type: string }
+        suggested_goal: { type: string }
+
     CheckAnswerRequest:
       type: object
       additionalProperties: false
@@ -809,6 +824,11 @@ components:
         total:         { type: integer }
         has_next:      { type: boolean }
         done:          { type: boolean }
+        add_lesson_suggestion:
+          oneOf:
+            - $ref: "#/components/schemas/AddLessonSuggestion"
+            - type: "null"
+          default: null
 
     CheckSkipRequest:
       type: object

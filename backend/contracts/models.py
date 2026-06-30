@@ -152,6 +152,21 @@ class PendingCheck(BaseModel):
     items: list[Item1]
 
 
+class AddLessonSuggestion(BaseModel):
+    """
+    Deterministic server hint, emitted on a check answer when the learner has repeatedly missed a gap inside a lesson-backed (subject) session. The client offers Add / No thanks; Add POSTs a practice lesson.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    subject_id: str
+    lesson_id: str
+    gap: str
+    suggested_title: str
+    suggested_goal: str
+
+
 class CheckAnswerRequest(BaseModel):
     """
     A learner's clicked answer to item `index` of the open batch.
@@ -179,6 +194,7 @@ class CheckAnswerResponse(BaseModel):
     total: int
     has_next: bool
     done: bool
+    add_lesson_suggestion: AddLessonSuggestion | None = None
 
 
 class CheckSkipRequest(BaseModel):
