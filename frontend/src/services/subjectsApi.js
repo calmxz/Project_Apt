@@ -22,6 +22,7 @@ export const addLesson = (subjectId, { title, goal }) =>
 
 export const patchLesson = (lessonId, patch) => apiPatch(`/lessons/${lessonId}`, patch)
 
-export const deleteLesson = (lessonId) => apiDelete(`/lessons/${lessonId}`)
+export const deleteLesson = (lessonId, { force = false } = {}) =>
+  apiDelete(`/lessons/${lessonId}${force ? '?force=true' : ''}`)
 
 export const openLesson = (lessonId) => apiPost(`/lessons/${lessonId}/open`, {})

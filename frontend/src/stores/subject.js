@@ -122,6 +122,24 @@ export const useSubjectStore = defineStore('subject', () => {
     }
   }
 
+  // Force-aware delete: without force, a lesson with session_id 409s on the server;
+  // with force=true the backend ends the session + clears session_id + deletes in one
+  // transaction. Local state is NOT mutated until the server confirms — a failed
+  // delete leaves the plan intact. Changes lesson count -> sync sidebar progress.
+  async function removeLesson(lessonId, { force = false } = {}) {
+    await subjectsApi.deleteLesson(lessonId, { force })
+    const lessons = currentSubject.value?.lessons || []
+    const idx = lessons.findIndex((l) => l.id === lessonId)
+    if (idx >= 0) {
+      lessons.splice(idx, 1)
+      const changed = _reindex(lessons)
+      for (const l of changed) {
+        await subjectsApi.patchLesson(l.id, { order_idx: l.order_idx })
+      }
+      _syncSubjectListProgress()
+    }
+  }
+
   async function openLesson(lessonId) {
     const { session_id } = await subjectsApi.openLesson(lessonId)
     return session_id
@@ -199,7 +217,7 @@ export const useSubjectStore = defineStore('subject', () => {
     subjects, currentSubject, loading, error,
     nextLesson,
     draftPlan, listSubjects, loadSubject, createSubject,
-    addLesson, patchLesson, deleteLesson, openLesson, markLessonDone, reset,
+    addLesson, patchLesson, deleteLesson, removeLesson, openLesson, markLessonDone, reset,
     addLessonAfter, moveLesson, renameLesson, editLessonGoal,
   }
 })

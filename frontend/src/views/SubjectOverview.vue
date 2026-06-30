@@ -93,6 +93,15 @@
                   <i class="pi pi-angle-down" aria-hidden="true" />
                 </button>
                 <button type="button" class="edit-action-btn" @click="openAddAfter(idx)">+ Add here</button>
+                <button
+                  type="button"
+                  data-testid="overview-delete-lesson"
+                  class="edit-action-btn edit-action-btn--danger"
+                  :aria-label="`Delete ${lesson.title}`"
+                  @click="handleDeleteLesson(lesson)"
+                >
+                  Delete
+                </button>
               </div>
             </div>
           </li>
@@ -190,6 +199,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useConfirm } from 'primevue/useconfirm'
 
 import { useSessionStore } from '../stores/session.js'
 import { useSubjectStore } from '../stores/subject.js'
@@ -199,6 +209,7 @@ const props = defineProps({ id: { type: String, required: true } })
 const router = useRouter()
 const store = useSubjectStore()
 const sessionStore = useSessionStore()
+const confirm = useConfirm()
 
 onMounted(() => {
   store.loadSubject(props.id).catch(() => {})
@@ -288,6 +299,27 @@ async function cleanupDuplicates() {
     // surface nothing — banner will update if reload succeeds
   } finally {
     cleaning.value = false
+  }
+}
+
+// --- Lesson delete ---
+function handleDeleteLesson(lesson) {
+  if (lesson.session_id == null) {
+    store.removeLesson(lesson.id)
+  } else {
+    confirm.require({
+      message: "End this lesson's chat and remove it? This ends the session and deletes the lesson.",
+      header: 'End & delete lesson',
+      icon: 'pi pi-exclamation-triangle',
+      rejectLabel: 'Cancel',
+      acceptLabel: 'End & delete',
+      rejectClass: 'p-button-text p-button-secondary',
+      acceptClass: 'p-button-danger confirm-delete-strong',
+      acceptProps: { 'data-testid': 'overview-delete-force' },
+      accept: async () => {
+        await store.removeLesson(lesson.id, { force: true })
+      },
+    })
   }
 }
 
@@ -528,6 +560,12 @@ async function submitAdd(afterIdx) {
   background: transparent;
   border: 1px solid var(--color-border);
   color: inherit;
+}
+
+.edit-action-btn--danger {
+  background: transparent;
+  border: 1px solid var(--signal-error);
+  color: var(--signal-error);
 }
 
 .reorder-btn {

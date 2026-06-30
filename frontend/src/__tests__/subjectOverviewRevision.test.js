@@ -76,4 +76,34 @@ describe('subject store — plan revision', () => {
     expect(subjectsApi.patchLesson).toHaveBeenCalledWith('l1', { title: 'Alkanes & isomers' })
     expect(subjectsApi.patchLesson).toHaveBeenCalledWith('l1', { goal: 'new goal' })
   })
+
+  it('removeLesson deletes an unopened lesson and reindexes', async () => {
+    const store = useSubjectStore()
+    seed(store)
+    const del = vi.spyOn(subjectsApi, 'deleteLesson').mockResolvedValue({})
+    vi.spyOn(subjectsApi, 'patchLesson').mockResolvedValue({})
+    await store.removeLesson('l1') // l1 has session_id null -> no force
+    expect(del).toHaveBeenCalledWith('l1', { force: false })
+    expect(store.currentSubject.lessons.map((l) => l.id)).toEqual(['l0'])
+    expect(store.currentSubject.lessons[0].order_idx).toBe(0)
+  })
+
+  it('removeLesson with force=true end-detaches-deletes a lesson that has a session', async () => {
+    const store = useSubjectStore()
+    seed(store)
+    const del = vi.spyOn(subjectsApi, 'deleteLesson').mockResolvedValue({})
+    vi.spyOn(subjectsApi, 'patchLesson').mockResolvedValue({})
+    await store.removeLesson('l0', { force: true }) // l0 has session_id 's0'
+    expect(del).toHaveBeenCalledWith('l0', { force: true })
+    expect(store.currentSubject.lessons.map((l) => l.id)).toEqual(['l1'])
+    expect(store.currentSubject.lessons[0].order_idx).toBe(0)
+  })
+
+  it('removeLesson leaves local state intact when the delete fails', async () => {
+    const store = useSubjectStore()
+    seed(store)
+    vi.spyOn(subjectsApi, 'deleteLesson').mockRejectedValue(new Error('boom'))
+    await expect(store.removeLesson('l0')).rejects.toThrow('boom')
+    expect(store.currentSubject.lessons.map((l) => l.id)).toEqual(['l0', 'l1'])
+  })
 })

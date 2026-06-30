@@ -8,6 +8,7 @@ vi.mock('vue-router', () => ({
   useRoute: () => ({ params: { id: 's1' } }),
   RouterLink: { props: ['to'], template: '<a><slot /></a>' },
 }))
+vi.mock('primevue/useconfirm', () => ({ useConfirm: () => ({ require: vi.fn() }) }))
 vi.mock('@/services/subjectsApi.js', () => ({ getSubject: vi.fn(), openLesson: vi.fn() }))
 vi.mock('@/services/sessionsApi.js', () => ({
   listSessions: vi.fn().mockResolvedValue([]),
