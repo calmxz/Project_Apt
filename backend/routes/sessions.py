@@ -34,7 +34,7 @@ from contracts import (
 )
 from db.database import get_db
 from db.models import ChatMessage, Session as SessionModel, User
-from services import check_question_service, documents_service, profile_service, summary_service
+from services import check_question_service, documents_service, plan_revision_service, profile_service, summary_service
 from services.auth import current_user_id
 from services.session_enrichment import aware_utc as _aware_utc, compute_enrichment
 
@@ -391,6 +391,8 @@ def answer_check(
     row = db.get(SessionModel, session_id)
     if row is None or row.user_id != user_id:
         raise HTTPException(status_code=404, detail="session not found")
+    pc = check_question_service.get_pending_check(db, session_id)
+    gap = pc.get("gap") if pc else None
     try:
         result = check_question_service.answer(db, session_id, req.index, req.selected_index)
     except check_question_service.CheckStateError as e:
@@ -398,7 +400,10 @@ def answer_check(
     check_question_service.write_check_batch(
         db, check_question_service.get_pending_check(db, session_id)
     )
-    return CheckAnswerResponse(**result)
+    suggestion = None
+    if gap and not result.get("correct"):
+        suggestion = plan_revision_service.maybe_suggest_lesson(db, session_id, gap)
+    return CheckAnswerResponse(**result, add_lesson_suggestion=suggestion)
 
 
 def _recent_history(db: Session, session_id: str) -> list[dict]:
