@@ -115,148 +115,10 @@
         </div>
       </template>
 
-      <!-- Derived label (display-only) -->
-      <p data-testid="wizard-derived" class="wizard-derived">{{ derivedLabel }}</p>
-
       <div class="wizard-nav">
         <button type="button" data-testid="wizard-back" class="wizard-btn" @click="step = 'title'">
           Back
         </button>
-        <button
-          type="button"
-          data-testid="wizard-next"
-          class="wizard-btn wizard-btn--primary"
-          @click="step = 'source'"
-        >
-          Next
-        </button>
-      </div>
-    </template>
-
-    <!-- ─── Plan-source step ─── -->
-    <template v-else-if="step === 'source'">
-      <h2 class="wizard-heading">How do you want to build the lesson plan?</h2>
-      <div v-if="drafting" data-testid="wizard-drafting" class="wizard-drafting" aria-busy="true">
-        Drafting plan...
-      </div>
-      <div v-else class="wizard-source-row">
-        <button
-          type="button"
-          data-testid="wizard-mode-draft"
-          class="wizard-source-btn"
-          @click="chooseDraft"
-        >
-          Draft with AI
-        </button>
-        <button
-          type="button"
-          data-testid="wizard-mode-blank"
-          class="wizard-source-btn"
-          @click="chooseBlank"
-        >
-          Start blank
-        </button>
-      </div>
-      <div class="wizard-nav">
-        <button type="button" data-testid="wizard-back" class="wizard-btn" @click="step = 'duration'">
-          Back
-        </button>
-      </div>
-    </template>
-
-    <!-- ─── Editor step ─── -->
-    <template v-else-if="step === 'editor'">
-      <h2 class="wizard-heading">Review lessons</h2>
-
-      <!-- Draft error notice -->
-      <p
-        v-if="draftError"
-        data-testid="wizard-draft-error"
-        class="wizard-draft-error"
-        role="alert"
-      >
-        {{ draftError }}
-      </p>
-
-      <!-- Editable lesson rows -->
-      <div
-        v-for="(lesson, i) in lessons"
-        :key="i"
-        :data-testid="`wizard-lesson-row-${i}`"
-        class="wizard-lesson-row"
-      >
-        <input
-          :data-testid="`wizard-row-title-${i}`"
-          v-model="lessons[i].title"
-          class="wizard-input wizard-row-input"
-          placeholder="Lesson title"
-        />
-        <input
-          :data-testid="`wizard-row-goal-${i}`"
-          v-model="lessons[i].goal"
-          class="wizard-input wizard-row-input"
-          placeholder="Learning goal"
-        />
-        <div class="wizard-row-actions">
-          <button
-            type="button"
-            :data-testid="`wizard-lesson-up-${i}`"
-            class="wizard-row-btn"
-            :disabled="i === 0"
-            @click="moveLesson(i, -1)"
-          >
-            Up
-          </button>
-          <button
-            type="button"
-            :data-testid="`wizard-lesson-down-${i}`"
-            class="wizard-row-btn"
-            :disabled="i === lessons.length - 1"
-            @click="moveLesson(i, 1)"
-          >
-            Down
-          </button>
-          <button
-            type="button"
-            :data-testid="`wizard-lesson-remove-${i}`"
-            class="wizard-row-btn wizard-row-btn--remove"
-            @click="removeLessonRow(i)"
-          >
-            Remove
-          </button>
-        </div>
-      </div>
-
-      <!-- Add row -->
-      <div class="wizard-add-row">
-        <input
-          data-testid="wizard-lesson-title"
-          v-model="lessonTitle"
-          class="wizard-input wizard-row-input"
-          placeholder="New lesson title"
-        />
-        <input
-          data-testid="wizard-lesson-goal"
-          v-model="lessonGoal"
-          class="wizard-input wizard-row-input"
-          placeholder="Learning goal (optional)"
-        />
-        <button
-          type="button"
-          data-testid="wizard-add-lesson"
-          class="wizard-btn"
-          :disabled="!lessonTitle.trim()"
-          @click="addLessonRow"
-        >
-          Add lesson
-        </button>
-      </div>
-
-      <!-- Derived label (live from lessons count) -->
-      <p data-testid="wizard-derived" class="wizard-derived">{{ derivedLabel }}</p>
-
-      <!-- Commit -->
-      <div class="wizard-nav">
         <button
           type="button"
           data-testid="wizard-create"
@@ -271,15 +133,14 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { derivePace, deriveHorizonWeeks } from '../utils/pace.js'
 import { useSubjectStore } from '../stores/subject.js'
 
 const router = useRouter()
 const store = useSubjectStore()
 
-// Step state machine: 'title' | 'duration' | 'source' | 'editor'
+// Step state machine: 'title' | 'duration'
 const step = ref('title')
 
 // Title step
@@ -291,25 +152,6 @@ const durationMode = ref('deadline')
 const selectedTimeline = ref(14)
 const pacePerWeek = ref(3)
 
-// Lessons list — populated by chooseDraft or left empty by chooseBlank
-const lessons = ref([])
-
-// Add-row inputs
-const lessonTitle = ref('')
-const lessonGoal = ref('')
-
-// Draft state
-const drafting = ref(false)
-const draftError = ref(null)
-
-// Display-only derived label; updates when lessons or the active knob changes
-const derivedLabel = computed(() => {
-  if (durationMode.value === 'deadline') {
-    return `~${derivePace(lessons.value.length, selectedTimeline.value)}/week`
-  }
-  return `~${deriveHorizonWeeks(lessons.value.length, pacePerWeek.value)} weeks`
-})
-
 function incPace() {
   if (pacePerWeek.value < 5) pacePerWeek.value++
 }
@@ -318,26 +160,7 @@ function decPace() {
   if (pacePerWeek.value > 1) pacePerWeek.value--
 }
 
-function addLessonRow() {
-  const t = lessonTitle.value.trim()
-  if (!t) return
-  lessons.value.push({ title: t, goal: lessonGoal.value.trim() })
-  lessonTitle.value = ''
-  lessonGoal.value = ''
-}
-
-function removeLessonRow(i) {
-  lessons.value.splice(i, 1)
-}
-
-function moveLesson(i, delta) {
-  const j = i + delta
-  if (j < 0 || j >= lessons.value.length) return
-  const arr = lessons.value
-  ;[arr[i], arr[j]] = [arr[j], arr[i]]
-}
-
-// Only the pinned duration knob is sent (Spec B §2 step 2).
+// Only the pinned duration knob is sent.
 function durationPayload() {
   return durationMode.value === 'deadline'
     ? { duration_mode: 'deadline', timeline_days: selectedTimeline.value }
@@ -348,29 +171,8 @@ function basePayload() {
   return { title: title.value.trim(), per_session_minutes: selectedMinutes.value, ...durationPayload() }
 }
 
-async function chooseDraft() {
-  drafting.value = true
-  draftError.value = null
-  try {
-    const drafted = await store.draftPlan(basePayload())
-    lessons.value = (drafted || []).map((l) => ({ title: l.title, goal: l.goal }))
-    step.value = 'editor'
-  } catch {
-    draftError.value = 'Could not draft a plan right now. Add lessons yourself below.'
-    lessons.value = []
-    step.value = 'editor'
-  } finally {
-    drafting.value = false
-  }
-}
-
-function chooseBlank() {
-  lessons.value = []
-  step.value = 'editor'
-}
-
 async function commitCreate() {
-  const subject = await store.createSubject({ ...basePayload(), mode: 'blank', lessons: lessons.value })
+  const subject = await store.createSubject(basePayload())
   if (subject) router.push({ name: 'subject-overview', params: { id: subject.id } })
 }
 </script>
@@ -501,112 +303,6 @@ async function commitCreate() {
 .wizard-pace-label {
   color: var(--color-text-muted);
   font-size: 0.875rem;
-}
-
-/* Derived display */
-.wizard-derived {
-  color: var(--color-text-muted);
-  font-size: 0.875rem;
-  margin-block-end: 1.25rem;
-}
-
-/* Plan-source buttons */
-.wizard-source-row {
-  display: flex;
-  gap: 1rem;
-  margin-block-end: 1.5rem;
-}
-
-.wizard-source-btn {
-  flex: 1;
-  padding: 1rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card, 8px);
-  background: var(--color-surface);
-  color: var(--color-text);
-  cursor: pointer;
-  font-size: 0.9375rem;
-  text-align: center;
-  transition: border-color 0.15s, background 0.15s;
-}
-
-.wizard-source-btn:hover {
-  border-color: var(--color-accent);
-  background: var(--color-accent-soft);
-}
-
-/* Drafting spinner */
-.wizard-drafting {
-  padding: 1rem 0;
-  color: var(--color-text-muted);
-  font-size: 0.9375rem;
-  margin-block-end: 1rem;
-}
-
-/* Draft error notice */
-.wizard-draft-error {
-  padding: 0.75rem 1rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  color: var(--color-text);
-  font-size: 0.875rem;
-  margin-block-end: 1rem;
-}
-
-/* Editor lesson rows */
-.wizard-lesson-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  align-items: center;
-  padding: 0.75rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  margin-block-end: 0.5rem;
-}
-
-.wizard-row-input {
-  flex: 1;
-  min-width: 8rem;
-}
-
-.wizard-row-actions {
-  display: flex;
-  gap: 0.375rem;
-}
-
-.wizard-row-btn {
-  padding: 0.25rem 0.625rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  color: var(--color-text);
-  cursor: pointer;
-  font-size: 0.8125rem;
-}
-
-.wizard-row-btn:disabled {
-  opacity: 0.35;
-  cursor: default;
-}
-
-.wizard-row-btn--remove {
-  color: var(--color-text-muted);
-}
-
-/* Add row */
-.wizard-add-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  align-items: center;
-  padding: 0.75rem;
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  margin-block-end: 1rem;
 }
 
 /* Navigation row */

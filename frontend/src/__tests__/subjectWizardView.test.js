@@ -14,7 +14,7 @@ import SubjectWizardView from '@/views/SubjectWizardView.vue'
 
 function mountView() { return mount(SubjectWizardView) }
 
-describe('SubjectWizardView steps 1-3', () => {
+describe('SubjectWizardView (title -> duration -> Create)', () => {
   beforeEach(() => { setActivePinia(createPinia()); push.mockClear() })
 
   it('starts on the title step and advances on Next', async () => {
@@ -57,53 +57,33 @@ describe('SubjectWizardView steps 1-3', () => {
     expect(wrapper.get('[data-testid="wizard-pace-value"]').text()).toContain('4')
   })
 
-  it('reaches the plan-source step with two buttons', async () => {
-    const wrapper = mountView()
-    await wrapper.get('[data-testid="wizard-title-input"]').setValue('Chem')
-    await wrapper.get('[data-testid="wizard-next"]').trigger('click')
-    await wrapper.get('[data-testid="wizard-next"]').trigger('click')
-    expect(wrapper.find('[data-testid="wizard-mode-draft"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="wizard-mode-blank"]').exists()).toBe(true)
-  })
-
-  it('blank path: add a lesson then commit with the reviewed lessons', async () => {
+  it('deadline mode: Create commits title + timeline and routes to overview', async () => {
     const wrapper = mountView()
     const store = useSubjectStore()
     vi.spyOn(store, 'createSubject').mockResolvedValue({ id: 's9' })
     await wrapper.get('[data-testid="wizard-title-input"]').setValue('Chem')
-    await wrapper.get('[data-testid="wizard-next"]').trigger('click') // -> duration
+    await wrapper.get('[data-testid="wizard-next"]').trigger('click')
     await wrapper.get('[data-testid="wizard-timeline-14"]').trigger('click')
-    await wrapper.get('[data-testid="wizard-next"]').trigger('click') // -> source
-    await wrapper.get('[data-testid="wizard-mode-blank"]').trigger('click') // -> editor (empty)
-    await wrapper.get('[data-testid="wizard-lesson-title"]').setValue('Bonding')
-    await wrapper.get('[data-testid="wizard-lesson-goal"]').setValue('Understand bonds')
-    await wrapper.get('[data-testid="wizard-add-lesson"]').trigger('click')
     await wrapper.get('[data-testid="wizard-create"]').trigger('click')
     await flushPromises()
     expect(store.createSubject).toHaveBeenCalledWith({
-      title: 'Chem', per_session_minutes: 30, duration_mode: 'deadline', timeline_days: 14, mode: 'blank',
-      lessons: [{ title: 'Bonding', goal: 'Understand bonds' }],
+      title: 'Chem', per_session_minutes: 30, duration_mode: 'deadline', timeline_days: 14,
     })
     expect(push).toHaveBeenCalledWith({ name: 'subject-overview', params: { id: 's9' } })
   })
 
-  it('pace mode commits pace_per_week and omits timeline_days', async () => {
+  it('pace mode: Create commits pace_per_week and omits timeline_days', async () => {
     const wrapper = mountView()
     const store = useSubjectStore()
     vi.spyOn(store, 'createSubject').mockResolvedValue({ id: 's5' })
     await wrapper.get('[data-testid="wizard-title-input"]').setValue('Chem')
-    await wrapper.get('[data-testid="wizard-next"]').trigger('click') // -> duration
+    await wrapper.get('[data-testid="wizard-next"]').trigger('click')
     await wrapper.get('[data-testid="wizard-duration-mode-pace"]').trigger('click')
-    await wrapper.get('[data-testid="wizard-next"]').trigger('click') // -> source
-    await wrapper.get('[data-testid="wizard-mode-blank"]').trigger('click') // -> editor
-    await wrapper.get('[data-testid="wizard-lesson-title"]').setValue('Intro')
-    await wrapper.get('[data-testid="wizard-add-lesson"]').trigger('click')
     await wrapper.get('[data-testid="wizard-create"]').trigger('click')
     await flushPromises()
     expect(store.createSubject).toHaveBeenCalledWith({
-      title: 'Chem', per_session_minutes: 30, duration_mode: 'pace', pace_per_week: 3, mode: 'blank',
-      lessons: [{ title: 'Intro', goal: '' }],
+      title: 'Chem', per_session_minutes: 30, duration_mode: 'pace', pace_per_week: 3,
     })
+    expect(push).toHaveBeenCalledWith({ name: 'subject-overview', params: { id: 's5' } })
   })
-
 })
