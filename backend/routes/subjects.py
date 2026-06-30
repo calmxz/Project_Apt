@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from contracts import (
     LessonCreateRequest,
+    LessonDraft,
     LessonItem,
     LessonOpenResponse,
     LessonUpdateRequest,
@@ -23,7 +24,7 @@ from lib.error_codes import (
     LESSON_NOT_FOUND,
     SUBJECT_NOT_FOUND,
 )
-from services import plan_service, subject_profile_service, subject_service
+from services import subject_profile_service, subject_service
 from services.auth import current_user_id
 from services.session_enrichment import aware_utc as _aware_utc
 
@@ -70,7 +71,7 @@ def _subject_detail(db: Session, subject: Subject) -> SubjectDetail:
 
 
 @router.post("/subjects", response_model=SubjectDetail, status_code=status.HTTP_201_CREATED)
-async def create_subject(
+def create_subject(
     req: SubjectCreateRequest,
     user_id: str = Depends(current_user_id),
     db: Session = Depends(get_db),
@@ -83,13 +84,9 @@ async def create_subject(
     # Null the complement so only the pinned field is stored.
     timeline_days = req.timeline_days if req.duration_mode == "deadline" else None
     pace_per_week = req.pace_per_week if req.duration_mode == "pace" else None
-    if req.mode == "draft":
-        drafts = await plan_service.draft_plan(
-            db, user_id, req.title, req.per_session_minutes,
-            req.duration_mode, timeline_days, pace_per_week,
-        )
-    else:
-        drafts = req.lessons or []
+    # Seed exactly one lesson titled after the subject; more are added later via
+    # POST /subjects/{id}/lessons or the tutor practice-lesson suggestion.
+    drafts = [LessonDraft(title=req.title, goal=f"Introduction to {req.title}.")]
     subject = subject_service.create_subject(
         db, user_id, req.title, req.per_session_minutes,
         req.duration_mode, timeline_days, pace_per_week, drafts,
@@ -114,7 +111,6 @@ def list_subjects(
             )
         )
     return out
-
 
 
 @router.get("/subjects/{subject_id}", response_model=SubjectDetail)
