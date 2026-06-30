@@ -87,6 +87,13 @@
         @dismiss="onDismissMarkDone"
       />
 
+      <AddLessonSuggestion
+        v-if="store.lessonSuggestion"
+        :suggestion="store.lessonSuggestion"
+        @add="onAddSuggestedLesson"
+        @dismiss="store.dismissLessonSuggestion"
+      />
+
       <Composer
         v-if="!isEnded"
         ref="composerRef"
@@ -133,6 +140,8 @@ import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 
+import * as subjectsApi from '../services/subjectsApi.js'
+import AddLessonSuggestion from '../components/session/AddLessonSuggestion.vue'
 import BackButton from '../components/BackButton.vue'
 import CapBanners from '../components/chat/CapBanners.vue'
 import ChatEmptyState from '../components/chat/EmptyState.vue'
@@ -561,6 +570,25 @@ async function onMarkDone() {
 function onDismissMarkDone() {
   showMarkDone.value = false
   if (lesson.value) suggestedLessons.add(lesson.value.id)
+}
+
+// Add-lesson suggestion (Spec C). Fires when the user clicks [Add] on the inline
+// suggestion card. Appends the lesson via the API, then clears the active
+// suggestion. Route: subject-overview (params.id = subject_id).
+async function onAddSuggestedLesson(suggestion) {
+  try {
+    await subjectsApi.addLesson(suggestion.subject_id, {
+      title: suggestion.suggested_title,
+      goal: suggestion.suggested_goal,
+    })
+    store.clearLessonSuggestion()
+    showSuccess(
+      `Added "${suggestion.suggested_title}" — see it in your subject plan.`,
+      { summary: 'Lesson added', life: 5000 },
+    )
+  } catch (e) {
+    lastError.value = e
+  }
 }
 
 function goHome() {
