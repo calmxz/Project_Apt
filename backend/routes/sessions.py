@@ -34,7 +34,13 @@ from contracts import (
 )
 from db.database import get_db
 from db.models import ChatMessage, Session as SessionModel, User
-from services import check_question_service, documents_service, profile_service, summary_service
+from services import (
+    check_question_service,
+    diagnostic_service,
+    documents_service,
+    profile_service,
+    summary_service,
+)
 from services.auth import current_user_id
 from services.session_enrichment import aware_utc as _aware_utc, compute_enrichment
 
@@ -398,6 +404,19 @@ def answer_check(
     check_question_service.write_check_batch(
         db, check_question_service.get_pending_check(db, session_id)
     )
+    pc_after = check_question_service.get_pending_check(db, session_id)
+    if (
+        pc_after
+        and pc_after.get("purpose") == "diagnostic"
+        and check_question_service.is_done(pc_after)
+    ):
+        items = pc_after.get("items", [])
+        graded = [it for it in items if it["status"] == "answered"]
+        n_correct = sum(1 for it in graded if it.get("correct"))
+        level = diagnostic_service.level_for_score(n_correct, len(items))
+        profile = profile_service.load_profile(db, session_id)
+        profile.knowledge_level = level
+        profile_service.save_profile(db, session_id, profile)
     return CheckAnswerResponse(**result)
 
 
