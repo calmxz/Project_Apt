@@ -80,6 +80,13 @@ POST-QUIZ PROTOCOL:
   for that gap, you may note that a quick recap could help first. If the learner
   insists ("just quiz me"), quiz them. The learner stays in control.
 
+KNOWLEDGE DIAGNOSTIC:
+- When DIAGNOSTIC is REQUIRED, before any teaching, call ask_check_questions ONCE
+  with exactly 3 multiple-choice items on the TOPIC at increasing difficulty
+  (easy, medium, hard). Do not teach or explain first.
+- After the learner answers, continue teaching at their level.
+- When DIAGNOSTIC is OFF, follow the normal check-question protocol above.
+
 RETRIEVAL POLICY:
 - If RETRIEVAL is REQUIRED and INGESTION_STATUS is ready: call retrieve_chunks
   BEFORE answering and cite the source.
@@ -113,6 +120,8 @@ def build_dynamic_context(state: dict) -> str:
     seed_mode = state.get("seed_mode") or "none"
     last_session_summary = state.get("last_session_summary") or "none"
     retrieval_label = "REQUIRED" if retrieval_required else "OPTIONAL"
+    diagnostic_required = bool(state.get("diagnostic_required", False))
+    diagnostic_label = "REQUIRED" if diagnostic_required else "OFF"
 
     pending_check = state.get("pending_check")
     if pending_check:
@@ -142,6 +151,7 @@ def build_dynamic_context(state: dict) -> str:
         f"CURRENT TOPIC PROFILE: {json.dumps(profile_dict)}\n"
         f"INGESTION_STATUS: {ingestion_status}\n"
         f"RETRIEVAL: {retrieval_label}\n"
+        f"DIAGNOSTIC: {diagnostic_label}\n"
         f"SEED_MODE: {seed_mode}\n"
         f"LAST_SESSION_SUMMARY: {last_session_summary}\n"
         f"PENDING_CHECK: {pc_label}\n"
