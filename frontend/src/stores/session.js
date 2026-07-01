@@ -154,10 +154,6 @@ export const useSessionStore = defineStore('session', () => {
               })),
             }
           : null
-        // Session switch: discard any suggestion from the previous session so it
-        // cannot leak over the newly loaded one. Matches pendingCheck clearing above.
-        lessonSuggestion.value = null
-        _dismissedGaps = new Set()
         return s
       } catch (e) {
         // Same discriminator as the success path: a superseded load (the user
@@ -338,13 +334,6 @@ export const useSessionStore = defineStore('session', () => {
   // Batch shape: { gap, total, currentIndex, viewIndex, items: [
   //   { question, options, status, selectedIndex, correctIndex, correct, explanation } ] }
   const pendingCheck = ref(null)
-  // Active add-lesson suggestion from the last answerCheck response. Null when
-  // none is active or after the user acts (Add / dismiss). One suggestion at a
-  // time; a newer one replaces any standing suggestion.
-  const lessonSuggestion = ref(null)
-  // Gaps the user dismissed this session — closed over in the store so it
-  // survives re-renders but resets when the store itself is cleared.
-  let _dismissedGaps = new Set()
   // Typing mid-batch is allowed (spec section 3), so the composer never locks on
   // an open check. Kept as a computed for the SessionView/Composer binding.
   const checkLocked = computed(() => false)
@@ -386,9 +375,6 @@ export const useSessionStore = defineStore('session', () => {
       item.correctIndex = resp.correct_index
       item.explanation = resp.explanation
       pc.currentIndex = resp.current_index
-      if (resp.add_lesson_suggestion && !_dismissedGaps.has(resp.add_lesson_suggestion.gap)) {
-        lessonSuggestion.value = resp.add_lesson_suggestion
-      }
     } finally {
       checkAnswering.value = false
     }
@@ -397,18 +383,6 @@ export const useSessionStore = defineStore('session', () => {
   function nextCheck() {
     const pc = pendingCheck.value
     if (pc) pc.viewIndex = pc.currentIndex
-  }
-
-  // Dismiss the active suggestion permanently for this session: the gap will not
-  // reappear even if a later answer check response carries the same gap.
-  function dismissLessonSuggestion() {
-    if (lessonSuggestion.value) _dismissedGaps.add(lessonSuggestion.value.gap)
-    lessonSuggestion.value = null
-  }
-
-  // Clear the active suggestion without blacklisting the gap (used after Add).
-  function clearLessonSuggestion() {
-    lessonSuggestion.value = null
   }
 
   async function skipCheck() {
@@ -588,8 +562,6 @@ export const useSessionStore = defineStore('session', () => {
     costCapInfo.value = null
     pendingSummary.value = null
     pendingCheck.value = null
-    lessonSuggestion.value = null
-    _dismissedGaps = new Set()
     streamingMessage.value = null
     streamState.value = 'idle'
     abortController.value = null
@@ -610,7 +582,6 @@ export const useSessionStore = defineStore('session', () => {
     pendingSummary,
     consumePendingSummary,
     pendingCheck,
-    lessonSuggestion,
     checkLocked,
     streamingMessage,
     streamState,
@@ -629,8 +600,6 @@ export const useSessionStore = defineStore('session', () => {
     handleCheckQuestion,
     answerCheck,
     nextCheck,
-    dismissLessonSuggestion,
-    clearLessonSuggestion,
     skipCheck,
     completeCheck,
     appendAssistantDelta,

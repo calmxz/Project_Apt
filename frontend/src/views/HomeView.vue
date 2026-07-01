@@ -198,37 +198,6 @@ function continueResume() {
   outline-offset: 3px;
 }
 
-.cta-secondary {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1.375rem;
-  border-radius: var(--radius-pill);
-  background: var(--color-accent-soft);
-  color: var(--color-accent-text);
-  border: 0;
-  font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 0.9375rem;
-  cursor: pointer;
-  box-shadow: var(--shadow-pop);
-  transition: transform var(--motion-fast) var(--motion-bounce), box-shadow var(--motion-fast) ease;
-}
-
-.cta-secondary:hover {
-  transform: translateY(-2px);
-}
-
-.cta-secondary:active {
-  transform: translateY(4px);
-  box-shadow: var(--shadow-pop-pressed);
-}
-
-.cta-secondary:focus-visible {
-  outline: 2px solid var(--color-accent-ring);
-  outline-offset: 3px;
-}
-
 .quick-more {
   font-size: 0.9rem;
   color: var(--color-accent);
