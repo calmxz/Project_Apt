@@ -381,10 +381,6 @@ def skip_check(
 @router.post(
     "/sessions/{session_id}/check/answer",
     response_model=CheckAnswerResponse,
-    # add_lesson_suggestion is subject-coupled and no longer populated here;
-    # suppress it from the response body until a later task drops the field
-    # from the contract entirely.
-    response_model_exclude={"add_lesson_suggestion"},
 )
 def answer_check(
     session_id: str,
