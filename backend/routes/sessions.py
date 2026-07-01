@@ -57,7 +57,6 @@ def _to_response(db: Session, row: SessionModel) -> SessionResponse:
         ended_at=_aware_utc(row.ended_at),
         ingestion_status=documents_service.session_ingestion_status(db, row.id),
         pinned=row.pinned,
-        subject_id=row.subject_id,
     )
 
 
@@ -77,7 +76,6 @@ def _enrich_list_items(db: Session, rows: list[SessionModel]) -> list[SessionLis
             last_message_preview=enr[r.id].last_message_preview,
             last_session_summary=enr[r.id].last_session_summary,
             progress=enr[r.id].progress,
-            subject_id=r.subject_id,
         )
         for r in rows
     ]
@@ -271,7 +269,6 @@ def get_session(
         ingestion_status=documents_service.session_ingestion_status(db, row.id),
         messages=_load_messages(db, row.id, open_msg_id),
         pinned=row.pinned,
-        subject_id=row.subject_id,
         pending_check=check_question_service.public_view(pc),
     )
 
