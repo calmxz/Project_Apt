@@ -113,14 +113,18 @@ reaches into surviving code.
 ## Area 4 - Knowledge diagnostic (tutor-first-turn)
 
 ### Trigger (server-derived, no new column)
-Diagnostic runs when **all** hold:
-- `seed_mode == "fresh"` (resume sessions already carry a profile - skip)
-- `topic_profile.knowledge_level is None`
-- no diagnostic batch has already been graded this session
+Diagnostic runs when `topic_profile.knowledge_level is None`.
+
+`seed_mode` is **not persisted** on the session (create-time only), and a resume session
+copies the prior session's profile. So a fresh session starts with `knowledge_level = None`
+and a resume session inherits the prior level - meaning `knowledge_level is None` alone
+captures the intent (fresh, not yet calibrated) without needing a `seed_mode` gate. A resumed
+session whose prior was never calibrated will also run the diagnostic, which is acceptable
+(still worth calibrating).
 
 Like `retrieval_required`, `diagnostic_required` is a boolean derived per-turn in the
-prompt-build path (`backend/agent/prompts.py`, mirroring the `retrieval_required` label at
-line ~112) and injected into the system prompt. Since it derives from
+prompt-build path (`backend/routes/chat.py` sets it into `prompt_state`; `prompts.py`
+renders it, mirroring the `retrieval_required` label at line ~112). Since it derives from
 `knowledge_level is None`, it naturally flips false once the level is set.
 
 ### Flow
@@ -137,6 +141,15 @@ line ~112) and injected into the system prompt. Since it derives from
    - 3 correct -> `advanced`
 6. `diagnostic_required` clears (level is now set). Tutor continues teaching calibrated to
    `knowledge_level`.
+
+### Profile-pollution guard (critical)
+`check_question_service.answer()` calls `learning_event_service.record_from_answer`, which
+mutates `mastered_concepts` (correct -> add gap as mastered; incorrect -> demote). A diagnostic
+probe answered correctly would masquerade as a mastered concept. The diagnostic path must
+record the `LearningEvent` (history) but **skip the mastery mutation**: add an
+`apply_profile_effects: bool = True` parameter to `record_from_answer`; `answer()` passes
+`False` when the batch purpose is `"diagnostic"`. The score->level write is the diagnostic's
+only profile effect.
 
 ### Distinguishing the diagnostic batch from a normal check
 A normal check batch tests a confirmed gap and can trigger demotion/plan logic. The
