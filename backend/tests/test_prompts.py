@@ -88,6 +88,12 @@ def test_immutable_rules_has_post_quiz_protocol():
     assert "insist" in rules.lower()
 
 
+def test_immutable_rules_has_knowledge_diagnostic_protocol():
+    rules = prompts.IMMUTABLE_RULES
+    assert "KNOWLEDGE DIAGNOSTIC" in rules
+    assert "ask_check_questions" in rules.split("KNOWLEDGE DIAGNOSTIC:")[1].split("RETRIEVAL POLICY:")[0]
+
+
 def test_dynamic_context_diagnostic_required():
     from agent.prompts import build_dynamic_context
     s = build_dynamic_context({"topic": "Recursion", "diagnostic_required": True})

@@ -64,6 +64,7 @@ def record(
 def record_from_answer(
     db: Session,
     session_id: str,
+    *,
     gap: str,
     question: str,
     correct: bool,

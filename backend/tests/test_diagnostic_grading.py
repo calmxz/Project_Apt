@@ -132,3 +132,27 @@ def test_answer_check_normal_check_leaves_level(client, db, session_with_level_a
     sid = session_with_level_and_check_batch  # knowledge_level already "intermediate"
     client.post(f"/api/sessions/{sid}/check/answer", json={"index": 0, "selected_index": 0})
     assert profile_service.load_profile(db, sid).knowledge_level == "intermediate"
+
+
+def test_skip_check_sets_level_when_final_item_resolved_via_skip(
+    client, db, fresh_session_with_diagnostic_batch
+):
+    """Regression: the diagnostic batch's FINAL item is resolved via the SKIP
+    route (not answer). Grading must still fire so knowledge_level gets set -
+    otherwise the tutor re-issues the diagnostic forever (bug found in final
+    whole-branch review)."""
+    sid, correct_indices = fresh_session_with_diagnostic_batch  # 3-item diagnostic batch
+    # Answer items 0 and 1 correctly, then SKIP the final item (index 2).
+    r0 = client.post(f"/api/sessions/{sid}/check/answer", json={"index": 0, "selected_index": correct_indices[0]})
+    assert r0.status_code == 200
+    r1 = client.post(f"/api/sessions/{sid}/check/answer", json={"index": 1, "selected_index": correct_indices[1]})
+    assert r1.status_code == 200
+    r2 = client.post(f"/api/sessions/{sid}/check/skip", json={"index": 2})
+    assert r2.status_code == 200
+    assert r2.json()["done"] is True
+
+    # 2 answered-correct out of 3 items -> ratio 2/3 -> "intermediate" per
+    # level_for_score. The key assertion is that it is set at all (not None).
+    level = profile_service.load_profile(db, sid).knowledge_level
+    assert level is not None
+    assert level == "intermediate"

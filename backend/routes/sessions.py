@@ -381,6 +381,7 @@ def skip_check(
     check_question_service.write_check_batch(
         db, check_question_service.get_pending_check(db, session_id)
     )
+    diagnostic_service.grade_if_diagnostic(db, session_id)
     return CheckSkipResponse(**prog)
 
 
@@ -404,19 +405,7 @@ def answer_check(
     check_question_service.write_check_batch(
         db, check_question_service.get_pending_check(db, session_id)
     )
-    pc_after = check_question_service.get_pending_check(db, session_id)
-    if (
-        pc_after
-        and pc_after.get("purpose") == "diagnostic"
-        and check_question_service.is_done(pc_after)
-    ):
-        items = pc_after.get("items", [])
-        graded = [it for it in items if it["status"] == "answered"]
-        n_correct = sum(1 for it in graded if it.get("correct"))
-        level = diagnostic_service.level_for_score(n_correct, len(items))
-        profile = profile_service.load_profile(db, session_id)
-        profile.knowledge_level = level
-        profile_service.save_profile(db, session_id, profile)
+    diagnostic_service.grade_if_diagnostic(db, session_id)
     return CheckAnswerResponse(**result)
 
 
