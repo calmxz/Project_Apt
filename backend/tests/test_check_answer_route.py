@@ -16,10 +16,13 @@ USER_ID = "u_ans_1"
 
 @pytest.fixture
 def seeded_session(db_session):
+    # knowledge_level set so register() tags this batch "check" (not
+    # "diagnostic"), matching this file's intent: exercising the check-answer
+    # route's mastery mutation, not the diagnostic bypass.
     db_session.add(User(id=USER_ID))
     session = SessionModel(
         id="s_ans_1", user_id=USER_ID, topic="biology",
-        topic_profile_json=TopicProfile().model_dump_json(),
+        topic_profile_json=TopicProfile(knowledge_level="intermediate").model_dump_json(),
     )
     db_session.add(session)
     db_session.commit()
