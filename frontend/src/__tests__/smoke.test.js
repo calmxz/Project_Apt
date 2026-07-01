@@ -21,6 +21,6 @@ describe('frontend smoke', () => {
         },
       },
     })
-    expect(wrapper.text()).toContain('Quick lesson')
+    expect(wrapper.text()).toContain('New lesson')
   })
 })

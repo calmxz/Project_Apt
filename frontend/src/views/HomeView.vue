@@ -14,7 +14,7 @@
     <template v-else>
       <div class="modes">
         <div class="mode-card" data-testid="home-mode-quick">
-          <h2 class="mode-title">Quick lesson</h2>
+          <h2 class="mode-title">New lesson</h2>
           <p class="mode-sub">One topic. Type and go.</p>
           <input
             v-model="quickTopic"
@@ -32,18 +32,6 @@
             <span>Start</span><i class="pi pi-arrow-right" aria-hidden="true" />
           </button>
           <RouterLink to="/new" class="quick-more">Add reference files</RouterLink>
-        </div>
-        <div class="mode-card" data-testid="home-mode-subject">
-          <h2 class="mode-title">Build a subject</h2>
-          <p class="mode-sub">Multiple lessons, a guided plan.</p>
-          <button
-            type="button"
-            class="cta-secondary"
-            data-testid="home-build-start"
-            @click="buildSubject"
-          >
-            <span>Start a plan</span><i class="pi pi-arrow-right" aria-hidden="true" />
-          </button>
         </div>
       </div>
 
@@ -91,10 +79,6 @@ async function startQuick() {
   if (!topic) return
   const created = await store.createSession({ topic, seedMode: 'fresh', priorSessionId: null })
   if (created) router.push({ name: 'session', params: { id: created.id } })
-}
-
-function buildSubject() {
-  router.push({ name: 'subject-new' })
 }
 
 function continueResume() {
