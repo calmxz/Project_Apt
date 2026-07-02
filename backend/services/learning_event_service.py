@@ -13,12 +13,14 @@ from sqlalchemy.orm import Session
 from agent.types import ToolContext
 from contracts import RecordLearningEventArgs, ToolResult
 from db.models import LearningEvent
-from services import check_question_service, profile_service
+from services import profile_service
 
 
 def record(
     db: Session, ctx: ToolContext, args: RecordLearningEventArgs
 ) -> ToolResult:
+    from services import check_question_service  # local import avoids circular
+
     if args.session_id != ctx.session_id:
         return ToolResult(
             ok=False,
@@ -91,6 +93,8 @@ def record_from_answer(
     correct diagnostic answer cannot pollute the profile with a fake "tested
     mastery" promotion.
     """
+    from services import check_question_service  # local import avoids circular
+
     event = LearningEvent(
         session_id=session_id,
         gap_tested=gap,

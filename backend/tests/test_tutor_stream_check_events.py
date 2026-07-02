@@ -16,7 +16,6 @@ import pytest
 from agent import tutor
 from agent.types import ToolContext
 from config import settings
-from contracts import ToolResult
 from db.models import ChatMessage, Session as SessionModel, User as UserModel
 
 from services import check_question_service
