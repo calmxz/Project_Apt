@@ -10,10 +10,10 @@ def test_contracts_drop_subject_symbols():
 
 
 def test_session_response_has_no_subject_id():
-    from contracts import SessionResponse
-    assert "subject_id" not in SessionResponse.model_fields
+    import contracts
+    assert "subject_id" not in contracts.SessionResponse.model_fields
 
 
 def test_check_answer_response_has_no_suggestion():
-    from contracts import CheckAnswerResponse
-    assert "add_lesson_suggestion" not in CheckAnswerResponse.model_fields
+    import contracts
+    assert "add_lesson_suggestion" not in contracts.CheckAnswerResponse.model_fields
