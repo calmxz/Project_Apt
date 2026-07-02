@@ -38,6 +38,7 @@ from services import (
     check_question_service,
     diagnostic_service,
     documents_service,
+    pending_check_store,
     profile_service,
     summary_service,
 )
@@ -444,7 +445,7 @@ async def complete_check(
     summary = check_question_service.build_results_summary(pc)
     cooldown = check_question_service.build_quiz_cooldown(pc)
     check_question_service.write_check_batch(db, pc)
-    check_question_service.clear_pending_check(db, session_id)
+    pending_check_store.clear_pending_check(db, session_id)
     check_question_service.set_quiz_cooldown(db, session_id, cooldown)
 
     profile = profile_service.load_profile(db, session_id)

@@ -8,6 +8,7 @@ from agent.types import ToolContext
 from contracts import AskCheckQuestionsArgs, TopicProfile
 from db.models import Session as SessionModel, User
 from services import check_question_service as cq
+from services import pending_check_store as pcs
 
 
 SESSION_ID = "sess_1"
@@ -117,9 +118,9 @@ def test_is_gradable_requires_prior_turn(db_session, session_row, ctx):
     cq.register(db_session, ctx, args)
     same_turn = _T0
     later_turn = _T0 + timedelta(seconds=5)
-    assert cq.is_gradable(db_session, session_row.id, gap="g", current_turn=same_turn) is False
-    assert cq.is_gradable(db_session, session_row.id, gap="g", current_turn=later_turn) is True
-    assert cq.is_gradable(db_session, session_row.id, gap="other", current_turn=later_turn) is False
+    assert pcs.is_gradable(db_session, session_row.id, gap="g", current_turn=same_turn) is False
+    assert pcs.is_gradable(db_session, session_row.id, gap="g", current_turn=later_turn) is True
+    assert pcs.is_gradable(db_session, session_row.id, gap="other", current_turn=later_turn) is False
 
 
 def _batch_args(session_id):

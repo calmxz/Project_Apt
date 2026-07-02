@@ -9,6 +9,7 @@ from agent.types import ToolContext
 from contracts import TopicProfile
 from db.models import Session as SessionModel, User
 from services import check_question_service as cq
+from services import pending_check_store as pcs
 
 
 SESSION_ID = "sess_acq"
@@ -57,7 +58,7 @@ def test_ask_sets_pending_check(db_session, session_row, ctx):
     assert result.ok is True
     pc = cq.get_pending_check(db_session, ctx.session_id)
     assert pc["gap"] == "calvin_cycle"
-    assert cq.parse_asked_at(pc) == ctx.turn_started_at
+    assert pcs.parse_asked_at(pc) == ctx.turn_started_at
 
 
 def test_ask_rejected_when_one_already_open(db_session, session_row, ctx):
