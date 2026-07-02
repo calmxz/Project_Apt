@@ -5,8 +5,7 @@ Revision ID: 0011_drop_subjects_lessons
 Revises: 0010_subjects_lessons
 Create Date: 2026-07-01
 
-Reverses 0010_subjects_lessons: the "Build a subject" workflow is removed
-(docs/superpowers/specs/2026-07-01-remove-subjects-knowledge-diagnostic-design.md).
+Reverses 0010_subjects_lessons: the "Build a subject" workflow is removed.
 Drops sessions.subject_id (+ its FK/index) then the lessons/subjects tables,
 in FK-safe order. Constraint/table/index names below were confirmed against
 the live schema via `alembic revision --autogenerate` (matches 0010's
