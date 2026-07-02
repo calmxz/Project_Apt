@@ -129,10 +129,21 @@ Spec'd / Planned / In progress / Done / Deferred.
 
 ---
 
-## 7. Suggested execution order
+## 7. Execution order (needed-now -> needed-later)
 
-1. **WS-A** (this doc) — frames everything. *Done on write.*
-2. **WS-B legal + WS-C deploy + WS-D backups** — P0 launch trio, parallelizable.
-3. **WS-E editable profile** — highest user-felt P1.
-4. **WS-F product fixes** — quick wins.
-5. **WS-G owed gates** — fold live-smoke / e2e / reliability in as each WS lands.
+**Now — P0, launch-blocking (parallelizable):**
+1. **WS-C deploy** (Render + Vercel) — makes the app publicly reachable; nothing
+   launches without it.
+2. **WS-B legal** (ToS + Privacy + register acceptance) — required before
+   collecting real user data publicly.
+3. **WS-D backups** (R2) — required before real users create unrecoverable data.
+
+**Soon — P1 (post-launch-safe):**
+4. **WS-E editable profile** — highest user-felt gap.
+5. **WS-F product fixes** — F2 resume-review-gaps (P1) first, then F1 cap-warn +
+   F3 rate-limit.
+
+**Later — P2 (quality/owed, fold in):**
+6. **WS-G owed gates** — attach each to the WS it verifies as that lands.
+
+(WS-A is this doc, done on write.)
