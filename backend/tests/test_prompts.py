@@ -86,3 +86,21 @@ def test_immutable_rules_has_post_quiz_protocol():
     assert "do NOT re-quiz the same gap" in rules
     # insist overrides the nudge
     assert "insist" in rules.lower()
+
+
+def test_immutable_rules_has_knowledge_diagnostic_protocol():
+    rules = prompts.IMMUTABLE_RULES
+    assert "KNOWLEDGE DIAGNOSTIC" in rules
+    assert "ask_check_questions" in rules.split("KNOWLEDGE DIAGNOSTIC:")[1].split("RETRIEVAL POLICY:")[0]
+
+
+def test_dynamic_context_diagnostic_required():
+    from agent.prompts import build_dynamic_context
+    s = build_dynamic_context({"topic": "Recursion", "diagnostic_required": True})
+    assert "DIAGNOSTIC: REQUIRED" in s
+
+
+def test_dynamic_context_diagnostic_off_by_default():
+    from agent.prompts import build_dynamic_context
+    s = build_dynamic_context({"topic": "Recursion"})
+    assert "DIAGNOSTIC: OFF" in s

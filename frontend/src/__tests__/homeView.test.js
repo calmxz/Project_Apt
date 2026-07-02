@@ -74,25 +74,19 @@ describe('HomeView', () => {
     expect(wrapper.get('[data-testid="home-error"]').text()).toBe('list failed')
   })
 
-  it('renders both mode cards', async () => {
+  it('shows a single New lesson card, no Build a subject', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'listSessions').mockResolvedValue([])
     const wrapper = mountView()
     await flushPromises()
+    expect(wrapper.text()).toContain('New lesson')
+    expect(wrapper.text()).not.toContain('Build a subject')
     expect(wrapper.find('[data-testid="home-mode-quick"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="home-mode-subject"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="home-mode-subject"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="home-build-start"]').exists()).toBe(false)
   })
 
-  it('Build a subject routes to the wizard', async () => {
-    const store = useSessionStore()
-    vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    const wrapper = mountView()
-    await flushPromises()
-    await wrapper.get('[data-testid="home-build-start"]').trigger('click')
-    expect(push).toHaveBeenCalledWith({ name: 'subject-new' })
-  })
-
-  it('Quick lesson creates a subject-less session then navigates', async () => {
+  it('New lesson creates a session then navigates', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'listSessions').mockResolvedValue([])
     vi.spyOn(store, 'createSession').mockResolvedValue({ id: 'sess1' })

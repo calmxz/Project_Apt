@@ -14,7 +14,7 @@
     <template v-else>
       <div class="modes">
         <div class="mode-card" data-testid="home-mode-quick">
-          <h2 class="mode-title">Quick lesson</h2>
+          <h2 class="mode-title">New lesson</h2>
           <p class="mode-sub">One topic. Type and go.</p>
           <input
             v-model="quickTopic"
@@ -32,18 +32,6 @@
             <span>Start</span><i class="pi pi-arrow-right" aria-hidden="true" />
           </button>
           <RouterLink to="/new" class="quick-more">Add reference files</RouterLink>
-        </div>
-        <div class="mode-card" data-testid="home-mode-subject">
-          <h2 class="mode-title">Build a subject</h2>
-          <p class="mode-sub">Multiple lessons, a guided plan.</p>
-          <button
-            type="button"
-            class="cta-secondary"
-            data-testid="home-build-start"
-            @click="buildSubject"
-          >
-            <span>Start a plan</span><i class="pi pi-arrow-right" aria-hidden="true" />
-          </button>
         </div>
       </div>
 
@@ -91,10 +79,6 @@ async function startQuick() {
   if (!topic) return
   const created = await store.createSession({ topic, seedMode: 'fresh', priorSessionId: null })
   if (created) router.push({ name: 'session', params: { id: created.id } })
-}
-
-function buildSubject() {
-  router.push({ name: 'subject-new' })
 }
 
 function continueResume() {
@@ -210,37 +194,6 @@ function continueResume() {
 }
 
 .cta-primary:focus-visible {
-  outline: 2px solid var(--color-accent-ring);
-  outline-offset: 3px;
-}
-
-.cta-secondary {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1.375rem;
-  border-radius: var(--radius-pill);
-  background: var(--color-accent-soft);
-  color: var(--color-accent-text);
-  border: 0;
-  font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 0.9375rem;
-  cursor: pointer;
-  box-shadow: var(--shadow-pop);
-  transition: transform var(--motion-fast) var(--motion-bounce), box-shadow var(--motion-fast) ease;
-}
-
-.cta-secondary:hover {
-  transform: translateY(-2px);
-}
-
-.cta-secondary:active {
-  transform: translateY(4px);
-  box-shadow: var(--shadow-pop-pressed);
-}
-
-.cta-secondary:focus-visible {
   outline: 2px solid var(--color-accent-ring);
   outline-offset: 3px;
 }

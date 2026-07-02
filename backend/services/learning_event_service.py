@@ -64,11 +64,13 @@ def record(
 def record_from_answer(
     db: Session,
     session_id: str,
+    *,
     gap: str,
     question: str,
     correct: bool,
     clear_pending: bool = True,
     commit: bool = True,
+    apply_profile_effects: bool = True,
 ) -> LearningEvent:
     """Record a learner's clicked check-question answer (deterministic path).
 
@@ -83,6 +85,11 @@ def record_from_answer(
     the agent's only next-turn signal is the profile state:
     - correct  -> add gap to mastered_concepts (tested mastery)
     - incorrect-> remove gap from mastered_concepts if present (demotion)
+
+    apply_profile_effects=False (used by the knowledge diagnostic) still writes
+    the LearningEvent but skips the mastered_concepts mutation entirely, so a
+    correct diagnostic answer cannot pollute the profile with a fake "tested
+    mastery" promotion.
     """
     event = LearningEvent(
         session_id=session_id,
@@ -93,17 +100,18 @@ def record_from_answer(
     db.add(event)
     db.flush()
 
-    profile = profile_service.load_profile(db, session_id)
-    mastered = list(profile.mastered_concepts or [])
-    if correct:
-        if gap not in mastered:
-            mastered.append(gap)
-            profile.mastered_concepts = mastered
-            profile_service.save_profile(db, session_id, profile, commit=False)
-    else:
-        if gap in mastered:
-            profile.mastered_concepts = [c for c in mastered if c != gap]
-            profile_service.save_profile(db, session_id, profile, commit=False)
+    if apply_profile_effects:
+        profile = profile_service.load_profile(db, session_id)
+        mastered = list(profile.mastered_concepts or [])
+        if correct:
+            if gap not in mastered:
+                mastered.append(gap)
+                profile.mastered_concepts = mastered
+                profile_service.save_profile(db, session_id, profile, commit=False)
+        else:
+            if gap in mastered:
+                profile.mastered_concepts = [c for c in mastered if c != gap]
+                profile_service.save_profile(db, session_id, profile, commit=False)
 
     if clear_pending:
         check_question_service.clear_pending_check(db, session_id, commit=False)

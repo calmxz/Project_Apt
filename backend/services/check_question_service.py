@@ -176,8 +176,14 @@ def register(db: Session, ctx: "ToolContext", args: AskCheckQuestionsArgs) -> To
             error="a check-question batch is already open; resolve it first",
         )
 
+    from services import profile_service  # local import avoids circular
+
+    level = profile_service.load_profile(db, ctx.session_id).knowledge_level
+    purpose = "diagnostic" if level is None else "check"
+
     pc = {
         "gap": args.gap,
+        "purpose": purpose,
         "current_index": 0,
         "asked_at_turn": ctx.turn_started_at.isoformat(),
         "message_id": None,
@@ -231,10 +237,12 @@ def answer(db: Session, session_id: str, index: int, selected_index: int) -> dic
         raise CheckStateError("selected_index out of range")
 
     correct = selected_index == item["correct_index"]
+    apply_effects = pc.get("purpose", "check") != "diagnostic"
     # Profile effect + LearningEvent, deferred into our single commit; does not clear.
     learning_event_service.record_from_answer(
         db, session_id, gap=pc["gap"], question=item["question"],
         correct=correct, clear_pending=False, commit=False,
+        apply_profile_effects=apply_effects,
     )
     item["status"] = "answered"
     item["selected_index"] = selected_index

@@ -52,6 +52,61 @@ def ctx(db_session, session_row):
     )
 
 
+@pytest.fixture
+def ctx_fresh_session(db_session):
+    """Fresh session: profile.knowledge_level is None -> diagnostic trigger."""
+    db_session.add(User(id=USER_ID))
+    db_session.flush()
+    row = SessionModel(
+        id=SESSION_ID,
+        user_id=USER_ID,
+        topic="biology",
+        topic_profile_json=TopicProfile().model_dump_json(),
+    )
+    db_session.add(row)
+    db_session.commit()
+    return ToolContext(
+        db=db_session,
+        session_id=row.id,
+        user_id=USER_ID,
+        turn_started_at=_T0,
+    )
+
+
+@pytest.fixture
+def ctx_session_with_level(db_session):
+    """Session with a known knowledge_level -> normal check, not diagnostic."""
+    db_session.add(User(id=USER_ID))
+    db_session.flush()
+    row = SessionModel(
+        id=SESSION_ID,
+        user_id=USER_ID,
+        topic="biology",
+        topic_profile_json=TopicProfile(knowledge_level="intermediate").model_dump_json(),
+    )
+    db_session.add(row)
+    db_session.commit()
+    return ToolContext(
+        db=db_session,
+        session_id=row.id,
+        user_id=USER_ID,
+        turn_started_at=_T0,
+    )
+
+
+def one_item_args(gap: str, correct_index: int = 0):
+    return AskCheckQuestionsArgs(
+        session_id=SESSION_ID,
+        gap=gap,
+        items=[{
+            "question": f"{gap}?",
+            "options": ["a", "b"],
+            "correct_index": correct_index,
+            "explanation": "e",
+        }],
+    )
+
+
 def test_is_gradable_requires_prior_turn(db_session, session_row, ctx):
     # Seed a batch using the new register API.
     args = AskCheckQuestionsArgs(
@@ -179,3 +234,33 @@ def test_build_results_summary_mentions_misses_and_skips(db, ctx, session_id):
     assert "gap=atp" in summary
     assert "0/1 correct" in summary or "0/2" in summary
     assert "skipped" in summary.lower()
+
+
+def test_register_tags_diagnostic_when_level_unknown(db, ctx_fresh_session):
+    # profile.knowledge_level is None on a fresh session
+    cq.register(db, ctx_fresh_session, one_item_args(gap="warmup"))
+    pc = cq.get_pending_check(db, ctx_fresh_session.session_id)
+    assert pc["purpose"] == "diagnostic"
+
+
+def test_register_tags_check_when_level_known(db, ctx_session_with_level):
+    cq.register(db, ctx_session_with_level, one_item_args(gap="loops"))
+    pc = cq.get_pending_check(db, ctx_session_with_level.session_id)
+    assert pc["purpose"] == "check"
+
+
+def test_diagnostic_correct_answer_does_not_master(db, ctx_fresh_session):
+    from services import profile_service
+
+    sid = ctx_fresh_session.session_id
+    cq.register(db, ctx_fresh_session, one_item_args(gap="warmup", correct_index=0))
+    cq.answer(db, sid, 0, 0)  # correct
+    assert "warmup" not in (profile_service.load_profile(db, sid).mastered_concepts or [])
+
+
+def test_public_view_does_not_leak_purpose(db, ctx_fresh_session):
+    cq.register(db, ctx_fresh_session, one_item_args(gap="warmup"))
+    pc = cq.get_pending_check(db, ctx_fresh_session.session_id)
+    assert pc["purpose"] == "diagnostic"
+    view = cq.public_view(pc)
+    assert "purpose" not in view

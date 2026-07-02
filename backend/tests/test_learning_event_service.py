@@ -237,3 +237,35 @@ def test_record_from_answer_defaults_still_clear(session_row, db_session):
     learning_event_service.record_from_answer(
         db_session, session_row.id, gap="g", question="q", correct=True)
     assert cq.get_pending_check(db_session, session_row.id) is None
+
+
+# --- Task 5: apply_profile_effects bypass (diagnostic profile-pollution guard) ---
+
+
+@pytest.fixture
+def db(db_session):
+    """Alias mirroring this file's db_session fixture under the brief's name."""
+    return db_session
+
+
+@pytest.fixture
+def session_id(session_row):
+    """Alias mirroring this file's session_row fixture under the brief's name."""
+    return session_row.id
+
+
+def test_record_from_answer_skips_mastery_when_disabled(db, session_id):
+    from services import learning_event_service as les, profile_service
+    les.record_from_answer(db, session_id, gap="warmup", question="q",
+                           correct=True, clear_pending=False,
+                           apply_profile_effects=False)
+    prof = profile_service.load_profile(db, session_id)
+    assert "warmup" not in (prof.mastered_concepts or [])
+
+
+def test_record_from_answer_applies_mastery_by_default(db, session_id):
+    from services import learning_event_service as les, profile_service
+    les.record_from_answer(db, session_id, gap="loops", question="q",
+                           correct=True, clear_pending=False)
+    prof = profile_service.load_profile(db, session_id)
+    assert "loops" in (prof.mastered_concepts or [])

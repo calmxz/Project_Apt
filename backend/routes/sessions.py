@@ -34,7 +34,13 @@ from contracts import (
 )
 from db.database import get_db
 from db.models import ChatMessage, Session as SessionModel, User
-from services import check_question_service, documents_service, plan_revision_service, profile_service, summary_service
+from services import (
+    check_question_service,
+    diagnostic_service,
+    documents_service,
+    profile_service,
+    summary_service,
+)
 from services.auth import current_user_id
 from services.session_enrichment import aware_utc as _aware_utc, compute_enrichment
 
@@ -57,7 +63,6 @@ def _to_response(db: Session, row: SessionModel) -> SessionResponse:
         ended_at=_aware_utc(row.ended_at),
         ingestion_status=documents_service.session_ingestion_status(db, row.id),
         pinned=row.pinned,
-        subject_id=row.subject_id,
     )
 
 
@@ -77,7 +82,6 @@ def _enrich_list_items(db: Session, rows: list[SessionModel]) -> list[SessionLis
             last_message_preview=enr[r.id].last_message_preview,
             last_session_summary=enr[r.id].last_session_summary,
             progress=enr[r.id].progress,
-            subject_id=r.subject_id,
         )
         for r in rows
     ]
@@ -271,7 +275,6 @@ def get_session(
         ingestion_status=documents_service.session_ingestion_status(db, row.id),
         messages=_load_messages(db, row.id, open_msg_id),
         pinned=row.pinned,
-        subject_id=row.subject_id,
         pending_check=check_question_service.public_view(pc),
     )
 
@@ -378,10 +381,14 @@ def skip_check(
     check_question_service.write_check_batch(
         db, check_question_service.get_pending_check(db, session_id)
     )
+    diagnostic_service.grade_if_diagnostic(db, session_id)
     return CheckSkipResponse(**prog)
 
 
-@router.post("/sessions/{session_id}/check/answer", response_model=CheckAnswerResponse)
+@router.post(
+    "/sessions/{session_id}/check/answer",
+    response_model=CheckAnswerResponse,
+)
 def answer_check(
     session_id: str,
     req: CheckAnswerRequest,
@@ -391,8 +398,6 @@ def answer_check(
     row = db.get(SessionModel, session_id)
     if row is None or row.user_id != user_id:
         raise HTTPException(status_code=404, detail="session not found")
-    pc = check_question_service.get_pending_check(db, session_id)
-    gap = pc.get("gap") if pc else None
     try:
         result = check_question_service.answer(db, session_id, req.index, req.selected_index)
     except check_question_service.CheckStateError as e:
@@ -400,10 +405,8 @@ def answer_check(
     check_question_service.write_check_batch(
         db, check_question_service.get_pending_check(db, session_id)
     )
-    suggestion = None
-    if gap and not result.get("correct"):
-        suggestion = plan_revision_service.maybe_suggest_lesson(db, session_id, gap)
-    return CheckAnswerResponse(**result, add_lesson_suggestion=suggestion)
+    diagnostic_service.grade_if_diagnostic(db, session_id)
+    return CheckAnswerResponse(**result)
 
 
 def _recent_history(db: Session, session_id: str) -> list[dict]:
