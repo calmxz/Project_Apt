@@ -1,0 +1,48 @@
+"""Deterministic knowledge-level assignment from a diagnostic check batch."""
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
+
+
+def grade_if_diagnostic(db: "Session", session_id: str) -> None:
+    """Grade a just-resolved diagnostic batch into topic_profile.knowledge_level.
+
+    No-op unless the pending check's purpose is "diagnostic" AND it is fully
+    resolved (is_done). Safe to call from any route that may resolve the final
+    item of a batch (answer or skip) - resolving the same already-graded batch
+    twice is harmless since it recomputes the same score from persisted item
+    state.
+
+    Local imports avoid circular imports (check_question_service and
+    profile_service both sit alongside this module in services/).
+    """
+    from services import check_question_service, profile_service
+
+    pc = check_question_service.get_pending_check(db, session_id)
+    if not pc or pc.get("purpose") != "diagnostic" or not check_question_service.is_done(pc):
+        return
+    items = pc.get("items", [])
+    graded = [it for it in items if it["status"] == "answered"]
+    n_correct = sum(1 for it in graded if it.get("correct"))
+    level = level_for_score(n_correct, len(items))
+    profile = profile_service.load_profile(db, session_id)
+    profile.knowledge_level = level
+    profile_service.save_profile(db, session_id, profile)
+
+
+def level_for_score(n_correct: int, total: int) -> str:
+    """Map a diagnostic score to a coarse knowledge level.
+
+    Tuned for a 3-question batch: 0-1 beginner, 2 intermediate, 3 advanced.
+    Generalizes by ratio for other batch sizes."""
+    if total <= 0:
+        return "beginner"
+    ratio = n_correct / total
+    if ratio >= 1.0:
+        return "advanced"
+    if ratio >= (2 / 3):
+        return "intermediate"
+    return "beginner"

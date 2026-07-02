@@ -7,12 +7,10 @@ import { storeToRefs } from 'pinia'
 import { useSidebar } from '@/composables/useSidebar.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useSessionStore } from '@/stores/session.js'
-import { useSubjectStore } from '@/stores/subject.js'
 import { useSessionGroups } from '@/composables/useSessionGroups.js'
 import Logo from '@/components/Logo.vue'
 import SidebarSessionRow from './SidebarSessionRow.vue'
 import SidebarSkeletonList from './SidebarSkeletonList.vue'
-import SidebarSubjectNode from './SidebarSubjectNode.vue'
 
 const { mode, isDesktop, drawerOpen, toggleDesktop, closeDrawer } = useSidebar()
 const router = useRouter()
@@ -21,11 +19,6 @@ const authStore = useAuthStore()
 const { isAuthenticated } = storeToRefs(authStore)
 const sessionStore = useSessionStore()
 const { sessions, loading } = storeToRefs(sessionStore)
-const subjectStore = useSubjectStore()
-const { subjects } = storeToRefs(subjectStore)
-
-// Sessions not linked to a subject — rendered as the legacy quick-session flat list.
-const quickSessions = computed(() => sessions.value.filter((s) => !s.subject_id))
 
 const listEl = ref(null)
 const asideEl = ref(null)
@@ -95,7 +88,7 @@ onBeforeUnmount(() => {
 
 const searchQuery = ref('')
 const { searching, filteredFlat, matchCount, pinnedActive, activeGroups, endedGroups, endedRows } =
-  useSessionGroups(quickSessions, searchQuery, ref(null)) // null => Date.now() captured at setup time
+  useSessionGroups(sessions, searchQuery, ref(null)) // null => Date.now() captured at setup time
 
 const activeFlat = computed(() => activeGroups.value.flatMap((g) => g.rows))
 
@@ -120,9 +113,6 @@ const showEmptyActiveHint = computed(
 onMounted(async () => {
   if (isAuthenticated.value && !sessions.value.length) {
     await sessionStore.listSessions().catch(() => {})
-  }
-  if (isAuthenticated.value && !subjects.value.length) {
-    subjectStore.listSubjects().catch(() => {})
   }
 })
 
@@ -275,21 +265,8 @@ function onNewSession() {
           </p>
         </template>
         <template v-else>
-          <!-- ACTIVE view: subjects + pinned mini-group + quick-session activity buckets -->
+          <!-- ACTIVE view: pinned mini-group + session activity buckets -->
           <template v-if="statusFilter === 'active'">
-            <!-- Subject nodes: expandable rows listing opened lesson sessions -->
-            <section
-              v-if="subjects.length"
-              class="sb-section sb-section--subjects"
-              data-testid="sidebar-subjects-group"
-            >
-              <SidebarSubjectNode
-                v-for="s in subjects"
-                :key="s.id"
-                :subject="s"
-              />
-            </section>
-
             <section
               v-if="pinnedActive.length"
               class="sb-section sb-section--pinned"

@@ -95,6 +95,7 @@ async def _prepare_turn(
         "profile": profile,
         "ingestion_status": ingestion_status,
         "retrieval_required": retrieval_required,
+        "diagnostic_required": profile.knowledge_level is None,
         "seed_mode": None,
         "last_session_summary": profile.last_session_summary,
         "pending_check": check_question_service.get_pending_check(db, req.session_id),

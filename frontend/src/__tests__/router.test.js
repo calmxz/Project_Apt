@@ -31,12 +31,15 @@ describe('router', () => {
         'session-profile',
         'login',
         'register',
-        'subject-new',
-        'subject-overview',
       ]),
     )
-    expect(names).toContain('subject-new')
-    expect(names).toContain('subject-overview')
+  })
+
+  it('has no subject routes', () => {
+    const names = router.getRoutes().map((r) => r.name)
+    expect(names).not.toContain('subject-new')
+    expect(names).not.toContain('subject-overview')
+    expect(names).not.toContain('subject-mastery')
   })
 
   it('redirects unauthenticated user to /login', async () => {

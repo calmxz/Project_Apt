@@ -26,9 +26,6 @@ class User(Base):
 
 class Session(Base):
     __tablename__ = "sessions"
-    __table_args__ = (
-        Index("ix_sessions_subject_id", "subject_id"),
-    )
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
@@ -41,9 +38,6 @@ class Session(Base):
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     pinned: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false", default=False
-    )
-    subject_id: Mapped[str | None] = mapped_column(
-        ForeignKey("subjects.id"), nullable=True
     )
 
     user: Mapped["User"] = relationship("User", back_populates="sessions")
@@ -142,51 +136,3 @@ class DailyCostLedger(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False
     )
-
-
-class Subject(Base):
-    __tablename__ = "subjects"
-    __table_args__ = (
-        CheckConstraint(
-            "duration_mode IN ('deadline', 'pace')",
-            name="subjects_duration_mode_check",
-        ),
-    )
-
-    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: uuid4().hex)
-    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
-    title: Mapped[str] = mapped_column(String, nullable=False)
-    per_session_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
-    # Duration is a user-toggled pair: duration_mode records which knob is pinned;
-    # exactly one of timeline_days / pace_per_week is set, the other is derived on read.
-    duration_mode: Mapped[str] = mapped_column(String, nullable=False)
-    timeline_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    pace_per_week: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
-    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
-    lessons: Mapped[list["Lesson"]] = relationship("Lesson", back_populates="subject")
-
-
-class Lesson(Base):
-    __tablename__ = "lessons"
-    __table_args__ = (
-        CheckConstraint(
-            "status IN ('not_started', 'in_progress', 'done')",
-            name="lessons_status_check",
-        ),
-        Index("ix_lessons_subject_id", "subject_id"),
-    )
-
-    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: uuid4().hex)
-    subject_id: Mapped[str] = mapped_column(ForeignKey("subjects.id"), nullable=False)
-    order_idx: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    title: Mapped[str] = mapped_column(String, nullable=False)
-    goal: Mapped[str] = mapped_column(String, nullable=False, default="")
-    status: Mapped[str] = mapped_column(
-        String, nullable=False, server_default="not_started", default="not_started"
-    )
-    session_id: Mapped[str | None] = mapped_column(ForeignKey("sessions.id"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
-
-    subject: Mapped["Subject"] = relationship("Subject", back_populates="lessons")
