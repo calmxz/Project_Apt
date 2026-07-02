@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
@@ -32,6 +31,17 @@ from sqlalchemy.orm import Session
 
 from contracts import AskCheckQuestionsArgs, ToolResult
 from db.models import ChatMessage, LearningEvent, Session as SessionModel
+
+# Low-level pending_check state accessors live in a leaf module so
+# learning_event_service can use them without importing this module (which
+# would create a cyclic import). Re-exported here for existing callers.
+from services.pending_check_store import (  # noqa: F401
+    _save,
+    clear_pending_check,
+    get_pending_check,
+    is_gradable,
+    parse_asked_at,
+)
 
 log = logging.getLogger(__name__)
 
@@ -41,30 +51,6 @@ if TYPE_CHECKING:
 
 class CheckStateError(Exception):
     """Raised on an out-of-order or no-batch answer/skip."""
-
-
-def get_pending_check(db: Session, session_id: str) -> dict | None:
-    row = db.get(SessionModel, session_id)
-    if row is None or not row.pending_check_json:
-        return None
-    try:
-        data = json.loads(row.pending_check_json)
-    except (ValueError, TypeError):
-        return None
-    return data if isinstance(data, dict) else None
-
-
-def parse_asked_at(pc: dict) -> datetime:
-    return datetime.fromisoformat(pc["asked_at_turn"])
-
-
-def is_gradable(db: Session, session_id: str, gap: str, current_turn: datetime) -> bool:
-    """Legacy guard kept for learning_event_service.record() (the LLM tool path).
-    Batch gap stays top-level so this still resolves."""
-    pc = get_pending_check(db, session_id)
-    if pc is None or pc.get("gap") != gap:
-        return False
-    return parse_asked_at(pc) < current_turn
 
 
 def public_view(pc: dict | None) -> dict | None:
@@ -90,24 +76,6 @@ def public_view(pc: dict | None) -> dict | None:
         "total": len(items),
         "items": items,
     }
-
-
-def _save(db: Session, session_id: str, pc: dict, commit: bool = True) -> None:
-    row = db.get(SessionModel, session_id)
-    if row is None:
-        raise ValueError(f"session not found: {session_id}")
-    row.pending_check_json = json.dumps(pc)
-    if commit:
-        db.commit()
-
-
-def clear_pending_check(db: Session, session_id: str, commit: bool = True) -> None:
-    row = db.get(SessionModel, session_id)
-    if row is None:
-        return
-    row.pending_check_json = None
-    if commit:
-        db.commit()
 
 
 def attach_message_id(db: Session, session_id: str, message_id: int) -> None:

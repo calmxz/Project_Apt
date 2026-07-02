@@ -13,14 +13,12 @@ from sqlalchemy.orm import Session
 from agent.types import ToolContext
 from contracts import RecordLearningEventArgs, ToolResult
 from db.models import LearningEvent
-from services import profile_service
+from services import pending_check_store, profile_service
 
 
 def record(
     db: Session, ctx: ToolContext, args: RecordLearningEventArgs
 ) -> ToolResult:
-    from services import check_question_service  # local import avoids circular
-
     if args.session_id != ctx.session_id:
         return ToolResult(
             ok=False,
@@ -28,7 +26,7 @@ def record(
             error=f"session_id mismatch: args={args.session_id} ctx={ctx.session_id}",
         )
 
-    if not check_question_service.is_gradable(
+    if not pending_check_store.is_gradable(
         db, ctx.session_id, gap=args.gap_tested, current_turn=ctx.turn_started_at
     ):
         return ToolResult(
@@ -57,7 +55,7 @@ def record(
             ]
             profile_service.save_profile(db, ctx.session_id, profile)
 
-    check_question_service.clear_pending_check(db, ctx.session_id, commit=False)
+    pending_check_store.clear_pending_check(db, ctx.session_id, commit=False)
     db.commit()
     db.refresh(event)
     return ToolResult(ok=True, status="ok", data={"event_id": event.id, "correct": args.correct})
@@ -93,8 +91,6 @@ def record_from_answer(
     correct diagnostic answer cannot pollute the profile with a fake "tested
     mastery" promotion.
     """
-    from services import check_question_service  # local import avoids circular
-
     event = LearningEvent(
         session_id=session_id,
         gap_tested=gap,
@@ -118,7 +114,7 @@ def record_from_answer(
                 profile_service.save_profile(db, session_id, profile, commit=False)
 
     if clear_pending:
-        check_question_service.clear_pending_check(db, session_id, commit=False)
+        pending_check_store.clear_pending_check(db, session_id, commit=False)
     if commit:
         db.commit()
         db.refresh(event)
