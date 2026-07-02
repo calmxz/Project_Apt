@@ -99,18 +99,6 @@ describe('HomeView', () => {
     expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'sess1' } })
   })
 
-  it('resume nudge shows the most-recent active session and continues to it', async () => {
-    const store = useSessionStore()
-    vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    store.sessions = [makeSession('a1', 'Trees', false, -5000), makeSession('a2', 'Graphs', false, 0)]
-    const wrapper = mountView()
-    await flushPromises()
-    const resume = wrapper.get('[data-testid="home-resume"]')
-    expect(resume.text()).toContain('Graphs')
-    await wrapper.get('[data-testid="home-resume-continue"]').trigger('click')
-    expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'a2' } })
-  })
-
   it('does not render the dupe banner or recent feed (relocated)', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'listSessions').mockResolvedValue([])

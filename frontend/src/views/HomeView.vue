@@ -34,30 +34,12 @@
           <RouterLink to="/new" class="quick-more">Add reference files</RouterLink>
         </div>
       </div>
-
-      <RouterLink
-        v-if="resumeSession"
-        class="resume"
-        data-testid="home-resume"
-        :to="{ name: 'session', params: { id: resumeSession.id } }"
-      >
-        <span>Continue where you left off — {{ resumeSession.topic || 'untitled' }}</span>
-      </RouterLink>
-      <button
-        v-if="resumeSession"
-        type="button"
-        class="resume-btn"
-        data-testid="home-resume-continue"
-        @click="continueResume"
-      >
-        Continue
-      </button>
     </template>
   </section>
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSessionStore } from '../stores/session.js'
 import { friendlyError } from '../lib/errors.js'
@@ -68,21 +50,11 @@ const quickTopic = ref('')
 
 onMounted(() => store.listSessions().catch(() => {}))
 
-const resumeSession = computed(() => {
-  const active = store.sessions.filter((s) => !s.ended_at)
-  if (!active.length) return null
-  return [...active].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0]
-})
-
 async function startQuick() {
   const topic = quickTopic.value.trim()
   if (!topic) return
   const created = await store.createSession({ topic, seedMode: 'fresh', priorSessionId: null })
   if (created) router.push({ name: 'session', params: { id: created.id } })
-}
-
-function continueResume() {
-  if (resumeSession.value) router.push({ name: 'session', params: { id: resumeSession.value.id } })
 }
 </script>
 
@@ -213,63 +185,5 @@ function continueResume() {
   outline: 2px solid var(--color-accent-ring);
   outline-offset: 2px;
   border-radius: var(--radius-sm);
-}
-
-/* Resume nudge */
-.resume {
-  display: flex;
-  align-items: center;
-  padding: 1rem 1.25rem;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  color: inherit;
-  text-decoration: none;
-  cursor: pointer;
-  transition: border-color var(--motion-fast) ease, transform var(--motion-fast) var(--motion-bounce);
-}
-
-.resume:hover {
-  border-color: var(--color-accent-soft);
-  transform: translateY(-1px);
-}
-
-.resume:focus-visible {
-  outline: 2px solid var(--color-accent-ring);
-  outline-offset: 2px;
-}
-
-.resume span {
-  font-size: 1rem;
-  line-height: 1.4;
-}
-
-.resume-btn {
-  align-self: flex-start;
-  padding: 0.5rem 1rem;
-  border-radius: var(--radius-pill);
-  background: var(--color-accent-soft);
-  border: 1px solid var(--color-accent-soft);
-  color: var(--color-accent-text);
-  font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: background var(--motion-fast) ease, transform var(--motion-fast) var(--motion-bounce);
-}
-
-.resume-btn:hover {
-  background: var(--color-accent);
-  color: var(--color-text-on-accent);
-  transform: translateY(-1px);
-}
-
-.resume-btn:active {
-  transform: translateY(2px);
-}
-
-.resume-btn:focus-visible {
-  outline: 2px solid var(--color-accent-ring);
-  outline-offset: 2px;
 }
 </style>
