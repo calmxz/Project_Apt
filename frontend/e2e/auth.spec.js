@@ -100,6 +100,7 @@ test.describe('auth gate', () => {
     await page.getByTestId('register-email').fill('me@example.com')
     await page.getByTestId('register-password').fill('hunter2pw')
     await page.getByTestId('register-confirm').fill('hunter2pw')
+    await page.getByTestId('register-consent').check()
     await page.getByTestId('register-submit').click()
 
     await expect(page.getByTestId('register-sent')).toBeVisible()
