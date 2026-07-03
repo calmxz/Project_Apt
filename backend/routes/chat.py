@@ -12,11 +12,12 @@ from agent.types import ToolContext
 from config import settings
 from contracts import ChatRequest, ChatResponse
 from db.database import get_db
-from db.models import ChatMessage, Session as SessionModel, User
+from db.models import ChatMessage, Session as SessionModel
 from lib import keyword_index
 from lib.error_codes import DAILY_CAP_REACHED, DAILY_COST_CAP_REACHED
 from services import check_question_service, cost_meter, documents_service, profile_service, rate_limit
 from services.auth import current_user_id
+from services.user_service import ensure_user
 
 
 router = APIRouter(prefix="/api")
@@ -60,9 +61,7 @@ async def _prepare_turn(
             },
         )
 
-    if not db.get(User, user_id):
-        db.add(User(id=user_id))
-        db.flush()
+    ensure_user(db, user_id)
 
     session = db.get(SessionModel, req.session_id)
     if session is None or session.user_id != user_id:

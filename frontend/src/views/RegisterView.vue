@@ -55,6 +55,21 @@
       </p>
       <p v-if="error" class="error" data-testid="register-error">{{ error }}</p>
 
+      <label class="consent">
+        <input
+          type="checkbox"
+          v-model="consent"
+          data-testid="register-consent"
+          class="consent-box"
+        />
+        <span>
+          I agree to the
+          <RouterLink to="/tos" target="_blank">Terms of Service</RouterLink>
+          and
+          <RouterLink to="/privacy" target="_blank">Privacy Policy</RouterLink>.
+        </span>
+      </label>
+
       <div class="actions">
         <button
           type="submit"
@@ -101,12 +116,17 @@ const confirm = ref('')
 const submitting = ref(false)
 const error = ref('')
 const sent = ref(false)
+const consent = ref(false)
 
 const emailValid = computed(() => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.value.trim()))
 const passwordValid = computed(() => password.value.length >= 8)
 const mismatch = computed(() => confirm.value.length > 0 && confirm.value !== password.value)
 const canSubmit = computed(
-  () => emailValid.value && passwordValid.value && confirm.value === password.value,
+  () =>
+    emailValid.value &&
+    passwordValid.value &&
+    confirm.value === password.value &&
+    consent.value,
 )
 
 async function submit() {
@@ -237,6 +257,20 @@ async function submit() {
 .actions {
   display: flex;
   justify-content: flex-end;
+}
+
+.consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  line-height: var(--lh-body);
+}
+
+.consent-box {
+  margin-top: 0.2rem;
+  flex-shrink: 0;
 }
 
 .error {
