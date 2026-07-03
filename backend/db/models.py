@@ -19,6 +19,10 @@ class User(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    accepted_terms_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+    terms_version: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
 
     sessions: Mapped[list["Session"]] = relationship("Session", back_populates="user")
     usage_counters: Mapped[list["UsageCounter"]] = relationship("UsageCounter", back_populates="user")
