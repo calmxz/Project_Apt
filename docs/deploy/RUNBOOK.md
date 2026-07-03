@@ -60,14 +60,20 @@ Copy the deployment URL, e.g. `https://crux.vercel.app`.
    from step 5 → save (triggers a redeploy).
 2. In `frontend/vercel.json`, replace the `CRUX_API_HOST` placeholder in the
    CSP `connect-src` with the Render host (no scheme), commit, and let Vercel
-   redeploy.
+   redeploy. NOTE: unlike the `CORS_ORIGINS` change above (a dashboard edit),
+   this is a git commit — `vercel.json` headers have no env interpolation. The
+   app deployed in step 4 cannot reach the real API until this redeploy lands,
+   so do not expect a working app between steps 5 and 6.
 
 ## Step 7 — Live smoke (owed gate)
 
 Against the live Vercel URL: register, confirm email, log in, send a chat
 message (tutor responds), upload a PDF. Open browser devtools and confirm no
-CSP violations block the app. If the CSP blocks a needed origin, widen the
-relevant directive in `vercel.json` and redeploy.
+CSP violations block the app (watch for blocked `wss://` Supabase connections
+too — `connect-src` currently allows `https://*.supabase.co` only, fine for
+auth-only usage but would need `wss://*.supabase.co` if realtime is ever added).
+If the CSP blocks a needed origin, widen the relevant directive in
+`vercel.json` and redeploy.
 
 ## Step 8 — Uploads caveat
 
