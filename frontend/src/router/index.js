@@ -31,6 +31,18 @@ const router = createRouter({
       meta: { public: true, sidebar: false },
     },
     {
+      path: '/tos',
+      name: 'tos',
+      component: () => import('../views/TosView.vue'),
+      meta: { public: true, sidebar: false },
+    },
+    {
+      path: '/privacy',
+      name: 'privacy',
+      component: () => import('../views/PrivacyView.vue'),
+      meta: { public: true, sidebar: false },
+    },
+    {
       path: '/',
       name: 'home',
       component: () => import('../views/HomeView.vue'),
