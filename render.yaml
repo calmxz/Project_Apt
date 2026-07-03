@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: crux-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    # Set region to match the Supabase project region to avoid cross-region latency.
+    region: singapore
+    healthCheckPath: /health
+    envVars:
+      - key: ENV
+        value: prod
+      - key: LLM_STUB
+        value: "false"
+      - key: EMBEDDING_DIM
+        value: "768"
+      - key: DAILY_CAP
+        value: "50"
+      - key: LLM_SOFT_CAP_USD
+        value: "2.00"
+      - key: LLM_HARD_CAP_USD
+        value: "3.00"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
