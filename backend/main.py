@@ -3,13 +3,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from config import settings
+from config import assert_prod_database, settings
 from db.database import create_tables
 from routes import chat, documents, health, profile, sessions, upload
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    assert_prod_database(settings.env, settings.database_url)
     if settings.env == "prod" and not settings.supabase_url:
         raise RuntimeError("SUPABASE_URL is required when ENV=prod")
     create_tables()
