@@ -33,7 +33,7 @@ from contracts import (
     TopicProfile,
 )
 from db.database import get_db
-from db.models import ChatMessage, Session as SessionModel, User
+from db.models import ChatMessage, Session as SessionModel
 from services import (
     check_question_service,
     diagnostic_service,
@@ -44,6 +44,7 @@ from services import (
 )
 from services.auth import current_user_id
 from services.session_enrichment import aware_utc as _aware_utc, compute_enrichment
+from services.user_service import ensure_user
 
 NO_EXCHANGES_TEXT = (
     "This session ended without any exchanges. Start a new session to continue."
@@ -107,9 +108,7 @@ async def create_session(
             status_code=400, detail="prior_session_id forbidden when seed_mode=fresh"
         )
 
-    if not db.get(User, user_id):
-        db.add(User(id=user_id))
-        db.flush()
+    ensure_user(db, user_id)
 
     new_id = uuid.uuid4().hex
     profile_json = TopicProfile().model_dump_json()
