@@ -1,14 +1,14 @@
 """terms acceptance columns on users
 
-Revision ID: 0012
-Revises: 0011
+Revision ID: 0012_terms_acceptance
+Revises: 0011_drop_subjects_lessons
 """
 from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0012"
-down_revision = "0011"
+revision = "0012_terms_acceptance"
+down_revision = "0011_drop_subjects_lessons"
 branch_labels = None
 depends_on = None
 
