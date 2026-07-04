@@ -49,7 +49,9 @@ class CapStatus:
     allowed: bool
     used: Decimal
     soft_breached: bool
+    urgent_breached: bool
     soft_cap: Decimal
+    urgent_cap: Decimal
     hard_cap: Decimal
 
 
@@ -81,12 +83,15 @@ def record_cost(db: Session, user_id: str, cost_usd) -> Decimal:
 def check_cap(db: Session, user_id: str) -> CapStatus:
     soft_cap = _to_decimal(settings.llm_soft_cap_usd)
     hard_cap = _to_decimal(settings.llm_hard_cap_usd)
+    urgent_cap = _quantize(hard_cap * Decimal("0.9"))
     used = current_spend(db, user_id)
     return CapStatus(
         allowed=used < hard_cap,
         used=used,
         soft_breached=used >= soft_cap,
+        urgent_breached=used >= urgent_cap,
         soft_cap=soft_cap,
+        urgent_cap=urgent_cap,
         hard_cap=hard_cap,
     )
 

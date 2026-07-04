@@ -92,7 +92,9 @@ def _allow_cap(monkeypatch):
         allowed=True,
         used=Decimal("0.0"),
         soft_breached=False,
+        urgent_breached=False,
         soft_cap=Decimal("2.0"),
+        urgent_cap=Decimal("2.70"),
         hard_cap=Decimal("3.0"),
     )
     monkeypatch.setattr("agent.tutor.cost_meter.check_cap", MagicMock(return_value=cap))
@@ -233,7 +235,9 @@ async def test_run_streaming_emits_error_on_cost_cap(db_session, monkeypatch):
         allowed=False,
         used=Decimal("3.10"),
         soft_breached=True,
+        urgent_breached=True,
         soft_cap=Decimal("2.0"),
+        urgent_cap=Decimal("2.70"),
         hard_cap=Decimal("3.0"),
     )
     monkeypatch.setattr("agent.tutor.cost_meter.check_cap", MagicMock(return_value=cap))
@@ -266,7 +270,9 @@ async def test_run_streaming_emits_cost_warning_when_soft_breached(db_session, m
         allowed=True,
         used=Decimal("1.95"),
         soft_breached=True,
+        urgent_breached=False,
         soft_cap=Decimal("2.0"),
+        urgent_cap=Decimal("2.70"),
         hard_cap=Decimal("3.0"),
     )
     monkeypatch.setattr("agent.tutor.cost_meter.check_cap", MagicMock(return_value=cap))
