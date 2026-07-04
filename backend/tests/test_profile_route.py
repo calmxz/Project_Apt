@@ -160,6 +160,27 @@ def test_patch_empty_body_is_422(client, auth_headers, seeded_session_id):
     assert r.status_code == 422
 
 
+def test_patch_whitespace_only_add_gap_is_422(client, auth_headers, seeded_session_id):
+    tag = _etag(client, auth_headers, seeded_session_id)
+    r = client.patch(
+        f"/api/profile/{seeded_session_id}",
+        headers={**auth_headers, "If-Match": tag},
+        json={"add_gap": "   "},
+    )
+    assert r.status_code == 422
+
+
+def test_patch_empty_body_is_422_before_if_match_guard(client, auth_headers, seeded_session_id):
+    """Empty-body 422 must fire before the If-Match 428 guard, even when no
+    If-Match header is sent at all."""
+    r = client.patch(
+        f"/api/profile/{seeded_session_id}",
+        headers=auth_headers,
+        json={},
+    )
+    assert r.status_code == 422
+
+
 def test_delete_gap_with_spaces_and_nulls_focus(client, auth_headers, seeded_session_id):
     from urllib.parse import quote
     tag = _etag(client, auth_headers, seeded_session_id)

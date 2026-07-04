@@ -299,6 +299,18 @@ def test_apply_user_patch_adds_and_sets_level(db_session, seeded_session_id):
     assert "loops" in profile_service.load_profile(db_session, seeded_session_id).mastered_concepts
 
 
+def test_apply_user_patch_strips_whitespace(db_session, seeded_session_id):
+    profile_service.apply_user_patch(db_session, seeded_session_id, add_mastered="  loops  ")
+    reloaded = profile_service.load_profile(db_session, seeded_session_id)
+    assert "loops" in reloaded.mastered_concepts
+    assert "  loops  " not in reloaded.mastered_concepts
+
+
+def test_apply_user_patch_whitespace_only_raises_value_error(db_session, seeded_session_id):
+    with pytest.raises(ValueError):
+        profile_service.apply_user_patch(db_session, seeded_session_id, add_mastered="   ")
+
+
 def test_apply_user_patch_mutual_exclusion_moves_item(db_session, seeded_session_id):
     profile_service.apply_user_patch(db_session, seeded_session_id, add_gap="recursion")
     p = profile_service.apply_user_patch(db_session, seeded_session_id, add_mastered="recursion")

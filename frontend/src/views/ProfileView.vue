@@ -89,6 +89,7 @@
               type="button"
               data-testid="add-mastered-submit"
               class="add-btn"
+              aria-label="Add concept"
               @click="addMastered"
             >
               Add
@@ -135,6 +136,7 @@
               type="button"
               data-testid="add-gap-submit"
               class="add-btn"
+              aria-label="Add gap"
               @click="addGap"
             >
               Add

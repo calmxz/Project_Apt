@@ -131,6 +131,14 @@ def apply_user_patch(
 ) -> TopicProfile:
     if db.get(SessionModel, session_id) is None:
         raise ValueError(f"session not found: {session_id}")
+    if add_mastered is not None:
+        add_mastered = add_mastered.strip()
+        if not add_mastered:
+            raise ValueError("item cannot be empty after stripping whitespace")
+    if add_gap is not None:
+        add_gap = add_gap.strip()
+        if not add_gap:
+            raise ValueError("item cannot be empty after stripping whitespace")
     profile = load_profile(db, session_id)
     if add_mastered is not None:
         _add_exclusive(profile, "mastered_concepts", add_mastered)

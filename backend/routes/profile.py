@@ -88,13 +88,16 @@ def patch_profile(
     if body.add_mastered is None and body.add_gap is None and body.knowledge_level is None:
         raise HTTPException(status_code=422, detail="empty patch")
     _guard_if_match(db, session_id, if_match)
-    profile = profile_service.apply_user_patch(
-        db,
-        session_id,
-        add_mastered=body.add_mastered,
-        add_gap=body.add_gap,
-        knowledge_level=body.knowledge_level,
-    )
+    try:
+        profile = profile_service.apply_user_patch(
+            db,
+            session_id,
+            add_mastered=body.add_mastered,
+            add_gap=body.add_gap,
+            knowledge_level=body.knowledge_level,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     return ProfileMutationResponse(profile=profile, etag=profile_service.profile_etag(profile))
 
 
