@@ -12,12 +12,29 @@
           level.
         </p>
       </div>
+
+      <div v-if="data" class="level-edit" data-testid="level-select">
+        <button
+          v-for="lvl in ['beginner', 'intermediate', 'advanced']"
+          :key="lvl"
+          type="button"
+          class="level-opt"
+          :class="{ active: data.profile.knowledge_level === lvl }"
+          @click="setLevel(lvl)"
+        >
+          {{ lvl }}
+        </button>
+      </div>
     </header>
 
     <p v-if="loading" class="muted" data-testid="sprof-loading">Loading...</p>
     <p v-else-if="error" class="error" data-testid="sprof-error">{{ error }}</p>
 
     <template v-else-if="data">
+      <p v-if="conflict" class="conflict" data-testid="sprof-conflict" role="status">
+        Profile changed elsewhere — reloaded with the latest.
+      </p>
+
       <div
         v-if="data.profile.focus_target_gap"
         class="focus"
@@ -48,8 +65,36 @@
               class="chip chip-mastered"
             >
               {{ c }}
+              <button
+                type="button"
+                class="chip-x"
+                data-testid="chip-remove"
+                :aria-label="`Remove ${c}`"
+                @click="removeItem('mastered_concepts', c)"
+              >
+                <i class="pi pi-times" aria-hidden="true" />
+              </button>
             </li>
           </ul>
+          <div class="add-row">
+            <input
+              v-model="newMastered"
+              data-testid="add-mastered"
+              class="add-input"
+              placeholder="Add a concept"
+              maxlength="200"
+              @keydown.enter="addMastered"
+            />
+            <button
+              type="button"
+              data-testid="add-mastered-submit"
+              class="add-btn"
+              aria-label="Add concept"
+              @click="addMastered"
+            >
+              Add
+            </button>
+          </div>
         </div>
 
         <div class="col" data-testid="sprof-gaps">
@@ -67,8 +112,36 @@
               class="chip chip-gap"
             >
               {{ g }}
+              <button
+                type="button"
+                class="chip-x"
+                data-testid="chip-remove"
+                :aria-label="`Remove ${g}`"
+                @click="removeItem('confirmed_gaps', g)"
+              >
+                <i class="pi pi-times" aria-hidden="true" />
+              </button>
             </li>
           </ul>
+          <div class="add-row">
+            <input
+              v-model="newGap"
+              data-testid="add-gap"
+              class="add-input"
+              placeholder="Add a gap"
+              maxlength="200"
+              @keydown.enter="addGap"
+            />
+            <button
+              type="button"
+              data-testid="add-gap-submit"
+              class="add-btn"
+              aria-label="Add gap"
+              @click="addGap"
+            >
+              Add
+            </button>
+          </div>
         </div>
       </div>
 
@@ -110,7 +183,7 @@ import { computed, onMounted, ref } from 'vue'
 
 import BackButton from '../components/BackButton.vue'
 import { friendlyError } from '../lib/errors.js'
-import { getSessionProfile } from '../services/profileApi.js'
+import { deleteProfileItem, getSessionProfile, patchProfile } from '../services/profileApi.js'
 import { useSessionStore } from '../stores/session.js'
 import { formatRelative } from '../utils/formatDate.js'
 
@@ -120,6 +193,10 @@ const store = useSessionStore()
 const data = ref(null)
 const loading = ref(false)
 const error = ref('')
+const etag = ref('')
+const conflict = ref(false)
+const newMastered = ref('')
+const newGap = ref('')
 
 const topicLabel = computed(() => {
   const fromStore = store.sessions.find((s) => s.id === props.id)?.topic
@@ -131,11 +208,50 @@ async function load() {
   error.value = ''
   try {
     data.value = await getSessionProfile(props.id)
+    etag.value = data.value.etag
   } catch (e) {
     error.value = friendlyError(e)
   } finally {
     loading.value = false
   }
+}
+
+async function _applyWrite(fn) {
+  conflict.value = false
+  try {
+    const res = await fn()
+    data.value = { ...data.value, profile: res.profile }
+    etag.value = res.etag
+  } catch (e) {
+    if (e?.status === 412) {
+      conflict.value = true
+      await load()
+    } else {
+      error.value = friendlyError(e)
+    }
+  }
+}
+
+function addMastered() {
+  const v = newMastered.value.trim()
+  if (!v) return
+  newMastered.value = ''
+  return _applyWrite(() => patchProfile(props.id, { add_mastered: v }, etag.value))
+}
+
+function addGap() {
+  const v = newGap.value.trim()
+  if (!v) return
+  newGap.value = ''
+  return _applyWrite(() => patchProfile(props.id, { add_gap: v }, etag.value))
+}
+
+function setLevel(level) {
+  return _applyWrite(() => patchProfile(props.id, { knowledge_level: level }, etag.value))
+}
+
+function removeItem(listName, item) {
+  return _applyWrite(() => deleteProfileItem(props.id, listName, item, etag.value))
 }
 
 onMounted(load)
@@ -429,5 +545,92 @@ onMounted(load)
   font-family: var(--font-sans);
   font-size: 0.75rem;
   color: var(--color-text-faint);
+}
+
+/* Chip remove button */
+.chip-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 0.375rem;
+  padding: 0;
+  width: 1.125rem;
+  height: 1.125rem;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 0.7rem;
+  cursor: pointer;
+  border-radius: var(--radius-pill);
+  opacity: 0.7;
+  transition: opacity var(--motion-fast) var(--motion-bounce);
+}
+.chip-x:hover { opacity: 1; }
+
+/* Add-item row */
+.add-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.add-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.add-btn {
+  padding: 0.4rem 0.875rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  font-weight: 600;
+  background: var(--color-surface);
+  color: var(--color-accent-strong);
+  cursor: pointer;
+}
+.add-btn:hover { background: var(--color-surface-soft); }
+
+/* Level control */
+.level-edit {
+  display: inline-flex;
+  gap: 0.375rem;
+}
+
+.level-opt {
+  padding: 0.3rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.level-opt.active {
+  background: var(--color-accent-strong);
+  color: #FFFFFF;
+  border-color: var(--color-accent-strong);
+}
+
+/* Conflict notice */
+.conflict {
+  margin: 0;
+  padding: 0.625rem 1rem;
+  border: 1px solid var(--color-error-text);
+  border-radius: var(--radius-lg);
+  color: var(--color-error-text);
+  font-size: 0.875rem;
 }
 </style>

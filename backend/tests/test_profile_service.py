@@ -41,6 +41,25 @@ def ctx(db_session):
     )
 
 
+SEEDED_SESSION_ID = "sess_seeded"
+SEEDED_USER_ID = "u_seeded"
+
+
+@pytest.fixture
+def seeded_session_id(db_session):
+    db_session.add(User(id=SEEDED_USER_ID))
+    db_session.flush()
+    db_session.add(
+        SessionModel(
+            id=SEEDED_SESSION_ID,
+            user_id=SEEDED_USER_ID,
+            topic_profile_json="{}",
+        )
+    )
+    db_session.commit()
+    return SEEDED_SESSION_ID
+
+
 def _patch(**kw) -> UpdateTopicProfileArgs:
     kw.setdefault("session_id", SESSION_ID)
     kw.setdefault("evidence_type", "declared")
@@ -260,3 +279,89 @@ def test_save_profile_commit_false_defers_write(session_row, db_session):
     assert "deferred_gap" not in (
         profile_service.load_profile(db_session, SESSION_ID).mastered_concepts or []
     )
+
+
+def test_profile_etag_is_stable_and_changes_with_content():
+    a = TopicProfile(mastered_concepts=["x"])
+    b = TopicProfile(mastered_concepts=["x"])
+    c = TopicProfile(mastered_concepts=["y"])
+    assert profile_service.profile_etag(a) == profile_service.profile_etag(b)
+    assert profile_service.profile_etag(a) != profile_service.profile_etag(c)
+
+
+def test_apply_user_patch_adds_and_sets_level(db_session, seeded_session_id):
+    p = profile_service.apply_user_patch(
+        db_session, seeded_session_id, add_mastered="loops", knowledge_level="advanced"
+    )
+    assert "loops" in p.mastered_concepts
+    assert p.knowledge_level == "advanced"
+    # persisted
+    assert "loops" in profile_service.load_profile(db_session, seeded_session_id).mastered_concepts
+
+
+def test_apply_user_patch_strips_whitespace(db_session, seeded_session_id):
+    profile_service.apply_user_patch(db_session, seeded_session_id, add_mastered="  loops  ")
+    reloaded = profile_service.load_profile(db_session, seeded_session_id)
+    assert "loops" in reloaded.mastered_concepts
+    assert "  loops  " not in reloaded.mastered_concepts
+
+
+def test_apply_user_patch_whitespace_only_raises_value_error(db_session, seeded_session_id):
+    with pytest.raises(ValueError):
+        profile_service.apply_user_patch(db_session, seeded_session_id, add_mastered="   ")
+
+
+def test_apply_user_patch_mutual_exclusion_moves_item(db_session, seeded_session_id):
+    profile_service.apply_user_patch(db_session, seeded_session_id, add_gap="recursion")
+    p = profile_service.apply_user_patch(db_session, seeded_session_id, add_mastered="recursion")
+    assert "recursion" in p.mastered_concepts
+    assert "recursion" not in p.confirmed_gaps
+    # persisted
+    reloaded = profile_service.load_profile(db_session, seeded_session_id)
+    assert "recursion" in reloaded.mastered_concepts
+    assert "recursion" not in reloaded.confirmed_gaps
+
+
+def test_add_mastered_nulls_focus_when_it_was_the_focused_gap(db_session, seeded_session_id):
+    profile_service.save_profile(
+        db_session, seeded_session_id,
+        TopicProfile(confirmed_gaps=["recursion"], focus_target_gap="recursion"),
+    )
+    p = profile_service.apply_user_patch(db_session, seeded_session_id, add_mastered="recursion")
+    assert p.focus_target_gap is None
+    # persisted
+    reloaded = profile_service.load_profile(db_session, seeded_session_id)
+    assert reloaded.focus_target_gap is None
+
+
+def test_remove_profile_item_removes_and_persists(db_session, seeded_session_id):
+    profile_service.apply_user_patch(db_session, seeded_session_id, add_mastered="loops")
+    p = profile_service.remove_profile_item(db_session, seeded_session_id, "mastered_concepts", "loops")
+    assert "loops" not in p.mastered_concepts
+    # persisted
+    reloaded = profile_service.load_profile(db_session, seeded_session_id)
+    assert "loops" not in reloaded.mastered_concepts
+
+
+def test_remove_confirmed_gap_nulls_focus(db_session, seeded_session_id):
+    profile_service.save_profile(
+        db_session, seeded_session_id,
+        TopicProfile(confirmed_gaps=["recursion"], focus_target_gap="recursion"),
+    )
+    p = profile_service.remove_profile_item(db_session, seeded_session_id, "confirmed_gaps", "recursion")
+    assert "recursion" not in p.confirmed_gaps
+    assert p.focus_target_gap is None
+    # persisted
+    reloaded = profile_service.load_profile(db_session, seeded_session_id)
+    assert "recursion" not in reloaded.confirmed_gaps
+    assert reloaded.focus_target_gap is None
+
+
+def test_remove_missing_item_raises_keyerror(db_session, seeded_session_id):
+    with pytest.raises(KeyError):
+        profile_service.remove_profile_item(db_session, seeded_session_id, "mastered_concepts", "nope")
+
+
+def test_apply_user_patch_missing_session_raises_value_error(db_session):
+    with pytest.raises(ValueError):
+        profile_service.apply_user_patch(db_session, "nonexistent-session-id", add_mastered="x")

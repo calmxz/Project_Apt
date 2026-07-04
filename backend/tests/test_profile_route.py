@@ -73,3 +73,144 @@ def test_profile_route_with_events_desc(client, db_session, seed_session):
     assert len(body["recent_learning_events"]) == 3
     # ordered desc by created_at -> latest first
     assert body["recent_learning_events"][0]["gap_tested"] == "gap_2"
+
+
+def test_get_profile_includes_etag(client, auth_headers, seeded_session_id):
+    r = client.get(f"/api/profile/{seeded_session_id}", headers=auth_headers)
+    assert r.status_code == 200
+    assert isinstance(r.json()["etag"], str) and r.json()["etag"]
+
+
+# --- PATCH / DELETE routes -------------------------------------------------
+
+SEEDED_USER_ID = "u_seeded"
+SEEDED_SESSION_ID = "sess_seeded"
+OTHER_USER_ID = "u_other"
+
+
+@pytest.fixture
+def seeded_session_id(db_session):
+    db_session.add(User(id=SEEDED_USER_ID))
+    db_session.flush()
+    db_session.add(
+        SessionModel(
+            id=SEEDED_SESSION_ID,
+            user_id=SEEDED_USER_ID,
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.commit()
+    return SEEDED_SESSION_ID
+
+
+@pytest.fixture
+def auth_headers():
+    return {"Authorization": f"Bearer test-{SEEDED_USER_ID}"}
+
+
+@pytest.fixture
+def other_auth_headers():
+    return {"Authorization": f"Bearer test-{OTHER_USER_ID}"}
+
+
+def _etag(client, headers, sid):
+    return client.get(f"/api/profile/{sid}", headers=headers).json()["etag"]
+
+
+def test_patch_requires_if_match(client, auth_headers, seeded_session_id):
+    r = client.patch(
+        f"/api/profile/{seeded_session_id}",
+        headers=auth_headers,
+        json={"add_mastered": "loops"},
+    )
+    assert r.status_code == 428
+
+
+def test_patch_stale_if_match_returns_412(client, auth_headers, seeded_session_id):
+    r = client.patch(
+        f"/api/profile/{seeded_session_id}",
+        headers={**auth_headers, "If-Match": "deadbeef"},
+        json={"add_gap": "recursion"},
+    )
+    assert r.status_code == 412
+
+
+def test_patch_adds_item_and_returns_new_etag(client, auth_headers, seeded_session_id):
+    tag = _etag(client, auth_headers, seeded_session_id)
+    r = client.patch(
+        f"/api/profile/{seeded_session_id}",
+        headers={**auth_headers, "If-Match": tag},
+        json={"add_mastered": "loops", "knowledge_level": "advanced"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert "loops" in body["profile"]["mastered_concepts"]
+    assert body["profile"]["knowledge_level"] == "advanced"
+    assert body["etag"] != tag
+
+
+def test_patch_empty_body_is_422(client, auth_headers, seeded_session_id):
+    tag = _etag(client, auth_headers, seeded_session_id)
+    r = client.patch(
+        f"/api/profile/{seeded_session_id}",
+        headers={**auth_headers, "If-Match": tag},
+        json={},
+    )
+    assert r.status_code == 422
+
+
+def test_patch_whitespace_only_add_gap_is_422(client, auth_headers, seeded_session_id):
+    tag = _etag(client, auth_headers, seeded_session_id)
+    r = client.patch(
+        f"/api/profile/{seeded_session_id}",
+        headers={**auth_headers, "If-Match": tag},
+        json={"add_gap": "   "},
+    )
+    assert r.status_code == 422
+
+
+def test_patch_empty_body_is_422_before_if_match_guard(client, auth_headers, seeded_session_id):
+    """Empty-body 422 must fire before the If-Match 428 guard, even when no
+    If-Match header is sent at all."""
+    r = client.patch(
+        f"/api/profile/{seeded_session_id}",
+        headers=auth_headers,
+        json={},
+    )
+    assert r.status_code == 422
+
+
+def test_delete_gap_with_spaces_and_nulls_focus(client, auth_headers, seeded_session_id):
+    from urllib.parse import quote
+    tag = _etag(client, auth_headers, seeded_session_id)
+    client.patch(
+        f"/api/profile/{seeded_session_id}",
+        headers={**auth_headers, "If-Match": tag},
+        json={"add_gap": "big O notation"},
+    )
+    tag = _etag(client, auth_headers, seeded_session_id)
+    r = client.delete(
+        f"/api/profile/{seeded_session_id}/confirmed_gaps/{quote('big O notation')}",
+        headers={**auth_headers, "If-Match": tag},
+    )
+    assert r.status_code == 200
+    assert "big O notation" not in r.json()["profile"]["confirmed_gaps"]
+
+
+def test_delete_missing_item_404(client, auth_headers, seeded_session_id):
+    tag = _etag(client, auth_headers, seeded_session_id)
+    r = client.delete(
+        f"/api/profile/{seeded_session_id}/mastered_concepts/nope",
+        headers={**auth_headers, "If-Match": tag},
+    )
+    assert r.status_code == 404
+
+
+def test_patch_other_users_session_404(client, other_auth_headers, seeded_session_id):
+    r = client.patch(
+        f"/api/profile/{seeded_session_id}",
+        headers={**other_auth_headers, "If-Match": "x"},
+        json={"add_mastered": "loops"},
+    )
+    assert r.status_code == 404

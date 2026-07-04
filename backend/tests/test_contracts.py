@@ -216,7 +216,7 @@ def test_session_create_request_seed_mode_enum():
 
 
 def test_profile_response_shape():
-    pr = ProfileResponse(profile=TopicProfile(), recent_learning_events=[])
+    pr = ProfileResponse(profile=TopicProfile(), recent_learning_events=[], etag="abc123")
     assert pr.profile.knowledge_level is None
     assert pr.recent_learning_events == []
 

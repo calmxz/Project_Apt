@@ -15,7 +15,7 @@
     <template v-else>
       <BackButton />
 
-      <SessionHeader :topic="headerTopic" />
+      <SessionHeader :topic="headerTopic" :session-id="props.id" />
 
       <CapBanners />
 

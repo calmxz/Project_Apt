@@ -29,7 +29,7 @@ function _getAccessToken() {
   }
 }
 
-async function request(method, path, { body, params, silent = false } = {}) {
+async function request(method, path, { body, params, silent = false, headers } = {}) {
   let url = `${BASE_URL}${path}`
   if (params) {
     const qs = new URLSearchParams(
@@ -38,7 +38,7 @@ async function request(method, path, { body, params, silent = false } = {}) {
     if (qs) url += `?${qs}`
   }
 
-  const init = { method, headers: {} }
+  const init = { method, headers: { ...(headers || {}) } }
   if (body !== undefined) {
     init.headers['content-type'] = 'application/json'
     init.body = JSON.stringify(body)

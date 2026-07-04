@@ -432,6 +432,34 @@ class ProfileResponse(BaseModel):
     )
     profile: TopicProfile
     recent_learning_events: list[LearningEventResponse]
+    etag: str
+    """
+    sha256 hex of the serialized profile; send back as If-Match on writes.
+    """
+
+
+class ProfilePatchRequest(BaseModel):
+    """
+    Add one item to a list and/or set the knowledge level. At least one
+    field must be present. Adding an item to one list removes it from the
+    other (mutual exclusion).
+
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    add_mastered: constr(min_length=1, max_length=200) | None = None
+    add_gap: constr(min_length=1, max_length=200) | None = None
+    knowledge_level: Literal["beginner", "intermediate", "advanced"] | None = None
+
+
+class ProfileMutationResponse(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    profile: TopicProfile
+    etag: str
 
 
 class AggregateConceptCount(BaseModel):
