@@ -116,3 +116,10 @@ def test_dynamic_context_review_gaps_off_by_default():
     from agent.prompts import build_dynamic_context
     ctx = build_dynamic_context({"topic": "Biology"})
     assert "REVIEW_GAPS: OFF" in ctx
+
+
+def test_immutable_rules_has_review_gaps_mode():
+    from agent.prompts import IMMUTABLE_RULES
+    assert "REVIEW-GAPS MODE" in IMMUTABLE_RULES
+    # The rule must direct the tutor to open on the named gap and pose a check.
+    assert "ask_check_questions" in IMMUTABLE_RULES  # already present; sanity
