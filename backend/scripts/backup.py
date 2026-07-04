@@ -6,8 +6,10 @@ module's own environment variables, never the app Settings.
 
 from __future__ import annotations
 
+import argparse
 import os
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Protocol
 
@@ -78,3 +80,34 @@ def prune(store: BackupStore, prefix: str = "crux/pg/", keep: int = 7) -> list[s
     for key in to_delete:
         store.delete(key)
     return to_delete
+
+
+def make_store() -> BackupStore:
+    return R2Store.from_env()
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="backup")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+
+    up = sub.add_parser("upload")
+    up.add_argument("path")
+
+    pr = sub.add_parser("prune")
+    pr.add_argument("--keep", type=int, default=7)
+
+    args = parser.parse_args(argv)
+    store = make_store()
+
+    if args.cmd == "upload":
+        today = datetime.now(timezone.utc).date().isoformat()
+        store.put(backup_key(today), Path(args.path))
+        return 0
+    if args.cmd == "prune":
+        prune(store, keep=args.keep)
+        return 0
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

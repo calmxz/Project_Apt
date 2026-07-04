@@ -1,7 +1,7 @@
 from pathlib import Path
 from unittest import mock
 
-from scripts.backup import BackupObject, R2Store, backup_key, prune
+from scripts.backup import BackupObject, R2Store, backup_key, main, prune
 
 
 def test_backup_key_scheme():
@@ -51,6 +51,31 @@ def test_prune_noop_when_at_or_under_keep():
 
     assert deleted == []
     assert len(store.objects) == 4
+
+
+def test_main_upload_puts_dated_key(tmp_path, monkeypatch):
+    store = FakeStore([])
+    monkeypatch.setattr("scripts.backup.make_store", lambda: store)
+    dump = tmp_path / "dump.pgc"
+    dump.write_bytes(b"data")
+
+    rc = main(["upload", str(dump)])
+
+    assert rc == 0
+    assert len(store.objects) == 1
+    only_key = next(iter(store.objects))
+    assert only_key.startswith("crux/pg/") and only_key.endswith("/dump.pgc")
+
+
+def test_main_prune_deletes_old(monkeypatch):
+    keys = [f"crux/pg/2026-07-0{d}/dump.pgc" for d in range(1, 10)]
+    store = FakeStore(keys)
+    monkeypatch.setattr("scripts.backup.make_store", lambda: store)
+
+    rc = main(["prune", "--keep", "7"])
+
+    assert rc == 0
+    assert len(store.objects) == 7
 
 
 def _r2(client):
