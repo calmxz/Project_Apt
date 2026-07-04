@@ -53,6 +53,18 @@ describe('apiClient cost-warning bus', () => {
     expect(listener).toHaveBeenCalledTimes(1)
     expect(listener.mock.calls[0][0].detail.header).toContain('soft_cap_breached')
   })
+
+  it('fires with detail.header containing level=urgent when the cap is urgent', async () => {
+    fetchMock.mockReturnValueOnce(
+      okWithHeader(
+        { ok: true },
+        'soft_cap_breached;level=urgent;used_usd=2.9;urgent_cap_usd=2.8;hard_cap_usd=3.0',
+      ),
+    )
+    await apiGet('/x')
+    expect(listener).toHaveBeenCalledTimes(1)
+    expect(listener.mock.calls[0][0].detail.header).toContain('level=urgent')
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -201,6 +213,58 @@ describe('SessionView cost-cap UX', () => {
     costBus.dispatchEvent(new CustomEvent('cost-warning', { detail: { header: 'x' } }))
     costBus.dispatchEvent(new CustomEvent('cost-warning', { detail: { header: 'x' } }))
     await flushPromises()
+    expect(showWarn).toHaveBeenCalledTimes(1)
+    expect(showError).not.toHaveBeenCalled()
+  })
+
+  it('surfaces an urgent cost warning distinctly from a soft one (stream shape)', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      seedActive(store)
+    })
+    lastWrapper = mount(SessionView, { props: { id: 's1' }, global: { stubs } })
+    await flushPromises()
+    costBus.dispatchEvent(
+      new CustomEvent('cost-warning', {
+        detail: { level: 'urgent', used_usd: 2.9, urgent_cap_usd: 2.8, hard_cap_usd: 3.0 },
+      }),
+    )
+    await flushPromises()
+    expect(showError).toHaveBeenCalledTimes(1)
+    expect(showWarn).not.toHaveBeenCalled()
+  })
+
+  it('surfaces an urgent cost warning distinctly from a soft one (header shape)', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      seedActive(store)
+    })
+    lastWrapper = mount(SessionView, { props: { id: 's1' }, global: { stubs } })
+    await flushPromises()
+    costBus.dispatchEvent(
+      new CustomEvent('cost-warning', {
+        detail: { header: 'soft_cap_breached;level=urgent;used_usd=2.9;urgent_cap_usd=2.8' },
+      }),
+    )
+    await flushPromises()
+    expect(showError).toHaveBeenCalledTimes(1)
+    expect(showWarn).not.toHaveBeenCalled()
+  })
+
+  it('still shows urgent warning even if a soft warning already fired this mount', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      seedActive(store)
+    })
+    lastWrapper = mount(SessionView, { props: { id: 's1' }, global: { stubs } })
+    await flushPromises()
+    costBus.dispatchEvent(new CustomEvent('cost-warning', { detail: { level: 'soft' } }))
+    await flushPromises()
+    expect(showWarn).toHaveBeenCalledTimes(1)
+    costBus.dispatchEvent(new CustomEvent('cost-warning', { detail: { level: 'urgent' } }))
+    await flushPromises()
+    expect(showError).toHaveBeenCalledTimes(1)
+    // soft does not fire again
     expect(showWarn).toHaveBeenCalledTimes(1)
   })
 })

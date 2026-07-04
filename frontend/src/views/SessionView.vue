@@ -237,9 +237,32 @@ watch(
   },
 )
 
-// One soft-cap warning per mount of this view (i.e. per session entry).
+// One warning per level, per mount of this view (i.e. per session entry).
+// Soft and urgent are tracked separately so an urgent warning can still
+// surface even if a soft one already showed earlier in this mount (urgent
+// escalates the signal; it must never be silently swallowed by a prior soft
+// warning), while neither level repeats.
 const softCapShown = ref(false)
-function onCostWarning() {
+const urgentCapShown = ref(false)
+function resolveCostWarningLevel(detail) {
+  let level = detail?.level
+  if (!level && typeof detail?.header === 'string') {
+    const match = detail.header.match(/level=(\w+)/)
+    level = match ? match[1] : null
+  }
+  return level === 'urgent' ? 'urgent' : 'soft'
+}
+function onCostWarning(event) {
+  const level = resolveCostWarningLevel(event?.detail)
+  if (level === 'urgent') {
+    if (urgentCapShown.value) return
+    urgentCapShown.value = true
+    showError(
+      'You are very close to today’s cost limit.',
+      { summary: 'Cost limit near', life: 8000 },
+    )
+    return
+  }
   if (softCapShown.value) return
   softCapShown.value = true
   showWarn(
