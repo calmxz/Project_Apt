@@ -70,4 +70,27 @@ describe('SessionEndedBanner', () => {
     await wrapper.get('[data-testid="session-resume"]').trigger('click')
     expect(wrapper.emitted('resume')?.length).toBeGreaterThan(0)
   })
+
+  it('shows Review my gaps button only when hasGaps is true', () => {
+    const withGaps = mount(SessionEndedBanner, {
+      props: { endedAt: '2026-07-04T00:00:00Z', hasGaps: true },
+      global: { stubs },
+    })
+    expect(withGaps.find('[data-testid="session-resume-gaps"]').exists()).toBe(true)
+
+    const noGaps = mount(SessionEndedBanner, {
+      props: { endedAt: '2026-07-04T00:00:00Z', hasGaps: false },
+      global: { stubs },
+    })
+    expect(noGaps.find('[data-testid="session-resume-gaps"]').exists()).toBe(false)
+  })
+
+  it('emits resume-gaps when the gaps button is clicked', async () => {
+    const w = mount(SessionEndedBanner, {
+      props: { endedAt: '2026-07-04T00:00:00Z', hasGaps: true },
+      global: { stubs },
+    })
+    await w.find('[data-testid="session-resume-gaps"]').trigger('click')
+    expect(w.emitted('resume-gaps')).toBeTruthy()
+  })
 })

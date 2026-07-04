@@ -23,7 +23,9 @@
         v-if="isEnded"
         :ended-at="store.currentSession.ended_at"
         :loading="resuming"
+        :has-gaps="hasGaps"
         @resume="resume"
+        @resume-gaps="resumeReviewGaps"
       />
 
       <div ref="messagesEl" class="messages" :class="{ 'is-empty': !store.messages.length }" data-testid="session-messages">
@@ -173,6 +175,12 @@ const referenceBannerRef = ref(null)
 // the old session id. Falls back to not-ended until the target detail resolves.
 const isEnded = computed(() =>
   store.currentSession?.id === props.id ? Boolean(store.currentSession.ended_at) : false,
+)
+// Gates the "Review my gaps" CTA — only meaningful once we're showing the
+// ended banner for this session, so read confirmed_gaps off the same
+// discriminator-checked currentSession rather than re-deriving it.
+const hasGaps = computed(
+  () => (store.currentSession?.topic_profile?.confirmed_gaps?.length ?? 0) > 0,
 )
 // Discriminator-gated (same as isEnded/headerTopic): during a switch,
 // store.currentSession still holds the PREVIOUS session, so gating on raw
@@ -435,6 +443,19 @@ async function resume() {
   resuming.value = true
   try {
     await store.reopenSession(store.currentSession.id)
+  } catch {
+    // store.error already populated
+  } finally {
+    resuming.value = false
+  }
+}
+
+async function resumeReviewGaps() {
+  if (!store.currentSession) return
+  resuming.value = true
+  try {
+    await store.reopenSession(store.currentSession.id)
+    await store.sendMessageStreaming({ text: 'Review my gaps', reviewGaps: true })
   } catch {
     // store.error already populated
   } finally {
