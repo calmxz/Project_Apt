@@ -724,8 +724,9 @@ components:
       additionalProperties: false
       required: [session_id, message]
       properties:
-        session_id: { type: string, maxLength: 64 }
-        message:    { type: string, maxLength: 4000 }
+        session_id:  { type: string, maxLength: 64 }
+        message:     { type: string, maxLength: 4000 }
+        review_gaps: { type: boolean, default: false }
 
     ChatResponse:
       type: object

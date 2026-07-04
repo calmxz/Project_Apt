@@ -208,6 +208,13 @@ def test_chat_request_required_fields():
         ChatRequest(session_id="s")  # missing message
 
 
+def test_chat_request_has_review_gaps_default_false():
+    req = ChatRequest(session_id="s1", message="hi")
+    assert req.review_gaps is False
+    req2 = ChatRequest(session_id="s1", message="hi", review_gaps=True)
+    assert req2.review_gaps is True
+
+
 def test_session_create_request_seed_mode_enum():
     SessionCreateRequest(topic="t", seed_mode="fresh")
     SessionCreateRequest(topic="t", seed_mode="resume")
