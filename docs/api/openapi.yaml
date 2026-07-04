@@ -336,6 +336,71 @@ paths:
                 $ref: "#/components/schemas/ProfileResponse"
         "404":
           $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [profile]
+      summary: Add a list item and/or set knowledge level. Optimistic-concurrency guarded.
+      operationId: patchProfile
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - $ref: "#/components/parameters/IfMatch"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProfilePatchRequest" }
+      responses:
+        "200":
+          description: Updated profile.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProfileMutationResponse" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "412": { $ref: "#/components/responses/PreconditionFailed" }
+        "428": { $ref: "#/components/responses/PreconditionRequired" }
+
+  /api/profile/{session_id}/mastered_concepts/{item}:
+    delete:
+      tags: [profile]
+      summary: Remove one mastered concept. Optimistic-concurrency guarded.
+      operationId: deleteMasteredConcept
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - name: item
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200":
+          description: Updated profile.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProfileMutationResponse" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "412": { $ref: "#/components/responses/PreconditionFailed" }
+        "428": { $ref: "#/components/responses/PreconditionRequired" }
+
+  /api/profile/{session_id}/confirmed_gaps/{item}:
+    delete:
+      tags: [profile]
+      summary: Remove one confirmed gap (nulls focus if it was the focus). Optimistic-concurrency guarded.
+      operationId: deleteConfirmedGap
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - name: item
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200":
+          description: Updated profile.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProfileMutationResponse" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "412": { $ref: "#/components/responses/PreconditionFailed" }
+        "428": { $ref: "#/components/responses/PreconditionRequired" }
 
 components:
   securitySchemes:
@@ -354,6 +419,12 @@ components:
       name: session_id
       required: true
       schema: { type: string, maxLength: 64 }
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: ETag from the last profile read. Guards against clobbering a concurrent write.
+      schema: { type: string }
 
   responses:
     BadRequest:
@@ -378,6 +449,16 @@ components:
           schema: { $ref: "#/components/schemas/ErrorResponse" }
     UpstreamUnavailable:
       description: LLM provider timeout or unavailable.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    PreconditionFailed:
+      description: If-Match did not match the current profile; refetch and retry.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    PreconditionRequired:
+      description: If-Match header missing.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -871,12 +952,43 @@ components:
     ProfileResponse:
       type: object
       additionalProperties: false
-      required: [profile, recent_learning_events]
+      required: [profile, recent_learning_events, etag]
       properties:
         profile: { $ref: "#/components/schemas/TopicProfile" }
         recent_learning_events:
           type: array
           items: { $ref: "#/components/schemas/LearningEventResponse" }
+        etag:
+          type: string
+          description: sha256 hex of the serialized profile; send back as If-Match on writes.
+
+    ProfilePatchRequest:
+      type: object
+      additionalProperties: false
+      description: |
+        Add one item to a list and/or set the knowledge level. At least one
+        field must be present. Adding an item to one list removes it from the
+        other (mutual exclusion).
+      properties:
+        add_mastered:
+          type: string
+          minLength: 1
+          maxLength: 200
+        add_gap:
+          type: string
+          minLength: 1
+          maxLength: 200
+        knowledge_level:
+          type: string
+          enum: [beginner, intermediate, advanced]
+
+    ProfileMutationResponse:
+      type: object
+      additionalProperties: false
+      required: [profile, etag]
+      properties:
+        profile: { $ref: "#/components/schemas/TopicProfile" }
+        etag: { type: string }
 
     AggregateConceptCount:
       type: object
