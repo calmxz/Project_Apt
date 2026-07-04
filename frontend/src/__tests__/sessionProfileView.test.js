@@ -65,4 +65,100 @@ describe('SessionProfileView (per-session)', () => {
     expect(err.exists()).toBe(true)
     expect(err.text()).toContain('nope')
   })
+
+  async function mountProfile({ profile = {}, etag = 'e0' } = {}) {
+    vi.spyOn(profileApi, 'getSessionProfile').mockResolvedValue({
+      profile: {
+        knowledge_level: 'beginner',
+        confirmed_gaps: [],
+        mastered_concepts: [],
+        ...profile,
+      },
+      etag,
+      recent_learning_events: [],
+    })
+    const wrapper = mount(ProfileView, {
+      props: { id: 's1' },
+      global: { stubs },
+    })
+    await flushPromises()
+    return wrapper
+  }
+
+  it('adds a mastered concept and threads the etag', async () => {
+    const patchProfile = vi.spyOn(profileApi, 'patchProfile').mockResolvedValue({
+      profile: { mastered_concepts: ['loops'], confirmed_gaps: [] },
+      etag: 'e1',
+    })
+    const wrapper = await mountProfile({ etag: 'e0' })
+    await wrapper.get('[data-testid="add-mastered"]').setValue('loops')
+    await wrapper.get('[data-testid="add-mastered-submit"]').trigger('click')
+    await flushPromises()
+    expect(patchProfile).toHaveBeenCalledWith('s1', { add_mastered: 'loops' }, 'e0')
+  })
+
+  it('adds a confirmed gap and threads the etag', async () => {
+    const patchProfile = vi.spyOn(profileApi, 'patchProfile').mockResolvedValue({
+      profile: { mastered_concepts: [], confirmed_gaps: ['window-fns'] },
+      etag: 'e1',
+    })
+    const wrapper = await mountProfile({ etag: 'e0' })
+    await wrapper.get('[data-testid="add-gap"]').setValue('window-fns')
+    await wrapper.get('[data-testid="add-gap-submit"]').trigger('click')
+    await flushPromises()
+    expect(patchProfile).toHaveBeenCalledWith('s1', { add_gap: 'window-fns' }, 'e0')
+  })
+
+  it('removes a chip via deleteProfileItem', async () => {
+    const deleteProfileItem = vi.spyOn(profileApi, 'deleteProfileItem').mockResolvedValue({
+      profile: { mastered_concepts: [], confirmed_gaps: [] },
+      etag: 'e1',
+    })
+    const wrapper = await mountProfile({
+      profile: { mastered_concepts: ['loops'], confirmed_gaps: [] },
+      etag: 'e0',
+    })
+    await wrapper.get('[data-testid="chip-remove"]').trigger('click')
+    await flushPromises()
+    expect(deleteProfileItem).toHaveBeenCalledWith('s1', 'mastered_concepts', 'loops', 'e0')
+  })
+
+  it('sets the knowledge level and threads the etag', async () => {
+    const patchProfile = vi.spyOn(profileApi, 'patchProfile').mockResolvedValue({
+      profile: { mastered_concepts: [], confirmed_gaps: [], knowledge_level: 'advanced' },
+      etag: 'e1',
+    })
+    const wrapper = await mountProfile({ etag: 'e0' })
+    const advancedBtn = wrapper
+      .get('[data-testid="level-select"]')
+      .findAll('button')
+      .find((b) => b.text() === 'advanced')
+    await advancedBtn.trigger('click')
+    await flushPromises()
+    expect(patchProfile).toHaveBeenCalledWith('s1', { knowledge_level: 'advanced' }, 'e0')
+  })
+
+  it('on 412 refetches and shows a notice', async () => {
+    const getSessionProfile = vi.spyOn(profileApi, 'getSessionProfile').mockResolvedValue({
+      profile: { knowledge_level: 'beginner', confirmed_gaps: [], mastered_concepts: [] },
+      etag: 'e0',
+      recent_learning_events: [],
+    })
+    vi.spyOn(profileApi, 'patchProfile').mockRejectedValueOnce(
+      Object.assign(new Error('x'), { status: 412 }),
+    )
+
+    const wrapper = mount(ProfileView, {
+      props: { id: 's1' },
+      global: { stubs },
+    })
+    await flushPromises()
+
+    await wrapper.get('[data-testid="add-mastered"]').setValue('loops')
+    await wrapper.get('[data-testid="add-mastered-submit"]').trigger('click')
+    await flushPromises()
+
+    expect(getSessionProfile).toHaveBeenCalledTimes(2) // initial + refetch
+    expect(wrapper.get('[data-testid="sprof-conflict"]').exists()).toBe(true)
+  })
 })
