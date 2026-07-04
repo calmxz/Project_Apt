@@ -10,8 +10,10 @@ Rules:
   now a human click, not an LLM tool, so server-side event evidence is moot.
 """
 
+import hashlib
 import json
 import logging
+from typing import Literal
 
 from pydantic import ValidationError
 from sqlalchemy import func, select
@@ -95,6 +97,66 @@ def seed_from_prior(db: Session, new_session: SessionModel, prior: SessionModel)
 
 def _norm_list(values: list[str] | None) -> list[str]:
     return list(values) if values else []
+
+
+def profile_etag(profile: TopicProfile) -> str:
+    return hashlib.sha256(profile.model_dump_json().encode("utf-8")).hexdigest()
+
+
+def _null_focus_if_removed(profile: TopicProfile, item: str) -> None:
+    if profile.focus_target_gap == item:
+        profile.focus_target_gap = None
+
+
+def _add_exclusive(profile: TopicProfile, target: str, item: str) -> None:
+    other = "confirmed_gaps" if target == "mastered_concepts" else "mastered_concepts"
+    tgt = _norm_list(getattr(profile, target))
+    oth = _norm_list(getattr(profile, other))
+    if item not in tgt:
+        tgt.append(item)
+    oth = [x for x in oth if x != item]
+    setattr(profile, target, tgt)
+    setattr(profile, other, oth)
+    if other == "confirmed_gaps":
+        _null_focus_if_removed(profile, item)
+
+
+def apply_user_patch(
+    db: Session,
+    session_id: str,
+    *,
+    add_mastered: str | None = None,
+    add_gap: str | None = None,
+    knowledge_level: str | None = None,
+) -> TopicProfile:
+    if db.get(SessionModel, session_id) is None:
+        raise ValueError(f"session not found: {session_id}")
+    profile = load_profile(db, session_id)
+    if add_mastered is not None:
+        _add_exclusive(profile, "mastered_concepts", add_mastered)
+    if add_gap is not None:
+        _add_exclusive(profile, "confirmed_gaps", add_gap)
+    if knowledge_level is not None:
+        profile.knowledge_level = knowledge_level
+    save_profile(db, session_id, profile)
+    return profile
+
+
+def remove_profile_item(
+    db: Session,
+    session_id: str,
+    list_name: Literal["mastered_concepts", "confirmed_gaps"],
+    item: str,
+) -> TopicProfile:
+    profile = load_profile(db, session_id)
+    current = _norm_list(getattr(profile, list_name))
+    if item not in current:
+        raise KeyError(item)
+    setattr(profile, list_name, [x for x in current if x != item])
+    if list_name == "confirmed_gaps":
+        _null_focus_if_removed(profile, item)
+    save_profile(db, session_id, profile)
+    return profile
 
 
 def apply_patch(
