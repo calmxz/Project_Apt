@@ -3,6 +3,7 @@ from pathlib import Path
 import yaml
 
 _WORKFLOW = Path(__file__).resolve().parents[2] / ".github" / "workflows" / "backup.yml"
+_RESTORE = Path(__file__).resolve().parents[2] / "docs" / "deploy" / "RESTORE.md"
 
 
 def _load():
@@ -39,3 +40,10 @@ def test_workflow_reads_secrets():
         "R2_BUCKET",
     ):
         assert f"secrets.{secret}" in text
+
+
+def test_restore_doc_documents_pg_restore():
+    text = _RESTORE.read_text(encoding="utf-8")
+    assert "pg_restore" in text
+    assert "--clean" in text
+    assert "scratch" in text.lower()
