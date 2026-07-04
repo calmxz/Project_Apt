@@ -26,3 +26,11 @@ class BackupStore(Protocol):
 
 def backup_key(date_str: str) -> str:
     return f"crux/pg/{date_str}/dump.pgc"
+
+
+def prune(store: BackupStore, prefix: str = "crux/pg/", keep: int = 7) -> list[str]:
+    keys = sorted((obj.key for obj in store.list(prefix)), reverse=True)
+    to_delete = keys[keep:]
+    for key in to_delete:
+        store.delete(key)
+    return to_delete
