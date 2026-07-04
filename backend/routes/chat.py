@@ -50,6 +50,7 @@ def _build_prompt_state(
     }
     if review_gaps and profile.confirmed_gaps:
         prompt_state["review_gaps_target"] = profile.confirmed_gaps[0]
+        prompt_state["diagnostic_required"] = False
     return prompt_state
 
 

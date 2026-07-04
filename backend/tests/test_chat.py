@@ -107,6 +107,13 @@ def test_build_prompt_state_review_gaps_picks_first_gap():
     assert state["review_gaps_target"] == "photosynthesis"
 
 
+def test_build_prompt_state_review_gaps_suppresses_diagnostic():
+    profile = _fake_profile(knowledge_level=None, confirmed_gaps=["a"])
+    state = _call_build_prompt_state(profile, review_gaps=True)
+    assert state["review_gaps_target"] == "a"
+    assert state["diagnostic_required"] is False
+
+
 def test_build_prompt_state_review_gaps_off_when_no_gaps():
     profile = _fake_profile(confirmed_gaps=[])
     state = _call_build_prompt_state(profile, review_gaps=True)
