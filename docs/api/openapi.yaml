@@ -1127,12 +1127,13 @@ x-sse-events:
   cost_warning:
     data:
       type: object
-      required: [code, used_usd, soft_cap_usd, hard_cap_usd]
+      required: [level, used_usd, soft_cap_usd, urgent_cap_usd, hard_cap_usd]
       properties:
-        code:         { type: string }
-        used_usd:     { type: string }
-        soft_cap_usd: { type: string }
-        hard_cap_usd: { type: string }
+        level:          { type: string, enum: [soft, urgent] }
+        used_usd:       { type: string }
+        soft_cap_usd:   { type: string }
+        urgent_cap_usd: { type: string }
+        hard_cap_usd:   { type: string }
 
   done:
     data:
