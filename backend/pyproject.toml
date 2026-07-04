@@ -34,6 +34,7 @@ dev = [
     "pytest-cov>=5.0",
     "datamodel-code-generator>=0.26,<0.30",
     "openapi-spec-validator>=0.7",
+    "pyyaml>=6.0",
 ]
 
 [tool.setuptools.packages.find]

@@ -53,6 +53,15 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
+
+def assert_prod_database(env: str, database_url: str) -> None:
+    if env == "prod" and database_url.startswith("sqlite"):
+        raise RuntimeError(
+            "database_url must be a Postgres URL when env=prod (got sqlite). "
+            "Set DATABASE_URL to the Supabase Postgres connection string."
+        )
+
+
 # Ensure runtime directories exist (data/uploads/ and parent of the sqlite file).
 for _p in (
     Path(settings.uploads_path),
