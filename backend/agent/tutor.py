@@ -367,8 +367,10 @@ async def run_streaming(
                     yield StreamEvent(
                         "cost_warning",
                         {
+                            "level": "urgent" if post.urgent_breached else "soft",
                             "used_usd": str(post.used),
                             "soft_cap_usd": str(post.soft_cap),
+                            "urgent_cap_usd": str(post.urgent_cap),
                             "hard_cap_usd": str(post.hard_cap),
                         },
                     )

@@ -171,8 +171,10 @@ async def chat(
 
     post = cost_meter.check_cap(db, user_id)
     if post.soft_breached:
+        level = "urgent" if post.urgent_breached else "soft"
         response.headers["X-Cost-Warning"] = (
-            f"soft_cap_breached;used_usd={post.used};soft_cap_usd={post.soft_cap};"
+            f"soft_cap_breached;level={level};used_usd={post.used};"
+            f"soft_cap_usd={post.soft_cap};urgent_cap_usd={post.urgent_cap};"
             f"hard_cap_usd={post.hard_cap}"
         )
 

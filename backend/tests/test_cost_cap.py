@@ -154,6 +154,36 @@ def test_chat_sets_warning_header_when_soft_breached(
     assert "used_usd=2.5000" in warn
     # soft_cap=2.00 but Decimal(str(2.0)) == "2.0"; accept either rendering.
     assert "soft_cap_usd=2.0" in warn
+    # 2.50 spend is soft-breached (>=2.00) but below the urgent band
+    # (urgent_cap = hard_cap * 0.9 = 2.70), so the level must be "soft".
+    assert "level=soft" in warn
+
+
+def test_chat_cost_header_marks_urgent_level(
+    client, db_session, seed_user, mock_litellm, monkeypatch
+):
+    """Spend in the urgent band ($2.70-$3.00, hard_cap=3.00) marks the
+    X-Cost-Warning header with level=urgent instead of level=soft."""
+    monkeypatch.setattr(settings, "llm_soft_cap_usd", 2.00)
+    monkeypatch.setattr(settings, "llm_hard_cap_usd", 3.00)
+    db_session.add(
+        DailyCostLedger(
+            user_id=USER_ID,
+            date_utc=cost_meter._today_utc(),
+            cost_usd=Decimal("2.8000"),
+        )
+    )
+    db_session.commit()
+
+    r = client.post(
+        "/api/chat",
+        json={"user_id": USER_ID, "session_id": SESSION_ID, "message": "hi"},
+    )
+    assert r.status_code == 200
+    warn = r.headers.get("X-Cost-Warning") or r.headers.get("x-cost-warning")
+    assert warn is not None
+    assert "level=urgent" in warn
+    assert "urgent_cap_usd=2.70" in warn
 
 
 def test_chat_no_warning_header_when_below_soft(
