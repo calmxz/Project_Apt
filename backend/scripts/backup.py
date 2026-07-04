@@ -22,11 +22,14 @@ class BackupObject:
 
 
 class BackupStore(Protocol):
-    def put(self, key: str, path: Path) -> None: ...
+    def put(self, key: str, path: Path) -> None:
+        """Upload the file at path to the store under key."""
 
-    def list(self, prefix: str) -> list[BackupObject]: ...
+    def list(self, prefix: str) -> list[BackupObject]:
+        """Return all objects whose key starts with prefix."""
 
-    def delete(self, key: str) -> None: ...
+    def delete(self, key: str) -> None:
+        """Remove the object stored under key."""
 
 
 class R2Store:
