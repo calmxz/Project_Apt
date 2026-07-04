@@ -46,7 +46,7 @@ describe('chatStreamService', () => {
     expect(url).toContain('/chat/stream')
     expect(init.method).toBe('POST')
     expect(init.headers['authorization']).toBe('Bearer tok-123')
-    expect(JSON.parse(init.body)).toEqual({ session_id: 's1', message: 'hi' })
+    expect(JSON.parse(init.body)).toEqual({ session_id: 's1', message: 'hi', review_gaps: false })
   })
 
   it('invokes onEvent for each parsed SSE event', async () => {
@@ -78,6 +78,21 @@ describe('chatStreamService', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
     const init = fetchMock.mock.calls[0][1]
     expect(init.signal).toBe(ctrl.signal)
+  })
+
+  it('streamChat puts review_gaps in the request body when reviewGaps is true', async () => {
+    const sseBody = 'event: done\ndata: {}\n\n'
+    fetchMock.mockResolvedValueOnce(mockResponse(sseBody))
+
+    await streamChat({
+      sessionId: 's1',
+      message: 'Review my gaps',
+      reviewGaps: true,
+      onEvent: () => {},
+    })
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body).toEqual({ session_id: 's1', message: 'Review my gaps', review_gaps: true })
   })
 
   it('throws ApiError on non-2xx with parsed body', async () => {

@@ -506,7 +506,7 @@ export const useSessionStore = defineStore('session', () => {
     if (abortController.value) { abortController.value.abort(); streamState.value = 'stopping' }
   }
 
-  async function sendMessageStreaming({ text }) {
+  async function sendMessageStreaming({ text, reviewGaps = false }) {
     if (!currentSessionId.value) throw new Error('no active session')
     const trimmed = (text || '').trim()
     if (!trimmed) return null
@@ -520,6 +520,7 @@ export const useSessionStore = defineStore('session', () => {
       await streamChat({
         sessionId: currentSessionId.value,
         message: trimmed,
+        reviewGaps,
         signal: ctrl.signal,
         onEvent: ({ event, data }) => {
           switch (event) {
