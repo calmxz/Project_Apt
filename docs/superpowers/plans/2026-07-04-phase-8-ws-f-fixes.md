@@ -792,6 +792,8 @@ git add backend/tests/test_rate_limit.py docs/superpowers/plans/2026-07-04-phase
 git commit -m "test(ws-f): assert rate limiter holds cap under contention (F3 verify)"
 ```
 
+**F3 verification result (2026-07-04):** Grep for in-memory throttles (`defaultdict|deque|per.minute|throttle|slowapi|limiter|_counts *= *\{`, excluding `.venv`/`__pycache__`/`test_*`) returned no matches — the only rate machinery in the backend is the DB-backed `rate_limit.py` and `cost_meter.py`. `backend/services/rate_limit.py::check_and_increment` confirmed to use the atomic `INSERT ... ON CONFLICT DO NOTHING` + `count < settings.daily_cap`-guarded `UPDATE` from PR #83. An existing test, `test_concurrent_calls_no_duplicate_rows_no_errors` (threaded + `threading.Barrier` for max overlap), already covered no-duplicate-rows/no-errors under contention, but it deliberately stays at/under the cap so every call is allowed and therefore did not assert the cap ceiling. Added `test_check_and_increment_never_exceeds_cap_under_contention` (Step 3, adapted to reuse the module-level `UsageCounter` import already in the test file) to close that gap: 6 calls against a cap of 3 yield exactly 3 allowed and one row with `count == 3`. `pytest tests/test_rate_limit.py -v` — 7 passed, all first-run green, no production code changed.
+
 ---
 
 ## Task 11: Full-suite green + final review

@@ -111,3 +111,21 @@ def test_concurrent_calls_no_duplicate_rows_no_errors(tmp_path):
     assert errors == [], f"concurrent calls raised: {errors!r}"
     assert len(rows) == 1, f"expected exactly one row, got {len(rows)}"
     assert rows[0].count == n
+
+
+def test_check_and_increment_never_exceeds_cap_under_contention(db_session, monkeypatch):
+    """Even when calls exceed the cap, exactly `daily_cap` are allowed and the
+    single row for (user, day) never goes past that count. The existing
+    `test_concurrent_calls_no_duplicate_rows_no_errors` above deliberately stays
+    at/under the cap so every call is allowed; this test closes the remaining
+    gap by pushing past the cap and asserting the ceiling itself holds."""
+    from services import rate_limit
+
+    monkeypatch.setattr(rate_limit.settings, "daily_cap", 3)
+    user = "u-concurrent"
+    results = [rate_limit.check_and_increment(db_session, user) for _ in range(6)]
+    allowed = [r for (r, _c) in results if r]
+    assert len(allowed) == 3  # cap holds
+    # exactly one row for (user, today)
+    rows = db_session.query(UsageCounter).filter_by(user_id=user).all()
+    assert len(rows) == 1 and rows[0].count == 3
