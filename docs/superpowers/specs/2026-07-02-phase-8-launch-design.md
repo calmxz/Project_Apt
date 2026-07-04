@@ -120,10 +120,10 @@ Spec'd / Planned / In progress / Done / Deferred.
 | WS | Title | Priority | State | Spec | Plan | Notes |
 |---|---|---|---|---|---|---|
 | A | Phase 8 umbrella doc | P0 | Done | this file | n/a | frames B-G |
-| B | Legal: ToS + Privacy | P0 | Not started | - | - | |
-| C | Deploy stack (Render + Vercel) | P0 | Not started | - | - | |
-| D | DB backups (R2, S3-ready) | P0 | Not started | - | - | |
-| E | Editable profile | P1 | Not started | - | - | |
+| B | Legal: ToS + Privacy | P0 | Done | - | - | |
+| C | Deploy stack (Render + Vercel) | P0 | Done | - | - | |
+| D | DB backups (R2, S3-ready) | P0 | Done | - | - | |
+| E | Editable profile | P1 | Done | 2026-07-04-ws-e-editable-profile-design.md | 2026-07-04-ws-e-editable-profile.md | ETag guard; lists + level; focus stays agent-owned |
 | F | Product-gap fixes (F1/F2/F3) | P1/P3 | Not started | - | - | F3 may fold into C |
 | G | Owed verification gates | P2 | Not started | - | - | fold into each WS |
 
