@@ -75,9 +75,11 @@ is empty the mode never triggers — see empty state.)
 [ended session]
   user clicks "Review my gaps"
     -> store.reopenSession(id)        (existing: clears ended_at)
-    -> store auto-fires ONE chat turn with review_gaps:true
-         seed turn is HIDDEN — not rendered as a user bubble
-         (mirror the MC multi-check hidden reactive follow-up pattern)
+    -> store auto-fires ONE chat turn with review_gaps:true and a fixed
+         seed message "Review my gaps"
+         seed turn renders as a normal user bubble (honest: the user clicked
+         the button; mirrors the codebase's visible "[check results]" system
+         turn rather than inventing hidden-render + backend persist-skip)
     -> backend chat: review_gaps flag + confirmed_gaps non-empty
          -> target = confirmed_gaps[0]
          -> prompt_state["review_gaps_target"] = target
@@ -96,12 +98,9 @@ is empty the mode never triggers — see empty state.)
   - if true and `profile.confirmed_gaps`: set
     `prompt_state["review_gaps_target"] = profile.confirmed_gaps[0]`
   - else leave unset (mode off)
-  - The hidden seed turn still persists a user message row today (`chat.py:81`).
-    To avoid a fake bubble the seed turn must be non-rendering. Prefer: frontend
-    sends a minimal fixed seed string AND does not append it to the visible
-    message list; the store already distinguishes rendered vs reactive turns for
-    MC follow-ups — reuse that. Do NOT special-case persistence in the backend
-    unless the store path proves it cannot suppress the bubble.
+  - The seed turn persists a normal user message row (`chat.py:81`) and renders
+    as a user bubble. No backend persist special-casing and no hidden-render
+    machinery. Seed text is the fixed string "Review my gaps".
 - `agent/prompts.py`:
   - `build_dynamic_context`: render `REVIEW_GAPS: <target or "OFF">`.
   - `IMMUTABLE_RULES`: add a "REVIEW-GAPS MODE" block — when `REVIEW_GAPS` names a
@@ -119,8 +118,9 @@ is empty the mode never triggers — see empty state.)
   `hasGaps` / `gapCount` prop down; do not fetch inside the banner.
 - `views/SessionView.vue`: add `resumeReviewGaps()` — calls `reopenSession`,
   then fires the hidden `review_gaps:true` seed turn through the store.
-- `stores/session.js`: extend the reopen/seed path to send `review_gaps:true`
-  on the auto-fired turn without rendering a user bubble.
+- `stores/session.js`: `sendMessageStreaming` gains an optional `reviewGaps`
+  flag threaded into `streamChat`; the review-gaps resume path calls it with the
+  fixed seed text "Review my gaps" and `reviewGaps:true`. Normal user bubble.
 
 ### 2.6 Empty state
 
@@ -163,8 +163,8 @@ arrives with no gaps, the mode is simply off (normal resume), never an error.
   `test_prompts.py` gains a REVIEW-GAPS render case; contract test covers the new
   `ChatRequest` field.
 - **F2 frontend:** banner shows the second button only with gaps; click drives
-  `reopenSession` then a hidden `review_gaps` turn; no visible user bubble for the
-  seed turn.
+  `reopenSession` then a `review_gaps` seed turn ("Review my gaps") that renders
+  as a normal user bubble.
 - **F1 backend:** `check_cap` boundaries — below soft, soft-only, urgent
   (`>= 0.9*hard`), hard (429). `test` for the header level string.
 - **F1 frontend:** store surfaces urgent vs soft distinctly.
