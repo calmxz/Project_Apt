@@ -146,6 +146,9 @@ def build_dynamic_context(state: dict) -> str:
     else:
         qr_label = "ready"
 
+    review_gaps_target = state.get("review_gaps_target")
+    review_gaps_label = review_gaps_target if review_gaps_target else "OFF"
+
     return (
         f"TOPIC: {topic}\n"
         f"CURRENT TOPIC PROFILE: {json.dumps(profile_dict)}\n"
@@ -155,7 +158,8 @@ def build_dynamic_context(state: dict) -> str:
         f"SEED_MODE: {seed_mode}\n"
         f"LAST_SESSION_SUMMARY: {last_session_summary}\n"
         f"PENDING_CHECK: {pc_label}\n"
-        f"QUIZ_READINESS: {qr_label}"
+        f"QUIZ_READINESS: {qr_label}\n"
+        f"REVIEW_GAPS: {review_gaps_label}"
     )
 
 

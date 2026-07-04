@@ -104,3 +104,15 @@ def test_dynamic_context_diagnostic_off_by_default():
     from agent.prompts import build_dynamic_context
     s = build_dynamic_context({"topic": "Recursion"})
     assert "DIAGNOSTIC: OFF" in s
+
+
+def test_dynamic_context_renders_review_gaps_target():
+    from agent.prompts import build_dynamic_context
+    ctx = build_dynamic_context({"topic": "Biology", "review_gaps_target": "glycolysis"})
+    assert "REVIEW_GAPS: glycolysis" in ctx
+
+
+def test_dynamic_context_review_gaps_off_by_default():
+    from agent.prompts import build_dynamic_context
+    ctx = build_dynamic_context({"topic": "Biology"})
+    assert "REVIEW_GAPS: OFF" in ctx
