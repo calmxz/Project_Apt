@@ -9,7 +9,7 @@ R2 bucket, produced by `.github/workflows/backup.yml`. Retention: newest 7.
 
 1. List available dumps (or use the R2 dashboard):
    - Set `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`.
-   - `python -c "from scripts.backup import R2Store; [print(o.key) for o in R2Store.from_env().list('crux/pg/')]"`
+   - `cd backend && python -c "from scripts.backup import R2Store; [print(o.key) for o in R2Store.from_env().list('crux/pg/')]"`
 2. Download the chosen dump (R2 dashboard or `aws s3 cp --endpoint-url $R2_ENDPOINT`).
 3. Restore into a scratch DB (a local Postgres 17 or a throwaway Supabase project):
    - `pg_restore --clean --if-exists -d "$TARGET_DATABASE_URL" dump.pgc`
@@ -20,7 +20,7 @@ R2 bucket, produced by `.github/workflows/backup.yml`. Retention: newest 7.
 
 ## Proven restore log
 
-<!-- Owed: run the drill once and paste real output here. WS-D is not complete until this is filled. -->
+_Not yet run. WS-D is not complete until the restore drill is run once and its real output is pasted here._
 
 ## Owed human gates
 

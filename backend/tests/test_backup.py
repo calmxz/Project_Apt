@@ -1,4 +1,3 @@
-from pathlib import Path
 from unittest import mock
 
 from scripts.backup import BackupObject, R2Store, backup_key, main, prune
