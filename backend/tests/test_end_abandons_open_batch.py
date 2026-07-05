@@ -110,13 +110,19 @@ def test_end_route_abandons_open_batch(
     assert pending_check_store.get_pending_check(db_session, sid) is None
 
 
-def test_abandon_is_noop_when_batch_already_done(db_session, seeded_session):
+def test_abandon_clears_a_done_but_uncleared_batch(db_session, seeded_session):
+    """Regression (live smoke 2026-07-05): a fully-answered batch whose pending
+    pointer was never cleared still blocks review-gaps (the register guard
+    blocks on ANY non-null pending_check). End must clear it too, not skip it."""
     sid = seeded_session.id
     _open_batch(db_session, sid)
-    # Resolve the whole batch (skip both items) so it is done.
+    # Resolve the whole batch so it is done, but leave the pointer dangling.
     check_question_service.skip(db_session, sid, 0)
     check_question_service.skip(db_session, sid, 1)
     pc_done = pending_check_store.get_pending_check(db_session, sid)
     assert check_question_service.is_done(pc_done) is True
 
-    assert check_question_service.abandon_open_batch(db_session, sid) is False
+    assert check_question_service.abandon_open_batch(db_session, sid) is True
+    assert pending_check_store.get_pending_check(db_session, sid) is None
+    # And a fresh batch can now be opened (the actual unblock).
+    assert _open_batch(db_session, sid).ok is True

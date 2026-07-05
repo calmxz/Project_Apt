@@ -240,16 +240,19 @@ def skip(db: Session, session_id: str, index: int) -> dict:
 
 
 def abandon_open_batch(db: Session, session_id: str) -> bool:
-    """Resolve any dangling (not-done) check batch: mark remaining pending items
+    """Clear any lingering pending check batch: mark still-pending items
     "skipped", freeze the batch onto its message for honest history, and clear
     the pending pointer. Side-effect free -- logs no learning events and does
-    not mutate the profile. Returns True when a batch was abandoned.
+    not mutate the profile. Returns True when a batch was cleared.
 
     Called on session end so a later review-gaps resume can pose a fresh check
-    instead of hitting the "a batch is already open" guard.
+    instead of hitting the "a batch is already open" guard. That guard blocks on
+    ANY non-null pending_check, so a fully-answered-but-uncleared batch blocks
+    just as a half-answered one does -- both must be cleared here, hence no
+    is_done() short-circuit.
     """
     pc = get_pending_check(db, session_id)
-    if pc is None or is_done(pc):
+    if pc is None:
         return False
     for item in pc.get("items", []):
         if item.get("status") == "pending":
