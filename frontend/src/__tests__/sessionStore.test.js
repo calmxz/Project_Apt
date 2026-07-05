@@ -345,6 +345,16 @@ describe('session store — streaming', () => {
     expect(s.messages.at(-1)).toMatchObject({ message_id: 'm1' })
   })
 
+  it('forwards reviewGaps to streamChat as review_gaps', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 's1'
+    const spy = vi.spyOn(streamSvc, 'streamChat').mockResolvedValue(undefined)
+    await s.sendMessageStreaming({ text: 'Review my gaps', reviewGaps: true })
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({ reviewGaps: true, message: 'Review my gaps' }),
+    )
+  })
+
   it('stopStream invokes abortController.abort() and transitions to stopping', () => {
     const s = useSessionStore()
     const abort = vi.fn()

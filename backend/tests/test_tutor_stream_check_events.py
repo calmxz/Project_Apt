@@ -83,7 +83,9 @@ def _allow_cap(monkeypatch):
         allowed=True,
         used=Decimal("0.0"),
         soft_breached=False,
+        urgent_breached=False,
         soft_cap=Decimal("2.0"),
+        urgent_cap=Decimal("2.70"),
         hard_cap=Decimal("3.0"),
     )
     monkeypatch.setattr("agent.tutor.cost_meter.check_cap", MagicMock(return_value=cap))

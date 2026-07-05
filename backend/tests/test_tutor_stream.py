@@ -92,7 +92,9 @@ def _allow_cap(monkeypatch):
         allowed=True,
         used=Decimal("0.0"),
         soft_breached=False,
+        urgent_breached=False,
         soft_cap=Decimal("2.0"),
+        urgent_cap=Decimal("2.70"),
         hard_cap=Decimal("3.0"),
     )
     monkeypatch.setattr("agent.tutor.cost_meter.check_cap", MagicMock(return_value=cap))
@@ -233,7 +235,9 @@ async def test_run_streaming_emits_error_on_cost_cap(db_session, monkeypatch):
         allowed=False,
         used=Decimal("3.10"),
         soft_breached=True,
+        urgent_breached=True,
         soft_cap=Decimal("2.0"),
+        urgent_cap=Decimal("2.70"),
         hard_cap=Decimal("3.0"),
     )
     monkeypatch.setattr("agent.tutor.cost_meter.check_cap", MagicMock(return_value=cap))
@@ -266,7 +270,9 @@ async def test_run_streaming_emits_cost_warning_when_soft_breached(db_session, m
         allowed=True,
         used=Decimal("1.95"),
         soft_breached=True,
+        urgent_breached=False,
         soft_cap=Decimal("2.0"),
+        urgent_cap=Decimal("2.70"),
         hard_cap=Decimal("3.0"),
     )
     monkeypatch.setattr("agent.tutor.cost_meter.check_cap", MagicMock(return_value=cap))
@@ -292,7 +298,49 @@ async def test_run_streaming_emits_cost_warning_when_soft_breached(db_session, m
     assert types[-1] == "done"
 
     cw = next(e for e in events if e.type == "cost_warning")
-    assert cw.data == {"used_usd": "1.95", "soft_cap_usd": "2.0", "hard_cap_usd": "3.0"}
+    assert cw.data == {
+        "level": "soft",
+        "used_usd": "1.95",
+        "soft_cap_usd": "2.0",
+        "urgent_cap_usd": "2.70",
+        "hard_cap_usd": "3.0",
+    }
+
+
+@pytest.mark.asyncio
+async def test_run_streaming_cost_warning_marks_urgent_level(db_session, monkeypatch):
+    """When spend is in the urgent band (>= urgent_cap), the cost_warning
+    event's level must be "urgent" instead of "soft"."""
+    _disable_stub(monkeypatch)
+
+    cap = CapStatus(
+        allowed=True,
+        used=Decimal("2.80"),
+        soft_breached=True,
+        urgent_breached=True,
+        soft_cap=Decimal("2.0"),
+        urgent_cap=Decimal("2.70"),
+        hard_cap=Decimal("3.0"),
+    )
+    monkeypatch.setattr("agent.tutor.cost_meter.check_cap", MagicMock(return_value=cap))
+
+    from agent import tutor
+
+    turn = _make_stream(_content_chunk("final answer"))
+    monkeypatch.setattr("agent.tutor.litellm.acompletion", AsyncMock(side_effect=[turn]))
+    monkeypatch.setattr(
+        "agent.tutor.litellm.stream_chunk_builder", MagicMock(return_value=SimpleNamespace())
+    )
+    monkeypatch.setattr("agent.tutor.litellm.completion_cost", MagicMock(return_value=0.01))
+    monkeypatch.setattr("agent.tutor.cost_meter.record_cost", MagicMock())
+
+    ctx = _ctx(db_session, session_id="s_urgentcap")
+    events = await _drain(
+        tutor.run_streaming([{"role": "user", "content": "hi"}], "sys", ctx)
+    )
+
+    cw = next(e for e in events if e.type == "cost_warning")
+    assert cw.data["level"] == "urgent"
 
 
 @pytest.mark.asyncio

@@ -23,7 +23,9 @@
         v-if="isEnded"
         :ended-at="store.currentSession.ended_at"
         :loading="resuming"
+        :has-gaps="hasGaps"
         @resume="resume"
+        @resume-gaps="resumeReviewGaps"
       />
 
       <div ref="messagesEl" class="messages" :class="{ 'is-empty': !store.messages.length }" data-testid="session-messages">
@@ -174,6 +176,12 @@ const referenceBannerRef = ref(null)
 const isEnded = computed(() =>
   store.currentSession?.id === props.id ? Boolean(store.currentSession.ended_at) : false,
 )
+// Gates the "Review my gaps" CTA — only meaningful once we're showing the
+// ended banner for this session, so read confirmed_gaps off the same
+// discriminator-checked currentSession rather than re-deriving it.
+const hasGaps = computed(
+  () => (store.currentSession?.topic_profile?.confirmed_gaps?.length ?? 0) > 0,
+)
 // Discriminator-gated (same as isEnded/headerTopic): during a switch,
 // store.currentSession still holds the PREVIOUS session, so gating on raw
 // currentSession would leave the composer enabled+pointed at the old session
@@ -229,9 +237,32 @@ watch(
   },
 )
 
-// One soft-cap warning per mount of this view (i.e. per session entry).
+// One warning per level, per mount of this view (i.e. per session entry).
+// Soft and urgent are tracked separately so an urgent warning can still
+// surface even if a soft one already showed earlier in this mount (urgent
+// escalates the signal; it must never be silently swallowed by a prior soft
+// warning), while neither level repeats.
 const softCapShown = ref(false)
-function onCostWarning() {
+const urgentCapShown = ref(false)
+function resolveCostWarningLevel(detail) {
+  let level = detail?.level
+  if (!level && typeof detail?.header === 'string') {
+    const match = detail.header.match(/level=(\w+)/)
+    level = match ? match[1] : null
+  }
+  return level === 'urgent' ? 'urgent' : 'soft'
+}
+function onCostWarning(event) {
+  const level = resolveCostWarningLevel(event?.detail)
+  if (level === 'urgent') {
+    if (urgentCapShown.value) return
+    urgentCapShown.value = true
+    showError(
+      'You are very close to today’s cost limit.',
+      { summary: 'Cost limit near', life: 8000 },
+    )
+    return
+  }
   if (softCapShown.value) return
   softCapShown.value = true
   showWarn(
@@ -435,6 +466,19 @@ async function resume() {
   resuming.value = true
   try {
     await store.reopenSession(store.currentSession.id)
+  } catch {
+    // store.error already populated
+  } finally {
+    resuming.value = false
+  }
+}
+
+async function resumeReviewGaps() {
+  if (!store.currentSession) return
+  resuming.value = true
+  try {
+    await store.reopenSession(store.currentSession.id)
+    await store.sendMessageStreaming({ text: 'Review my gaps', reviewGaps: true })
   } catch {
     // store.error already populated
   } finally {

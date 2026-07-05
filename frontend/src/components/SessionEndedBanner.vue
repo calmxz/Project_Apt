@@ -8,6 +8,17 @@
       <p class="sub">Read-only. Continue the topic in a new session to keep the profile.</p>
     </div>
     <button
+      v-if="hasGaps"
+      type="button"
+      class="resume-btn gaps-btn"
+      data-testid="session-resume-gaps"
+      :disabled="loading"
+      @click="$emit('resume-gaps')"
+    >
+      <span>Review my gaps</span>
+      <i class="pi pi-bullseye" aria-hidden="true" />
+    </button>
+    <button
       type="button"
       class="resume-btn"
       data-testid="session-resume"
@@ -26,9 +37,10 @@ import { formatDate } from '../utils/formatDate.js'
 defineProps({
   endedAt: { type: String, required: true },
   loading: { type: Boolean, default: false },
+  hasGaps: { type: Boolean, default: false },
 })
 
-defineEmits(['resume'])
+defineEmits(['resume', 'resume-gaps'])
 </script>
 
 <style scoped>
@@ -103,5 +115,16 @@ defineEmits(['resume'])
 .resume-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.gaps-btn {
+  background: transparent;
+  border: 1px solid var(--signal-warning);
+  color: var(--color-heading);
+}
+
+.gaps-btn:hover:not(:disabled) {
+  background: rgba(255, 176, 32, 0.14);
+  filter: none;
 }
 </style>

@@ -724,8 +724,9 @@ components:
       additionalProperties: false
       required: [session_id, message]
       properties:
-        session_id: { type: string, maxLength: 64 }
-        message:    { type: string, maxLength: 4000 }
+        session_id:  { type: string, maxLength: 64 }
+        message:     { type: string, maxLength: 4000 }
+        review_gaps: { type: boolean, default: false }
 
     ChatResponse:
       type: object
@@ -1126,12 +1127,13 @@ x-sse-events:
   cost_warning:
     data:
       type: object
-      required: [code, used_usd, soft_cap_usd, hard_cap_usd]
+      required: [level, used_usd, soft_cap_usd, urgent_cap_usd, hard_cap_usd]
       properties:
-        code:         { type: string }
-        used_usd:     { type: string }
-        soft_cap_usd: { type: string }
-        hard_cap_usd: { type: string }
+        level:          { type: string, enum: [soft, urgent] }
+        used_usd:       { type: string }
+        soft_cap_usd:   { type: string }
+        urgent_cap_usd: { type: string }
+        hard_cap_usd:   { type: string }
 
   done:
     data:

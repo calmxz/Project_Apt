@@ -36,10 +36,10 @@ const stubs = {
   BackButton: { template: '<button data-testid="back" />' },
   ReferenceStatusBanner: { methods: { refresh: bannerRefresh }, template: '<div />' },
   SessionEndedBanner: {
-    props: ['endedAt', 'loading'],
-    emits: ['resume'],
+    props: ['endedAt', 'loading', 'hasGaps'],
+    emits: ['resume', 'resume-gaps'],
     template:
-      '<div data-testid="ended-banner"><button data-testid="resume-btn" @click="$emit(\'resume\')" /></div>',
+      '<div data-testid="ended-banner"><button data-testid="resume-btn" @click="$emit(\'resume\')" /><button v-if="hasGaps" data-testid="session-resume-gaps" @click="$emit(\'resume-gaps\')" /></div>',
   },
   Button: {
     props: ['disabled', 'loading', 'label'],
@@ -55,12 +55,13 @@ const stubs = {
   RouterLink: { template: '<a><slot /></a>' },
 }
 
-function setupSession({ ended = false, messages = [], dailyCap = null } = {}) {
+function setupSession({ ended = false, messages = [], dailyCap = null, confirmedGaps = [] } = {}) {
   const store = useSessionStore()
   store.currentSession = {
     id: 's1',
     topic: 'Calculus',
     ended_at: ended ? new Date().toISOString() : null,
+    topic_profile: { confirmed_gaps: confirmedGaps },
   }
   store.currentSessionId = 's1'
   store.messages = messages
@@ -405,6 +406,21 @@ describe('SessionView', () => {
     await wrapper.get('[data-testid="resume-btn"]').trigger('click')
     await flushPromises()
     expect(reopenSpy).toHaveBeenCalledWith('s1')
+  })
+
+  it('resumeReviewGaps reopens then sends a review_gaps seed turn', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession({ ended: true, confirmedGaps: ['limits'] })
+    })
+    const reopenSpy = vi.spyOn(store, 'reopenSession').mockResolvedValue()
+    const sendSpy = vi.spyOn(store, 'sendMessageStreaming').mockResolvedValue()
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-testid="session-resume-gaps"]').trigger('click')
+    await flushPromises()
+    expect(reopenSpy).toHaveBeenCalledWith('s1')
+    expect(sendSpy).toHaveBeenCalledWith({ text: 'Review my gaps', reviewGaps: true })
   })
 
   it('daily cap banner shown when cap reached', async () => {

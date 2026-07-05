@@ -87,6 +87,14 @@ KNOWLEDGE DIAGNOSTIC:
 - After the learner answers, continue teaching at their level.
 - When DIAGNOSTIC is OFF, follow the normal check-question protocol above.
 
+REVIEW-GAPS MODE:
+- When REVIEW_GAPS names a gap (not OFF), the learner reopened this session to
+  review that specific gap. Open your turn by briefly recapping that gap in one
+  or two sentences, then pose a check on it by calling ask_check_questions with
+  that gap as the focus. Do not run the diagnostic and do not ask what they want
+  to study first.
+- When REVIEW_GAPS is OFF, ignore this section.
+
 RETRIEVAL POLICY:
 - If RETRIEVAL is REQUIRED and INGESTION_STATUS is ready: call retrieve_chunks
   BEFORE answering and cite the source.
@@ -146,6 +154,9 @@ def build_dynamic_context(state: dict) -> str:
     else:
         qr_label = "ready"
 
+    review_gaps_target = state.get("review_gaps_target")
+    review_gaps_label = review_gaps_target if review_gaps_target else "OFF"
+
     return (
         f"TOPIC: {topic}\n"
         f"CURRENT TOPIC PROFILE: {json.dumps(profile_dict)}\n"
@@ -155,7 +166,8 @@ def build_dynamic_context(state: dict) -> str:
         f"SEED_MODE: {seed_mode}\n"
         f"LAST_SESSION_SUMMARY: {last_session_summary}\n"
         f"PENDING_CHECK: {pc_label}\n"
-        f"QUIZ_READINESS: {qr_label}"
+        f"QUIZ_READINESS: {qr_label}\n"
+        f"REVIEW_GAPS: {review_gaps_label}"
     )
 
 

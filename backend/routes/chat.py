@@ -23,6 +23,37 @@ from services.user_service import ensure_user
 router = APIRouter(prefix="/api")
 
 
+def _build_prompt_state(
+    *,
+    session: SessionModel,
+    profile,
+    ingestion_status,
+    retrieval_required: bool,
+    review_gaps: bool,
+    pending_check,
+    quiz_cooldown,
+) -> dict:
+    """Build the prompt_state dict consumed by prompts.build_system_prompt.
+
+    Pure function (no DB access) so it can be unit-tested directly.
+    """
+    prompt_state = {
+        "topic": session.topic,
+        "profile": profile,
+        "ingestion_status": ingestion_status,
+        "retrieval_required": retrieval_required,
+        "diagnostic_required": profile.knowledge_level is None,
+        "seed_mode": None,
+        "last_session_summary": profile.last_session_summary,
+        "pending_check": pending_check,
+        "quiz_cooldown": quiz_cooldown,
+    }
+    if review_gaps and profile.confirmed_gaps:
+        prompt_state["review_gaps_target"] = profile.confirmed_gaps[0]
+        prompt_state["diagnostic_required"] = False
+    return prompt_state
+
+
 async def _prepare_turn(
     req: ChatRequest,
     user_id: str,
@@ -89,17 +120,15 @@ async def _prepare_turn(
         req.message, json.loads(session.kw_index_json or "[]")
     )
 
-    prompt_state = {
-        "topic": session.topic,
-        "profile": profile,
-        "ingestion_status": ingestion_status,
-        "retrieval_required": retrieval_required,
-        "diagnostic_required": profile.knowledge_level is None,
-        "seed_mode": None,
-        "last_session_summary": profile.last_session_summary,
-        "pending_check": check_question_service.get_pending_check(db, req.session_id),
-        "quiz_cooldown": check_question_service.get_quiz_cooldown(db, req.session_id),
-    }
+    prompt_state = _build_prompt_state(
+        session=session,
+        profile=profile,
+        ingestion_status=ingestion_status,
+        retrieval_required=retrieval_required,
+        review_gaps=getattr(req, "review_gaps", False),
+        pending_check=check_question_service.get_pending_check(db, req.session_id),
+        quiz_cooldown=check_question_service.get_quiz_cooldown(db, req.session_id),
+    )
     system_prompt = prompts.build_system_prompt(prompt_state)
 
     ctx = ToolContext(
@@ -143,8 +172,10 @@ async def chat(
 
     post = cost_meter.check_cap(db, user_id)
     if post.soft_breached:
+        level = "urgent" if post.urgent_breached else "soft"
         response.headers["X-Cost-Warning"] = (
-            f"soft_cap_breached;used_usd={post.used};soft_cap_usd={post.soft_cap};"
+            f"soft_cap_breached;level={level};used_usd={post.used};"
+            f"soft_cap_usd={post.soft_cap};urgent_cap_usd={post.urgent_cap};"
             f"hard_cap_usd={post.hard_cap}"
         )
 
