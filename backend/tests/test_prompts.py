@@ -123,3 +123,16 @@ def test_immutable_rules_has_review_gaps_mode():
     assert "REVIEW-GAPS MODE" in IMMUTABLE_RULES
     # The rule must direct the tutor to open on the named gap and pose a check.
     assert "ask_check_questions" in IMMUTABLE_RULES  # already present; sanity
+
+
+def test_review_gaps_mode_forces_check_same_turn():
+    # Live smoke (2026-07-05) found the tutor sometimes recapped the gap and then
+    # OFFERED to review first instead of posing the check (card fired turn 1 in only
+    # 2/3 trials). The rule must close that escape hatch: mandate the tool call in
+    # the same turn and forbid deferring it behind an offer or a readiness question.
+    from agent.prompts import IMMUTABLE_RULES
+    section = IMMUTABLE_RULES.split("REVIEW-GAPS MODE:")[1].split("RETRIEVAL POLICY:")[0]
+    low = section.lower()
+    assert "must call ask_check_questions" in low
+    assert "do not offer to review" in low
+    assert "do not ask whether they are ready" in low
