@@ -297,6 +297,7 @@ async def end_session(
             summary=_build_end_summary(db, session_id, profile.last_session_summary or ""),
         )
 
+    check_question_service.abandon_open_batch(db, session_id)
     summary_text = await summary_service.generate_and_persist(db, row)
     db.refresh(row)
     return SessionEndResponse(

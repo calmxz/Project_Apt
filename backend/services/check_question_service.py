@@ -37,7 +37,7 @@ from db.models import ChatMessage, LearningEvent, Session as SessionModel
 # would create a cyclic import). Only the ones this module calls internally
 # are imported; callers wanting is_gradable / parse_asked_at / clear_pending_check
 # import them from services.pending_check_store directly.
-from services.pending_check_store import _save, get_pending_check
+from services.pending_check_store import _save, clear_pending_check, get_pending_check
 
 log = logging.getLogger(__name__)
 
@@ -237,6 +237,30 @@ def skip(db: Session, session_id: str, index: int) -> dict:
     pc["current_index"] = ci + 1
     _save(db, session_id, pc)
     return _progress(pc)
+
+
+def abandon_open_batch(db: Session, session_id: str) -> bool:
+    """Clear any lingering pending check batch: mark still-pending items
+    "skipped", freeze the batch onto its message for honest history, and clear
+    the pending pointer. Side-effect free -- logs no learning events and does
+    not mutate the profile. Returns True when a batch was cleared.
+
+    Called on session end so a later review-gaps resume can pose a fresh check
+    instead of hitting the "a batch is already open" guard. That guard blocks on
+    ANY non-null pending_check, so a fully-answered-but-uncleared batch blocks
+    just as a half-answered one does -- both must be cleared here, hence no
+    is_done() short-circuit.
+    """
+    pc = get_pending_check(db, session_id)
+    if pc is None:
+        return False
+    for item in pc.get("items", []):
+        if item.get("status") == "pending":
+            item["status"] = "skipped"
+    pc["current_index"] = len(pc.get("items", []))
+    write_check_batch(db, pc)
+    clear_pending_check(db, session_id)
+    return True
 
 
 def build_results_summary(pc: dict) -> str:
