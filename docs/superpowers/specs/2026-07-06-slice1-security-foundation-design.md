@@ -153,7 +153,9 @@ manual smoke = compose up, login, one chat turn (human gate, listed in PR).
 
 ## 4. R0.2 — data foundation
 
-### 4a. Learning-event enrichment (migration 0012)
+### 4a. Learning-event enrichment (migration 0013)
+
+Note: 0012 is taken (`0012_terms_acceptance.py`); this slice adds 0013 + 0014.
 
 `learning_events` gains nullable columns:
 - `selected_index` (int), `correct_index` (int), `options_json` (text),
@@ -167,7 +169,7 @@ Contract: the profile recent-events shape in `openapi.yaml` exposes the new
 nullable fields (single contract churn now; R3 consumes later). Codegen +
 drift gate.
 
-### 4b. Per-call LLM cost attribution (migration 0013)
+### 4b. Per-call LLM cost attribution (migration 0014)
 
 New table `llm_call_log`:
 - `id` (pk), `user_id` (fk, indexed), `session_id` (nullable fk, indexed),
