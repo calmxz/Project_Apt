@@ -516,12 +516,15 @@ components:
       additionalProperties: false
       required: [id, session_id, gap_tested, question, correct, created_at]
       properties:
-        id:          { type: integer }
-        session_id:  { type: string }
-        gap_tested:  { type: string }
-        question:    { type: string }
-        correct:     { type: boolean }
-        created_at:  { type: string, format: date-time }
+        id:              { type: integer }
+        session_id:      { type: string }
+        gap_tested:      { type: string }
+        question:        { type: string }
+        correct:         { type: boolean }
+        created_at:      { type: string, format: date-time }
+        selected_index:  { type: [integer, "null"], default: null }
+        correct_index:   { type: [integer, "null"], default: null }
+        purpose:         { type: [string, "null"], default: null }
 
     # ---- Tool argument schemas (LiteLLM tool params) ----
     UpdateTopicProfileArgs:

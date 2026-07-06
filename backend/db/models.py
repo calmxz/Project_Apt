@@ -100,6 +100,10 @@ class LearningEvent(Base):
     question: Mapped[str] = mapped_column(Text, nullable=False)
     correct: Mapped[bool] = mapped_column(nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    selected_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    correct_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    options_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    purpose: Mapped[str | None] = mapped_column(String, nullable=True)
 
     session: Mapped["Session"] = relationship("Session", back_populates="learning_events")
 

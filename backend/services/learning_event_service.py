@@ -8,6 +8,8 @@ via record_from_answer when the learner clicks a check-question answer. The
 is_gradable turn-barrier (pending_check_store) is therefore not consulted here.
 """
 
+import json
+
 from sqlalchemy.orm import Session
 
 from db.models import LearningEvent
@@ -21,6 +23,10 @@ def record_from_answer(
     gap: str,
     question: str,
     correct: bool,
+    selected_index: int | None = None,
+    correct_index: int | None = None,
+    options: list[str] | None = None,
+    purpose: str = "check",
     clear_pending: bool = True,
     commit: bool = True,
     apply_profile_effects: bool = True,
@@ -49,6 +55,10 @@ def record_from_answer(
         gap_tested=gap,
         question=question,
         correct=correct,
+        selected_index=selected_index,
+        correct_index=correct_index,
+        options_json=json.dumps(options) if options is not None else None,
+        purpose=purpose,
     )
     db.add(event)
     db.flush()

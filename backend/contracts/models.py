@@ -50,6 +50,9 @@ class LearningEventResponse(BaseModel):
     question: str
     correct: bool
     created_at: datetime
+    selected_index: int | None = None
+    correct_index: int | None = None
+    purpose: str | None = None
 
 
 class UpdateTopicProfileArgs(BaseModel):

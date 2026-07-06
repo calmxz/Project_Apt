@@ -201,12 +201,15 @@ def answer(db: Session, session_id: str, index: int, selected_index: int) -> dic
         raise CheckStateError("selected_index out of range")
 
     correct = selected_index == item["correct_index"]
-    apply_effects = pc.get("purpose", "check") != "diagnostic"
+    batch_purpose = pc.get("purpose", "check")
+    apply_effects = batch_purpose != "diagnostic"
     # Profile effect + LearningEvent, deferred into our single commit; does not clear.
     learning_event_service.record_from_answer(
         db, session_id, gap=pc["gap"], question=item["question"],
         correct=correct, clear_pending=False, commit=False,
         apply_profile_effects=apply_effects,
+        selected_index=selected_index, correct_index=item["correct_index"],
+        options=item["options"], purpose=batch_purpose,
     )
     item["status"] = "answered"
     item["selected_index"] = selected_index
