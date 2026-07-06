@@ -84,16 +84,6 @@ class RetrieveChunksArgs(BaseModel):
     k: conint(ge=1, le=20) | None = 5
 
 
-class RecordLearningEventArgs(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    session_id: constr(max_length=64)
-    gap_tested: constr(max_length=200)
-    question: constr(max_length=1000)
-    correct: bool
-
-
 class Item(BaseModel):
     model_config = ConfigDict(
         extra="forbid",

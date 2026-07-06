@@ -12,7 +12,6 @@ from contracts import (
     HealthResponse,
     PendingCheck,
     ProfileResponse,
-    RecordLearningEventArgs,
     RetrieveChunksArgs,
     SessionCreateRequest,
     ToolResult,
@@ -85,15 +84,6 @@ def test_retrieve_chunks_k_bounds():
         RetrieveChunksArgs(session_id="s1", query="q", k=0)
     with pytest.raises(ValidationError):
         RetrieveChunksArgs(session_id="s1", query="q", k=21)
-
-
-def test_record_learning_event_args_required():
-    args = RecordLearningEventArgs(
-        session_id="s1", gap_tested="g1", question="?", correct=True
-    )
-    assert args.correct is True
-    with pytest.raises(ValidationError):
-        RecordLearningEventArgs(session_id="s1", gap_tested="g1", question="?")
 
 
 def _one_item():

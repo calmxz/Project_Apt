@@ -1,12 +1,12 @@
-"""TDD: learning_event_service.record + demotion side effect."""
+"""TDD: learning_event_service.record_from_answer + demotion/mastery side effects."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import pytest
 
 from agent.types import ToolContext
-from contracts import AskCheckQuestionsArgs, RecordLearningEventArgs, TopicProfile
-from db.models import LearningEvent, Session as SessionModel, User
+from contracts import AskCheckQuestionsArgs, TopicProfile
+from db.models import Session as SessionModel, User
 from services import check_question_service as cq
 from services import learning_event_service, profile_service
 
@@ -31,112 +31,6 @@ def session_row(db_session):
     )
     db_session.commit()
     return db_session.get(SessionModel, SESSION_ID)
-
-
-@pytest.fixture
-def ctx(db_session):
-    return ToolContext(
-        db=db_session,
-        session_id=SESSION_ID,
-        user_id=USER_ID,
-        turn_started_at=datetime.now(timezone.utc),
-    )
-
-
-def _args(**kw) -> RecordLearningEventArgs:
-    kw.setdefault("session_id", SESSION_ID)
-    kw.setdefault("gap_tested", "indexes")
-    kw.setdefault("question", "what is a btree?")
-    kw.setdefault("correct", True)
-    return RecordLearningEventArgs(**kw)
-
-
-def _seed_check(db_session, ctx, gap, question, asked_at):
-    """Seed a single-item batch so is_gradable resolves for the record() LLM path."""
-    seed_ctx = ToolContext(
-        db=db_session,
-        session_id=SESSION_ID,
-        user_id=USER_ID,
-        turn_started_at=asked_at,
-    )
-    cq.register(db_session, seed_ctx, AskCheckQuestionsArgs(
-        session_id=SESSION_ID,
-        gap=gap,
-        items=[{"question": question, "options": ["a", "b"],
-                "correct_index": 0, "explanation": "a."}],
-    ))
-
-
-def test_correct_event_recorded(session_row, ctx, db_session):
-    # A prior-turn pending check is required by the grading guard.
-    _seed_check(db_session, ctx, gap="indexes", question="what is a btree?",
-                asked_at=ctx.turn_started_at - timedelta(seconds=5))
-    result = learning_event_service.record(db_session, ctx, _args(correct=True))
-    assert result.ok is True
-    assert result.status == "ok"
-    rows = db_session.query(LearningEvent).all()
-    assert len(rows) == 1
-    assert rows[0].correct is True
-
-
-def test_incorrect_on_non_mastered_does_not_demote(session_row, ctx, db_session):
-    # A prior-turn pending check is required by the grading guard.
-    _seed_check(db_session, ctx, gap="indexes", question="what is a btree?",
-                asked_at=ctx.turn_started_at - timedelta(seconds=5))
-    result = learning_event_service.record(
-        db_session, ctx, _args(gap_tested="indexes", correct=False)
-    )
-    assert result.ok is True
-    profile = profile_service.load_profile(db_session, SESSION_ID)
-    assert profile.mastered_concepts == ["joins"]
-
-
-def test_incorrect_on_mastered_demotes(session_row, ctx, db_session):
-    # A prior-turn pending check is required by the grading guard.
-    _seed_check(db_session, ctx, gap="joins", question="what is a join?",
-                asked_at=ctx.turn_started_at - timedelta(seconds=5))
-    result = learning_event_service.record(
-        db_session, ctx, _args(gap_tested="joins", correct=False)
-    )
-    assert result.ok is True
-    profile = profile_service.load_profile(db_session, SESSION_ID)
-    assert "joins" not in profile.mastered_concepts
-    assert cq.get_pending_check(db_session, SESSION_ID) is None
-
-
-# --- Grading guard tests (Task 8) ---
-
-
-def test_grade_rejected_without_pending_check(session_row, ctx, db_session):
-    args = RecordLearningEventArgs(
-        session_id=SESSION_ID, gap_tested="g", question="q?", correct=True
-    )
-    result = learning_event_service.record(db_session, ctx, args)
-    assert result.ok is False
-    assert "no open check-question" in (result.error or "").lower()
-
-
-def test_grade_rejected_when_asked_this_turn(session_row, ctx, db_session):
-    _seed_check(db_session, ctx, gap="g", question="q?",
-                asked_at=ctx.turn_started_at)
-    args = RecordLearningEventArgs(
-        session_id=SESSION_ID, gap_tested="g", question="q?", correct=True
-    )
-    result = learning_event_service.record(db_session, ctx, args)
-    assert result.ok is False
-    assert cq.get_pending_check(db_session, SESSION_ID) is not None
-
-
-def test_grade_accepted_from_prior_turn_and_clears(session_row, ctx, db_session):
-    _seed_check(db_session, ctx, gap="g", question="q?",
-                asked_at=ctx.turn_started_at - timedelta(seconds=5))
-    args = RecordLearningEventArgs(
-        session_id=SESSION_ID, gap_tested="g", question="q?", correct=True
-    )
-    result = learning_event_service.record(db_session, ctx, args)
-    assert result.ok is True
-    assert result.data["correct"] is True
-    assert cq.get_pending_check(db_session, SESSION_ID) is None
 
 
 # --- record_from_answer tests (Task 3: deterministic click path) ---

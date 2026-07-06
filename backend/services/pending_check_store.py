@@ -33,8 +33,9 @@ def parse_asked_at(pc: dict) -> datetime:
 
 
 def is_gradable(db: Session, session_id: str, gap: str, current_turn: datetime) -> bool:
-    """Legacy guard kept for learning_event_service.record() (the LLM tool path).
-    Batch gap stays top-level so this still resolves."""
+    """Legacy turn-barrier guard, no longer called from the record path (that path
+    was record_learning_event, removed when it stopped being an LLM tool). Kept
+    for its own direct test coverage; batch gap stays top-level so it still resolves."""
     pc = get_pending_check(db, session_id)
     if pc is None or pc.get("gap") != gap:
         return False
