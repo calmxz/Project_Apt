@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from agent import prompts, tutor
+from agent.stream_events import StreamEvent
 from agent.types import ToolContext
 from contracts import (
     CheckAnswerRequest,
@@ -40,6 +41,7 @@ from services import (
     documents_service,
     pending_check_store,
     profile_service,
+    rate_limit,
     summary_service,
 )
 from services.auth import current_user_id
@@ -431,8 +433,9 @@ async def complete_check(
 
     Builds a server-side results summary, injects it as a NON-persisted synthetic
     user turn, clears the batch, and streams the tutor's reaction. Only the
-    assistant reply is persisted (inside run_streaming). Does NOT increment the
-    daily rate limit; cost is still metered inside run_streaming.
+    assistant reply is persisted (inside run_streaming). The follow-up is a real
+    LLM turn, so it counts against the daily message cap; grading and batch
+    resolution above are never blocked by the cap (see S2).
     """
     row = db.get(SessionModel, session_id)
     if row is None or row.user_id != user_id:
@@ -447,6 +450,20 @@ async def complete_check(
     check_question_service.write_check_batch(db, pc)
     pending_check_store.clear_pending_check(db, session_id)
     check_question_service.set_quiz_cooldown(db, session_id, cooldown)
+
+    # S2: the follow-up is a real LLM turn, so it counts against the daily
+    # message cap. Grading above is already committed and is never blocked;
+    # at the cap we skip only the tutor's reaction.
+    allowed, _used = rate_limit.check_and_increment(db, user_id)
+    if not allowed:
+        async def skipped_stream():
+            yield StreamEvent("followup_skipped", {"reason": "daily_cap"}).to_sse()
+
+        return StreamingResponse(
+            skipped_stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     profile = profile_service.load_profile(db, session_id)
     ingestion_status = documents_service.session_ingestion_status(db, session_id)
