@@ -117,7 +117,11 @@ async def _run_fixture(SessionLocal, fixture: dict) -> bool:
                 user_id=user_id,
                 turn_started_at=datetime.now(timezone.utc),
             )
-            reply, _, _ = await tutor.run(messages, system_prompt, ctx)
+            reply_parts: list[str] = []
+            async for ev in tutor.run_streaming(messages, system_prompt, ctx):
+                if ev.type == "assistant_delta":
+                    reply_parts.append(ev.data.get("text", ""))
+            reply = "".join(reply_parts)
             messages.append({"role": "assistant", "content": reply})
 
             updated = profile_service.load_profile(db, session_id)

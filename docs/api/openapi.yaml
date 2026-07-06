@@ -46,31 +46,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/HealthResponse"
 
-  /api/chat:
-    post:
-      tags: [chat]
-      summary: Send a chat message and receive tutor response.
-      operationId: postChat
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ChatRequest"
-      responses:
-        "200":
-          description: Tutor response with any tool calls and citations.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ChatResponse"
-        "404":
-          $ref: "#/components/responses/NotFound"
-        "429":
-          $ref: "#/components/responses/RateLimited"
-        "503":
-          $ref: "#/components/responses/UpstreamUnavailable"
-
   /api/sessions:
     post:
       tags: [sessions]
@@ -727,27 +702,6 @@ components:
         session_id:  { type: string, maxLength: 64 }
         message:     { type: string, maxLength: 4000 }
         review_gaps: { type: boolean, default: false }
-
-    ChatResponse:
-      type: object
-      additionalProperties: false
-      required: [assistant_message, message_id]
-      properties:
-        assistant_message: { type: string }
-        message_id:        { type: integer }
-        tool_calls:
-          type: array
-          items: { $ref: "#/components/schemas/ToolCallRecord" }
-          default: []
-        citations:
-          type: array
-          items: { $ref: "#/components/schemas/Citation" }
-          default: []
-        pending_check:
-          oneOf:
-            - $ref: "#/components/schemas/PendingCheck"
-            - type: "null"
-          default: null
 
     SessionCreateRequest:
       type: object

@@ -232,17 +232,6 @@ class ChatRequest(BaseModel):
     review_gaps: bool | None = False
 
 
-class ChatResponse(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    assistant_message: str
-    message_id: int
-    tool_calls: list[ToolCallRecord] | None = []
-    citations: list[Citation] | None = []
-    pending_check: PendingCheck | None = None
-
-
 class SessionCreateRequest(BaseModel):
     model_config = ConfigDict(
         extra="forbid",

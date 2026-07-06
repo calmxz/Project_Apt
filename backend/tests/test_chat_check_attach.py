@@ -1,21 +1,32 @@
-"""TDD: non-streaming /chat attaches message_id to pending_check when a
-check-question batch is asked.
+"""Check-recap persistence and attach-guard tests (streaming chat path).
 
-Part A of the check-recap fix: without this, write_check_batch no-ops because
-message_id stays None, the recap card always shows selected_index=None.
+Originally these covered the non-streaming /chat route's attach_message_id
+fix; when that route was deleted they were migrated:
 
-Covers:
-  A1/A2 - failing test that asserts message_id is attached after /chat
-  A3/A4 - passes after the fix in routes/chat.py
-  A5    - end-to-end: wrong answer -> resolve -> GET /sessions confirms
-           selected_index and correct are preserved in check_batch
+  - end-to-end recap: ask (via /api/chat/stream) -> wrong answer -> complete
+    -> GET /sessions confirms selected_index and correct are preserved in
+    check_batch (write_check_batch persists the real pick because message_id
+    was attached).
+  - attach guard: a FAILED ask_check_questions dispatched inside
+    run_streaming must NOT repoint an already-open batch's message_id.
 """
+
+import json
+from datetime import datetime, timezone
+from decimal import Decimal
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from agent import tutor
+from agent.stream_events import StreamEvent
+from agent.types import ToolContext
+from config import settings
 from contracts import AskCheckQuestionsArgs, TopicProfile, ToolCallRecord
 from db.models import ChatMessage, Session as SessionModel, User
 from services import check_question_service
+from services.cost_meter import CapStatus
 
 
 # ---------------------------------------------------------------------------
@@ -48,118 +59,88 @@ def seed_session(db_session):
 
 
 # ---------------------------------------------------------------------------
-# Fake tutor.run that registers a check batch and returns the right shape
+# Fake run_streaming that mirrors the real agent's ask turn: registers a
+# check batch, persists the assistant message, attaches message_id, yields
+# check_question + done.
 # ---------------------------------------------------------------------------
 
+ASK_ITEMS = [
+    {
+        "question": "What is 2+2?",
+        "options": ["3", "4"],
+        "correct_index": 1,
+        "explanation": "2+2=4",
+    }
+]
 
-def _make_fake_run_asking(db_session):
-    """Fake tutor.run: registers a check batch via check_question_service,
-    then returns (reply, tool_calls, citations) shaped like the real function.
 
-    The db_session passed here is the same one the route uses (same engine via
-    override_get_db), so the pending_check row is visible after the call.
-    """
-
-    async def fake_run(messages, system_prompt, ctx):
-        # Register the batch using the same ctx the route built (same db/session_id).
-        check_question_service.register(
+def _make_fake_run_streaming_asking():
+    async def fake(messages, system_prompt, ctx):
+        result = check_question_service.register(
             ctx.db,
             ctx,
             AskCheckQuestionsArgs(
-                session_id=ctx.session_id,
-                gap="linear_algebra",
-                items=[
-                    {
-                        "question": "What is 2+2?",
-                        "options": ["3", "4"],
-                        "correct_index": 1,
-                        "explanation": "2+2=4",
-                    }
-                ],
+                session_id=ctx.session_id, gap="linear_algebra", items=ASK_ITEMS
             ),
         )
+        assert result.ok
         tool_call = ToolCallRecord(
             name="ask_check_questions",
-            args={
-                "session_id": ctx.session_id,
-                "gap": "linear_algebra",
-                "items": [
-                    {
-                        "question": "What is 2+2?",
-                        "options": ["3", "4"],
-                        "correct_index": 1,
-                        "explanation": "2+2=4",
-                    }
-                ],
-            },
+            args={"session_id": ctx.session_id, "gap": "linear_algebra", "items": ASK_ITEMS},
             status="ok",
             error=None,
         )
-        return ("What is 2+2?", [tool_call], [])
+        msg = ChatMessage(
+            session_id=ctx.session_id,
+            role="assistant",
+            content="What is 2+2?",
+            status="complete",
+            tool_calls_json=json.dumps([tool_call.model_dump()]),
+            citations_json="[]",
+        )
+        ctx.db.add(msg)
+        ctx.db.commit()
+        check_question_service.attach_message_id(ctx.db, ctx.session_id, msg.id)
+        data = result.data or {}
+        yield StreamEvent(
+            "check_question",
+            {"gap": data.get("gap"), "items": data.get("items", []), "total": data.get("total", 0)},
+        )
+        yield StreamEvent("done", {"message_id": str(msg.id)})
 
-    return fake_run
-
-
-# ---------------------------------------------------------------------------
-# Step A1/A2: failing test - message_id attached after non-streaming /chat
-# ---------------------------------------------------------------------------
-
-
-def test_chat_check_attach_message_id(client, db_session, monkeypatch):
-    """After a non-streaming /chat turn that asks a check question, the open
-    pending_check must have message_id set to the persisted assistant message id.
-
-    Without the fix this fails because chat.py never calls attach_message_id.
-    """
-    monkeypatch.setattr("agent.tutor.run", _make_fake_run_asking(db_session))
-
-    resp = client.post(
-        "/api/chat",
-        json={"session_id": SESSION_ID, "message": "quiz me"},
-        headers=AUTH_HEADERS,
-    )
-    assert resp.status_code == 200
-    response_msg_id = resp.json()["message_id"]
-
-    pc = check_question_service.get_pending_check(db_session, SESSION_ID)
-    assert pc is not None, "pending_check should be set after ask"
-    assert pc["message_id"] is not None, (
-        "message_id must be attached to the pending_check by the non-streaming /chat route"
-    )
-    assert pc["message_id"] == response_msg_id, (
-        f"message_id in pending_check ({pc['message_id']}) must equal "
-        f"the assistant message id returned by /chat ({response_msg_id})"
-    )
+    return fake
 
 
 # ---------------------------------------------------------------------------
-# Step A5: end-to-end bug regression - wrong pick persisted in check_batch
+# End-to-end bug regression - wrong pick persisted in check_batch
 # ---------------------------------------------------------------------------
 
 
 def test_chat_check_wrong_pick_persists_in_recap(client, db_session, monkeypatch):
-    """Full flow: ask (via /chat) -> answer wrong -> complete -> GET /sessions
-    shows selected_index != None and correct=False.
+    """Full flow: ask (via /chat/stream) -> answer wrong -> complete ->
+    GET /sessions shows selected_index != None and correct=False.
 
-    Before the fix, message_id was None so write_check_batch no-oped.
-    reconstruct_check_batch (fallback) sets selected_index=None.
-    After the fix, message_id is set, write_check_batch persists the real pick.
+    With message_id attached to the batch, write_check_batch persists the
+    real pick instead of the reconstruct_check_batch fallback (which sets
+    selected_index=None).
     """
-    # 1. Ask a check question via the non-streaming /chat route.
-    monkeypatch.setattr("agent.tutor.run", _make_fake_run_asking(db_session))
+    # 1. Ask a check question via the streaming chat route.
+    monkeypatch.setattr("agent.tutor.run_streaming", _make_fake_run_streaming_asking())
 
-    ask_resp = client.post(
-        "/api/chat",
+    with client.stream(
+        "POST",
+        "/api/chat/stream",
         json={"session_id": SESSION_ID, "message": "quiz me"},
         headers=AUTH_HEADERS,
-    )
-    assert ask_resp.status_code == 200
-    asking_msg_id = ask_resp.json()["message_id"]
+    ) as resp:
+        assert resp.status_code == 200
+        for _ in resp.iter_lines():
+            pass
 
-    # Confirm the fix: message_id is now attached.
     pc_after_ask = check_question_service.get_pending_check(db_session, SESSION_ID)
     assert pc_after_ask is not None
-    assert pc_after_ask["message_id"] == asking_msg_id
+    asking_msg_id = pc_after_ask["message_id"]
+    assert asking_msg_id is not None
 
     # 2. Answer wrong: correct_index=1, we submit selected_index=0.
     answer_resp = client.post(
@@ -173,8 +154,6 @@ def test_chat_check_wrong_pick_persists_in_recap(client, db_session, monkeypatch
 
     # 3. Complete the batch (hidden follow-up stream). Patch run_streaming to
     #    avoid real LLM while still exercising write_check_batch.
-    from agent.stream_events import StreamEvent
-
     async def fake_run_streaming(messages, system_prompt, ctx):
         msg = ChatMessage(session_id=SESSION_ID, role="assistant", content="Better luck!")
         ctx.db.add(msg)
@@ -210,8 +189,8 @@ def test_chat_check_wrong_pick_persists_in_recap(client, db_session, monkeypatch
     assert len(items) == 1
     item = items[0]
     assert item["selected_index"] is not None, (
-        "selected_index must be persisted (not None) after the fix - "
-        "before fix it was None because write_check_batch was a no-op"
+        "selected_index must be persisted (not None) - if None, write_check_batch "
+        "no-oped because message_id was never attached"
     )
     assert item["selected_index"] == 0, (
         f"wrong pick (0) must be stored; got {item['selected_index']}"
@@ -221,55 +200,75 @@ def test_chat_check_wrong_pick_persists_in_recap(client, db_session, monkeypatch
     )
 
 
-def _make_fake_run_failed_ask(prior_msg_id_holder):
-    """Fake tutor.run: returns a FAILED ask_check_questions ToolCallRecord.
-
-    Does NOT call check_question_service.register (no open batch is created
-    by this turn). Used to verify that a name-only gate would wrongly repoint
-    a prior open batch's message_id to a non-asking message.
-    """
-
-    async def fake_run(messages, system_prompt, ctx):
-        # A prior batch may be open; this turn's ask FAILED - do not register.
-        tool_call = ToolCallRecord(
-            name="ask_check_questions",
-            args={},
-            status="failed",
-            error="a check-question batch is already open; resolve it first",
-        )
-        return ("Please answer the open question first.", [tool_call], [])
-
-    return fake_run
+# ---------------------------------------------------------------------------
+# Attach guard: failed ask must not clobber a prior open batch's message_id
+# ---------------------------------------------------------------------------
 
 
-def test_failed_ask_does_not_clobber_prior_batch_message_id(
-    client, db_session, monkeypatch
+def _content_chunk(token):
+    delta = SimpleNamespace(content=token, tool_calls=None)
+    return SimpleNamespace(choices=[SimpleNamespace(delta=delta)])
+
+
+def _tool_chunk_ask(call_id):
+    fn = SimpleNamespace()
+    fn.name = "ask_check_questions"
+    fn.arguments = json.dumps(
+        {"session_id": SESSION_ID, "gap": "new_gap", "items": ASK_ITEMS}
+    )
+    frag = SimpleNamespace()
+    frag.index = 0
+    frag.id = call_id
+    frag.function = fn
+    delta = SimpleNamespace(content=None, tool_calls=[frag])
+    return SimpleNamespace(choices=[SimpleNamespace(delta=delta)])
+
+
+def _make_stream(*chunks):
+    async def _gen():
+        for c in chunks:
+            yield c
+    return _gen()
+
+
+@pytest.mark.asyncio
+async def test_failed_ask_does_not_clobber_prior_batch_message_id(
+    db_session, monkeypatch
 ):
     """Gate correctness: a FAILED ask_check_questions must NOT attach the
     current message's id to an already-open pending_check.
 
-    A name-only gate ('ask_check_questions' in tool_calls) would fire even on
-    failed asks and repoint the prior batch's message_id to the wrong message.
-    The status=='ok' guard in the fix prevents this.
-
-    Flow:
-      1. Open a batch manually (prior turn's register).
-      2. Monkeypatch tutor.run to return a failed ask ToolCallRecord (no register).
-      3. POST /chat.
-      4. Assert the prior batch's message_id is unchanged (still the id from
-         step 1's attach, or still None if we never attached in the prior turn).
+    run_streaming only sets asked_check (and thereby calls attach_message_id)
+    when the ask dispatch result is ok. A second ask while a batch is open
+    fails in check_question_service.register, so the prior batch's message_id
+    must stay untouched.
     """
-    from datetime import datetime, timezone
-    from agent.types import ToolContext
+    monkeypatch.setattr(settings, "llm_stub", False)
+    monkeypatch.setattr(settings, "gemini_api_key", "real-key")
+    cap = CapStatus(
+        allowed=True,
+        used=Decimal("0.0"),
+        soft_breached=False,
+        urgent_breached=False,
+        soft_cap=Decimal("2.0"),
+        urgent_cap=Decimal("2.70"),
+        hard_cap=Decimal("3.0"),
+    )
+    monkeypatch.setattr("agent.tutor.cost_meter.check_cap", MagicMock(return_value=cap))
+    monkeypatch.setattr(
+        "agent.tutor.litellm.stream_chunk_builder", MagicMock(return_value=SimpleNamespace())
+    )
+    monkeypatch.setattr("agent.tutor.litellm.completion_cost", MagicMock(return_value=0.0))
 
-    # 1. Manually register a batch to simulate a prior open batch.
+    # 1. Manually register a batch to simulate a prior open batch, stamped
+    #    with a known sentinel message_id.
     prior_ctx = ToolContext(
         db=db_session,
         session_id=SESSION_ID,
         user_id=USER_ID,
         turn_started_at=datetime.now(timezone.utc),
     )
-    check_question_service.register(
+    result = check_question_service.register(
         db_session,
         prior_ctx,
         AskCheckQuestionsArgs(
@@ -285,30 +284,45 @@ def test_failed_ask_does_not_clobber_prior_batch_message_id(
             ],
         ),
     )
-    # Stamp the prior message_id to a known sentinel value (99999) so we can
-    # detect whether the gate fires and overwrites it.
+    assert result.ok
     check_question_service.attach_message_id(db_session, SESSION_ID, 99999)
 
     pc_before = check_question_service.get_pending_check(db_session, SESSION_ID)
     assert pc_before["message_id"] == 99999
 
-    # 2. POST /chat with a failed ask turn.
-    monkeypatch.setattr("agent.tutor.run", _make_fake_run_failed_ask({}))
-
-    resp = client.post(
-        "/api/chat",
-        json={"session_id": SESSION_ID, "message": "quiz me again"},
-        headers=AUTH_HEADERS,
+    # 2. Stream a turn whose ask fails (batch already open), then finishes
+    #    with plain text.
+    turn1 = _make_stream(_tool_chunk_ask("tc_fail"))
+    turn2 = _make_stream(_content_chunk("Please answer the open question first."))
+    monkeypatch.setattr(
+        "agent.tutor.litellm.acompletion",
+        AsyncMock(side_effect=[turn1, turn2]),
     )
-    assert resp.status_code == 200
-    new_msg_id = resp.json()["message_id"]
-    assert new_msg_id != 99999  # the new message should have a different id
 
-    # 4. The prior batch's message_id must still be 99999 (not clobbered).
+    ctx = ToolContext(
+        db=db_session,
+        session_id=SESSION_ID,
+        user_id=USER_ID,
+        turn_started_at=datetime.now(timezone.utc),
+    )
+    events = [
+        ev
+        async for ev in tutor.run_streaming(
+            [{"role": "user", "content": "quiz me again"}], "sys", ctx
+        )
+    ]
+
+    # The ask dispatch failed and the turn finished normally.
+    done_tool = next(e for e in events if e.type == "tool_call_done")
+    assert done_tool.data["status"] == "error"
+    assert "check_question" not in [e.type for e in events]
+    assert events[-1].type == "done"
+
+    # 3. The prior batch's message_id must still be 99999 (not clobbered).
     pc_after = check_question_service.get_pending_check(db_session, SESSION_ID)
     assert pc_after is not None
     assert pc_after["message_id"] == 99999, (
         f"Failed ask must NOT repoint the prior batch's message_id "
         f"(got {pc_after['message_id']!r}, expected 99999). "
-        "The gate must check status=='ok', not name only."
+        "attach_message_id must only run when the ask dispatch result is ok."
     )

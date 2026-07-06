@@ -8,7 +8,6 @@ from contracts import (
     CheckSkipRequest,
     CheckSkipResponse,
     ChatRequest,
-    ChatResponse,
     Citation,
     HealthResponse,
     PendingCheck,
@@ -16,7 +15,6 @@ from contracts import (
     RecordLearningEventArgs,
     RetrieveChunksArgs,
     SessionCreateRequest,
-    ToolCallRecord,
     ToolResult,
     TopicProfile,
     UpdateTopicProfileArgs,
@@ -167,42 +165,6 @@ def test_tool_result_status_enum():
         ToolResult(ok=False, status="weird")
 
 
-def test_chat_response_defaults():
-    r = ChatResponse(assistant_message="hi", message_id=1)
-    assert r.tool_calls == []
-    assert r.citations == []
-    assert r.pending_check is None
-
-
-def test_chat_response_with_pending_check():
-    r = ChatResponse(
-        assistant_message="Here is a question.",
-        message_id=3,
-        pending_check=PendingCheck(
-            gap="recursion",
-            current_index=0,
-            total=1,
-            items=[_one_pending_item()],
-        ),
-    )
-    assert r.pending_check is not None
-    assert r.pending_check.gap == "recursion"
-    assert r.pending_check.total == 1
-
-
-def test_chat_response_with_tool_calls():
-    r = ChatResponse(
-        assistant_message="ok",
-        message_id=2,
-        tool_calls=[
-            ToolCallRecord(name="update_topic_profile", args={"x": 1}, status="ok"),
-            ToolCallRecord(name="retrieve_chunks", args={}, status="no_results"),
-        ],
-    )
-    assert len(r.tool_calls) == 2
-    assert r.tool_calls[1].status == "no_results"
-
-
 def test_chat_request_required_fields():
     with pytest.raises(ValidationError):
         ChatRequest(session_id="s")  # missing message
@@ -341,7 +303,3 @@ def test_array_fields_accept_none_quirk():
     p = TopicProfile(confirmed_gaps=None, mastered_concepts=None)
     assert p.confirmed_gaps is None
     assert p.mastered_concepts is None
-
-    r = ChatResponse(assistant_message="x", message_id=1, tool_calls=None, citations=None)
-    assert r.tool_calls is None
-    assert r.citations is None
