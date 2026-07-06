@@ -239,7 +239,7 @@ describe('SessionView', () => {
     expect(wrapper.findComponent(SessionEndedBanner).exists()).toBe(false)
   })
 
-  it('send dispatches sendMessage and clears draft', async () => {
+  it('send dispatches sendMessageStreaming and clears draft', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'loadSession').mockImplementation(async () => {
       setupSession()

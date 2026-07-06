@@ -71,11 +71,11 @@ describe('apiClient cost-warning bus', () => {
 // session store: a cost-cap 429 raised through the streaming transport.
 //
 // Note: sendMessageStreaming's catch block (frontend/src/stores/session.js)
-// does not parse the 429 envelope into costCapInfo the way the deleted JSON
-// path (sendMessage/postChat) did -- it only resets stream state, records
+// does not parse the 429 envelope into costCapInfo the way the removed
+// non-streaming chain did -- it only resets stream state, records
 // the error via friendlyError into store.error, and rethrows. So on the
 // streaming path costCapInfo is NOT populated by this rejection; the assertions
-// below describe that actual behavior rather than the JSON path's mapping.
+// below describe that actual behavior rather than the removed chain's mapping.
 // ---------------------------------------------------------------------------
 
 describe('session store cost-cap envelope (streaming)', () => {

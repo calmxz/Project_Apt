@@ -6,7 +6,6 @@ import * as streamSvc from '@/services/chatStreamService.js'
 
 vi.mock('@/services/sessionsApi.js')
 vi.mock('@/services/chatStreamService.js')
-vi.mock('@/services/chatApi.js', () => ({ postChat: vi.fn() }))
 vi.mock('@/services/costBus.js', () => ({ reportCostWarning: vi.fn() }))
 
 function batchEvent() {

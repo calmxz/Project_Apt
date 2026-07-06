@@ -339,13 +339,13 @@ describe('session store — streaming', () => {
     expect(s.messages[1].tool_calls[0].summary).toBe('5 found')
   })
 
-  // Streaming maps a daily-cap 429 differently from the deleted JSON path:
-  // sendMessage (postChat) parsed the 429 envelope into dailyCapInfo so the
+  // Streaming maps a daily-cap 429 differently from the removed non-streaming
+  // chain: that old code parsed the 429 envelope into dailyCapInfo so the
   // UI could show a cap banner without a hard error. sendMessageStreaming's
   // catch block has no such mapping -- it resets stream state, records
   // e via friendlyError into store.error, and rethrows. dailyCapInfo is left
   // untouched (still null). This test documents that current behavior; it is
-  // not asserting a JSON-path equivalent that no longer exists.
+  // not asserting an equivalent from the removed chain.
   it('sendMessageStreaming surfaces a daily-cap 429 as a store error without setting dailyCapInfo', async () => {
     const s = useSessionStore()
     s.currentSessionId = 's1'
