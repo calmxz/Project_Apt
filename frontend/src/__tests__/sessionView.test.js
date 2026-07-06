@@ -551,6 +551,7 @@ describe('SessionView', () => {
     const notice = wrapper.find('[data-testid="followup-notice"]')
     expect(notice.exists()).toBe(true)
     expect(notice.text()).toContain('Daily message limit reached')
+    expect(notice.attributes('role')).toBe('status')
   })
 
   it('renders streaming bubble when store.streamingMessage is set', async () => {

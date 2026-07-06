@@ -45,7 +45,7 @@
         </template>
       </div>
 
-      <p v-if="store.followupNotice" class="followup-notice" data-testid="followup-notice">
+      <p v-if="store.followupNotice" class="followup-notice" data-testid="followup-notice" role="status" aria-live="polite">
         {{ store.followupNotice }}
       </p>
 
