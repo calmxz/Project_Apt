@@ -437,6 +437,13 @@ export const useSessionStore = defineStore('session', () => {
             case 'check_question': handleCheckQuestion(data); break
             case 'done': finalizeMessage(data.message_id); break
             case 'cancelled': handleCancelled(data.message_id, data.partial_content_chars, data.estimated_cost_usd); break
+            case 'followup_skipped':
+              followupNotice.value =
+                'Daily message limit reached - recap saved, tutor follow-up skipped.'
+              streamingMessage.value = null
+              streamState.value = 'idle'
+              abortController.value = null
+              break
             case 'error':
               error.value = data.message || data.code
               streamingMessage.value = null
@@ -463,6 +470,11 @@ export const useSessionStore = defineStore('session', () => {
   const streamingMessage = ref(null)
   const streamState = ref('idle') // 'idle' | 'streaming' | 'tool_running' | 'stopping'
   const abortController = ref(null)
+  const followupNotice = ref(null)
+
+  function clearFollowupNotice() {
+    followupNotice.value = null
+  }
 
   function appendAssistantDelta(text) {
     if (!streamingMessage.value) return
@@ -510,6 +522,7 @@ export const useSessionStore = defineStore('session', () => {
     if (!currentSessionId.value) throw new Error('no active session')
     const trimmed = (text || '').trim()
     if (!trimmed) return null
+    followupNotice.value = null
     messages.value.push({ role: 'user', content: trimmed })
     streamingMessage.value = { role: 'assistant', content: '', tool_calls: [], citations: [] }
     streamState.value = 'streaming'
@@ -566,6 +579,7 @@ export const useSessionStore = defineStore('session', () => {
     streamingMessage.value = null
     streamState.value = 'idle'
     abortController.value = null
+    followupNotice.value = null
   }
 
   return {
@@ -587,6 +601,8 @@ export const useSessionStore = defineStore('session', () => {
     streamingMessage,
     streamState,
     abortController,
+    followupNotice,
+    clearFollowupNotice,
     listSessions,
     createSession,
     loadSession,

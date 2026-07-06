@@ -45,6 +45,10 @@
         </template>
       </div>
 
+      <p v-if="store.followupNotice" class="followup-notice" data-testid="followup-notice">
+        {{ store.followupNotice }}
+      </p>
+
       <div
         v-if="store.error || lastError"
         class="error-banner"
@@ -658,6 +662,13 @@ function goHome() {
   color: var(--color-error-text);
   margin: 0;
   font-size: var(--fs-caption);
+}
+
+.followup-notice {
+  margin: 0;
+  padding: 0.5rem 0.875rem;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
 }
 
 /* End-session summary dialog */

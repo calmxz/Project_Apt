@@ -538,6 +538,21 @@ describe('SessionView', () => {
     expect(composer.props('disabled')).toBe(true)
   })
 
+  it('renders a quiet notice when store.followupNotice is set', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession()
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="followup-notice"]').exists()).toBe(false)
+    store.followupNotice = 'Daily message limit reached - recap saved, tutor follow-up skipped.'
+    await nextTick()
+    const notice = wrapper.find('[data-testid="followup-notice"]')
+    expect(notice.exists()).toBe(true)
+    expect(notice.text()).toContain('Daily message limit reached')
+  })
+
   it('renders streaming bubble when store.streamingMessage is set', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'loadSession').mockImplementation(async () => {

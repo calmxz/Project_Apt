@@ -104,6 +104,20 @@ describe('multi-check store', () => {
     expect(s.pendingCheck.items[0].correct).toBe(true)
   })
 
+  it('followup_skipped clears stream state and sets a quiet notice', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 'sid'
+    s.handleCheckQuestion(batchEvent())
+    streamSvc.streamCheckComplete.mockImplementation(async ({ onEvent }) => {
+      onEvent({ event: 'followup_skipped', data: { reason: 'daily_cap' } })
+    })
+    await s.completeCheck()
+    expect(s.followupNotice).toMatch(/daily message limit/i)
+    expect(s.streamingMessage).toBeNull()
+    expect(s.streamState).toBe('idle')
+    expect(s.error).toBeNull()
+  })
+
   it('loadSession maps check_batch onto messages (camelCase)', async () => {
     const store = useSessionStore()
     sessionsApi.getSession.mockResolvedValue({
