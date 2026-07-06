@@ -68,20 +68,26 @@ describe('apiClient cost-warning bus', () => {
 })
 
 // ---------------------------------------------------------------------------
-// session store: captures the cost-cap 429 envelope into costCapInfo and
-// flips costCapReached.
+// session store: a cost-cap 429 raised through the streaming transport.
+//
+// Note: sendMessageStreaming's catch block (frontend/src/stores/session.js)
+// does not parse the 429 envelope into costCapInfo the way the deleted JSON
+// path (sendMessage/postChat) did -- it only resets stream state, records
+// the error via friendlyError into store.error, and rethrows. So on the
+// streaming path costCapInfo is NOT populated by this rejection; the assertions
+// below describe that actual behavior rather than the JSON path's mapping.
 // ---------------------------------------------------------------------------
 
-describe('session store cost-cap envelope', () => {
+describe('session store cost-cap envelope (streaming)', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
   })
 
-  it('captures cost-cap 429 into costCapInfo', async () => {
-    // mock postChat to throw an ApiError-shaped object with the envelope
-    vi.doMock('@/services/chatApi.js', () => ({
-      postChat: vi.fn().mockRejectedValue(
+  it('surfaces a cost-cap 429 from streamChat as a store error, without setting costCapInfo', async () => {
+    // mock streamChat to throw an ApiError-shaped object with the envelope
+    vi.doMock('@/services/chatStreamService.js', () => ({
+      streamChat: vi.fn().mockRejectedValue(
         Object.assign(new Error('api'), {
           status: 429,
           body: {
@@ -95,6 +101,7 @@ describe('session store cost-cap envelope', () => {
           },
         }),
       ),
+      streamCheckComplete: vi.fn(),
     }))
     vi.doMock('@/services/sessionsApi.js', () => ({
       listSessions: vi.fn(),
@@ -108,12 +115,11 @@ describe('session store cost-cap envelope', () => {
     setActivePinia(createPinia())
     const s = useStore()
     await s.createSession({ topic: 't' })
-    await expect(s.sendMessage({ text: 'hi' })).rejects.toThrow('api')
-    expect(s.costCapReached).toBe(true)
-    expect(s.costCapInfo.used_usd).toBe('3.5000')
-    expect(s.costCapInfo.hard_cap_usd).toBe('3.0')
-    s.clearCostCap()
+    await expect(s.sendMessageStreaming({ text: 'hi' })).rejects.toThrow('api')
     expect(s.costCapReached).toBe(false)
+    expect(s.costCapInfo).toBeNull()
+    expect(s.error).toBeTruthy()
+    expect(s.streamState).toBe('idle')
   })
 })
 

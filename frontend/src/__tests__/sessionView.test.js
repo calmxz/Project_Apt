@@ -244,7 +244,7 @@ describe('SessionView', () => {
     vi.spyOn(store, 'loadSession').mockImplementation(async () => {
       setupSession()
     })
-    const sendSpy = vi.spyOn(store, 'sendMessage').mockResolvedValue()
+    const sendSpy = vi.spyOn(store, 'sendMessageStreaming').mockResolvedValue()
     const wrapper = mountView()
     await flushPromises()
     await wrapper.get('[data-testid="session-input"]').setValue('hello')
@@ -259,7 +259,7 @@ describe('SessionView', () => {
     vi.spyOn(store, 'loadSession').mockImplementation(async () => {
       setupSession()
     })
-    vi.spyOn(store, 'sendMessage').mockRejectedValue(
+    vi.spyOn(store, 'sendMessageStreaming').mockRejectedValue(
       Object.assign(new Error('network down'), { status: 500 }),
     )
     const wrapper = mountView()
@@ -277,7 +277,7 @@ describe('SessionView', () => {
       setupSession()
     })
     const sendSpy = vi
-      .spyOn(store, 'sendMessage')
+      .spyOn(store, 'sendMessageStreaming')
       .mockRejectedValueOnce(new Error('boom'))
       .mockResolvedValueOnce()
     const wrapper = mountView()
@@ -296,7 +296,7 @@ describe('SessionView', () => {
     vi.spyOn(store, 'loadSession').mockImplementation(async () => {
       setupSession()
     })
-    const sendSpy = vi.spyOn(store, 'sendMessage').mockResolvedValue()
+    const sendSpy = vi.spyOn(store, 'sendMessageStreaming').mockResolvedValue()
     const wrapper = mountView()
     await flushPromises()
     const input = wrapper.get('[data-testid="session-input"]')
@@ -311,7 +311,7 @@ describe('SessionView', () => {
     vi.spyOn(store, 'loadSession').mockImplementation(async () => {
       setupSession()
     })
-    const sendSpy = vi.spyOn(store, 'sendMessage').mockResolvedValue()
+    const sendSpy = vi.spyOn(store, 'sendMessageStreaming').mockResolvedValue()
     const wrapper = mountView()
     await flushPromises()
     const input = wrapper.get('[data-testid="session-input"]')
@@ -326,7 +326,7 @@ describe('SessionView', () => {
     vi.spyOn(store, 'loadSession').mockImplementation(async () => {
       setupSession()
     })
-    const sendSpy = vi.spyOn(store, 'sendMessage').mockResolvedValue()
+    const sendSpy = vi.spyOn(store, 'sendMessageStreaming').mockResolvedValue()
     const wrapper = mountView()
     await flushPromises()
     await wrapper.get('[data-testid="quick-prompt-0"]').trigger('click')
