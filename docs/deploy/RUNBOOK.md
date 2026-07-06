@@ -47,7 +47,6 @@ Copy the service URL, e.g. `https://crux-api.onrender.com`.
    - `VITE_API_BASE_URL` = the Render URL from step 3
    - `VITE_SUPABASE_URL` = your Supabase URL
    - `VITE_SUPABASE_PUBLISHABLE_KEY` = your Supabase publishable key
-   - `VITE_CHAT_STREAM` = `true`
 5. Deploy.
 
 ## Step 5 — Record the Vercel URL
