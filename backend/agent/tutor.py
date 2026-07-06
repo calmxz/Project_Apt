@@ -193,6 +193,14 @@ async def run_streaming(
                     cost_meter.record_cost(ctx.db, ctx.user_id, cost)
                 except Exception as e:
                     log.warning("cost_meter.record_cost failed: %s", e)
+                cost_meter.log_call(
+                    ctx.db,
+                    user_id=ctx.user_id,
+                    session_id=ctx.session_id,
+                    purpose="followup" if getattr(ctx, "suppress_check", False) else "chat",
+                    model=settings.model,
+                    cost_usd=cost,
+                )
 
             # No tool calls assembled -> the streamed content was the final answer.
             if not tool_frags:
@@ -366,6 +374,14 @@ async def run_streaming(
             cost_meter.record_cost(ctx.db, ctx.user_id, cost)
         except Exception as e:
             log.warning("cost_meter.record_cost (cancel) failed: %s", e)
+        cost_meter.log_call(
+            ctx.db,
+            user_id=ctx.user_id,
+            session_id=ctx.session_id,
+            purpose="followup" if getattr(ctx, "suppress_check", False) else "chat",
+            model=settings.model,
+            cost_usd=cost,
+        )
 
         msg_id = _persist_assistant_message(
             ctx,

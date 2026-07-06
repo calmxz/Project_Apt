@@ -144,3 +144,23 @@ class DailyCostLedger(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False
     )
+
+
+class LlmCallLog(Base):
+    """Per-call LLM cost attribution. Analytics-only (roadmap R3 consumes it);
+    additive to DailyCostLedger, never a substitute -- cap gating stays on the
+    daily ledger. No readers exist yet in this slice."""
+
+    __tablename__ = "llm_call_log"
+    __table_args__ = (
+        Index("ix_llm_call_log_user", "user_id"),
+        Index("ix_llm_call_log_session", "session_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    session_id: Mapped[str | None] = mapped_column(ForeignKey("sessions.id"), nullable=True)
+    purpose: Mapped[str] = mapped_column(String, nullable=False)  # chat | followup | summary
+    model: Mapped[str] = mapped_column(String, nullable=False)
+    cost_usd: Mapped[Decimal] = mapped_column(Numeric(10, 4), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
