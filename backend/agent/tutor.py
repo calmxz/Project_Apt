@@ -16,6 +16,7 @@ import litellm
 
 from agent import tools
 from agent._stub import stub_response
+from agent.excerpt import wrap_chunk
 from agent.stream_events import StreamEvent
 from agent.types import ToolContext
 from config import settings
@@ -148,14 +149,7 @@ async def run(
                         )
                     )
                 wrapped_chunks = [
-                    {
-                        **ch,
-                        "text": (
-                            f"<document_excerpt id={str(ch.get('doc_id', ''))!r}>"
-                            f"{ch.get('text', '')}"
-                            f"</document_excerpt>"
-                        ),
-                    }
+                    {**ch, "text": wrap_chunk(ch)}
                     for ch in raw_chunks
                 ]
                 tool_payload = result.model_copy(
@@ -475,14 +469,7 @@ async def run_streaming(
                             "citations", [c.model_dump() for c in new_cites]
                         )
                     wrapped_chunks = [
-                        {
-                            **ch,
-                            "text": (
-                                f"<document_excerpt id={str(ch.get('doc_id', ''))!r}>"
-                                f"{ch.get('text', '')}"
-                                f"</document_excerpt>"
-                            ),
-                        }
+                        {**ch, "text": wrap_chunk(ch)}
                         for ch in raw_chunks
                     ]
                     tool_payload = result.model_copy(
