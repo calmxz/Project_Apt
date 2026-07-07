@@ -6,7 +6,6 @@ chars/token.
 """
 import json
 
-from agent import context_budget
 from agent.context_budget import (
     MAX_MESSAGE_CHARS,
     TRUNCATION_MARKER,
