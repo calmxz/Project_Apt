@@ -163,4 +163,11 @@ class LlmCallLog(Base):
     purpose: Mapped[str] = mapped_column(String, nullable=False)  # chat | followup | summary
     model: Mapped[str] = mapped_column(String, nullable=False)
     cost_usd: Mapped[Decimal] = mapped_column(Numeric(10, 4), nullable=False)
+
+    # P1 instrumentation (slice 2): nullable per-call token counts.
+    # cached_tokens = Gemini implicit-prefix-cache hit portion of prompt_tokens.
+    prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    completion_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cached_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)

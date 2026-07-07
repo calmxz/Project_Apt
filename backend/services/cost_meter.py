@@ -83,7 +83,12 @@ def record_cost(db: Session, user_id: str, cost_usd) -> Decimal:
     return _to_decimal(row.cost_usd)
 
 
-def log_call(db: Session, *, user_id: str, session_id, purpose: str, model: str, cost_usd) -> None:
+def log_call(
+    db: Session, *, user_id: str, session_id, purpose: str, model: str, cost_usd,
+    prompt_tokens: int | None = None,
+    completion_tokens: int | None = None,
+    cached_tokens: int | None = None,
+) -> None:
     """Best-effort per-call attribution row. Never raises: a failed log
     write must not fail the user's turn. Cap gating stays on the daily
     ledger; this table is analytics-only (roadmap R3 consumes it).
@@ -104,9 +109,41 @@ def log_call(db: Session, *, user_id: str, session_id, purpose: str, model: str,
             db.add(LlmCallLog(
                 user_id=user_id, session_id=session_id, purpose=purpose,
                 model=model, cost_usd=_quantize(cost),
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                cached_tokens=cached_tokens,
             ))
     except Exception as e:  # noqa: BLE001 - isolation by design
         log.warning("llm_call_log write failed: %s", e)
+
+
+def extract_usage(resp) -> dict:
+    """Tolerantly read token usage off a LiteLLM response (acompletion result
+    or stream_chunk_builder output). Returns exactly the keys log_call accepts
+    as token kwargs, so callers can splat: log_call(..., **extract_usage(r)).
+
+    cached_tokens carries the Gemini implicit-prefix-cache hit count. LiteLLM
+    normalizes Gemini's cachedContentTokenCount into OpenAI-style
+    usage.prompt_tokens_details.cached_tokens on current versions; the raw
+    Gemini field name is probed as a fallback. Instrumentation only -- never
+    raises (it runs inside the billed turn path).
+    """
+    out = {"prompt_tokens": None, "completion_tokens": None, "cached_tokens": None}
+    try:
+        usage = getattr(resp, "usage", None)
+        if usage is None:
+            return out
+        out["prompt_tokens"] = getattr(usage, "prompt_tokens", None)
+        out["completion_tokens"] = getattr(usage, "completion_tokens", None)
+        details = getattr(usage, "prompt_tokens_details", None)
+        if details is not None:
+            cached = getattr(details, "cached_tokens", None)
+            if cached is None:
+                cached = getattr(details, "cached_content_token_count", None)
+            out["cached_tokens"] = cached
+    except Exception:  # noqa: BLE001 - instrumentation must never break a turn
+        pass
+    return out
 
 
 def check_cap(db: Session, user_id: str) -> CapStatus:
