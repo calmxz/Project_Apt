@@ -30,6 +30,7 @@ def _build_prompt_state(
     ingestion_status,
     retrieval_required: bool,
     review_gaps: bool,
+    review_gap: str | None = None,
     pending_check,
     quiz_cooldown,
 ) -> dict:
@@ -49,7 +50,8 @@ def _build_prompt_state(
         "quiz_cooldown": quiz_cooldown,
     }
     if review_gaps and profile.confirmed_gaps:
-        prompt_state["review_gaps_target"] = profile.confirmed_gaps[0]
+        target = review_gap if review_gap in profile.confirmed_gaps else profile.confirmed_gaps[0]
+        prompt_state["review_gaps_target"] = target
         prompt_state["diagnostic_required"] = False
     return prompt_state
 
@@ -131,6 +133,7 @@ async def _prepare_turn(
         ingestion_status=ingestion_status,
         retrieval_required=retrieval_required,
         review_gaps=getattr(req, "review_gaps", False),
+        review_gap=getattr(req, "review_gap", None),
         pending_check=check_question_service.get_pending_check(db, req.session_id),
         quiz_cooldown=check_question_service.get_quiz_cooldown(db, req.session_id),
     )
