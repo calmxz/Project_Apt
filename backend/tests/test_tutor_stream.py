@@ -16,6 +16,7 @@ Streaming mock shape (mirrors litellm streaming objects):
 """
 
 import asyncio
+import copy
 import json
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -563,3 +564,63 @@ async def test_run_streaming_writes_llm_call_log_row(db_session, monkeypatch):
     row = db_session.query(LlmCallLog).filter(LlmCallLog.session_id == "s_call_log").one()
     assert row.purpose == "chat"
     assert row.user_id == "u1"
+
+
+@pytest.mark.asyncio
+async def test_prune_superseded_excerpts_wired_into_loop(db_session, monkeypatch):
+    """Integration (Task 7): prune_superseded_excerpts runs after each
+    tool-dispatch iteration. Two same-turn retrieve_chunks calls (iterations 1
+    and 2) followed by a final text iteration (3) must arrive at the third
+    acompletion call with the FIRST retrieval's tool message stubbed and the
+    SECOND (newest) retrieval's document_excerpt intact.
+
+    `full` is mutated and reused across iterations, so the fake acompletion
+    must deep-copy kwargs["messages"] at call time -- a plain reference would
+    show the same (fully mutated) list for every captured call.
+    """
+    _disable_stub(monkeypatch)
+    _allow_cap(monkeypatch)
+
+    from agent import tutor
+
+    turn1 = _make_stream(
+        _tool_chunk(_tool_fragment(0, id="tc_1", name="retrieve_chunks", arguments='{"query":"a"}')),
+    )
+    turn2 = _make_stream(
+        _tool_chunk(_tool_fragment(0, id="tc_2", name="retrieve_chunks", arguments='{"query":"b"}')),
+    )
+    turn3 = _make_stream(_content_chunk("final answer"))
+    turns = [turn1, turn2, turn3]
+
+    captured_messages = []
+
+    async def _fake_acompletion(*args, **kwargs):
+        captured_messages.append(copy.deepcopy(kwargs["messages"]))
+        return turns.pop(0)
+
+    monkeypatch.setattr("agent.tutor.litellm.acompletion", _fake_acompletion)
+    monkeypatch.setattr(
+        "agent.tutor.litellm.stream_chunk_builder", MagicMock(return_value=SimpleNamespace())
+    )
+    monkeypatch.setattr("agent.tutor.litellm.completion_cost", MagicMock(return_value=0.0))
+
+    def _dispatch(name, args, ctx):
+        first = args.get("query") == "a"
+        chunk = {
+            "doc_id": "d1" if first else "d2",
+            "doc_name": "notes.pdf" if first else "slides.pdf",
+            "text": "old material" if first else "new material",
+        }
+        return ToolResult(ok=True, status="ok", error=None, data={"chunks": [chunk]})
+
+    monkeypatch.setattr("agent.tutor.tools.dispatch", MagicMock(side_effect=_dispatch))
+
+    ctx = _ctx(db_session, session_id="s_prune")
+    await _drain(tutor.run_streaming([{"role": "user", "content": "hi"}], "sys", ctx))
+
+    assert len(captured_messages) == 3
+    third_call_msgs = captured_messages[2]
+    tool_msgs = [m for m in third_call_msgs if m.get("role") == "tool" and m.get("name") == "retrieve_chunks"]
+    assert len(tool_msgs) == 2
+    assert tool_msgs[0]["content"].startswith("[superseded retrieval:")
+    assert "<document_excerpt" in tool_msgs[1]["content"]

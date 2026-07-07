@@ -12,7 +12,7 @@ from typing import AsyncIterator
 
 import litellm
 
-from agent import tools
+from agent import context_budget, tools
 from agent._stub import stub_response
 from agent.excerpt import wrap_chunk
 from agent.stream_events import StreamEvent
@@ -341,6 +341,11 @@ async def run_streaming(
                         "content": tool_content,
                     }
                 )
+
+            # P2: earlier same-turn retrieval payloads are superseded once a
+            # newer one exists; stub them so they stop re-billing every
+            # remaining iteration.
+            context_budget.prune_superseded_excerpts(full)
 
             if asked_check:
                 # Turn-terminating: check question handed to learner. Persist and
