@@ -223,6 +223,7 @@ class ChatRequest(BaseModel):
     session_id: constr(max_length=64)
     message: constr(max_length=4000)
     review_gaps: bool | None = False
+    review_gap: constr(max_length=200) | None = None
 
 
 class SessionCreateRequest(BaseModel):
