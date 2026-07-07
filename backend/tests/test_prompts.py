@@ -136,3 +136,33 @@ def test_review_gaps_mode_forces_check_same_turn():
     assert "must call ask_check_questions" in low
     assert "do not offer to review" in low
     assert "do not ask whether they are ready" in low
+
+
+def test_system_prompt_prefix_is_byte_identical_across_turns():
+    """Gemini's implicit prefix cache only helps if the prompt head never
+    varies. All per-turn material must render strictly after IMMUTABLE_RULES.
+    (Roadmap P1 AC2 -- guards the cache-friendliness CLAUDE.md promises.)"""
+    state_a = {
+        "topic": "photosynthesis",
+        "profile": {"knowledge_level": "beginner", "confirmed_gaps": ["light reactions"]},
+        "ingestion_status": "ready",
+        "retrieval_required": True,
+        "seed_mode": "fresh",
+    }
+    state_b = {
+        "topic": "linear algebra",
+        "profile": {"knowledge_level": "advanced", "mastered_concepts": ["matrix rank"]},
+        "ingestion_status": "none",
+        "retrieval_required": False,
+        "seed_mode": "resume",
+        "quiz_cooldown": {"gap": "eigenvalues", "last_score": "1/3"},
+    }
+    a = prompts.build_system_prompt(state_a)
+    b = prompts.build_system_prompt(state_b)
+    n = len(prompts.IMMUTABLE_RULES)
+    assert a[:n] == prompts.IMMUTABLE_RULES
+    assert b[:n] == prompts.IMMUTABLE_RULES
+    assert a[:n] == b[:n]
+    # No per-turn material may leak into the stable prefix.
+    assert "photosynthesis" not in a[:n]
+    assert "linear algebra" not in b[:n]
