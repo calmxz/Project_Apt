@@ -7,7 +7,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from agent import prompts, tutor
+from agent import context_budget, prompts, tutor
 from agent.types import ToolContext
 from config import settings
 from contracts import ChatRequest
@@ -106,7 +106,12 @@ async def _prepare_turn(
     ).scalars().all()
     history = list(reversed(history))
 
-    messages = [{"role": m.role, "content": m.content} for m in history]
+    # P2: cap each history message; the current user message (appended below)
+    # and the system prompt are exempt.
+    messages = [
+        {"role": m.role, "content": context_budget.truncate_message(m.content)}
+        for m in history
+    ]
     messages.append({"role": "user", "content": req.message})
 
     user_msg = ChatMessage(session_id=req.session_id, role="user", content=req.message)

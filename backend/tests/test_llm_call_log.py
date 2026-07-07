@@ -59,3 +59,26 @@ def test_log_call_flush_failure_does_not_break_session(db_session):
     ))
     db_session.commit()
     assert db_session.query(LlmCallLog).count() == 1
+
+
+def test_log_call_persists_token_counts(db_session):
+    cost_meter.log_call(
+        db_session, user_id="u1", session_id=None, purpose="chat",
+        model="m", cost_usd="0.0100",
+        prompt_tokens=1200, completion_tokens=340, cached_tokens=900,
+    )
+    row = db_session.query(LlmCallLog).one()
+    assert row.prompt_tokens == 1200
+    assert row.completion_tokens == 340
+    assert row.cached_tokens == 900
+
+
+def test_log_call_token_kwargs_default_null(db_session):
+    cost_meter.log_call(
+        db_session, user_id="u1", session_id=None, purpose="chat",
+        model="m", cost_usd="0.0100",
+    )
+    row = db_session.query(LlmCallLog).one()
+    assert row.prompt_tokens is None
+    assert row.completion_tokens is None
+    assert row.cached_tokens is None

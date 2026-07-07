@@ -76,6 +76,7 @@ async def generate_and_persist(db: Session, session: SessionModel) -> str:
                 purpose="summary",
                 model=settings.model,
                 cost_usd=cost,
+                **cost_meter.extract_usage(resp),
             )
         except Exception as e:
             log.warning("summary LLM failed, using mechanical fallback: %s", e)

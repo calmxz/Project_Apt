@@ -13,7 +13,7 @@ vi.mock('@/services/sessionsApi.js', () => ({
 import { useSessionStore } from '@/stores/session.js'
 import * as sessionsApi from '@/services/sessionsApi.js'
 import * as streamSvc from '@/services/chatStreamService.js'
-import { ERR_DAILY_CAP_REACHED } from '@/lib/errorCodes.js'
+import { ERR_DAILY_CAP_REACHED, ERR_DAILY_COST_CAP_REACHED } from '@/lib/errorCodes.js'
 
 class ApiErrorLike extends Error {
   constructor(status, body) {
@@ -339,14 +339,9 @@ describe('session store — streaming', () => {
     expect(s.messages[1].tool_calls[0].summary).toBe('5 found')
   })
 
-  // Streaming maps a daily-cap 429 differently from the removed non-streaming
-  // chain: that old code parsed the 429 envelope into dailyCapInfo so the
-  // UI could show a cap banner without a hard error. sendMessageStreaming's
-  // catch block has no such mapping -- it resets stream state, records
-  // e via friendlyError into store.error, and rethrows. dailyCapInfo is left
-  // untouched (still null). This test documents that current behavior; it is
-  // not asserting an equivalent from the removed chain.
-  it('sendMessageStreaming surfaces a daily-cap 429 as a store error without setting dailyCapInfo', async () => {
+  // Streaming path now maps the 429 envelope into dailyCapInfo via
+  // lib/capErrors.js (slice 2) -- parity with the removed non-streaming chain.
+  it('sendMessageStreaming maps a daily-cap 429 into dailyCapInfo and store error', async () => {
     const s = useSessionStore()
     s.currentSessionId = 's1'
     vi.spyOn(streamSvc, 'streamChat').mockRejectedValueOnce(
@@ -356,10 +351,28 @@ describe('session store — streaming', () => {
     )
     await expect(s.sendMessageStreaming({ text: 'x' })).rejects.toThrow('api error')
     expect(s.error).toBeTruthy()
-    expect(s.dailyCapInfo).toBeNull()
-    expect(s.dailyCapReached).toBe(false)
+    expect(s.dailyCapInfo).toEqual({ cap: 10, used: 10, resets_at: '2026-01-02' })
+    expect(s.dailyCapReached).toBe(true)
     expect(s.streamState).toBe('idle')
     expect(s.streamingMessage).toBeNull()
+  })
+
+  it('sendMessageStreaming maps a mid-turn SSE cost-cap error event into costCapInfo', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 's1'
+    vi.spyOn(streamSvc, 'streamChat').mockImplementation(async ({ onEvent }) => {
+      onEvent({ event: 'assistant_delta', data: { text: 'partial' } })
+      onEvent({
+        event: 'error',
+        data: { code: ERR_DAILY_COST_CAP_REACHED, used_usd: '3.0100', soft_cap_usd: '2.0', hard_cap_usd: '3.0' },
+      })
+    })
+    await s.sendMessageStreaming({ text: 'x' })
+    expect(s.costCapInfo).toEqual({
+      used_usd: '3.0100', soft_cap_usd: '2.0', hard_cap_usd: '3.0', resets_at: null,
+    })
+    expect(s.costCapReached).toBe(true)
+    expect(s.streamState).toBe('idle')
   })
 
   it('stopStream invokes abortController.abort() and transitions to stopping', () => {

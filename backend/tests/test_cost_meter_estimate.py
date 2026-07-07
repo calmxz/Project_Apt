@@ -5,8 +5,6 @@ These tests must FAIL before the implementation is added to cost_meter.py.
 
 from decimal import Decimal
 
-import pytest
-
 from config import settings
 from services.cost_meter import estimate_cancelled_cost, MODEL_RATES
 
@@ -61,11 +59,25 @@ def test_estimate_zero_delta_only_charges_prompt():
     assert cost == expected
 
 
-def test_estimate_raises_for_unknown_model():
-    """A model not in MODEL_RATES must raise KeyError."""
-    with pytest.raises(KeyError):
-        estimate_cancelled_cost(
-            model="nonexistent/model",
-            delta_text="hello",
-            prompt_tokens=100,
-        )
+def test_unknown_model_falls_back_to_litellm_price_table(monkeypatch):
+    """P2 AC5: an unregistered model id must not raise mid-turn."""
+    monkeypatch.setattr(
+        "services.cost_meter.litellm.token_counter", lambda model, text: 10
+    )
+    monkeypatch.setattr(
+        "services.cost_meter.litellm.cost_per_token",
+        lambda model, prompt_tokens, completion_tokens: (0.001, 0.002),
+    )
+    cost = estimate_cancelled_cost("some/unknown-model", "partial reply", 100)
+    assert cost == Decimal("0.003")
+
+
+def test_unknown_model_double_failure_returns_zero(monkeypatch):
+    monkeypatch.setattr(
+        "services.cost_meter.litellm.token_counter", lambda model, text: 10
+    )
+    def _boom(**kwargs):
+        raise ValueError("model not mapped")
+    monkeypatch.setattr("services.cost_meter.litellm.cost_per_token", _boom)
+    cost = estimate_cancelled_cost("some/unknown-model", "partial reply", 100)
+    assert cost == Decimal("0")
