@@ -182,6 +182,7 @@ async def run_streaming(
             # toward the daily cap too. Previously this block lived inside `if not
             # tool_frags`, so multi-tool turns charged only their final text
             # iteration and could evade the hard cost cap.
+            built = None
             try:
                 built = litellm.stream_chunk_builder(chunks, messages=full)
                 cost = litellm.completion_cost(completion_response=built) or 0.0
@@ -200,6 +201,7 @@ async def run_streaming(
                     purpose="followup" if getattr(ctx, "suppress_check", False) else "chat",
                     model=settings.model,
                     cost_usd=cost,
+                    **cost_meter.extract_usage(built),
                 )
 
             # No tool calls assembled -> the streamed content was the final answer.

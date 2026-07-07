@@ -62,12 +62,18 @@ def test_successful_summary_logs_llm_call(
 ):
     """Migration 0014: generate_and_persist logs a per-call attribution row
     (purpose="summary") -- additive to whatever cost tracking exists
-    elsewhere, log-only (not passed to record_cost, out of scope here)."""
+    elsewhere, log-only (not passed to record_cost, out of scope here).
+
+    Also verifies (Task 4) that token usage on the acompletion response is
+    extracted and persisted onto the LlmCallLog row via cost_meter.extract_usage."""
     from types import SimpleNamespace
 
     async def fake_acompletion(**kwargs):
         return SimpleNamespace(
-            choices=[SimpleNamespace(message=SimpleNamespace(content="a good summary"))]
+            choices=[SimpleNamespace(message=SimpleNamespace(content="a good summary"))],
+            usage=SimpleNamespace(
+                prompt_tokens=50, completion_tokens=10, prompt_tokens_details=None
+            ),
         )
 
     monkeypatch.setattr("services.summary_service.litellm.acompletion", fake_acompletion)
@@ -83,6 +89,9 @@ def test_successful_summary_logs_llm_call(
     row = db_session.query(LlmCallLog).filter(LlmCallLog.purpose == "summary").one()
     assert row.session_id == SESSION_ID
     assert row.user_id == USER_ID
+    assert row.prompt_tokens == 50
+    assert row.completion_tokens == 10
+    assert row.cached_tokens is None
 
 
 def test_llm_exception_uses_mechanical_fallback(

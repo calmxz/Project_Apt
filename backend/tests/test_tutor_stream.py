@@ -506,6 +506,41 @@ async def test_run_streaming_ask_check_question_skips_siblings(db_session, monke
 
 
 @pytest.mark.asyncio
+async def test_stream_logs_token_usage(db_session, monkeypatch):
+    """log_call receives the token usage extracted from stream_chunk_builder's
+    output (extract_usage, Task 3) so llm_call_log rows carry token counts."""
+    _disable_stub(monkeypatch)
+    _allow_cap(monkeypatch)
+
+    from agent import tutor
+
+    built = SimpleNamespace(usage=SimpleNamespace(
+        prompt_tokens=1500, completion_tokens=200,
+        prompt_tokens_details=SimpleNamespace(cached_tokens=1100),
+    ))
+    monkeypatch.setattr(
+        "agent.tutor.litellm.stream_chunk_builder", MagicMock(return_value=built)
+    )
+    monkeypatch.setattr(
+        "agent.tutor.litellm.completion_cost", MagicMock(return_value=0.01)
+    )
+    log_call_spy = MagicMock()
+    monkeypatch.setattr("agent.tutor.cost_meter.log_call", log_call_spy)
+
+    turn = _make_stream(_content_chunk("final answer"))
+    monkeypatch.setattr("agent.tutor.litellm.acompletion", AsyncMock(side_effect=[turn]))
+
+    ctx = _ctx(db_session, session_id="s_token_usage")
+    await _drain(tutor.run_streaming([{"role": "user", "content": "hi"}], "sys", ctx))
+
+    assert log_call_spy.call_count == 1
+    kwargs = log_call_spy.call_args.kwargs
+    assert kwargs["prompt_tokens"] == 1500
+    assert kwargs["completion_tokens"] == 200
+    assert kwargs["cached_tokens"] == 1100
+
+
+@pytest.mark.asyncio
 async def test_run_streaming_writes_llm_call_log_row(db_session, monkeypatch):
     """Integration: log_call is additive to record_cost, not a replacement.
     After a streamed turn with nonzero cost, LlmCallLog gains a row with
