@@ -1,11 +1,12 @@
 # backend/tests/test_token_budget.py
 """P2 AC4: fixture-based token-budget tripwire.
 
-Assembles a canonical 3-turn conversation with one retrieval through the
-REAL truncation/pruning helpers and asserts the token total stays under
-TOKEN_BUDGET. The budget is a measured baseline plus slack, not a spec
-number -- its job is to break loudly if prompt/window assembly regresses
-(e.g. someone removes truncation or starts resending full excerpts).
+Assembles a canonical 3-turn conversation with a superseded and a current
+retrieval through the REAL truncation/pruning helpers and asserts the token
+total stays under TOKEN_BUDGET. The budget is a measured baseline plus
+slack, not a spec number -- its job is to break loudly if prompt/window
+assembly regresses (e.g. someone removes truncation or starts resending
+full excerpts).
 """
 import json
 
@@ -17,7 +18,7 @@ from config import settings
 # Set in Step 2 from the measured baseline (printed value * 1.10, rounded up
 # to the nearest 100). Do not raise casually: an increase here means every
 # turn got more expensive.
-TOKEN_BUDGET = 6700
+TOKEN_BUDGET = 6800
 
 
 def _assembled_turn():
@@ -47,6 +48,7 @@ def _assembled_turn():
         for i in range(5)
     ]
     full = [{"role": "system", "content": system_prompt}] + messages
+    # Round 1: an older retrieval that pruning must stub as superseded.
     full.append({
         "role": "assistant", "content": None,
         "tool_calls": [{"id": "c1", "type": "function",
@@ -54,6 +56,16 @@ def _assembled_turn():
     })
     full.append({
         "role": "tool", "tool_call_id": "c1", "name": "retrieve_chunks",
+        "content": json.dumps({"status": "ok", "data": {"chunks": chunks}}),
+    })
+    # Round 2: the current retrieval that pruning must keep intact.
+    full.append({
+        "role": "assistant", "content": None,
+        "tool_calls": [{"id": "c2", "type": "function",
+                        "function": {"name": "retrieve_chunks", "arguments": "{}"}}],
+    })
+    full.append({
+        "role": "tool", "tool_call_id": "c2", "name": "retrieve_chunks",
         "content": json.dumps({"status": "ok", "data": {"chunks": chunks}}),
     })
     context_budget.prune_superseded_excerpts(full)
