@@ -67,16 +67,7 @@ describe('apiClient cost-warning bus', () => {
   })
 })
 
-// ---------------------------------------------------------------------------
-// session store: a cost-cap 429 raised through the streaming transport.
-//
-// Note: sendMessageStreaming's catch block (frontend/src/stores/session.js)
-// does not parse the 429 envelope into costCapInfo the way the removed
-// non-streaming chain did -- it only resets stream state, records
-// the error via friendlyError into store.error, and rethrows. So on the
-// streaming path costCapInfo is NOT populated by this rejection; the assertions
-// below describe that actual behavior rather than the removed chain's mapping.
-// ---------------------------------------------------------------------------
+// Slice 2: the streaming catch maps the 429 envelope into costCapInfo.
 
 describe('session store cost-cap envelope (streaming)', () => {
   beforeEach(() => {
@@ -84,7 +75,7 @@ describe('session store cost-cap envelope (streaming)', () => {
     vi.clearAllMocks()
   })
 
-  it('surfaces a cost-cap 429 from streamChat as a store error, without setting costCapInfo', async () => {
+  it('maps a cost-cap 429 from streamChat into costCapInfo and store error', async () => {
     // mock streamChat to throw an ApiError-shaped object with the envelope
     vi.doMock('@/services/chatStreamService.js', () => ({
       streamChat: vi.fn().mockRejectedValue(
@@ -116,8 +107,13 @@ describe('session store cost-cap envelope (streaming)', () => {
     const s = useStore()
     await s.createSession({ topic: 't' })
     await expect(s.sendMessageStreaming({ text: 'hi' })).rejects.toThrow('api')
-    expect(s.costCapReached).toBe(false)
-    expect(s.costCapInfo).toBeNull()
+    expect(s.costCapReached).toBe(true)
+    expect(s.costCapInfo).toEqual({
+      used_usd: '3.5000',
+      soft_cap_usd: '2.0',
+      hard_cap_usd: '3.0',
+      resets_at: '2026-05-24T00:00:00Z',
+    })
     expect(s.error).toBeTruthy()
     expect(s.streamState).toBe('idle')
   })

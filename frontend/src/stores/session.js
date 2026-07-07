@@ -5,6 +5,7 @@ import * as sessionsApi from '../services/sessionsApi.js'
 import { streamChat, streamCheckComplete } from '../services/chatStreamService.js'
 import { reportCostWarning } from '../services/costBus.js'
 import { friendlyError } from '../lib/errors.js'
+import { mapCapError } from '../lib/capErrors.js'
 
 export const useSessionStore = defineStore('session', () => {
   const currentSessionId = ref(null)
@@ -48,6 +49,14 @@ export const useSessionStore = defineStore('session', () => {
     } finally {
       libraryLoading.value = false
     }
+  }
+
+  // Route a backend cap envelope (HTTP 429 detail or SSE error payload)
+  // into the cap-banner refs. Unknown codes are a no-op.
+  function _applyCapError(detail) {
+    const { kind, info } = mapCapError(detail)
+    if (kind === 'daily') dailyCapInfo.value = info
+    else if (kind === 'cost') costCapInfo.value = info
   }
 
   function _setError(e) {
@@ -375,6 +384,7 @@ export const useSessionStore = defineStore('session', () => {
               abortController.value = null
               break
             case 'error':
+              _applyCapError(data)
               error.value = data.message || data.code
               streamingMessage.value = null
               streamState.value = 'idle'
@@ -388,6 +398,7 @@ export const useSessionStore = defineStore('session', () => {
         if (streamingMessage.value) handleCancelled('pending', streamingMessage.value.content.length, '0')
         return
       }
+      if (e?.status === 429) _applyCapError(e?.body?.detail)
       streamingMessage.value = null
       streamState.value = 'idle'
       abortController.value = null
@@ -476,6 +487,7 @@ export const useSessionStore = defineStore('session', () => {
             case 'done': finalizeMessage(data.message_id); break
             case 'cancelled': handleCancelled(data.message_id, data.partial_content_chars, data.estimated_cost_usd); break
             case 'error':
+              _applyCapError(data)
               error.value = data.message || data.code
               streamingMessage.value = null
               streamState.value = 'idle'
@@ -489,6 +501,7 @@ export const useSessionStore = defineStore('session', () => {
         if (streamingMessage.value) handleCancelled('pending', streamingMessage.value.content.length, '0')
         return
       }
+      if (e?.status === 429) _applyCapError(e?.body?.detail)
       streamingMessage.value = null
       streamState.value = 'idle'
       abortController.value = null
