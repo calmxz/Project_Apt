@@ -192,12 +192,19 @@ def estimate_cancelled_cost(model: str, delta_text: str, prompt_tokens: int) -> 
     'gemini/gemini-3.1-flash-lite' — returns 6 for a 6-word phrase — so no
     fallback guard is needed for this model id.
 
-    Raises KeyError if `model` has no entry in MODEL_RATES.
+    Unknown models fall back to litellm.cost_per_token, then to 0.
     """
-    if model not in MODEL_RATES:
-        raise KeyError(f"no rate entry for model: {model}")
-    rates = MODEL_RATES[model]
+    rates = MODEL_RATES.get(model)
     output_tokens = litellm.token_counter(model=model, text=delta_text or "")
-    prompt_cost = Decimal(prompt_tokens) * rates["input_per_1k"]
-    output_cost = Decimal(output_tokens) * rates["output_per_1k"]
-    return (prompt_cost + output_cost) / Decimal(1000)
+    if rates is not None:
+        prompt_cost = Decimal(prompt_tokens) * rates["input_per_1k"]
+        output_cost = Decimal(output_tokens) * rates["output_per_1k"]
+        return (prompt_cost + output_cost) / Decimal(1000)
+    try:
+        prompt_usd, completion_usd = litellm.cost_per_token(
+            model=model, prompt_tokens=prompt_tokens, completion_tokens=output_tokens
+        )
+        return _to_decimal(prompt_usd) + _to_decimal(completion_usd)
+    except Exception as e:  # noqa: BLE001 - cancellation metering must not raise
+        log.warning("cost fallback failed for model %s: %s", model, e)
+        return Decimal("0")
