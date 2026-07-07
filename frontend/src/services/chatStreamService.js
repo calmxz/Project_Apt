@@ -8,17 +8,20 @@ function _authToken() {
   try { return useAuthStore().accessToken ?? null } catch { return null }
 }
 
-export async function streamChat({ sessionId, message, reviewGaps = false, onEvent, signal }) {
+export async function streamChat({ sessionId, message, reviewGaps = false, reviewGap = null, onEvent, signal }) {
   const headers = { 'content-type': 'application/json' }
   const token = _authToken()
   if (token) headers['authorization'] = `Bearer ${token}`
+
+  const payload = { session_id: sessionId, message, review_gaps: reviewGaps }
+  if (reviewGap) payload.review_gap = reviewGap
 
   let resp
   try {
     resp = await fetch(`${BASE_URL}/chat/stream`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ session_id: sessionId, message, review_gaps: reviewGaps }),
+      body: JSON.stringify(payload),
       signal,
     })
   } catch (e) {
