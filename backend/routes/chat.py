@@ -1,26 +1,50 @@
 import asyncio
 import json
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from starlette.background import BackgroundTask
 
 from agent import context_budget, prompts, tutor
 from agent.types import ToolContext
 from config import settings
 from contracts import ChatRequest
-from db.database import get_db
+from db.database import SessionLocal, get_db
 from db.models import ChatMessage, Session as SessionModel
 from lib import keyword_index
 from lib.error_codes import DAILY_CAP_REACHED, DAILY_COST_CAP_REACHED
-from services import check_question_service, cost_meter, documents_service, profile_service, rate_limit
+from services import (
+    check_question_service,
+    cost_meter,
+    documents_service,
+    profile_service,
+    rate_limit,
+    summary_service,
+)
 from services.auth import current_user_id
 from services.user_service import ensure_user
 
 
 router = APIRouter(prefix="/api")
+log = logging.getLogger(__name__)
+
+
+async def _rolling_summary_task(session_id: str) -> None:
+    """Post-response: refresh the rolling summary if due. Opens its own DB
+    session because the request-scoped session is closed by the time
+    background tasks run. Must never raise: a failed rolling summary must
+    not break a chat turn (the response has already been sent)."""
+    db = SessionLocal()
+    try:
+        await summary_service.update_rolling_summary(db, session_id)
+    except Exception as e:  # noqa: BLE001 - never surface to the client
+        log.warning("rolling summary task failed: %s", e)
+    finally:
+        db.close()
 
 
 def _build_prompt_state(
@@ -205,4 +229,5 @@ async def chat_stream(
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
         },
+        background=BackgroundTask(_rolling_summary_task, req.session_id),
     )

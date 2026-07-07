@@ -30,6 +30,7 @@ import pytest
 from contracts import TopicProfile
 from db.models import Session as SessionModel, User
 from agent.stream_events import StreamEvent
+from services import summary_service
 
 
 SESSION_ID = "stream-s1"
@@ -207,3 +208,64 @@ def test_chat_stream_includes_quiz_readiness(client, db_session, monkeypatch):
     sp = captured["system_prompt"]
     assert '"gap": "joins"' in sp
     assert '"status": "cooling_down"' in sp
+
+
+# ---------------------------------------------------------------------------
+# Test: post-stream rolling summary trigger (Task 5, P2 AC3)
+# ---------------------------------------------------------------------------
+
+
+def test_stream_schedules_rolling_summary(client, monkeypatch):
+    """The stream response attaches a BackgroundTask that calls
+    summary_service.update_rolling_summary(db, session_id) after the SSE
+    body is fully consumed. TestClient runs background tasks once the
+    response completes, so a synchronous .post() (which reads the full
+    body) is enough to observe the call."""
+    fake = _make_fake_run_streaming(
+        StreamEvent("assistant_delta", {"text": "Hi"}),
+        StreamEvent("done", {"message_id": "1"}),
+    )
+    monkeypatch.setattr("agent.tutor.run_streaming", fake)
+
+    calls = []
+
+    async def fake_update(db, session_id):
+        calls.append(session_id)
+        return None
+
+    monkeypatch.setattr(summary_service, "update_rolling_summary", fake_update)
+
+    resp = client.post(
+        "/api/chat/stream",
+        json={"session_id": SESSION_ID, "message": "hello"},
+        headers=AUTH_HEADERS,
+    )
+    assert resp.status_code == 200
+    _ = resp.text  # drain the SSE body; TestClient runs background tasks after
+
+    assert calls == [SESSION_ID]
+
+
+def test_stream_rolling_summary_failure_does_not_break_turn(client, monkeypatch):
+    """A raising update_rolling_summary must not surface to the client: the
+    chat turn already completed and sent its response before the background
+    task runs. The helper's try/except/finally is what's under test here."""
+    fake = _make_fake_run_streaming(
+        StreamEvent("assistant_delta", {"text": "Hi"}),
+        StreamEvent("done", {"message_id": "1"}),
+    )
+    monkeypatch.setattr("agent.tutor.run_streaming", fake)
+
+    async def fake_update_raises(db, session_id):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(summary_service, "update_rolling_summary", fake_update_raises)
+
+    resp = client.post(
+        "/api/chat/stream",
+        json={"session_id": SESSION_ID, "message": "hello"},
+        headers=AUTH_HEADERS,
+    )
+    assert resp.status_code == 200
+    body = resp.text  # drain the SSE body; background task raises after this
+    assert "event: done" in body
