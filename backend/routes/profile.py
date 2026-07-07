@@ -51,6 +51,9 @@ def get_profile(
             question=r.question,
             correct=r.correct,
             created_at=r.created_at,
+            selected_index=r.selected_index,
+            correct_index=r.correct_index,
+            purpose=r.purpose,
         )
         for r in rows
     ]

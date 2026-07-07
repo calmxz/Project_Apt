@@ -9,11 +9,10 @@ vi.mock('@/services/sessionsApi.js', () => ({
   reopenSession: vi.fn(),
   getSessionLibrary: vi.fn(),
 }))
-vi.mock('@/services/chatApi.js', () => ({ postChat: vi.fn() }))
 
 import { useSessionStore } from '@/stores/session.js'
 import * as sessionsApi from '@/services/sessionsApi.js'
-import { postChat } from '@/services/chatApi.js'
+import * as streamSvc from '@/services/chatStreamService.js'
 import { ERR_DAILY_CAP_REACHED } from '@/lib/errorCodes.js'
 
 class ApiErrorLike extends Error {
@@ -69,53 +68,6 @@ describe('session store', () => {
     expect(s.messages).toHaveLength(2)
     expect(s.messages[0].message_id).toBe('m1')
     expect(s.messages[1].citations).toEqual([])
-  })
-
-  it('sendMessage rejects without an active session', async () => {
-    const s = useSessionStore()
-    await expect(s.sendMessage({ userId: 'u', text: 'x' })).rejects.toThrow(
-      'no active session',
-    )
-  })
-
-  it('sendMessage returns null when text is empty', async () => {
-    sessionsApi.createSession.mockResolvedValueOnce({ id: 's1', topic: 't' })
-    const s = useSessionStore()
-    await s.createSession({ userId: 'u', topic: 't' })
-    const out = await s.sendMessage({ userId: 'u', text: '  ' })
-    expect(out).toBeNull()
-  })
-
-  it('sendMessage appends assistant reply on success', async () => {
-    sessionsApi.createSession.mockResolvedValueOnce({ id: 's1', topic: 't' })
-    postChat.mockResolvedValueOnce({
-      assistant_message: 'hi',
-      message_id: 'm1',
-      citations: [{ doc_id: 'd1', text: 't' }],
-      tool_calls: [],
-    })
-    const s = useSessionStore()
-    await s.createSession({ userId: 'u', topic: 't' })
-    await s.sendMessage({ userId: 'u', text: 'hello' })
-    expect(s.messages).toHaveLength(2)
-    expect(s.messages[1].role).toBe('assistant')
-    expect(s.messages[1].citations[0].doc_id).toBe('d1')
-  })
-
-  it('sendMessage captures daily cap info on 429', async () => {
-    sessionsApi.createSession.mockResolvedValueOnce({ id: 's1', topic: 't' })
-    postChat.mockRejectedValueOnce(
-      new ApiErrorLike(429, {
-        detail: { code: ERR_DAILY_CAP_REACHED, cap: 10, used: 10, resets_at: '2026-01-02' },
-      }),
-    )
-    const s = useSessionStore()
-    await s.createSession({ userId: 'u', topic: 't' })
-    await expect(s.sendMessage({ userId: 'u', text: 'x' })).rejects.toThrow('api error')
-    expect(s.dailyCapReached).toBe(true)
-    expect(s.dailyCapInfo.cap).toBe(10)
-    s.clearDailyCap()
-    expect(s.dailyCapReached).toBe(false)
   })
 
   it('endSession updates currentSession ended_at', async () => {
@@ -274,10 +226,11 @@ describe('session store', () => {
   })
 })
 
-import * as streamSvc from '../services/chatStreamService.js'
-
 describe('session store — streaming', () => {
-  beforeEach(() => { setActivePinia(createPinia()) })
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.restoreAllMocks()
+  })
 
   it('starts in idle stream state with no streaming message', () => {
     const s = useSessionStore()
@@ -353,6 +306,60 @@ describe('session store — streaming', () => {
     expect(spy).toHaveBeenCalledWith(
       expect.objectContaining({ reviewGaps: true, message: 'Review my gaps' }),
     )
+  })
+
+  it('sendMessageStreaming rejects without an active session', async () => {
+    const s = useSessionStore()
+    await expect(s.sendMessageStreaming({ text: 'x' })).rejects.toThrow(
+      'no active session',
+    )
+  })
+
+  it('sendMessageStreaming returns null when text is empty', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 's1'
+    const out = await s.sendMessageStreaming({ text: '  ' })
+    expect(out).toBeNull()
+  })
+
+  it('sendMessageStreaming appends citations and tool_calls from stream events on success', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 's1'
+    vi.spyOn(streamSvc, 'streamChat').mockImplementation(async ({ onEvent }) => {
+      onEvent({ event: 'tool_call_start', data: { id: 't1', name: 'retrieve_chunks' } })
+      onEvent({ event: 'tool_call_done', data: { id: 't1', summary: '5 found' } })
+      onEvent({ event: 'assistant_delta', data: { text: 'hi' } })
+      onEvent({ event: 'citations', data: [{ doc_id: 'd1', text: 't' }] })
+      onEvent({ event: 'done', data: { message_id: 'm1' } })
+    })
+    await s.sendMessageStreaming({ text: 'hello' })
+    expect(s.messages).toHaveLength(2)
+    expect(s.messages[1].role).toBe('assistant')
+    expect(s.messages[1].citations[0].doc_id).toBe('d1')
+    expect(s.messages[1].tool_calls[0].summary).toBe('5 found')
+  })
+
+  // Streaming maps a daily-cap 429 differently from the removed non-streaming
+  // chain: that old code parsed the 429 envelope into dailyCapInfo so the
+  // UI could show a cap banner without a hard error. sendMessageStreaming's
+  // catch block has no such mapping -- it resets stream state, records
+  // e via friendlyError into store.error, and rethrows. dailyCapInfo is left
+  // untouched (still null). This test documents that current behavior; it is
+  // not asserting an equivalent from the removed chain.
+  it('sendMessageStreaming surfaces a daily-cap 429 as a store error without setting dailyCapInfo', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 's1'
+    vi.spyOn(streamSvc, 'streamChat').mockRejectedValueOnce(
+      new ApiErrorLike(429, {
+        detail: { code: ERR_DAILY_CAP_REACHED, cap: 10, used: 10, resets_at: '2026-01-02' },
+      }),
+    )
+    await expect(s.sendMessageStreaming({ text: 'x' })).rejects.toThrow('api error')
+    expect(s.error).toBeTruthy()
+    expect(s.dailyCapInfo).toBeNull()
+    expect(s.dailyCapReached).toBe(false)
+    expect(s.streamState).toBe('idle')
+    expect(s.streamingMessage).toBeNull()
   })
 
   it('stopStream invokes abortController.abort() and transitions to stopping', () => {

@@ -1,3 +1,8 @@
+> **HISTORICAL DOCUMENT.** This describes the original Firebase / Google ADK /
+> Firestore architecture, which was replaced in Phase 7 by Supabase Postgres +
+> pgvector + Supabase Auth with LiteLLM direct. It is retained as v2 reference
+> only. Current source of truth: `docs/superpowers/specs/2026-05-03-crux-v1-design.md`.
+
 # Crux
 
 **Adaptive AI Study Companion — Project Specification**

@@ -1,8 +1,6 @@
-"""Tutor agent loop. Calls LiteLLM with the three registered tools and
-dispatches tool calls until the model returns a final text answer or
-max_iters is exhausted.
-
-Returns (assistant_text, list[ToolCallRecord], list[Citation]).
+"""Streaming tutor agent loop. Calls LiteLLM (stream=True) with the three
+registered tools and dispatches tool calls until the model returns a final
+text answer or max_iters is exhausted, yielding StreamEvent objects live.
 """
 
 import asyncio
@@ -16,6 +14,7 @@ import litellm
 
 from agent import tools
 from agent._stub import stub_response
+from agent.excerpt import wrap_chunk
 from agent.stream_events import StreamEvent
 from agent.types import ToolContext
 from config import settings
@@ -27,176 +26,17 @@ from services import check_question_service, cost_meter
 log = logging.getLogger(__name__)
 
 MAX_ITERS = 8
-FALLBACK_TEXT = "I'm having trouble finishing that — could you rephrase?"
-
-
-def _serialize_tool_calls(tool_calls) -> list[dict] | None:
-    if not tool_calls:
-        return None
-    out: list[dict] = []
-    for tc in tool_calls:
-        out.append(
-            {
-                "id": getattr(tc, "id", None),
-                "type": getattr(tc, "type", "function"),
-                "function": {
-                    "name": tc.function.name,
-                    "arguments": tc.function.arguments,
-                },
-            }
-        )
-    return out
-
-
-async def run(
-    messages: list[dict],
-    system_prompt: str,
-    ctx: ToolContext,
-    max_iters: int = MAX_ITERS,
-) -> tuple[str, list[ToolCallRecord], list[Citation]]:
-    if settings.llm_stub_enabled:
-        return (stub_response(messages, system_prompt), [], [])
-
-    full: list[dict] = [{"role": "system", "content": system_prompt}] + list(messages)
-    tool_calls_record: list[ToolCallRecord] = []
-    citations: list[Citation] = []
-
-    for i in range(max_iters):
-        if i > 0:
-            cap = cost_meter.check_cap(ctx.db, ctx.user_id)
-            if not cap.allowed:
-                log.warning(
-                    "hard cost cap reached mid-turn for user_id=%s used=%s",
-                    ctx.user_id, cap.used,
-                )
-                return (FALLBACK_TEXT, tool_calls_record, citations)
-
-        resp = await litellm.acompletion(
-            model=settings.model,
-            messages=full,
-            tools=tools.TOOLS,
-            tool_choice="auto",
-        )
-
-        try:
-            call_cost = litellm.completion_cost(completion_response=resp) or 0.0
-        except Exception as e:
-            log.warning("completion_cost failed: %s", e)
-            call_cost = 0.0
-        if call_cost > 0:
-            try:
-                cost_meter.record_cost(ctx.db, ctx.user_id, call_cost)
-            except Exception as e:
-                log.warning("cost_meter.record_cost failed: %s", e)
-
-        msg = resp.choices[0].message
-        msg_tool_calls = getattr(msg, "tool_calls", None)
-
-        # ask_check_questions is turn-terminating. If the model bundles other tool
-        # calls in the same response (e.g. prematurely grading the question it is
-        # asking), drop them: only the ask is dispatched. Reduce BEFORE building the
-        # assistant message so `full` stays protocol-consistent (one tool response
-        # per tool_call) even if the ask itself fails.
-        if msg_tool_calls:
-            ask_calls = [
-                tc for tc in msg_tool_calls if tc.function.name == "ask_check_questions"
-            ]
-            if ask_calls:
-                msg_tool_calls = ask_calls[:1]
-
-        full.append(
-            {
-                "role": "assistant",
-                "content": msg.content,
-                "tool_calls": _serialize_tool_calls(msg_tool_calls),
-            }
-        )
-
-        if not msg_tool_calls:
-            return (msg.content or "", tool_calls_record, citations)
-
-        asked_check = False
-        for tc in msg_tool_calls:
-            try:
-                args = json.loads(tc.function.arguments)
-            except json.JSONDecodeError as e:
-                args = {}
-                log.warning("invalid tool args json: %s", e)
-
-            result = tools.dispatch(tc.function.name, args, ctx)
-            tool_calls_record.append(
-                ToolCallRecord(
-                    name=tc.function.name,
-                    args=args,
-                    status=result.status,
-                    error=result.error,
-                )
-            )
-
-            if tc.function.name == "ask_check_questions" and result.ok:
-                asked_check = True
-
-            if tc.function.name == "retrieve_chunks" and result.ok:
-                raw_chunks = (result.data or {}).get("chunks", [])
-                for ch in raw_chunks:
-                    citations.append(
-                        Citation(
-                            doc_id=str(ch.get("doc_id", "")),
-                            text=ch.get("text", ""),
-                            page=ch.get("page"),
-                            doc_name=ch.get("doc_name"),
-                        )
-                    )
-                wrapped_chunks = [
-                    {
-                        **ch,
-                        "text": (
-                            f"<document_excerpt id={str(ch.get('doc_id', ''))!r}>"
-                            f"{ch.get('text', '')}"
-                            f"</document_excerpt>"
-                        ),
-                    }
-                    for ch in raw_chunks
-                ]
-                tool_payload = result.model_copy(
-                    update={"data": {**(result.data or {}), "chunks": wrapped_chunks}}
-                )
-                tool_content = json.dumps(tool_payload.model_dump())
-            else:
-                tool_content = json.dumps(result.model_dump())
-
-            full.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": tc.id,
-                    "name": tc.function.name,
-                    "content": tool_content,
-                }
-            )
-
-        if asked_check:
-            # Turn-terminating: the check question has been handed to the learner.
-            # Grading happens on the next turn, not this one.
-            return (msg.content or "", tool_calls_record, citations)
-
-    return (FALLBACK_TEXT, tool_calls_record, citations)
-
-
-# ---------------------------------------------------------------------------
-# Streaming variant
-# ---------------------------------------------------------------------------
 
 
 def _persist_assistant_message(
     ctx, content, status, cancelled_at=None, tool_calls=None, citations=None
 ):
     # run_streaming OWNS persistence of the streaming assistant message on BOTH
-    # normal completion and cancel. This differs from non-streaming run(), whose
-    # caller (the chat route) persists the message: a cancelled stream cannot be
-    # persisted from the route after the client disconnects, so the agent does it.
-    # tool_calls_json / citations_json are serialized here with the same shape the
-    # chat route uses for run(), so a resumed session renders streamed messages
-    # (including partial ones on cancel) with their tool calls and citations.
+    # normal completion and cancel: a cancelled stream cannot be persisted from
+    # the route after the client disconnects, so the agent does it.
+    # tool_calls_json / citations_json are serialized here so a resumed session
+    # renders streamed messages (including partial ones on cancel) with their
+    # tool calls and citations.
     m = ChatMessage(
         session_id=ctx.session_id,
         role="assistant",
@@ -242,7 +82,7 @@ async def run_streaming(
     ctx: ToolContext,
     max_iters: int = MAX_ITERS,
 ) -> AsyncIterator[StreamEvent]:
-    """Streaming mirror of run(). Yields StreamEvent objects live.
+    """The tutor agent loop. Yields StreamEvent objects live.
 
     Real token streaming via litellm.acompletion(stream=True) each iteration.
     Owns persistence of the assistant ChatMessage (complete or cancelled) and
@@ -339,8 +179,7 @@ async def run_streaming(
 
             # Record this iteration's cost BEFORE branching on tool_frags. Every
             # acompletion above is billed, so tool-dispatch iterations must count
-            # toward the daily cap too (mirrors non-streaming run(), which records
-            # each iteration). Previously this block lived inside `if not
+            # toward the daily cap too. Previously this block lived inside `if not
             # tool_frags`, so multi-tool turns charged only their final text
             # iteration and could evade the hard cost cap.
             try:
@@ -354,14 +193,21 @@ async def run_streaming(
                     cost_meter.record_cost(ctx.db, ctx.user_id, cost)
                 except Exception as e:
                     log.warning("cost_meter.record_cost failed: %s", e)
+                cost_meter.log_call(
+                    ctx.db,
+                    user_id=ctx.user_id,
+                    session_id=ctx.session_id,
+                    purpose="followup" if getattr(ctx, "suppress_check", False) else "chat",
+                    model=settings.model,
+                    cost_usd=cost,
+                )
 
             # No tool calls assembled -> the streamed content was the final answer.
             if not tool_frags:
-                # Soft-cap warning: the non-streaming /chat path sets an
-                # X-Cost-Warning header after metering, but SSE flushes its
-                # headers before the LLM runs, so the streaming path emits the
-                # 90%-of-cap signal as a dedicated event instead. Routed through
-                # the same costBus -> toast as the header path on the client.
+                # Soft-cap warning: SSE flushes its headers before the LLM runs,
+                # so a response header cannot carry the 90%-of-cap signal; it is
+                # emitted as a dedicated event instead and routed through the
+                # costBus -> toast on the client.
                 post = cost_meter.check_cap(ctx.db, ctx.user_id)
                 if post.soft_breached:
                     yield StreamEvent(
@@ -475,14 +321,7 @@ async def run_streaming(
                             "citations", [c.model_dump() for c in new_cites]
                         )
                     wrapped_chunks = [
-                        {
-                            **ch,
-                            "text": (
-                                f"<document_excerpt id={str(ch.get('doc_id', ''))!r}>"
-                                f"{ch.get('text', '')}"
-                                f"</document_excerpt>"
-                            ),
-                        }
+                        {**ch, "text": wrap_chunk(ch)}
                         for ch in raw_chunks
                     ]
                     tool_payload = result.model_copy(
@@ -535,6 +374,14 @@ async def run_streaming(
             cost_meter.record_cost(ctx.db, ctx.user_id, cost)
         except Exception as e:
             log.warning("cost_meter.record_cost (cancel) failed: %s", e)
+        cost_meter.log_call(
+            ctx.db,
+            user_id=ctx.user_id,
+            session_id=ctx.session_id,
+            purpose="followup" if getattr(ctx, "suppress_check", False) else "chat",
+            model=settings.model,
+            cost_usd=cost,
+        )
 
         msg_id = _persist_assistant_message(
             ctx,

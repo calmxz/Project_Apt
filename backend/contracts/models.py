@@ -50,6 +50,9 @@ class LearningEventResponse(BaseModel):
     question: str
     correct: bool
     created_at: datetime
+    selected_index: int | None = None
+    correct_index: int | None = None
+    purpose: str | None = None
 
 
 class UpdateTopicProfileArgs(BaseModel):
@@ -82,16 +85,6 @@ class RetrieveChunksArgs(BaseModel):
     session_id: constr(max_length=64)
     query: constr(max_length=500)
     k: conint(ge=1, le=20) | None = 5
-
-
-class RecordLearningEventArgs(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    session_id: constr(max_length=64)
-    gap_tested: constr(max_length=200)
-    question: constr(max_length=1000)
-    correct: bool
 
 
 class Item(BaseModel):
@@ -230,17 +223,6 @@ class ChatRequest(BaseModel):
     session_id: constr(max_length=64)
     message: constr(max_length=4000)
     review_gaps: bool | None = False
-
-
-class ChatResponse(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    assistant_message: str
-    message_id: int
-    tool_calls: list[ToolCallRecord] | None = []
-    citations: list[Citation] | None = []
-    pending_check: PendingCheck | None = None
 
 
 class SessionCreateRequest(BaseModel):

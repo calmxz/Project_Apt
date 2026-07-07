@@ -27,7 +27,7 @@ import pytest
 from agent.types import ToolContext
 from config import settings
 from contracts import ToolResult
-from db.models import ChatMessage
+from db.models import ChatMessage, LlmCallLog
 from services.cost_meter import CapStatus
 
 
@@ -503,3 +503,28 @@ async def test_run_streaming_ask_check_question_skips_siblings(db_session, monke
     types = [e.type for e in events]
     assert "check_question" in types
     assert types[-1] == "done"
+
+
+@pytest.mark.asyncio
+async def test_run_streaming_writes_llm_call_log_row(db_session, monkeypatch):
+    """Integration: log_call is additive to record_cost, not a replacement.
+    After a streamed turn with nonzero cost, LlmCallLog gains a row with
+    purpose == "chat" (suppress_check is unset, so it is not "followup")."""
+    _disable_stub(monkeypatch)
+    _allow_cap(monkeypatch)
+
+    from agent import tutor
+
+    turn = _make_stream(_content_chunk("hi there"))
+    monkeypatch.setattr("agent.tutor.litellm.acompletion", AsyncMock(side_effect=[turn]))
+    monkeypatch.setattr(
+        "agent.tutor.litellm.stream_chunk_builder", MagicMock(return_value=SimpleNamespace())
+    )
+    monkeypatch.setattr("agent.tutor.litellm.completion_cost", MagicMock(return_value=0.0032))
+
+    ctx = _ctx(db_session, session_id="s_call_log")
+    await _drain(tutor.run_streaming([{"role": "user", "content": "hi"}], "sys", ctx))
+
+    row = db_session.query(LlmCallLog).filter(LlmCallLog.session_id == "s_call_log").one()
+    assert row.purpose == "chat"
+    assert row.user_id == "u1"

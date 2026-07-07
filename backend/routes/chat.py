@@ -2,7 +2,7 @@ import asyncio
 import json
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from agent import prompts, tutor
 from agent.types import ToolContext
 from config import settings
-from contracts import ChatRequest, ChatResponse
+from contracts import ChatRequest
 from db.database import get_db
 from db.models import ChatMessage, Session as SessionModel
 from lib import keyword_index
@@ -59,7 +59,7 @@ async def _prepare_turn(
     user_id: str,
     db: Session,
 ) -> tuple[list[dict], str, ToolContext]:
-    """Shared pre-flight for /chat and /chat/stream.
+    """Pre-flight for /chat/stream.
 
     Checks cost cap and rate limit (raises HTTPException 429 on breach),
     auto-creates User if missing, validates session (raises 404 if absent),
@@ -139,57 +139,6 @@ async def _prepare_turn(
     )
 
     return messages, system_prompt, ctx
-
-
-@router.post("/chat", response_model=ChatResponse)
-async def chat(
-    req: ChatRequest,
-    response: Response,
-    user_id: str = Depends(current_user_id),
-    db: Session = Depends(get_db),
-):
-    messages, system_prompt, ctx = await _prepare_turn(req, user_id, db)
-
-    reply, tool_calls, citations = await tutor.run(messages, system_prompt, ctx)
-
-    assistant_msg = ChatMessage(
-        session_id=req.session_id,
-        role="assistant",
-        content=reply,
-        tool_calls_json=json.dumps([tc.model_dump() for tc in tool_calls]),
-        citations_json=json.dumps([c.model_dump() for c in citations]),
-    )
-    db.add(assistant_msg)
-    db.commit()
-    db.refresh(assistant_msg)
-
-    if any(
-        getattr(tc, "name", None) == "ask_check_questions"
-        and getattr(tc, "status", None) == "ok"
-        for tc in tool_calls
-    ):
-        check_question_service.attach_message_id(db, req.session_id, assistant_msg.id)
-
-    post = cost_meter.check_cap(db, user_id)
-    if post.soft_breached:
-        level = "urgent" if post.urgent_breached else "soft"
-        response.headers["X-Cost-Warning"] = (
-            f"soft_cap_breached;level={level};used_usd={post.used};"
-            f"soft_cap_usd={post.soft_cap};urgent_cap_usd={post.urgent_cap};"
-            f"hard_cap_usd={post.hard_cap}"
-        )
-
-    pending_check = check_question_service.public_view(
-        check_question_service.get_pending_check(db, req.session_id)
-    )
-
-    return ChatResponse(
-        assistant_message=reply,
-        message_id=assistant_msg.id,
-        tool_calls=tool_calls,
-        citations=citations,
-        pending_check=pending_check,
-    )
 
 
 @router.post("/chat/stream")

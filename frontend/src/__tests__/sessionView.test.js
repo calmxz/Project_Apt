@@ -239,12 +239,12 @@ describe('SessionView', () => {
     expect(wrapper.findComponent(SessionEndedBanner).exists()).toBe(false)
   })
 
-  it('send dispatches sendMessage and clears draft', async () => {
+  it('send dispatches sendMessageStreaming and clears draft', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'loadSession').mockImplementation(async () => {
       setupSession()
     })
-    const sendSpy = vi.spyOn(store, 'sendMessage').mockResolvedValue()
+    const sendSpy = vi.spyOn(store, 'sendMessageStreaming').mockResolvedValue()
     const wrapper = mountView()
     await flushPromises()
     await wrapper.get('[data-testid="session-input"]').setValue('hello')
@@ -259,7 +259,7 @@ describe('SessionView', () => {
     vi.spyOn(store, 'loadSession').mockImplementation(async () => {
       setupSession()
     })
-    vi.spyOn(store, 'sendMessage').mockRejectedValue(
+    vi.spyOn(store, 'sendMessageStreaming').mockRejectedValue(
       Object.assign(new Error('network down'), { status: 500 }),
     )
     const wrapper = mountView()
@@ -277,7 +277,7 @@ describe('SessionView', () => {
       setupSession()
     })
     const sendSpy = vi
-      .spyOn(store, 'sendMessage')
+      .spyOn(store, 'sendMessageStreaming')
       .mockRejectedValueOnce(new Error('boom'))
       .mockResolvedValueOnce()
     const wrapper = mountView()
@@ -296,7 +296,7 @@ describe('SessionView', () => {
     vi.spyOn(store, 'loadSession').mockImplementation(async () => {
       setupSession()
     })
-    const sendSpy = vi.spyOn(store, 'sendMessage').mockResolvedValue()
+    const sendSpy = vi.spyOn(store, 'sendMessageStreaming').mockResolvedValue()
     const wrapper = mountView()
     await flushPromises()
     const input = wrapper.get('[data-testid="session-input"]')
@@ -311,7 +311,7 @@ describe('SessionView', () => {
     vi.spyOn(store, 'loadSession').mockImplementation(async () => {
       setupSession()
     })
-    const sendSpy = vi.spyOn(store, 'sendMessage').mockResolvedValue()
+    const sendSpy = vi.spyOn(store, 'sendMessageStreaming').mockResolvedValue()
     const wrapper = mountView()
     await flushPromises()
     const input = wrapper.get('[data-testid="session-input"]')
@@ -326,7 +326,7 @@ describe('SessionView', () => {
     vi.spyOn(store, 'loadSession').mockImplementation(async () => {
       setupSession()
     })
-    const sendSpy = vi.spyOn(store, 'sendMessage').mockResolvedValue()
+    const sendSpy = vi.spyOn(store, 'sendMessageStreaming').mockResolvedValue()
     const wrapper = mountView()
     await flushPromises()
     await wrapper.get('[data-testid="quick-prompt-0"]').trigger('click')
@@ -536,6 +536,22 @@ describe('SessionView', () => {
     // (canSend false because canEnd's discriminator fails id match).
     expect(composer.exists()).toBe(true)
     expect(composer.props('disabled')).toBe(true)
+  })
+
+  it('renders a quiet notice when store.followupNotice is set', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession()
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="followup-notice"]').exists()).toBe(false)
+    store.followupNotice = 'Daily message limit reached - recap saved, tutor follow-up skipped.'
+    await nextTick()
+    const notice = wrapper.find('[data-testid="followup-notice"]')
+    expect(notice.exists()).toBe(true)
+    expect(notice.text()).toContain('Daily message limit reached')
+    expect(notice.attributes('role')).toBe('status')
   })
 
   it('renders streaming bubble when store.streamingMessage is set', async () => {

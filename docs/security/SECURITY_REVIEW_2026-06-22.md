@@ -53,6 +53,8 @@ Notes:
 - `style-src 'unsafe-inline'` is likely needed for PrimeVue/Vite-injected styles — verify in a dev build before tightening further; don't ship a CSP that's broken vs. one that's perfect.
 - HSTS only matters once TLS termination is confirmed at the edge (Fly.io / reverse proxy in front of this nginx) — harmless to ship now, just confirm it's actually serving over HTTPS in Phase 8 deploy.
 
+**Status update (2026-07-06):** still **Open**. Deploy target moved to Vercel (frontend) + Render (backend) in Phase 8 WS-C, so the remedy now belongs in `vercel.json` `headers`, not `frontend/nginx.conf` (which only serves the local docker-compose stack). Same header set applies.
+
 ### Finding 2 — JWT `iss` claim not verified — LOW (carried over, independently re-confirmed)
 
 `backend/services/auth.py` — `jwt.decode(..., options={"verify_aud": True, "verify_exp": True})`. No `verify_iss` / no `issuer=` argument. A token signed by the correct Supabase project key but for a *different* `iss` (e.g. a different Supabase project sharing infra, in a pathological misconfiguration) would still pass. Low severity because `aud="authenticated"` plus JWKS-pinned signing key already do the heavy lifting — this is defense-in-depth, not a live exploit path under the current single-project setup.
@@ -71,6 +73,8 @@ payload = jwt.decode(
 ```
 
 Verify the exact `iss` format against a real token first (decode one at jwt.io or via `jwt.decode(token, options={"verify_signature": False})`) — Supabase's issuer string format should match `<project_url>/auth/v1` but confirm before hardcoding.
+
+**Status update (2026-07-06): Fixed.** Implemented exactly as above at `backend/services/auth.py:53-54` (`issuer=f"{settings.supabase_url}/auth/v1"` with `"verify_iss": True`), re-verified by reading the current code this pass.
 
 ### Finding 3 — JWKS-client misconfiguration returns 500, not 401 — INFO
 
@@ -92,6 +96,14 @@ if not settings.supabase_url:
 
 Reviewed `backend/services/ingestion_service.py` and `backend/lib/chunking.py`. `pypdf`/`python-pptx` are covered by `pip-audit` in CI; every extraction call runs inside `run()`'s top-level `try/except Exception`, which marks the document `failed` without crashing or leaking internals; resource-exhaustion risk is bounded by the existing 25MB upload cap (`upload.py:29`). No code change.
 
+### Finding 5 — `document_excerpt` delimiter forgery (S1) — MEDIUM (added 2026-07-06, Fixed)
+
+Text inside an uploaded document could contain the excerpt-block delimiter string, letting a hostile PDF forge or break out of the retrieved-excerpt framing injected into the tutor prompt. **Fixed 2026-07-06** — delimiter escaping in `backend/agent/excerpt.py` (slice 1, S1).
+
+### Finding 6 — check/complete rate-limit bypass (S2) — MEDIUM (added 2026-07-06, Fixed)
+
+The check-question complete path could be driven repeatedly without being counted against the per-user rate limit, bypassing the throttle that gates other LLM-backed turns. **Fixed 2026-07-06** — bypass closed in `backend/routes/sessions.py` (slice 1, S2).
+
 ## 4. Still-open, not new
 
 - **Branch protection / required status checks** — never applied (confirmed via CLAUDE.md's own Phase 6 status note). Manual steps for whoever has admin on the repo, in GitHub → Settings → Branches → Add branch protection rule for `main`:
@@ -107,13 +119,15 @@ Reviewed `backend/services/ingestion_service.py` and `backend/lib/chunking.py`. 
 
 | # | Finding | Severity | Status |
 |---|---|---|---|
-| 1 | No CSP / security headers in `nginx.conf` | Medium | **Open — fix above** |
-| 2 | JWT `iss` not verified | Low | **Open — fix above** |
+| 1 | No CSP / security headers on the frontend | Medium | **Open — remedy now belongs in `vercel.json` headers (see 2026-07-06 note)** |
+| 2 | JWT `iss` not verified | Low | **Fixed (2026-07-06) — `backend/services/auth.py:53-54`** |
 | 3 | JWKS misconfig → 500 instead of fail-fast | Info | **Open — fix above** |
 | 4 | `v-html` sink — confirmed single, sanitized | Info | Closed (no action) |
+| 5 | `document_excerpt` delimiter forgery (S1) | Medium | **Fixed (2026-07-06) — `backend/agent/excerpt.py`** |
+| 6 | check/complete rate-limit bypass (S2) | Medium | **Fixed (2026-07-06) — `backend/routes/sessions.py`** |
 | — | All 12 findings from 2026-05-23 audit | — | Confirmed still resolved |
 | — | "No token stored" claim | — | Corrected (now stores Supabase JWT in localStorage, by design, needs Finding 1's CSP as mitigation) |
 | — | ChromaDB references in old docs | — | Corrected (architecturally replaced by pgvector, Phase 7 T4) |
 | — | Branch protection / required checks | — | Still not applied — repo-settings action, owner: user |
 
-Priority order for fixes: **1 → 2 → 3**. Finding 1 is the only Medium and is cheap (one nginx config block, no code changes); do it first since it's the real mitigating control for the JWT-in-localStorage tradeoff documented in §2.1.
+Priority order for remaining fixes (as of 2026-07-06): **1 → 3**. Finding 1 is the only open Medium and is cheap (one `vercel.json` headers block, no code changes); do it first since it's the real mitigating control for the JWT-in-localStorage tradeoff documented in §2.1. Finding 2 is done; Findings 5 and 6 shipped fixed.

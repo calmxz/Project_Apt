@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from config import settings
 from db.models import ChatMessage, Session as SessionModel
-from services import profile_service
+from services import cost_meter, profile_service
 
 
 log = logging.getLogger(__name__)
@@ -64,6 +64,19 @@ async def generate_and_persist(db: Session, session: SessionModel) -> str:
             )
             content = (resp.choices[0].message.content or "").strip()
             summary = content if content else _mechanical_fallback(messages)
+            try:
+                cost = litellm.completion_cost(completion_response=resp)
+            except Exception as e:
+                log.warning("summary completion_cost failed: %s", e)
+                cost = 0
+            cost_meter.log_call(
+                db,
+                user_id=session.user_id,
+                session_id=session.id,
+                purpose="summary",
+                model=settings.model,
+                cost_usd=cost,
+            )
         except Exception as e:
             log.warning("summary LLM failed, using mechanical fallback: %s", e)
             summary = _mechanical_fallback(messages)

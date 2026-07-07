@@ -2,14 +2,9 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import * as sessionsApi from '../services/sessionsApi.js'
-import { postChat } from '../services/chatApi.js'
 import { streamChat, streamCheckComplete } from '../services/chatStreamService.js'
 import { reportCostWarning } from '../services/costBus.js'
 import { friendlyError } from '../lib/errors.js'
-import {
-  ERR_DAILY_CAP_REACHED,
-  ERR_DAILY_COST_CAP_REACHED,
-} from '../lib/errorCodes.js'
 
 export const useSessionStore = defineStore('session', () => {
   const currentSessionId = ref(null)
@@ -169,71 +164,6 @@ export const useSessionStore = defineStore('session', () => {
     })()
     _inflight.set(id, p)
     return p
-  }
-
-  async function sendMessage({ text }) {
-    if (!currentSessionId.value) throw new Error('no active session')
-    const trimmed = (text || '').trim()
-    if (!trimmed) return null
-
-    messages.value.push({ role: 'user', content: trimmed })
-    loading.value = true
-    error.value = null
-    try {
-      const resp = await postChat({
-        sessionId: currentSessionId.value,
-        message: trimmed,
-      })
-      messages.value.push({
-        role: 'assistant',
-        content: resp.assistant_message,
-        message_id: resp.message_id,
-        tool_calls: resp.tool_calls || [],
-        citations: resp.citations || [],
-      })
-      // Non-streaming fallback: rebuild the batch check card from the chat
-      // response's pending_check public_view (same batch shape as loadSession).
-      // Per-item grading happens later via POST /check/answer, not on this turn.
-      pendingCheck.value = resp.pending_check
-        ? {
-            gap: resp.pending_check.gap,
-            total: resp.pending_check.total,
-            currentIndex: resp.pending_check.current_index,
-            viewIndex: resp.pending_check.current_index,
-            items: (resp.pending_check.items || []).map((it) => ({
-              question: it.question,
-              options: it.options || [],
-              status: it.status,
-              selectedIndex: it.selected_index,
-              correctIndex: it.correct_index,
-              correct: it.correct,
-              explanation: it.explanation,
-            })),
-          }
-        : null
-      return resp
-    } catch (e) {
-      if (e?.status === 429 && e?.body?.detail?.code === ERR_DAILY_CAP_REACHED) {
-        dailyCapInfo.value = {
-          cap: e.body.detail.cap,
-          used: e.body.detail.used,
-          resets_at: e.body.detail.resets_at,
-        }
-      } else if (
-        e?.status === 429 &&
-        e?.body?.detail?.code === ERR_DAILY_COST_CAP_REACHED
-      ) {
-        costCapInfo.value = {
-          used_usd: e.body.detail.used_usd,
-          soft_cap_usd: e.body.detail.soft_cap_usd,
-          hard_cap_usd: e.body.detail.hard_cap_usd,
-          resets_at: e.body.detail.resets_at,
-        }
-      }
-      _setError(e)
-    } finally {
-      loading.value = false
-    }
   }
 
   function clearDailyCap() {
@@ -437,6 +367,13 @@ export const useSessionStore = defineStore('session', () => {
             case 'check_question': handleCheckQuestion(data); break
             case 'done': finalizeMessage(data.message_id); break
             case 'cancelled': handleCancelled(data.message_id, data.partial_content_chars, data.estimated_cost_usd); break
+            case 'followup_skipped':
+              followupNotice.value =
+                'Daily message limit reached - recap saved, tutor follow-up skipped.'
+              streamingMessage.value = null
+              streamState.value = 'idle'
+              abortController.value = null
+              break
             case 'error':
               error.value = data.message || data.code
               streamingMessage.value = null
@@ -463,6 +400,11 @@ export const useSessionStore = defineStore('session', () => {
   const streamingMessage = ref(null)
   const streamState = ref('idle') // 'idle' | 'streaming' | 'tool_running' | 'stopping'
   const abortController = ref(null)
+  const followupNotice = ref(null)
+
+  function clearFollowupNotice() {
+    followupNotice.value = null
+  }
 
   function appendAssistantDelta(text) {
     if (!streamingMessage.value) return
@@ -510,6 +452,7 @@ export const useSessionStore = defineStore('session', () => {
     if (!currentSessionId.value) throw new Error('no active session')
     const trimmed = (text || '').trim()
     if (!trimmed) return null
+    followupNotice.value = null
     messages.value.push({ role: 'user', content: trimmed })
     streamingMessage.value = { role: 'assistant', content: '', tool_calls: [], citations: [] }
     streamState.value = 'streaming'
@@ -566,6 +509,7 @@ export const useSessionStore = defineStore('session', () => {
     streamingMessage.value = null
     streamState.value = 'idle'
     abortController.value = null
+    followupNotice.value = null
   }
 
   return {
@@ -587,10 +531,11 @@ export const useSessionStore = defineStore('session', () => {
     streamingMessage,
     streamState,
     abortController,
+    followupNotice,
+    clearFollowupNotice,
     listSessions,
     createSession,
     loadSession,
-    sendMessage,
     endSession,
     reopenSession,
     renameSession,

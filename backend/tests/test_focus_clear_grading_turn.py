@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from agent.types import ToolContext
-from contracts import AskCheckQuestionsArgs, RecordLearningEventArgs, TopicProfile, UpdateTopicProfileArgs
+from contracts import AskCheckQuestionsArgs, TopicProfile, UpdateTopicProfileArgs
 from db.models import Session as SessionModel, User
 from services import check_question_service as cq
 from services import learning_event_service, profile_service
@@ -108,18 +108,15 @@ def test_grade_then_clear_focus_tested_correct_same_turn(session_row, ctx, db_se
         items=[{"question": "q?", "options": ["a", "b"], "correct_index": 0, "explanation": "a."}],
     ))
 
-    # Grading turn: log a correct LearningEvent (now via human click / record_from_answer)
-    rec = learning_event_service.record(
+    # Grading turn: log a correct LearningEvent via human click / record_from_answer
+    rec = learning_event_service.record_from_answer(
         db_session,
-        ctx,
-        RecordLearningEventArgs(
-            session_id=ctx.session_id,
-            gap_tested="g",
-            question="q?",
-            correct=True,
-        ),
+        ctx.session_id,
+        gap="g",
+        question="q?",
+        correct=True,
     )
-    assert rec.ok is True
+    assert rec.correct is True
 
     # Clear focus with reason "tested_correct" — succeeds without needing the guard
     clr = profile_service.apply_patch(
@@ -167,17 +164,14 @@ def test_clear_focus_tested_correct_with_divergent_gap_label(session_row, ctx, d
             "explanation": "mitochondria.",
         }],
     ))
-    rec = learning_event_service.record(
+    rec = learning_event_service.record_from_answer(
         db_session,
-        ctx,
-        RecordLearningEventArgs(
-            session_id=ctx.session_id,
-            gap_tested=check_gap,
-            question="Where does the ETC occur?",
-            correct=True,
-        ),
+        ctx.session_id,
+        gap=check_gap,
+        question="Where does the ETC occur?",
+        correct=True,
     )
-    assert rec.ok is True
+    assert rec.correct is True
 
     clr = profile_service.apply_patch(
         db_session,

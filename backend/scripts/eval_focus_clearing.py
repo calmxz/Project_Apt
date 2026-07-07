@@ -123,6 +123,41 @@ def _seed_session(focus_gap: str) -> tuple[str, str]:
     return user_id, session_id
 
 
+async def _collect_tool_calls(tutor, messages, system_prompt, ctx) -> list:
+    """Drain tutor.run_streaming and reassemble per-call tool records from the
+    tool_call_start / tool_call_done event pairs.
+
+    Returns a list of SimpleNamespace(name, args, status, error) matching the
+    shape the old non-streaming ToolCallRecord list exposed to this script.
+    """
+    from types import SimpleNamespace
+
+    starts: dict = {}
+    dones: dict = {}
+    order: list = []
+    async for ev in tutor.run_streaming(messages, system_prompt, ctx):
+        if ev.type == "tool_call_start":
+            call_id = ev.data.get("id")
+            starts[call_id] = ev.data
+            order.append(call_id)
+        elif ev.type == "tool_call_done":
+            dones[ev.data.get("id")] = ev.data
+
+    tool_calls = []
+    for call_id in order:
+        start = starts[call_id]
+        done = dones.get(call_id, {})
+        tool_calls.append(
+            SimpleNamespace(
+                name=start.get("name"),
+                args=start.get("args") or {},
+                status=done.get("status"),
+                error=done.get("error"),
+            )
+        )
+    return tool_calls
+
+
 async def _run_one(pattern: Pattern, model: str | None) -> dict:
     """Returns trial result dict with observed_clear + pass."""
     from agent import prompts, tutor
@@ -156,7 +191,7 @@ async def _run_one(pattern: Pattern, model: str | None) -> dict:
         )
         messages = [{"role": "user", "content": pattern.user_message}]
         try:
-            _text, tool_calls, _ = await tutor.run(messages, system_prompt, ctx)
+            tool_calls = await _collect_tool_calls(tutor, messages, system_prompt, ctx)
         except Exception as e:
             return {
                 "pattern": pattern.name,

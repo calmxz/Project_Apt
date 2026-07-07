@@ -8,6 +8,7 @@ UTC midnight rollover is implicit: rows are keyed on (user_id, date_utc), so
 a new day starts a new row at 0.
 """
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -16,8 +17,10 @@ import litellm
 from sqlalchemy.orm import Session
 
 from config import settings
-from db.models import DailyCostLedger
+from db.models import DailyCostLedger, LlmCallLog
 
+
+log = logging.getLogger(__name__)
 
 _ZERO = Decimal("0.0000")
 
@@ -78,6 +81,32 @@ def record_cost(db: Session, user_id: str, cost_usd) -> Decimal:
         row.cost_usd = _quantize(_to_decimal(row.cost_usd) + cost)
     db.flush()
     return _to_decimal(row.cost_usd)
+
+
+def log_call(db: Session, *, user_id: str, session_id, purpose: str, model: str, cost_usd) -> None:
+    """Best-effort per-call attribution row. Never raises: a failed log
+    write must not fail the user's turn. Cap gating stays on the daily
+    ledger; this table is analytics-only (roadmap R3 consumes it).
+
+    The write happens inside a SAVEPOINT (`db.begin_nested()`): if the flush
+    fails, only this row's sub-transaction rolls back -- the outer session
+    (and any earlier work in the same turn, e.g. record_cost's ledger write)
+    stays usable. Without this, a failed flush would leave the session in
+    SQLAlchemy's "rollback-required" state and the next unguarded db.commit()
+    in the caller would raise, failing the user's turn -- the opposite of the
+    isolation this function exists to provide.
+    """
+    try:
+        cost = _to_decimal(cost_usd)
+        if cost <= _ZERO:
+            return
+        with db.begin_nested():
+            db.add(LlmCallLog(
+                user_id=user_id, session_id=session_id, purpose=purpose,
+                model=model, cost_usd=_quantize(cost),
+            ))
+    except Exception as e:  # noqa: BLE001 - isolation by design
+        log.warning("llm_call_log write failed: %s", e)
 
 
 def check_cap(db: Session, user_id: str) -> CapStatus:

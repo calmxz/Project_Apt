@@ -5,7 +5,7 @@ import asyncio
 import pytest
 
 from contracts import TopicProfile
-from db.models import ChatMessage, Session as SessionModel, User
+from db.models import ChatMessage, LlmCallLog, Session as SessionModel, User
 from services import profile_service, summary_service
 
 
@@ -55,6 +55,34 @@ def test_successful_summary_persists_into_profile(
     profile = profile_service.load_profile(db_session, SESSION_ID)
     assert profile.last_session_summary == "a good summary"
     assert session_with_messages.ended_at is not None
+
+
+def test_successful_summary_logs_llm_call(
+    session_with_messages, db_session, monkeypatch
+):
+    """Migration 0014: generate_and_persist logs a per-call attribution row
+    (purpose="summary") -- additive to whatever cost tracking exists
+    elsewhere, log-only (not passed to record_cost, out of scope here)."""
+    from types import SimpleNamespace
+
+    async def fake_acompletion(**kwargs):
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="a good summary"))]
+        )
+
+    monkeypatch.setattr("services.summary_service.litellm.acompletion", fake_acompletion)
+    monkeypatch.setattr(
+        "services.summary_service.litellm.completion_cost",
+        lambda **kwargs: 0.0021,
+    )
+
+    asyncio.run(
+        summary_service.generate_and_persist(db_session, session_with_messages)
+    )
+
+    row = db_session.query(LlmCallLog).filter(LlmCallLog.purpose == "summary").one()
+    assert row.session_id == SESSION_ID
+    assert row.user_id == USER_ID
 
 
 def test_llm_exception_uses_mechanical_fallback(

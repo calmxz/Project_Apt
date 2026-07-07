@@ -45,6 +45,10 @@
         </template>
       </div>
 
+      <p v-if="store.followupNotice" class="followup-notice" data-testid="followup-notice" role="status" aria-live="polite">
+        {{ store.followupNotice }}
+      </p>
+
       <div
         v-if="store.error || lastError"
         class="error-banner"
@@ -148,10 +152,6 @@ const props = defineProps({ id: { type: String, required: true } })
 
 const router = useRouter()
 const store = useSessionStore()
-
-// Streaming (SSE) is the default chat path. Set VITE_CHAT_STREAM=false to fall
-// back to the JSON POST /api/chat endpoint.
-const streamEnabled = import.meta.env.VITE_CHAT_STREAM !== 'false'
 
 const draft = ref('')
 const lastSentText = ref('')
@@ -374,11 +374,7 @@ async function send() {
   lastError.value = null
   sending.value = true
   try {
-    if (streamEnabled) {
-      await store.sendMessageStreaming({ text })
-    } else {
-      await store.sendMessage({ text })
-    }
+    await store.sendMessageStreaming({ text })
     lastSentText.value = ''
   } catch (e) {
     draft.value = text
@@ -658,6 +654,13 @@ function goHome() {
   color: var(--color-error-text);
   margin: 0;
   font-size: var(--fs-caption);
+}
+
+.followup-notice {
+  margin: 0;
+  padding: 0.5rem 0.875rem;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
 }
 
 /* End-session summary dialog */

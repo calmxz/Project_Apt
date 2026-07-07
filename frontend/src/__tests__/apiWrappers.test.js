@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
 import * as sessionsApi from '@/services/sessionsApi.js'
-import { postChat } from '@/services/chatApi.js'
 import { getSessionProfile, getAggregateProfile } from '@/services/profileApi.js'
 import { errorBus } from '@/services/errorBus.js'
 
@@ -69,13 +68,6 @@ describe('api wrappers', () => {
     await sessionsApi.reopenSession('s1')
     expect(fetchMock.mock.calls[0][0]).toContain('/sessions/s1/reopen')
     expect(fetchMock.mock.calls[0][0]).not.toContain('user_id=')
-  })
-
-  it('postChat sends session_id + message (no user_id)', async () => {
-    fetchMock.mockReturnValueOnce(ok({ assistant_message: 'hi' }))
-    await postChat({ sessionId: 's', message: 'm' })
-    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
-    expect(body).toEqual({ session_id: 's', message: 'm' })
   })
 
   it('getSessionProfile hits /profile/:id without user_id query', async () => {

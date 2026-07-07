@@ -12,6 +12,7 @@ from routes.chat import _build_prompt_state
 
 SESSION_ID = "s1"
 USER_ID = "u1"
+AUTH_HEADERS = {"Authorization": f"Bearer test-{USER_ID}"}
 
 
 @pytest.fixture(autouse=True)
@@ -29,39 +30,52 @@ def seed_session(db_session):
     db_session.commit()
 
 
-def test_chat_persists_messages(client, mock_litellm):
-    response = client.post(
-        "/api/chat",
-        json={"user_id": USER_ID, "session_id": SESSION_ID, "message": "hello"},
-    )
-    assert response.status_code == 200
-    data = response.json()
-    assert data["assistant_message"] == "This is a mocked tutor response."
-    assert isinstance(data["message_id"], int)
+def _post_stream(client, session_id=SESSION_ID, message="hello"):
+    """POST /api/chat/stream and drain the SSE body. Returns (status, body)."""
+    lines = []
+    with client.stream(
+        "POST",
+        "/api/chat/stream",
+        json={"session_id": session_id, "message": message},
+        headers=AUTH_HEADERS,
+    ) as resp:
+        status = resp.status_code
+        if status == 200:
+            for line in resp.iter_lines():
+                lines.append(line)
+    return status, "\n".join(lines)
 
 
-def test_chat_persists_both_roles(client, db_session, mock_litellm):
-    client.post(
-        "/api/chat",
-        json={"user_id": USER_ID, "session_id": SESSION_ID, "message": "hi"},
-    )
+def test_chat_stream_stub_persists_both_roles(client, db_session, monkeypatch):
+    """Integration through the real run_streaming (stub mode): _prepare_turn
+    persists the user message and the agent persists the assistant message."""
+    monkeypatch.setattr(settings, "llm_stub", True)
+
+    status, body = _post_stream(client, message="hi")
+    assert status == 200
+    assert "event: assistant_delta" in body
+    assert "event: done" in body
+
     msgs = db_session.execute(
         select(ChatMessage).where(ChatMessage.session_id == SESSION_ID)
     ).scalars().all()
     roles = {m.role for m in msgs}
     assert roles == {"user", "assistant"}
+    assistant = next(m for m in msgs if m.role == "assistant")
+    assert assistant.content.startswith("[STUB:")
 
 
-def test_chat_429_on_cap(client, mock_litellm):
+def test_chat_stream_429_on_cap(client, monkeypatch):
+    monkeypatch.setattr(settings, "llm_stub", True)
+
     for _ in range(settings.daily_cap):
-        r = client.post(
-            "/api/chat",
-            json={"user_id": USER_ID, "session_id": SESSION_ID, "message": "x"},
-        )
-        assert r.status_code == 200
+        status, _body = _post_stream(client, message="x")
+        assert status == 200
+
     r = client.post(
-        "/api/chat",
-        json={"user_id": USER_ID, "session_id": SESSION_ID, "message": "x"},
+        "/api/chat/stream",
+        json={"session_id": SESSION_ID, "message": "x"},
+        headers=AUTH_HEADERS,
     )
     assert r.status_code == 429
     detail = r.json()["detail"]
@@ -69,14 +83,6 @@ def test_chat_429_on_cap(client, mock_litellm):
     assert detail["cap"] == settings.daily_cap
     assert detail["used"] == settings.daily_cap
     assert "resets_at" in detail
-
-
-def test_chat_404_when_session_missing(client, mock_litellm):
-    r = client.post(
-        "/api/chat",
-        json={"user_id": USER_ID, "session_id": "does_not_exist", "message": "x"},
-    )
-    assert r.status_code == 404
 
 
 def _fake_session(topic="sql"):
