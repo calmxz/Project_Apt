@@ -70,6 +70,7 @@ def _build_prompt_state(
         "diagnostic_required": profile.knowledge_level is None,
         "seed_mode": None,
         "last_session_summary": profile.last_session_summary,
+        "rolling_summary": getattr(session, "rolling_summary", None),
         "pending_check": pending_check,
         "quiz_cooldown": quiz_cooldown,
     }

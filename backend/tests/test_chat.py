@@ -165,6 +165,29 @@ def test_review_gap_none_falls_back_to_first():
     assert state["review_gaps_target"] == "gap-a"
 
 
+def test_build_prompt_state_carries_rolling_summary():
+    """P2 AC3: rolling_summary flows from the session onto the prompt state
+    so build_dynamic_context can render it."""
+    session = _fake_session()
+    session.rolling_summary = "covered limits and continuity"
+    profile = _fake_profile()
+    state = _build_prompt_state(
+        session=session,
+        profile=profile,
+        ingestion_status="none",
+        retrieval_required=False,
+        review_gaps=False,
+        pending_check=None,
+        quiz_cooldown=None,
+    )
+    assert state["rolling_summary"] == "covered limits and continuity"
+
+
+def test_build_prompt_state_rolling_summary_defaults_none():
+    state = _call_build_prompt_state(_fake_profile(), review_gaps=False)
+    assert state["rolling_summary"] is None
+
+
 def test_resumed_profile_skips_diagnostic():
     """R1.1 AC2: a resume-seeded profile carries a non-null knowledge_level,
     so the 3Q diagnostic branch must not be taken."""

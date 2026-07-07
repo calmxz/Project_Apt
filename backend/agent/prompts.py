@@ -130,6 +130,7 @@ def build_dynamic_context(state: dict) -> str:
     retrieval_required = bool(state.get("retrieval_required", False))
     seed_mode = state.get("seed_mode") or "none"
     last_session_summary = state.get("last_session_summary") or "none"
+    rolling_summary = state.get("rolling_summary") or "none"
     retrieval_label = "REQUIRED" if retrieval_required else "OPTIONAL"
     diagnostic_required = bool(state.get("diagnostic_required", False))
     diagnostic_label = "REQUIRED" if diagnostic_required else "OFF"
@@ -168,6 +169,7 @@ def build_dynamic_context(state: dict) -> str:
         f"DIAGNOSTIC: {diagnostic_label}\n"
         f"SEED_MODE: {seed_mode}\n"
         f"LAST_SESSION_SUMMARY: {last_session_summary}\n"
+        f"ROLLING_SUMMARY: {rolling_summary}\n"
         f"PENDING_CHECK: {pc_label}\n"
         f"QUIZ_READINESS: {qr_label}\n"
         f"REVIEW_GAPS: {review_gaps_label}"

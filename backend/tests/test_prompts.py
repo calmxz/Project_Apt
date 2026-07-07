@@ -138,6 +138,16 @@ def test_review_gaps_mode_forces_check_same_turn():
     assert "do not ask whether they are ready" in low
 
 
+def test_dynamic_context_renders_rolling_summary():
+    out = prompts.build_dynamic_context({"rolling_summary": "earlier we derived the chain rule"})
+    assert "ROLLING_SUMMARY: earlier we derived the chain rule" in out
+
+
+def test_dynamic_context_rolling_summary_defaults_none():
+    out = prompts.build_dynamic_context({})
+    assert "ROLLING_SUMMARY: none" in out
+
+
 def test_system_prompt_prefix_is_byte_identical_across_turns():
     """Gemini's implicit prefix cache only helps if the prompt head never
     varies. All per-turn material must render strictly after IMMUTABLE_RULES.
