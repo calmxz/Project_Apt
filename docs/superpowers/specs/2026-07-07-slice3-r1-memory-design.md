@@ -122,10 +122,10 @@ Service (`backend/services/summary_service.py`):
 
 Trigger (chat stream completion path in `routes/chat.py`):
 
-- After a turn completes, schedule a background task when
-  `total_messages > 20` and
-  `total_messages - (rolling_summary_count or 0) >= 10` (debounce: one LLM
-  call per ~10 dropped messages, not per turn).
+- After a turn completes, a background task refreshes the summary when due.
+  `rolling_summary_count` stores how many dropped messages the stored summary
+  covers; due when `(total_messages - 20) - (rolling_summary_count or 0) >= 10`
+  (debounce: one LLM call per ~10 newly dropped messages, not per turn).
 
 Prompt injection:
 
