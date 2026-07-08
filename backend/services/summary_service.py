@@ -137,6 +137,8 @@ async def update_rolling_summary(db: Session, session_id: str) -> str | None:
             summary = _mechanical_rolling(dropped)
         else:
             transcript = "\n".join(f"{m.role}: {m.content[:500]}" for m in dropped)
+            # Deliberately uncapped: matches generate_and_persist (end-of-session summary),
+            # spend is bounded by the debounce, and this call must never block/fail a turn.
             resp = await litellm.acompletion(
                 model=settings.model,
                 messages=[

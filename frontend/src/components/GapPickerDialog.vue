@@ -7,12 +7,11 @@
     data-testid="gap-picker"
     @update:visible="$emit('update:visible', $event)"
   >
-    <ul class="gap-list" role="listbox" aria-label="Confirmed gaps">
+    <ul class="gap-list" aria-label="Confirmed gaps">
       <li v-for="(g, i) in gaps" :key="g">
         <button
           type="button"
           class="gap-option"
-          role="option"
           :data-testid="`gap-picker-option-${i}`"
           @click="choose(g)"
         >
