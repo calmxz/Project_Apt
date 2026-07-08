@@ -47,8 +47,10 @@ def check_and_increment(db: Session, user_id: str) -> tuple[bool, int]:
     Step 1 atomically guarantees a single row exists via INSERT ... ON CONFLICT
     DO NOTHING against the `uq_usage_counters_user_date` constraint. Step 2
     increments under a row lock only while strictly below the cap, so the cap
-    holds even under contention. `scalar_one()` in step 3 is safe because the
-    unique constraint guarantees at most one matching row.
+    holds even under contention, and returns the post-increment count via
+    `RETURNING` so no separate SELECT is needed on the allowed path.
+    `scalar_one_or_none()` is safe because the unique constraint guarantees at
+    most one matching row.
     """
     date_utc = _today_utc()
 
@@ -67,15 +69,21 @@ def check_and_increment(db: Session, user_id: str) -> tuple[bool, int]:
             UsageCounter.count < settings.daily_cap,
         )
         .values(count=UsageCounter.count + 1)
+        .returning(UsageCounter.count)
     )
-    allowed = result.rowcount == 1
+    new_count = result.scalar_one_or_none()
+    if new_count is not None:
+        # UPDATE matched: we incremented while under the cap.
+        db.commit()
+        return True, new_count
 
-    count = db.execute(
+    # UPDATE matched no row: cap already reached. One fallback SELECT for the
+    # count (this path returns 429 upstream; outside the happy-path budget).
+    used = db.execute(
         select(UsageCounter.count).where(
             UsageCounter.user_id == user_id,
             UsageCounter.date_utc == date_utc,
         )
     ).scalar_one()
-
     db.commit()
-    return allowed, count
+    return False, used

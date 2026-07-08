@@ -1,8 +1,12 @@
+from contextlib import contextmanager
+
 import pytest
+from sqlalchemy import event as _sa_event
 from sqlalchemy.exc import IntegrityError
 
 from config import settings
 from db.models import UsageCounter
+from services import rate_limit
 from services.rate_limit import check_and_increment
 
 
@@ -129,3 +133,26 @@ def test_check_and_increment_never_exceeds_cap_under_contention(db_session, monk
     # exactly one row for (user, today)
     rows = db_session.query(UsageCounter).filter_by(user_id=user).all()
     assert len(rows) == 1 and rows[0].count == 3
+
+
+@contextmanager
+def _count(db):
+    bind = db.get_bind()
+    state = {"n": 0}
+
+    def _before(conn, cursor, statement, params, context, executemany):
+        state["n"] += 1
+
+    _sa_event.listen(bind, "before_cursor_execute", _before)
+    try:
+        yield state
+    finally:
+        _sa_event.remove(bind, "before_cursor_execute", _before)
+
+
+def test_check_and_increment_two_statements_on_allowed_path(db_session):
+    rate_limit.check_and_increment(db_session, "rl-perf")  # warm: row now exists
+    with _count(db_session) as q:
+        allowed, used = rate_limit.check_and_increment(db_session, "rl-perf")
+    assert allowed and used == 2
+    assert q["n"] <= 2, f"allowed path used {q['n']} statements"
