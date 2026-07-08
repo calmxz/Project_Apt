@@ -227,6 +227,93 @@ async def test_run_streaming_persists_cancelled_on_cancel(db_session, monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_no_token_counter_on_happy_path(db_session, monkeypatch):
+    """P3.2: litellm.token_counter is billing-estimate overhead needed only if
+    the stream is cancelled mid-flight. A normal (non-cancelled) turn must do
+    zero tokenization."""
+    _disable_stub(monkeypatch)
+    _allow_cap(monkeypatch)
+
+    from agent import tutor
+
+    calls = []
+
+    def _counter(*a, **k):
+        calls.append(1)
+        return 100
+
+    monkeypatch.setattr("agent.tutor.litellm.token_counter", _counter)
+
+    turn = _make_stream(_content_chunk("final answer"))
+    monkeypatch.setattr("agent.tutor.litellm.acompletion", AsyncMock(side_effect=[turn]))
+    monkeypatch.setattr(
+        "agent.tutor.litellm.stream_chunk_builder", MagicMock(return_value=SimpleNamespace())
+    )
+    monkeypatch.setattr("agent.tutor.litellm.completion_cost", MagicMock(return_value=0.0032))
+
+    ctx = _ctx(db_session, session_id="s_no_token_counter")
+    events = await _drain(
+        tutor.run_streaming([{"role": "user", "content": "hi"}], "sys", ctx)
+    )
+
+    assert events[-1].type == "done"
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_cancelled_stream_estimates_tokens_lazily(db_session, monkeypatch):
+    """P3.2: on cancellation, tokenization happens lazily from the recorded
+    iter_boundaries -- token_counter is called during cancellation handling
+    (not per-iteration on the happy path), and the resulting positive
+    prompt_tokens_total is what gets passed to estimate_cancelled_cost."""
+    _disable_stub(monkeypatch)
+    _allow_cap(monkeypatch)
+
+    from agent import tutor
+
+    counter_calls = []
+
+    def _counter(*a, **k):
+        counter_calls.append(1)
+        return 100
+
+    monkeypatch.setattr("agent.tutor.litellm.token_counter", _counter)
+
+    estimate_spy = MagicMock(return_value=Decimal("0.01"))
+    monkeypatch.setattr("agent.tutor.cost_meter.estimate_cancelled_cost", estimate_spy)
+
+    async def _slow_stream():
+        yield _content_chunk("partial ")
+        await asyncio.sleep(10)
+
+    monkeypatch.setattr(
+        "agent.tutor.litellm.acompletion",
+        AsyncMock(side_effect=[_slow_stream()]),
+    )
+
+    ctx = _ctx(db_session, session_id="s_cancel_tokens")
+
+    received = []
+
+    async def _consume():
+        async for ev in tutor.run_streaming(
+            [{"role": "user", "content": "go"}], "sys", ctx
+        ):
+            received.append(ev)
+
+    task = asyncio.create_task(_consume())
+    await asyncio.sleep(0.05)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert counter_calls, "token_counter must be called during cancellation handling"
+    assert estimate_spy.call_count == 1
+    prompt_tokens_total = estimate_spy.call_args.args[2]
+    assert prompt_tokens_total > 0
+
+
+@pytest.mark.asyncio
 async def test_run_streaming_emits_error_on_cost_cap(db_session, monkeypatch):
     _disable_stub(monkeypatch)
 
