@@ -24,6 +24,7 @@ from services import (
     cost_meter,
     documents_service,
     learning_event_service,
+    pending_check_store,
     profile_service,
     rate_limit,
     summary_service,
@@ -195,7 +196,7 @@ async def _prepare_turn(
             retrieval_required=retrieval_required,
             review_gaps=getattr(req, "review_gaps", False),
             review_gap=getattr(req, "review_gap", None),
-            pending_check=check_question_service.get_pending_check_from_row(session),
+            pending_check=pending_check_store.get_pending_check_from_row(session),
             quiz_cooldown=check_question_service.get_quiz_cooldown_from_row(session),
             gap_accuracy=gap_accuracy,
         )

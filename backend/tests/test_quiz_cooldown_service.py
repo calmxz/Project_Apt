@@ -24,6 +24,7 @@ def test_session_has_quiz_cooldown_column():
 
 
 from services import check_question_service as cqs
+from services import pending_check_store
 
 
 def _seed_session(db, sid="s1", uid="u1"):
@@ -139,7 +140,7 @@ def test_get_quiz_cooldown_from_row_bad_json_returns_none():
 def test_get_pending_check_from_row_parses():
     row = SessionModel(user_id="u", topic="t",
                        pending_check_json='{"gap": "g", "items": []}')
-    assert cqs.get_pending_check_from_row(row) == {"gap": "g", "items": []}
+    assert pending_check_store.get_pending_check_from_row(row) == {"gap": "g", "items": []}
 
 
 def test_build_quiz_cooldown_missed_carries_chosen_vs_correct():

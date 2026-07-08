@@ -35,13 +35,13 @@ from db.models import ChatMessage, LearningEvent, Session as SessionModel
 # Low-level pending_check state accessors live in a leaf module so
 # learning_event_service can use them without importing this module (which
 # would create a cyclic import). Only the ones this module calls internally
-# are imported; callers wanting is_gradable / parse_asked_at / clear_pending_check
-# import them from services.pending_check_store directly.
+# are imported; callers wanting is_gradable / parse_asked_at /
+# get_pending_check_from_row import them from services.pending_check_store
+# directly.
 from services.pending_check_store import (
     _save,
     clear_pending_check,
     get_pending_check,
-    get_pending_check_from_row,
 )
 
 log = logging.getLogger(__name__)
