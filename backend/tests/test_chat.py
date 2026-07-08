@@ -65,6 +65,46 @@ def test_chat_stream_stub_persists_both_roles(client, db_session, monkeypatch):
     assert assistant.content.startswith("[STUB:")
 
 
+def test_gap_accuracy_failure_does_not_kill_turn(client, db_session, monkeypatch):
+    """gap_accuracy is best-effort (D1.2): a failure must not kill the turn."""
+    monkeypatch.setattr(settings, "llm_stub", True)
+
+    sess = db_session.get(SessionModel, SESSION_ID)
+    sess.topic_profile_json = TopicProfile(confirmed_gaps=["frac"]).model_dump_json()
+    db_session.commit()
+
+    def _boom(db, sid):
+        raise RuntimeError("db exploded")
+
+    monkeypatch.setattr("routes.chat.learning_event_service.gap_accuracy", _boom)
+
+    status, body = _post_stream(client, message="hi")
+    assert status == 200
+    assert "event: assistant_delta" in body
+    assert "event: done" in body
+
+
+def test_prompt_build_failure_still_persists_user_message(client, db_session, monkeypatch):
+    """An unexpected crash while assembling the prompt must not lose the
+    user's message: it is persisted before the exception propagates."""
+    monkeypatch.setattr(settings, "llm_stub", True)
+
+    def _boom(prompt_state):
+        raise RuntimeError("prompt build exploded")
+
+    monkeypatch.setattr("routes.chat.prompts.build_system_prompt", _boom)
+
+    with pytest.raises(RuntimeError, match="prompt build exploded"):
+        _post_stream(client, message="save me")
+
+    user_msgs = db_session.execute(
+        select(ChatMessage).where(
+            ChatMessage.session_id == SESSION_ID, ChatMessage.role == "user"
+        )
+    ).scalars().all()
+    assert [m.content for m in user_msgs] == ["save me"]
+
+
 def test_chat_stream_429_on_cap(client, monkeypatch):
     monkeypatch.setattr(settings, "llm_stub", True)
 

@@ -123,6 +123,44 @@ def _profile_to_dict(profile) -> dict:
     return profile or {}
 
 
+_MISSED_STEM_CAP = 80
+
+
+def _normalize_missed(missed) -> list[dict]:
+    """Tolerate legacy plain-string missed entries (question stems only)
+    alongside the current {"question", "chosen", "correct"} shape."""
+    out = []
+    for entry in missed or []:
+        if isinstance(entry, dict):
+            q = str(entry.get("question", ""))[:_MISSED_STEM_CAP]
+            out.append({
+                "question": q,
+                "chosen": entry.get("chosen"),
+                "correct": entry.get("correct"),
+            })
+        elif isinstance(entry, str):
+            out.append({"question": entry[:_MISSED_STEM_CAP]})
+    return out
+
+
+_GAP_ACCURACY_MAX_GAPS = 8
+_GAP_ACCURACY_CHAR_CAP = 600
+
+
+def _gap_accuracy_label(profile_dict: dict, gap_accuracy: dict) -> str:
+    confirmed = profile_dict.get("confirmed_gaps") or []
+    scoped = {g: gap_accuracy[g] for g in confirmed if g in (gap_accuracy or {})}
+    if not scoped:
+        return "none"
+    top = sorted(scoped.items(), key=lambda kv: kv[1].get("attempts", 0), reverse=True)
+    top = top[:_GAP_ACCURACY_MAX_GAPS]
+    label = json.dumps(dict(top))
+    while len(label) > _GAP_ACCURACY_CHAR_CAP and len(top) > 1:
+        top = top[:-1]
+        label = json.dumps(dict(top))
+    return label
+
+
 def build_dynamic_context(state: dict) -> str:
     topic = state.get("topic", "") or ""
     profile_dict = _profile_to_dict(state.get("profile"))
@@ -148,13 +186,15 @@ def build_dynamic_context(state: dict) -> str:
 
     quiz_cooldown = state.get("quiz_cooldown")
     if quiz_cooldown:
-        qr_label = json.dumps(
-            {
-                "gap": quiz_cooldown.get("gap"),
-                "last_score": quiz_cooldown.get("last_score"),
-                "status": "cooling_down",
-            }
-        )
+        qr = {
+            "gap": quiz_cooldown.get("gap"),
+            "last_score": quiz_cooldown.get("last_score"),
+            "status": "cooling_down",
+        }
+        missed = _normalize_missed(quiz_cooldown.get("missed"))
+        if missed:
+            qr["missed"] = missed
+        qr_label = json.dumps(qr)
     else:
         qr_label = "ready"
 
@@ -171,6 +211,7 @@ def build_dynamic_context(state: dict) -> str:
         f"LAST_SESSION_SUMMARY: {last_session_summary}\n"
         f"ROLLING_SUMMARY: {rolling_summary}\n"
         f"PENDING_CHECK: {pc_label}\n"
+        f"GAP_ACCURACY: {_gap_accuracy_label(profile_dict, state.get('gap_accuracy') or {})}\n"
         f"QUIZ_READINESS: {qr_label}\n"
         f"REVIEW_GAPS: {review_gaps_label}"
     )

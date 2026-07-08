@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import litellm
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from config import settings
@@ -146,11 +147,10 @@ def extract_usage(resp) -> dict:
     return out
 
 
-def check_cap(db: Session, user_id: str) -> CapStatus:
+def check_cap_from_spend(used: Decimal) -> CapStatus:
     soft_cap = _to_decimal(settings.llm_soft_cap_usd)
     hard_cap = _to_decimal(settings.llm_hard_cap_usd)
     urgent_cap = _quantize(hard_cap * Decimal("0.9"))
-    used = current_spend(db, user_id)
     return CapStatus(
         allowed=used < hard_cap,
         used=used,
@@ -159,6 +159,26 @@ def check_cap(db: Session, user_id: str) -> CapStatus:
         soft_cap=soft_cap,
         urgent_cap=urgent_cap,
         hard_cap=hard_cap,
+    )
+
+
+def check_cap(db: Session, user_id: str) -> CapStatus:
+    return check_cap_from_spend(current_spend(db, user_id))
+
+
+def spend_subquery(user_id: str):
+    """Scalar subquery: today's spend for user_id (0/NULL when no row).
+
+    Same table, columns, and date window as current_spend (DailyCostLedger,
+    keyed on user_id + _today_utc()) -- keep them in lockstep.
+    """
+    return (
+        select(func.coalesce(func.sum(DailyCostLedger.cost_usd), 0))
+        .where(
+            DailyCostLedger.user_id == user_id,
+            DailyCostLedger.date_utc == _today_utc(),
+        )
+        .scalar_subquery()
     )
 
 

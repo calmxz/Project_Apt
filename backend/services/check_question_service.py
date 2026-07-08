@@ -35,9 +35,14 @@ from db.models import ChatMessage, LearningEvent, Session as SessionModel
 # Low-level pending_check state accessors live in a leaf module so
 # learning_event_service can use them without importing this module (which
 # would create a cyclic import). Only the ones this module calls internally
-# are imported; callers wanting is_gradable / parse_asked_at / clear_pending_check
-# import them from services.pending_check_store directly.
-from services.pending_check_store import _save, clear_pending_check, get_pending_check
+# are imported; callers wanting is_gradable / parse_asked_at /
+# get_pending_check_from_row import them from services.pending_check_store
+# directly.
+from services.pending_check_store import (
+    _save,
+    clear_pending_check,
+    get_pending_check,
+)
 
 log = logging.getLogger(__name__)
 
@@ -297,7 +302,15 @@ def build_quiz_cooldown(pc: dict) -> dict | None:
     has_miss = any(it["status"] == "skipped" for it in items) or n_correct < len(graded)
     if not has_miss:
         return None
-    missed = [it["question"] for it in graded if not it.get("correct")]
+    missed = [
+        {
+            "question": it["question"],
+            "chosen": it["options"][it["selected_index"]],
+            "correct": it["options"][it["correct_index"]],
+        }
+        for it in graded
+        if not it.get("correct")
+    ]
     return {
         "gap": pc["gap"],
         "last_score": f"{n_correct}/{len(graded)}",
@@ -305,8 +318,7 @@ def build_quiz_cooldown(pc: dict) -> dict | None:
     }
 
 
-def get_quiz_cooldown(db: Session, session_id: str) -> dict | None:
-    row = db.get(SessionModel, session_id)
+def get_quiz_cooldown_from_row(row: SessionModel | None) -> dict | None:
     if row is None or not row.quiz_cooldown_json:
         return None
     try:
@@ -314,6 +326,10 @@ def get_quiz_cooldown(db: Session, session_id: str) -> dict | None:
     except (ValueError, TypeError):
         return None
     return data if isinstance(data, dict) else None
+
+
+def get_quiz_cooldown(db: Session, session_id: str) -> dict | None:
+    return get_quiz_cooldown_from_row(db.get(SessionModel, session_id))
 
 
 def set_quiz_cooldown(db: Session, session_id: str, cd: dict | None, commit: bool = True) -> None:

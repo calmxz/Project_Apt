@@ -102,7 +102,7 @@ async def run_streaming(
 
     full: list[dict] = [{"role": "system", "content": system_prompt}] + list(messages)
     accumulated_text = ""
-    prompt_tokens_total = 0
+    iter_prompt_snapshots: list[list[dict]] = []  # shallow-copied prefix at each iteration start; used only on cancel
     tool_calls_record: list[ToolCallRecord] = []
     citations: list[Citation] = []
     asked_check = False  # hoisted so the except asyncio.CancelledError: branch can read it
@@ -126,15 +126,12 @@ async def run_streaming(
                 )
                 return
 
-            try:
-                prompt_tokens_total += litellm.token_counter(
-                    model=settings.model, messages=full
-                )
-            except Exception as e:
-                # litellm.token_counter is local tokenization (no API call); the
-                # exception carries no credential. The rule trips on "token" in
-                # the message, not on any logged secret.
-                log.warning("token_counter failed: %s", e)  # nosemgrep: python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure
+            # Shallow-copy each message dict: prune_superseded_excerpts (P2)
+            # mutates a tool message's "content" VALUE on the shared dict
+            # later in the loop, but a copied dict keeps its own reference to
+            # the original (unmutated) string, so this prefix stays exact
+            # even if a later iteration's prune stubs an earlier round.
+            iter_prompt_snapshots.append([dict(m) for m in full])
 
             resp = await litellm.acompletion(
                 model=settings.model,
@@ -370,6 +367,15 @@ async def run_streaming(
         return
 
     except asyncio.CancelledError:
+        prompt_tokens_total = 0
+        for snapshot in iter_prompt_snapshots:
+            try:
+                prompt_tokens_total += litellm.token_counter(
+                    model=settings.model, messages=snapshot
+                )
+            except Exception as e:
+                # Local tokenization only; no credential in the exception.
+                log.warning("token_counter failed: %s", e)  # nosemgrep: python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure
         try:
             cost = cost_meter.estimate_cancelled_cost(
                 settings.model, accumulated_text, prompt_tokens_total

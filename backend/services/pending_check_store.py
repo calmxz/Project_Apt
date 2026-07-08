@@ -17,8 +17,7 @@ from sqlalchemy.orm import Session
 from db.models import Session as SessionModel
 
 
-def get_pending_check(db: Session, session_id: str) -> dict | None:
-    row = db.get(SessionModel, session_id)
+def get_pending_check_from_row(row: SessionModel | None) -> dict | None:
     if row is None or not row.pending_check_json:
         return None
     try:
@@ -26,6 +25,10 @@ def get_pending_check(db: Session, session_id: str) -> dict | None:
     except (ValueError, TypeError):
         return None
     return data if isinstance(data, dict) else None
+
+
+def get_pending_check(db: Session, session_id: str) -> dict | None:
+    return get_pending_check_from_row(db.get(SessionModel, session_id))
 
 
 def parse_asked_at(pc: dict) -> datetime:

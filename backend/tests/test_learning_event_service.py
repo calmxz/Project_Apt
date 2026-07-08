@@ -163,3 +163,20 @@ def test_record_from_answer_applies_mastery_by_default(db, session_id):
                            correct=True, clear_pending=False)
     prof = profile_service.load_profile(db, session_id)
     assert "loops" in (prof.mastered_concepts or [])
+
+
+# --- Task 9: gap_accuracy aggregate (D1.2) ---
+
+
+def test_gap_accuracy_groups_by_gap(db, session_id):
+    for gap, correct in [("frac", True), ("frac", False), ("frac", False), ("alg", True)]:
+        learning_event_service.record_from_answer(
+            db, session_id, gap=gap, question="q", correct=correct,
+            clear_pending=False, apply_profile_effects=False,
+        )
+    acc = learning_event_service.gap_accuracy(db, session_id)
+    assert acc == {"frac": {"attempts": 3, "correct": 1}, "alg": {"attempts": 1, "correct": 1}}
+
+
+def test_gap_accuracy_empty_session(db, session_id):
+    assert learning_event_service.gap_accuracy(db, session_id) == {}

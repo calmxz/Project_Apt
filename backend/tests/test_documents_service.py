@@ -221,3 +221,16 @@ def test_delete_document_tolerates_unlink_oserror(db_session, monkeypatch, tmp_p
     # Must not raise.
     documents_service.delete_document(db_session, document_id=doc.id, user_id="u1")
     assert db_session.get(Document, doc.id) is None
+
+
+@pytest.mark.parametrize(
+    "total,pending,ready,expected",
+    [
+        (0, 0, 0, None),
+        (2, 1, 1, "pending"),
+        (2, 0, 1, "ready"),
+        (2, 0, 0, "failed"),
+    ],
+)
+def test_status_from_counts_mirrors_aggregate_status(total, pending, ready, expected):
+    assert documents_service.status_from_counts(total, pending, ready) == expected

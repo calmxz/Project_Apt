@@ -24,6 +24,7 @@ def test_session_has_quiz_cooldown_column():
 
 
 from services import check_question_service as cqs
+from services import pending_check_store
 
 
 def _seed_session(db, sid="s1", uid="u1"):
@@ -56,7 +57,11 @@ def test_build_quiz_cooldown_none_when_all_correct():
 def test_build_quiz_cooldown_set_on_miss():
     pc = _resolved_pc(["correct", "wrong"])
     cd = cqs.build_quiz_cooldown(pc)
-    assert cd == {"gap": "derivatives", "last_score": "1/2", "missed": ["q1"]}
+    assert cd == {
+        "gap": "derivatives",
+        "last_score": "1/2",
+        "missed": [{"question": "q1", "chosen": "b", "correct": "a"}],
+    }
 
 
 def test_build_quiz_cooldown_set_on_skip():
@@ -118,3 +123,35 @@ def test_register_allowed_when_not_suppressed():
     res = cqs.register(db, ctx, _one_item_args())
     assert res.ok is True
     assert cqs.get_pending_check(db, "s1") is not None
+
+
+def test_get_quiz_cooldown_from_row_matches_db_variant():
+    row = SessionModel(user_id="u", topic="t",
+                       quiz_cooldown_json='{"gap": "g", "last_score": "1/2", "missed": []}')
+    cd = cqs.get_quiz_cooldown_from_row(row)
+    assert cd == {"gap": "g", "last_score": "1/2", "missed": []}
+
+
+def test_get_quiz_cooldown_from_row_bad_json_returns_none():
+    row = SessionModel(user_id="u", topic="t", quiz_cooldown_json="{nope")
+    assert cqs.get_quiz_cooldown_from_row(row) is None
+
+
+def test_get_pending_check_from_row_parses():
+    row = SessionModel(user_id="u", topic="t",
+                       pending_check_json='{"gap": "g", "items": []}')
+    assert pending_check_store.get_pending_check_from_row(row) == {"gap": "g", "items": []}
+
+
+def test_build_quiz_cooldown_missed_carries_chosen_vs_correct():
+    pc = {
+        "gap": "g",
+        "items": [
+            {"question": "Q1?", "options": ["a", "b"], "selected_index": 0,
+             "correct_index": 1, "status": "answered", "correct": False},
+            {"question": "Q2?", "options": ["x", "y"], "selected_index": 1,
+             "correct_index": 1, "status": "answered", "correct": True},
+        ],
+    }
+    cd = cqs.build_quiz_cooldown(pc)
+    assert cd["missed"] == [{"question": "Q1?", "chosen": "a", "correct": "b"}]

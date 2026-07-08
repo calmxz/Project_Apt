@@ -10,6 +10,7 @@ is_gradable turn-barrier (pending_check_store) is therefore not consulted here.
 
 import json
 
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from db.models import LearningEvent
@@ -82,3 +83,21 @@ def record_from_answer(
         db.commit()
         db.refresh(event)
     return event
+
+
+def gap_accuracy(db: Session, session_id: str) -> dict[str, dict]:
+    """Per-gap attempts and correct counts for one session (D1.2).
+
+    Session-scoped by design: cross-session accuracy is R2's review-queue
+    concern and will be queried at user level there.
+    """
+    rows = db.execute(
+        select(
+            LearningEvent.gap_tested,
+            func.count().label("attempts"),
+            func.sum(case((LearningEvent.correct, 1), else_=0)).label("correct"),
+        )
+        .where(LearningEvent.session_id == session_id)
+        .group_by(LearningEvent.gap_tested)
+    ).all()
+    return {r.gap_tested: {"attempts": int(r.attempts), "correct": int(r.correct or 0)} for r in rows}
