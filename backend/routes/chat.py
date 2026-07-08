@@ -2,10 +2,11 @@ import asyncio
 import json
 import logging
 from datetime import datetime, timezone
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import func, literal, select
 from sqlalchemy.orm import Session
 from starlette.background import BackgroundTask
 
@@ -14,7 +15,7 @@ from agent.types import ToolContext
 from config import settings
 from contracts import ChatRequest
 from db.database import SessionLocal, get_db
-from db.models import ChatMessage, Session as SessionModel
+from db.models import ChatMessage, Document, Session as SessionModel, User
 from lib import keyword_index
 from lib.error_codes import DAILY_CAP_REACHED, DAILY_COST_CAP_REACHED
 from services import (
@@ -94,9 +95,15 @@ async def _prepare_turn(
     even if the stream ends early), builds the system prompt, and returns
     (messages, system_prompt, ctx).
     """
-    cost_status = cost_meter.check_cap(db, user_id)
+    # 1) Combined guard read: today's spend + user existence, one statement.
+    exists_subq = select(literal(True)).where(User.id == user_id).exists()
+    spend_raw, user_exists = db.execute(
+        select(cost_meter.spend_subquery(user_id), exists_subq)
+    ).one()
+
+    cost_status = cost_meter.check_cap_from_spend(Decimal(str(spend_raw or 0)))
     if not cost_status.allowed:
-        raise HTTPException(
+        raise HTTPException(  # unchanged detail payload
             status_code=429,
             detail={
                 "code": DAILY_COST_CAP_REACHED,
@@ -107,9 +114,10 @@ async def _prepare_turn(
             },
         )
 
+    # 2-3) Rate limit: 2 statements on the allowed path (Task 3).
     allowed, used = rate_limit.check_and_increment(db, user_id)
     if not allowed:
-        raise HTTPException(
+        raise HTTPException(  # unchanged detail payload
             status_code=429,
             detail={
                 "code": DAILY_CAP_REACHED,
@@ -119,12 +127,28 @@ async def _prepare_turn(
             },
         )
 
-    ensure_user(db, user_id)
+    # First-turn-ever: create the user row (rare path, excluded from budget).
+    if not user_exists:
+        ensure_user(db, user_id)
 
-    session = db.get(SessionModel, req.session_id)
-    if session is None or session.user_id != user_id:
+    # 4) Session + ingestion counts in one statement.
+    doc_base = select(func.count()).where(Document.session_id == req.session_id)
+    row = db.execute(
+        select(
+            SessionModel,
+            doc_base.scalar_subquery().label("doc_total"),
+            doc_base.where(Document.status == "pending").scalar_subquery().label("doc_pending"),
+            doc_base.where(Document.status == "ready").scalar_subquery().label("doc_ready"),
+        ).where(SessionModel.id == req.session_id)
+    ).first()
+    if row is None or row[0].user_id != user_id:
         raise HTTPException(status_code=404, detail="session not found")
+    session = row[0]
+    ingestion_status = documents_service.status_from_counts(
+        row.doc_total, row.doc_pending, row.doc_ready
+    )
 
+    # 5) History (unchanged statement).
     history = db.execute(
         select(ChatMessage)
         .where(ChatMessage.session_id == req.session_id)
@@ -141,12 +165,7 @@ async def _prepare_turn(
     ]
     messages.append({"role": "user", "content": req.message})
 
-    user_msg = ChatMessage(session_id=req.session_id, role="user", content=req.message)
-    db.add(user_msg)
-    db.commit()
-
-    profile = profile_service.load_profile(db, req.session_id)
-    ingestion_status = documents_service.session_ingestion_status(db, req.session_id)
+    profile = profile_service.profile_from_row(session)
 
     retrieval_required = keyword_index.match_required(
         req.message, json.loads(session.kw_index_json or "[]")
@@ -159,10 +178,17 @@ async def _prepare_turn(
         retrieval_required=retrieval_required,
         review_gaps=getattr(req, "review_gaps", False),
         review_gap=getattr(req, "review_gap", None),
-        pending_check=check_question_service.get_pending_check(db, req.session_id),
-        quiz_cooldown=check_question_service.get_quiz_cooldown(db, req.session_id),
+        pending_check=check_question_service.get_pending_check_from_row(session),
+        quiz_cooldown=check_question_service.get_quiz_cooldown_from_row(session),
     )
     system_prompt = prompts.build_system_prompt(prompt_state)
+
+    # 6) Persist the user turn LAST (still committed before returning, so it
+    # survives an early stream end) - after all reads, so commit-expiry does
+    # not trigger a refresh SELECT.
+    user_msg = ChatMessage(session_id=req.session_id, role="user", content=req.message)
+    db.add(user_msg)
+    db.commit()
 
     ctx = ToolContext(
         db=db,

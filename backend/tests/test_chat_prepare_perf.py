@@ -53,8 +53,14 @@ def _run_prepare(db, session_id):
 
 
 def test_prepare_turn_budget_no_gaps(db_session, seeded_session):
+    # Evaluate .id BEFORE the counted block: the fixture's commit expires the
+    # ORM instance (expire_on_commit=True), so accessing .id inside the block
+    # would trigger an extra refresh SELECT that is test-setup overhead, not
+    # part of _prepare_turn's own work. Mirrors test_sessions_perf.py's
+    # pattern of using plain-string ids inside count_queries.
+    session_id = seeded_session.id
     with count_queries(db_session) as q:
-        _run_prepare(db_session, seeded_session.id)
+        _run_prepare(db_session, session_id)
     assert q["n"] <= 6, f"prepare path used {q['n']} statements:\n" + "\n".join(q["statements"])
 
 
@@ -70,6 +76,7 @@ def test_prepare_turn_budget_with_gaps(db_session, seeded_session):
         )
     )
     db_session.commit()
+    session_id = seeded_session.id
     with count_queries(db_session) as q:
-        _run_prepare(db_session, seeded_session.id)
+        _run_prepare(db_session, session_id)
     assert q["n"] <= 7, f"prepare path used {q['n']} statements:\n" + "\n".join(q["statements"])
