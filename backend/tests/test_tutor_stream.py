@@ -263,8 +263,8 @@ async def test_no_token_counter_on_happy_path(db_session, monkeypatch):
 @pytest.mark.asyncio
 async def test_cancelled_stream_estimates_tokens_lazily(db_session, monkeypatch):
     """P3.2: on cancellation, tokenization happens lazily from the recorded
-    iter_boundaries -- token_counter is called during cancellation handling
-    (not per-iteration on the happy path), and the resulting positive
+    iter_prompt_snapshots -- token_counter is called during cancellation
+    handling (not per-iteration on the happy path), and the resulting positive
     prompt_tokens_total is what gets passed to estimate_cancelled_cost."""
     _disable_stub(monkeypatch)
     _allow_cap(monkeypatch)
@@ -711,3 +711,125 @@ async def test_prune_superseded_excerpts_wired_into_loop(db_session, monkeypatch
     assert len(tool_msgs) == 2
     assert tool_msgs[0]["content"].startswith("[superseded retrieval:")
     assert "<document_excerpt" in tool_msgs[1]["content"]
+
+
+@pytest.mark.asyncio
+async def test_cancelled_stream_prompt_tokens_survive_pruning(db_session, monkeypatch):
+    """Reviewer finding (Task 6, commit 758211f): prune_superseded_excerpts
+    (P2) mutates an earlier tool message's "content" VALUE in place, on the
+    SAME dict object, once a second retrieval round exists. The old
+    iter_boundaries (list[int]) + full[:boundary] cancel-time slicing shared
+    those dict objects, so pruning that ran during iteration 2 retroactively
+    shrank the round-1 boundary's tokenization at cancel time -- lower than
+    what eager per-iteration counting (the old pre-lazy behavior) would have
+    produced. The fix snapshots shallow COPIES of each message dict at the
+    top of every iteration (iter_prompt_snapshots), so a later prune's
+    mutation of the shared dict cannot reach back into an earlier snapshot.
+
+    Two retrieval rounds run (so round 2's prune stubs round 1's excerpt),
+    then the third iteration is cancelled mid-stream. Assert the iteration-2
+    snapshot (taken before round 2's prune runs) still carries round 1's
+    ORIGINAL content, the iteration-3 snapshot (taken after) correctly
+    carries the stub, and prompt_tokens_total is exactly the sum of the
+    per-snapshot fake-counter results (proving no snapshot is double counted
+    or skipped).
+    """
+    _disable_stub(monkeypatch)
+    _allow_cap(monkeypatch)
+
+    from agent import tutor
+
+    turn1 = _make_stream(
+        _tool_chunk(_tool_fragment(0, id="tc_1", name="retrieve_chunks", arguments='{"query":"a"}')),
+    )
+    turn2 = _make_stream(
+        _tool_chunk(_tool_fragment(0, id="tc_2", name="retrieve_chunks", arguments='{"query":"b"}')),
+    )
+
+    async def _slow_stream():
+        yield _content_chunk("partial ")
+        await asyncio.sleep(10)
+
+    turns = [turn1, turn2, _slow_stream()]
+
+    async def _fake_acompletion(*args, **kwargs):
+        return turns.pop(0)
+
+    monkeypatch.setattr("agent.tutor.litellm.acompletion", _fake_acompletion)
+    monkeypatch.setattr(
+        "agent.tutor.litellm.stream_chunk_builder", MagicMock(return_value=SimpleNamespace())
+    )
+    monkeypatch.setattr("agent.tutor.litellm.completion_cost", MagicMock(return_value=0.0))
+
+    def _dispatch(name, args, ctx):
+        first = args.get("query") == "a"
+        chunk = {
+            "doc_id": "d1" if first else "d2",
+            "doc_name": "notes.pdf" if first else "slides.pdf",
+            "text": "old material" if first else "new material",
+        }
+        return ToolResult(ok=True, status="ok", error=None, data={"chunks": [chunk]})
+
+    monkeypatch.setattr("agent.tutor.tools.dispatch", MagicMock(side_effect=_dispatch))
+
+    counter_calls = []
+
+    def _counter(*a, **k):
+        msgs = k.get("messages")
+        counter_calls.append(msgs)
+        return sum(len(m.get("content") or "") for m in msgs)
+
+    monkeypatch.setattr("agent.tutor.litellm.token_counter", _counter)
+
+    estimate_spy = MagicMock(return_value=Decimal("0.01"))
+    monkeypatch.setattr("agent.tutor.cost_meter.estimate_cancelled_cost", estimate_spy)
+
+    ctx = _ctx(db_session, session_id="s_cancel_prune")
+
+    received = []
+
+    async def _consume():
+        async for ev in tutor.run_streaming(
+            [{"role": "user", "content": "go"}], "sys", ctx
+        ):
+            received.append(ev)
+
+    task = asyncio.create_task(_consume())
+    await asyncio.sleep(0.05)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    # Three iterations were entered before cancel -> three snapshots tokenized.
+    assert len(counter_calls) == 3
+
+    # Iteration-2 snapshot (counter_calls[1]) is copied at the TOP of
+    # iteration 2 -- BEFORE round 2's dispatch and BEFORE
+    # prune_superseded_excerpts runs at the end of that same iteration. Eager
+    # per-iteration counting (the pre-lazy behavior) would have counted
+    # exactly this prefix, with round 1's excerpt still original. This is the
+    # discriminating assertion: the old full[:boundary] slicing re-read the
+    # shared (by-then-mutated) list at CANCEL time, so it saw round 1 already
+    # stubbed here and undercounted. The snapshot fix must not.
+    iter2_tc1 = next(m for m in counter_calls[1] if m.get("tool_call_id") == "tc_1")
+    assert "old material" in iter2_tc1["content"]
+    assert not iter2_tc1["content"].startswith("[superseded retrieval:")
+
+    # Iteration-3 snapshot (counter_calls[2]) is copied AFTER iteration 2's
+    # own prune_superseded_excerpts already stubbed round 1 -- eager
+    # per-iteration counting would see the stub here too, so this snapshot
+    # legitimately (and correctly) carries the stubbed content. Asserting
+    # this guards against an over-correction that keeps every snapshot
+    # unstubbed (which would OVER-count vs. eager) and proves prune actually
+    # ran, so the iter-2 assertion above isn't trivially vacuous.
+    iter3_tc1 = next(m for m in counter_calls[2] if m.get("tool_call_id") == "tc_1")
+    assert iter3_tc1["content"].startswith("[superseded retrieval:")
+
+    # prompt_tokens_total must be exactly the sum of the per-snapshot counts
+    # -- i.e. eager per-iteration accumulation, reproduced lazily.
+    assert estimate_spy.call_count == 1
+    prompt_tokens_total = estimate_spy.call_args.args[2]
+    expected_total = sum(
+        sum(len(m.get("content") or "") for m in msgs) for msgs in counter_calls
+    )
+    assert prompt_tokens_total == expected_total
