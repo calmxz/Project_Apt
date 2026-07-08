@@ -95,9 +95,9 @@ async def _prepare_turn(
 
     Checks cost cap and rate limit (raises HTTPException 429 on breach),
     auto-creates User if missing, validates session (raises 404 if absent),
-    loads history, persists the user ChatMessage (committed so it survives
-    even if the stream ends early), builds the system prompt, and returns
-    (messages, system_prompt, ctx).
+    loads history, builds the system prompt, then persists the user ChatMessage
+    last (committed before returning so it survives even if the stream ends early),
+    and returns (messages, system_prompt, ctx).
     """
     # 1) Combined guard read: today's spend + user existence, one statement.
     exists_subq = select(literal(True)).where(User.id == user_id).exists()
