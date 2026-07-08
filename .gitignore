@@ -16,6 +16,8 @@ docs/dev/debug-accounts.txt
 service-account*.json
 firebase-*.json
 .claude/
+# MCP server config (env-var refs only, no secrets) — local-only like .claude/.
+.mcp.json
 
 reports/
 
