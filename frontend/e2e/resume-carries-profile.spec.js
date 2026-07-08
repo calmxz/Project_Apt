@@ -51,7 +51,17 @@ test.describe('resume carries profile', () => {
     await page
       .locator(`[data-session-id="${sessionId}"] [data-testid="sidebar-row-menu-trigger"]`)
       .click()
+    // Start waiting for the end-session request before clicking: the click
+    // resolves on event dispatch, not on the async handler, and the
+    // subsequent page.goto is a full-page navigation that would abort an
+    // in-flight fetch. Without this wait the request can be cut short, so
+    // session A never persists as ended and the Ended-library assertions
+    // below flake (see backend/routes/sessions.py POST /sessions/{id}/end).
+    const endResponse = page.waitForResponse(
+      (r) => r.url().includes(`/sessions/${sessionId}/end`) && r.ok()
+    )
     await page.getByTestId('sidebar-row-menu-end').click()
+    await endResponse
 
     // Continue topic from the Sessions library, Ended filter.
     await page.goto('/sessions')
