@@ -152,51 +152,59 @@ async def _prepare_turn(
         row.doc_total, row.doc_pending, row.doc_ready
     )
 
-    # 5) History (unchanged statement).
-    history = db.execute(
-        select(ChatMessage)
-        .where(ChatMessage.session_id == req.session_id)
-        .order_by(ChatMessage.created_at.desc())
-        .limit(20)
-    ).scalars().all()
-    history = list(reversed(history))
+    # 5) History through prompt build. An unexpected crash here must not lose
+    # the user's message (before the P3.1 consolidation it was persisted
+    # up-front): persist it, then re-raise. Happy path pays no extra statement.
+    try:
+        history = db.execute(
+            select(ChatMessage)
+            .where(ChatMessage.session_id == req.session_id)
+            .order_by(ChatMessage.created_at.desc())
+            .limit(20)
+        ).scalars().all()
+        history = list(reversed(history))
 
-    # P2: cap each history message; the current user message (appended below)
-    # and the system prompt are exempt.
-    messages = [
-        {"role": m.role, "content": context_budget.truncate_message(m.content)}
-        for m in history
-    ]
-    messages.append({"role": "user", "content": req.message})
+        # P2: cap each history message; the current user message (appended below)
+        # and the system prompt are exempt.
+        messages = [
+            {"role": m.role, "content": context_budget.truncate_message(m.content)}
+            for m in history
+        ]
+        messages.append({"role": "user", "content": req.message})
 
-    profile = profile_service.profile_from_row(session)
+        profile = profile_service.profile_from_row(session)
 
-    # D1.2: per-gap accuracy, best-effort. Only run when there is something
-    # to enrich (confirmed_gaps non-empty) to keep the no-gaps path inside
-    # the P3.1 budget; a failure here must never kill the turn.
-    gap_accuracy: dict[str, dict] = {}
-    if profile.confirmed_gaps:
-        try:
-            gap_accuracy = learning_event_service.gap_accuracy(db, req.session_id)
-        except Exception as e:  # noqa: BLE001 - best-effort prompt enrichment
-            log.warning("gap_accuracy failed; continuing without it: %s", e)
+        # D1.2: per-gap accuracy, best-effort. Only run when there is something
+        # to enrich (confirmed_gaps non-empty) to keep the no-gaps path inside
+        # the P3.1 budget; a failure here must never kill the turn.
+        gap_accuracy: dict[str, dict] = {}
+        if profile.confirmed_gaps:
+            try:
+                gap_accuracy = learning_event_service.gap_accuracy(db, req.session_id)
+            except Exception as e:  # noqa: BLE001 - best-effort prompt enrichment
+                log.warning("gap_accuracy failed; continuing without it: %s", e)
 
-    retrieval_required = keyword_index.match_required(
-        req.message, json.loads(session.kw_index_json or "[]")
-    )
+        retrieval_required = keyword_index.match_required(
+            req.message, json.loads(session.kw_index_json or "[]")
+        )
 
-    prompt_state = _build_prompt_state(
-        session=session,
-        profile=profile,
-        ingestion_status=ingestion_status,
-        retrieval_required=retrieval_required,
-        review_gaps=getattr(req, "review_gaps", False),
-        review_gap=getattr(req, "review_gap", None),
-        pending_check=check_question_service.get_pending_check_from_row(session),
-        quiz_cooldown=check_question_service.get_quiz_cooldown_from_row(session),
-        gap_accuracy=gap_accuracy,
-    )
-    system_prompt = prompts.build_system_prompt(prompt_state)
+        prompt_state = _build_prompt_state(
+            session=session,
+            profile=profile,
+            ingestion_status=ingestion_status,
+            retrieval_required=retrieval_required,
+            review_gaps=getattr(req, "review_gaps", False),
+            review_gap=getattr(req, "review_gap", None),
+            pending_check=check_question_service.get_pending_check_from_row(session),
+            quiz_cooldown=check_question_service.get_quiz_cooldown_from_row(session),
+            gap_accuracy=gap_accuracy,
+        )
+        system_prompt = prompts.build_system_prompt(prompt_state)
+    except Exception:
+        db.rollback()
+        db.add(ChatMessage(session_id=req.session_id, role="user", content=req.message))
+        db.commit()
+        raise
 
     # 6) Persist the user turn LAST (still committed before returning, so it
     # survives an early stream end) - after all reads, so commit-expiry does

@@ -78,3 +78,27 @@ def test_end_session_logs_timing_when_enabled(client, caplog, monkeypatch, seede
     assert r.status_code == 200, r.text
     joined = " ".join(rec.getMessage() for rec in caplog.records)
     assert "end_session timing total_ms=" in joined
+
+
+def test_end_session_logs_nothing_when_disabled(client, caplog, monkeypatch, seeded_session_fixture):
+    monkeypatch.setattr(settings, "llm_stub", True)
+    with caplog.at_level(logging.INFO, logger="routes.sessions"):
+        r = client.post(f"/api/sessions/{SESSION_ID}/end", headers=AUTH_HEADERS)
+    assert r.status_code == 200, r.text
+    joined = " ".join(rec.getMessage() for rec in caplog.records)
+    assert "end_session timing total_ms=" not in joined
+
+
+def test_end_session_logs_timing_on_already_ended(client, caplog, monkeypatch, seeded_session_fixture):
+    """The timing log lives in a finally, so the already-ended early return
+    still emits it."""
+    monkeypatch.setattr(settings, "debug_timing", True)
+    monkeypatch.setattr(settings, "llm_stub", True)
+    first = client.post(f"/api/sessions/{SESSION_ID}/end", headers=AUTH_HEADERS)
+    assert first.status_code == 200, first.text
+    caplog.clear()
+    with caplog.at_level(logging.INFO, logger="routes.sessions"):
+        r = client.post(f"/api/sessions/{SESSION_ID}/end", headers=AUTH_HEADERS)
+    assert r.status_code == 200, r.text
+    joined = " ".join(rec.getMessage() for rec in caplog.records)
+    assert "end_session timing total_ms=" in joined
