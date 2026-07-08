@@ -183,6 +183,7 @@ describe('SessionProfileView (per-session)', () => {
       params: { id: 's1' },
       query: { review_gap: 'a' },
     })
+    expect(routerPushMock).toHaveBeenCalledTimes(1)
   })
 
   it('review-gaps button skips the picker and routes directly for a single gap', async () => {
@@ -194,6 +195,7 @@ describe('SessionProfileView (per-session)', () => {
       params: { id: 's1' },
       query: { review_gap: 'only-gap' },
     })
+    expect(routerPushMock).toHaveBeenCalledTimes(1)
   })
 
   it('does not show the review-gaps button when there are no confirmed gaps', async () => {

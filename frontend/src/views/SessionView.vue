@@ -515,6 +515,12 @@ async function onGapPicked(gap) {
 }
 
 async function sendReviewSeed(gap) {
+  // Covers the query-driven path (handleReviewGapQuery), which is only
+  // gated on !notFound in loadCurrent -- a non-404 loadSession failure
+  // leaves store.currentSession null or stale relative to props.id. The
+  // button path (resumeReviewGaps) already guards on !store.currentSession
+  // before calling in, but this covers both null and stale defensively.
+  if (!store.currentSession || store.currentSession.id !== props.id) return
   resuming.value = true
   try {
     if (isEnded.value) await store.reopenSession(store.currentSession.id)
