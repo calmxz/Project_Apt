@@ -45,16 +45,29 @@ def _excerpt_stub(content: str) -> str:
 
 
 def prune_superseded_excerpts(messages: list[dict]) -> None:
-    """In-place: replace the content of every tool message carrying
-    document_excerpt blocks EXCEPT the most recent one with a one-line stub.
-    Earlier same-turn retrievals otherwise get re-sent to the model on every
-    remaining loop iteration (~2.5k tokens each). Transport fields
-    (tool_call_id, name, role) are preserved so the transcript stays valid;
-    assistant and non-retrieval tool messages are never touched."""
-    carriers = [
-        i for i, m in enumerate(messages)
-        if m.get("role") == "tool" and _EXCERPT_SENTINEL in (m.get("content") or "")
-    ]
-    for i in carriers[:-1]:
-        if not messages[i]["content"].startswith(_STUB_PREFIX):
-            messages[i]["content"] = _excerpt_stub(messages[i]["content"])
+    """In-place: stub retrieval payloads from earlier dispatch ROUNDS, keeping
+    every carrier in the newest round. A round is all tool results answering
+    one assistant tool-call message, so sibling retrievals dispatched together
+    survive together (they cannot supersede each other). Transport fields are
+    preserved; assistant and non-retrieval tool messages are never touched."""
+    round_key = None
+    carriers_by_round: dict[int, list[int]] = {}
+    for i, m in enumerate(messages):
+        if m.get("role") == "assistant":
+            round_key = i
+        elif m.get("role") == "tool" and _EXCERPT_SENTINEL in (m.get("content") or ""):
+            # No dispatching assistant message seen yet (malformed/synthetic
+            # transcript) -> fall back to the carrier's own position so it
+            # doesn't get silently grouped as a "sibling" of an unrelated
+            # carrier that also lacks a preceding assistant message.
+            key = round_key if round_key is not None else i
+            carriers_by_round.setdefault(key, []).append(i)
+    if len(carriers_by_round) < 2:
+        return
+    newest = max(carriers_by_round)
+    for rk, idxs in carriers_by_round.items():
+        if rk == newest:
+            continue
+        for i in idxs:
+            if not messages[i]["content"].startswith(_STUB_PREFIX):
+                messages[i]["content"] = _excerpt_stub(messages[i]["content"])

@@ -10,7 +10,7 @@ const props = defineProps({
   pinned: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['end', 'resume', 'rename', 'pin', 'unpin'])
+const emit = defineEmits(['end', 'resume', 'continue-topic', 'rename', 'pin', 'unpin'])
 
 const open = ref(false)
 const triggerEl = ref(null)
@@ -29,6 +29,7 @@ function onAction(kind) {
   if (props.busy) return
   if (kind === 'end') emit('end')
   else if (kind === 'resume') emit('resume')
+  else if (kind === 'continue-topic') emit('continue-topic')
   else if (kind === 'rename') emit('rename')
   else if (kind === 'pin') emit('pin')
   else if (kind === 'unpin') emit('unpin')
@@ -120,7 +121,19 @@ onBeforeUnmount(() => {
         <span>End session</span>
       </button>
       <button
-        v-else-if="state === 'ended'"
+        v-if="state === 'ended'"
+        type="button"
+        role="menuitem"
+        class="sb-row-menu-item"
+        data-testid="sidebar-row-menu-continue-topic"
+        :disabled="busy"
+        @click="onAction('continue-topic')"
+      >
+        <i class="pi pi-play" aria-hidden="true" />
+        <span>Continue topic</span>
+      </button>
+      <button
+        v-if="state === 'ended'"
         type="button"
         role="menuitem"
         class="sb-row-menu-item"

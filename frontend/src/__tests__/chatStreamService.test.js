@@ -95,6 +95,32 @@ describe('chatStreamService', () => {
     expect(body).toEqual({ session_id: 's1', message: 'Review my gaps', review_gaps: true })
   })
 
+  it('streamChat puts review_gap in the request body when provided', async () => {
+    const sseBody = 'event: done\ndata: {}\n\n'
+    fetchMock.mockResolvedValueOnce(mockResponse(sseBody))
+
+    await streamChat({
+      sessionId: 's1',
+      message: 'Review my gap: recursion',
+      reviewGaps: true,
+      reviewGap: 'recursion',
+      onEvent: () => {},
+    })
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body.review_gap).toBe('recursion')
+  })
+
+  it('streamChat omits review_gap when not provided', async () => {
+    const sseBody = 'event: done\ndata: {}\n\n'
+    fetchMock.mockResolvedValueOnce(mockResponse(sseBody))
+
+    await streamChat({ sessionId: 's1', message: 'hi', onEvent: () => {} })
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect('review_gap' in body).toBe(false)
+  })
+
   it('throws ApiError on non-2xx with parsed body', async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ detail: 'bad' }), { status: 400 }),

@@ -43,6 +43,8 @@ class Session(Base):
     pinned: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false", default=False
     )
+    rolling_summary: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+    rolling_summary_count: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
 
     user: Mapped["User"] = relationship("User", back_populates="sessions")
     messages: Mapped[list["ChatMessage"]] = relationship("ChatMessage", back_populates="session")

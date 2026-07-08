@@ -11,8 +11,16 @@ import Composer from '@/components/chat/Composer.vue'
 import { useSessionStore } from '@/stores/session.js'
 
 const push = vi.fn()
+// Writes the mutation back into the shared mock route so the query-strip
+// watcher/re-trigger interaction is actually exercised (a bare vi.fn() would
+// leave route.query.review_gap set, hiding a double-send regression).
+const route = { query: {} }
+const replace = vi.fn((to) => {
+  Object.assign(route.query, to.query)
+})
 vi.mock('vue-router', () => ({
-  useRouter: () => ({ push }),
+  useRouter: () => ({ push, replace }),
+  useRoute: () => route,
   RouterLink: { template: '<a><slot /></a>' },
 }))
 
@@ -55,15 +63,21 @@ const stubs = {
   RouterLink: { template: '<a><slot /></a>' },
 }
 
-function setupSession({ ended = false, messages = [], dailyCap = null, confirmedGaps = [] } = {}) {
+function setupSession({
+  id = 's1',
+  ended = false,
+  messages = [],
+  dailyCap = null,
+  confirmedGaps = [],
+} = {}) {
   const store = useSessionStore()
   store.currentSession = {
-    id: 's1',
+    id,
     topic: 'Calculus',
     ended_at: ended ? new Date().toISOString() : null,
     topic_profile: { confirmed_gaps: confirmedGaps },
   }
-  store.currentSessionId = 's1'
+  store.currentSessionId = id
   store.messages = messages
   if (dailyCap) store.dailyCapInfo = dailyCap
   return store
@@ -77,6 +91,8 @@ describe('SessionView', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     push.mockClear()
+    replace.mockClear()
+    route.query = {}
     showError.mockClear()
     uploadDocument.mockReset()
     bannerRefresh.mockReset()
@@ -408,7 +424,7 @@ describe('SessionView', () => {
     expect(reopenSpy).toHaveBeenCalledWith('s1')
   })
 
-  it('resumeReviewGaps reopens then sends a review_gaps seed turn', async () => {
+  it('single confirmed gap skips the picker and sends directly', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'loadSession').mockImplementation(async () => {
       setupSession({ ended: true, confirmedGaps: ['limits'] })
@@ -420,7 +436,103 @@ describe('SessionView', () => {
     await wrapper.get('[data-testid="session-resume-gaps"]').trigger('click')
     await flushPromises()
     expect(reopenSpy).toHaveBeenCalledWith('s1')
-    expect(sendSpy).toHaveBeenCalledWith({ text: 'Review my gaps', reviewGaps: true })
+    expect(reopenSpy).toHaveBeenCalledTimes(1)
+    expect(wrapper.find('[data-testid="gap-picker"]').exists()).toBe(false)
+    expect(sendSpy).toHaveBeenCalledWith({
+      text: 'Review my gap: limits',
+      reviewGaps: true,
+      reviewGap: 'limits',
+    })
+    expect(sendSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('resumeReviewGaps opens the picker when more than one confirmed gap', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession({ ended: true, confirmedGaps: ['a', 'b'] })
+    })
+    vi.spyOn(store, 'reopenSession').mockResolvedValue()
+    const sendSpy = vi.spyOn(store, 'sendMessageStreaming').mockResolvedValue()
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-testid="session-resume-gaps"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="gap-picker"]').exists()).toBe(true)
+    expect(sendSpy).not.toHaveBeenCalled()
+  })
+
+  it('picker selection reopens then sends the targeted review seed', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession({ ended: true, confirmedGaps: ['a', 'b'] })
+    })
+    const reopenSpy = vi.spyOn(store, 'reopenSession').mockResolvedValue()
+    const sendSpy = vi.spyOn(store, 'sendMessageStreaming').mockResolvedValue()
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-testid="session-resume-gaps"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="gap-picker-option-1"]').trigger('click')
+    await flushPromises()
+    expect(reopenSpy).toHaveBeenCalledTimes(1)
+    expect(sendSpy).toHaveBeenCalledWith({
+      text: 'Review my gap: b',
+      reviewGaps: true,
+      reviewGap: 'b',
+    })
+    expect(sendSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('review_gap query param triggers the review seed then strips the query', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession({ ended: false, confirmedGaps: ['a', 'b'] })
+    })
+    vi.spyOn(store, 'reopenSession').mockResolvedValue()
+    const sendSpy = vi.spyOn(store, 'sendMessageStreaming').mockResolvedValue()
+    route.query = { review_gap: 'b' }
+    mountView()
+    await flushPromises()
+    expect(sendSpy).toHaveBeenCalledWith({
+      text: 'Review my gap: b',
+      reviewGaps: true,
+      reviewGap: 'b',
+    })
+    expect(replace).toHaveBeenCalledWith({ query: { review_gap: undefined } })
+    expect(replace).toHaveBeenCalledTimes(1)
+    // The mock replace above writes the strip back into route.query, so
+    // route.query.review_gap is now undefined. Give the non-immediate
+    // query watcher another tick to prove the strip does not re-trigger
+    // a second send (a double-send regression would show up as 2 calls).
+    await nextTick()
+    await flushPromises()
+    expect(sendSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('navigating to a different session id with review_gap query present sends into the new session only', async () => {
+    const store = useSessionStore()
+    const load = vi.spyOn(store, 'loadSession').mockImplementation(async (id) => {
+      setupSession({ id, confirmedGaps: ['x'] })
+    })
+    const sendSpy = vi.spyOn(store, 'sendMessageStreaming').mockResolvedValue()
+    const wrapper = mountView({ id: 's1' })
+    await flushPromises()
+    expect(sendSpy).not.toHaveBeenCalled()
+
+    // Simulate navigating from s1 to s2 via a link that already carries the
+    // review_gap query (e.g. ProfileView's review-gaps button), so the id
+    // prop and the query change together before loadCurrent('s2') resolves.
+    route.query = { review_gap: 'x' }
+    await wrapper.setProps({ id: 's2' })
+    await flushPromises()
+
+    expect(load).toHaveBeenLastCalledWith('s2')
+    expect(sendSpy).toHaveBeenCalledWith({
+      text: 'Review my gap: x',
+      reviewGaps: true,
+      reviewGap: 'x',
+    })
+    expect(sendSpy).toHaveBeenCalledTimes(1)
   })
 
   it('daily cap banner shown when cap reached', async () => {

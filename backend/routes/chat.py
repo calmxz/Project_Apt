@@ -1,26 +1,50 @@
 import asyncio
 import json
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from starlette.background import BackgroundTask
 
 from agent import context_budget, prompts, tutor
 from agent.types import ToolContext
 from config import settings
 from contracts import ChatRequest
-from db.database import get_db
+from db.database import SessionLocal, get_db
 from db.models import ChatMessage, Session as SessionModel
 from lib import keyword_index
 from lib.error_codes import DAILY_CAP_REACHED, DAILY_COST_CAP_REACHED
-from services import check_question_service, cost_meter, documents_service, profile_service, rate_limit
+from services import (
+    check_question_service,
+    cost_meter,
+    documents_service,
+    profile_service,
+    rate_limit,
+    summary_service,
+)
 from services.auth import current_user_id
 from services.user_service import ensure_user
 
 
 router = APIRouter(prefix="/api")
+log = logging.getLogger(__name__)
+
+
+async def _rolling_summary_task(session_id: str) -> None:
+    """Post-response: refresh the rolling summary if due. Opens its own DB
+    session because the request-scoped session is closed by the time
+    background tasks run. Must never raise: a failed rolling summary must
+    not break a chat turn (the response has already been sent)."""
+    db = SessionLocal()
+    try:
+        await summary_service.update_rolling_summary(db, session_id)
+    except Exception as e:  # noqa: BLE001 - never surface to the client
+        log.warning("rolling summary task failed: %s", e)
+    finally:
+        db.close()
 
 
 def _build_prompt_state(
@@ -30,6 +54,7 @@ def _build_prompt_state(
     ingestion_status,
     retrieval_required: bool,
     review_gaps: bool,
+    review_gap: str | None = None,
     pending_check,
     quiz_cooldown,
 ) -> dict:
@@ -45,11 +70,13 @@ def _build_prompt_state(
         "diagnostic_required": profile.knowledge_level is None,
         "seed_mode": None,
         "last_session_summary": profile.last_session_summary,
+        "rolling_summary": getattr(session, "rolling_summary", None),
         "pending_check": pending_check,
         "quiz_cooldown": quiz_cooldown,
     }
     if review_gaps and profile.confirmed_gaps:
-        prompt_state["review_gaps_target"] = profile.confirmed_gaps[0]
+        target = review_gap if review_gap in profile.confirmed_gaps else profile.confirmed_gaps[0]
+        prompt_state["review_gaps_target"] = target
         prompt_state["diagnostic_required"] = False
     return prompt_state
 
@@ -131,6 +158,7 @@ async def _prepare_turn(
         ingestion_status=ingestion_status,
         retrieval_required=retrieval_required,
         review_gaps=getattr(req, "review_gaps", False),
+        review_gap=getattr(req, "review_gap", None),
         pending_check=check_question_service.get_pending_check(db, req.session_id),
         quiz_cooldown=check_question_service.get_quiz_cooldown(db, req.session_id),
     )
@@ -202,4 +230,5 @@ async def chat_stream(
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
         },
+        background=BackgroundTask(_rolling_summary_task, req.session_id),
     )

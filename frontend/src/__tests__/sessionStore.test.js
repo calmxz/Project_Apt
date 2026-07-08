@@ -308,6 +308,28 @@ describe('session store — streaming', () => {
     )
   })
 
+  it('forwards reviewGap to streamChat as review_gap', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 's1'
+    const spy = vi.spyOn(streamSvc, 'streamChat').mockResolvedValue(undefined)
+    await s.sendMessageStreaming({ text: 'Review my gap: recursion', reviewGaps: true, reviewGap: 'recursion' })
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({ reviewGap: 'recursion' }),
+    )
+  })
+
+  it('continueTopic creates a resume session and marks the prior ended locally', async () => {
+    sessionsApi.createSession.mockResolvedValueOnce({ id: 'new-1', topic: 'Calculus' })
+    const s = useSessionStore()
+    s.sessions = [{ id: 'old-1', topic: 'Calculus', ended_at: null }]
+    const created = await s.continueTopic({ id: 'old-1', topic: 'Calculus' })
+    expect(sessionsApi.createSession).toHaveBeenCalledWith({
+      topic: 'Calculus', seedMode: 'resume', priorSessionId: 'old-1',
+    })
+    expect(created.id).toBe('new-1')
+    expect(s.sessions.find((x) => x.id === 'old-1').ended_at).toBeTruthy()
+  })
+
   it('sendMessageStreaming rejects without an active session', async () => {
     const s = useSessionStore()
     await expect(s.sendMessageStreaming({ text: 'x' })).rejects.toThrow(

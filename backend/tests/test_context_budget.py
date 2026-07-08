@@ -104,6 +104,47 @@ def test_non_retrieval_tool_messages_untouched():
     assert msgs[1]["content"].startswith("[superseded retrieval:")
 
 
+def make_carrier(doc_id):
+    return _tool_msg(f"call-{doc_id}", [_chunk(doc_id, f"{doc_id}.pdf", f"material {doc_id}")])
+
+
+def test_sibling_retrievals_same_round_both_survive():
+    messages = [
+        {"role": "assistant", "content": "", "tool_calls": [{"id": "a"}, {"id": "b"}]},
+        make_carrier(doc_id="d1"),   # sibling 1, round 0
+        make_carrier(doc_id="d2"),   # sibling 2, same round
+    ]
+    prune_superseded_excerpts(messages)
+    assert "<document_excerpt" in messages[1]["content"]
+    assert "<document_excerpt" in messages[2]["content"]
+
+
+def test_older_round_stubbed_newer_round_kept():
+    messages = [
+        {"role": "assistant", "content": "", "tool_calls": [{"id": "a"}]},
+        make_carrier(doc_id="d1"),   # round 0 -> stub
+        {"role": "assistant", "content": "", "tool_calls": [{"id": "b"}]},
+        make_carrier(doc_id="d2"),   # round 2 -> keep
+    ]
+    prune_superseded_excerpts(messages)
+    assert messages[1]["content"].startswith("[superseded retrieval:")
+    assert "<document_excerpt" in messages[3]["content"]
+
+
+def test_sibling_rounds_mixed():
+    messages = [
+        {"role": "assistant", "content": "", "tool_calls": [{"id": "a"}, {"id": "b"}]},
+        make_carrier(doc_id="d1"),
+        make_carrier(doc_id="d2"),
+        {"role": "assistant", "content": "", "tool_calls": [{"id": "c"}]},
+        make_carrier(doc_id="d3"),
+    ]
+    prune_superseded_excerpts(messages)
+    assert messages[1]["content"].startswith("[superseded retrieval:")
+    assert messages[2]["content"].startswith("[superseded retrieval:")
+    assert "<document_excerpt" in messages[4]["content"]
+
+
 def test_malformed_content_still_stubbed_without_raising():
     older = {
         "role": "tool", "tool_call_id": "c1", "name": "retrieve_chunks",

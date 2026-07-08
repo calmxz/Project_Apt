@@ -167,6 +167,16 @@ def test_chat_request_has_review_gaps_default_false():
     assert req2.review_gaps is True
 
 
+def test_chat_request_accepts_review_gap():
+    req = ChatRequest(session_id="s1", message="hi", review_gaps=True, review_gap="derivatives")
+    assert req.review_gap == "derivatives"
+
+
+def test_chat_request_review_gap_defaults_none():
+    req = ChatRequest(session_id="s1", message="hi")
+    assert req.review_gap is None
+
+
 def test_session_create_request_seed_mode_enum():
     SessionCreateRequest(topic="t", seed_mode="fresh")
     SessionCreateRequest(topic="t", seed_mode="resume")

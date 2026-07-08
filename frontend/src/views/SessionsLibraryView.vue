@@ -9,9 +9,9 @@ import SessionChips from '@/components/SessionChips.vue'
 const router = useRouter()
 const store = useSessionStore()
 
-async function continueSession(id) {
-  await store.reopenSession(id)
-  router.push({ name: 'session', params: { id } })
+async function continueSession(s) {
+  const created = await store.continueTopic(s)
+  if (created) router.push({ name: 'session', params: { id: created.id } })
 }
 
 const items = ref([])
@@ -199,9 +199,9 @@ defineExpose({ load }) // used by control/pagination tasks
           type="button"
           class="library-continue"
           :data-testid="`library-continue-${s.id}`"
-          @click="continueSession(s.id)"
+          @click="continueSession(s)"
         >
-          Continue
+          Continue topic
         </button>
       </li>
     </ul>

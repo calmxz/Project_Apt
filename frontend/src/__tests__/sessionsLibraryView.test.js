@@ -249,10 +249,10 @@ describe('SessionsLibraryView', () => {
     expect(wrapper.find('[data-testid="library-continue-active1"]').exists()).toBe(false)
   })
 
-  it('clicking Continue reopens then navigates without double-firing card navigation', async () => {
+  it('clicking Continue topic calls store.continueTopic and navigates without double-firing card navigation', async () => {
     const { useSessionStore } = await import('@/stores/session.js')
     const store = useSessionStore()
-    const reopenSpy = vi.spyOn(store, 'reopenSession').mockResolvedValue({})
+    const continueTopicSpy = vi.spyOn(store, 'continueTopic').mockResolvedValue({ id: 'z' })
     sessionsApi.getSessionLibrary.mockResolvedValue(page([
       item('z', { ended_at: '2026-06-02T00:00:00Z' }),
     ]))
@@ -260,8 +260,31 @@ describe('SessionsLibraryView', () => {
     await flushPromises()
     await wrapper.get('[data-testid="library-continue-z"]').trigger('click')
     await flushPromises()
-    expect(reopenSpy).toHaveBeenCalledWith('z')
+    expect(continueTopicSpy).toHaveBeenCalledWith(expect.objectContaining({ id: 'z' }))
     expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'z' } })
     expect(push).toHaveBeenCalledTimes(1)
+  })
+
+  it('Continue topic on an ended card creates a resume session and routes to it', async () => {
+    const { useSessionStore } = await import('@/stores/session.js')
+    const store = useSessionStore()
+    const continueTopicSpy = vi.spyOn(store, 'continueTopic').mockResolvedValue({ id: 'new-9' })
+    const endedSession = item('ended1', { ended_at: '2026-06-02T00:00:00Z' })
+    sessionsApi.getSessionLibrary.mockResolvedValue(page([endedSession]))
+    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+    await flushPromises()
+    await wrapper.get(`[data-testid="library-continue-${endedSession.id}"]`).trigger('click')
+    await flushPromises()
+    expect(continueTopicSpy).toHaveBeenCalledWith(expect.objectContaining({ id: endedSession.id }))
+    expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'new-9' } })
+  })
+
+  it('labels the ended-card action Continue topic', async () => {
+    sessionsApi.getSessionLibrary.mockResolvedValue(page([
+      item('z', { ended_at: '2026-06-02T00:00:00Z' }),
+    ]))
+    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="library-continue-z"]').text()).toBe('Continue topic')
   })
 })

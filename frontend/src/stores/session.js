@@ -240,6 +240,35 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
+  async function continueTopic(prior) {
+    loading.value = true
+    error.value = null
+    try {
+      const created = await sessionsApi.createSession({
+        topic: prior.topic,
+        seedMode: 'resume',
+        priorSessionId: prior.id,
+      })
+      // Backend auto-ends the prior session on resume-create; reflect it
+      // locally so ended-state UI updates without a refetch.
+      const idx = sessions.value.findIndex((x) => x.id === prior.id)
+      if (idx !== -1 && !sessions.value[idx].ended_at) {
+        sessions.value[idx].ended_at = new Date().toISOString()
+      }
+      if (currentSession.value?.id === prior.id && !currentSession.value.ended_at) {
+        currentSession.value.ended_at = new Date().toISOString()
+      }
+      currentSession.value = created
+      currentSessionId.value = created.id
+      messages.value = []
+      return created
+    } catch (e) {
+      _setError(e)
+    } finally {
+      loading.value = false
+    }
+  }
+
   async function renameSession(id, topic) {
     error.value = null
     const idx = sessions.value.findIndex((s) => s.id === id)
@@ -459,7 +488,7 @@ export const useSessionStore = defineStore('session', () => {
     if (abortController.value) { abortController.value.abort(); streamState.value = 'stopping' }
   }
 
-  async function sendMessageStreaming({ text, reviewGaps = false }) {
+  async function sendMessageStreaming({ text, reviewGaps = false, reviewGap = null }) {
     if (!currentSessionId.value) throw new Error('no active session')
     const trimmed = (text || '').trim()
     if (!trimmed) return null
@@ -475,6 +504,7 @@ export const useSessionStore = defineStore('session', () => {
         sessionId: currentSessionId.value,
         message: trimmed,
         reviewGaps,
+        reviewGap,
         signal: ctrl.signal,
         onEvent: ({ event, data }) => {
           switch (event) {
@@ -551,6 +581,7 @@ export const useSessionStore = defineStore('session', () => {
     loadSession,
     endSession,
     reopenSession,
+    continueTopic,
     renameSession,
     setPinned,
     setError,

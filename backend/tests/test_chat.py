@@ -95,13 +95,14 @@ def _fake_profile(**overrides):
     return TopicProfile(**defaults)
 
 
-def _call_build_prompt_state(profile, review_gaps):
+def _call_build_prompt_state(profile, review_gaps, review_gap=None):
     return _build_prompt_state(
         session=_fake_session(),
         profile=profile,
         ingestion_status="none",
         retrieval_required=False,
         review_gaps=review_gaps,
+        review_gap=review_gap,
         pending_check=None,
         quiz_cooldown=None,
     )
@@ -144,3 +145,52 @@ def test_build_prompt_state_preserves_other_keys():
     assert state["last_session_summary"] == "summary text"
     assert state["pending_check"] is None
     assert state["quiz_cooldown"] is None
+
+
+def test_review_gap_targets_named_gap():
+    profile = _fake_profile(confirmed_gaps=["gap-a", "gap-b", "gap-c"])
+    state = _call_build_prompt_state(profile, review_gaps=True, review_gap="gap-b")
+    assert state["review_gaps_target"] == "gap-b"
+
+
+def test_review_gap_invalid_falls_back_to_first():
+    profile = _fake_profile(confirmed_gaps=["gap-a", "gap-b", "gap-c"])
+    state = _call_build_prompt_state(profile, review_gaps=True, review_gap="not-a-gap")
+    assert state["review_gaps_target"] == "gap-a"
+
+
+def test_review_gap_none_falls_back_to_first():
+    profile = _fake_profile(confirmed_gaps=["gap-a", "gap-b", "gap-c"])
+    state = _call_build_prompt_state(profile, review_gaps=True, review_gap=None)
+    assert state["review_gaps_target"] == "gap-a"
+
+
+def test_build_prompt_state_carries_rolling_summary():
+    """P2 AC3: rolling_summary flows from the session onto the prompt state
+    so build_dynamic_context can render it."""
+    session = _fake_session()
+    session.rolling_summary = "covered limits and continuity"
+    profile = _fake_profile()
+    state = _build_prompt_state(
+        session=session,
+        profile=profile,
+        ingestion_status="none",
+        retrieval_required=False,
+        review_gaps=False,
+        pending_check=None,
+        quiz_cooldown=None,
+    )
+    assert state["rolling_summary"] == "covered limits and continuity"
+
+
+def test_build_prompt_state_rolling_summary_defaults_none():
+    state = _call_build_prompt_state(_fake_profile(), review_gaps=False)
+    assert state["rolling_summary"] is None
+
+
+def test_resumed_profile_skips_diagnostic():
+    """R1.1 AC2: a resume-seeded profile carries a non-null knowledge_level,
+    so the 3Q diagnostic branch must not be taken."""
+    profile = _fake_profile(knowledge_level="intermediate", confirmed_gaps=["gap-a"])
+    state = _call_build_prompt_state(profile, review_gaps=False)
+    assert state["diagnostic_required"] is False
