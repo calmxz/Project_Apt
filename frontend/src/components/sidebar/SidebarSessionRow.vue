@@ -76,6 +76,18 @@ async function onResume() {
   }
 }
 
+async function onContinueTopic() {
+  if (busy.value) return
+  busy.value = true
+  try {
+    const created = await store.continueTopic(props.session)
+    if (created) router.push({ name: 'session', params: { id: created.id } })
+    closeDrawer()
+  } finally {
+    busy.value = false
+  }
+}
+
 function refocusRowTrigger(id) {
   nextTick(() => {
     const row = document.querySelector(`[data-session-id="${id}"]`)
@@ -182,6 +194,7 @@ function commitRenameFromKey() {
       :pinned="session.pinned ?? false"
       @end="onEnd"
       @resume="onResume"
+      @continue-topic="onContinueTopic"
       @pin="onPin"
       @unpin="onUnpin"
       @rename="startRename"

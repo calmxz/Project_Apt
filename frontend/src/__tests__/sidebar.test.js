@@ -396,6 +396,36 @@ describe('Sidebar.vue — row interactions', () => {
     expect(routerPush).toHaveBeenCalledWith({ name: 'session', params: { id: 'e1' } })
   })
 
+  it('ended row menu offers Continue topic which calls store.continueTopic and routes', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'e1', topic: 'X', ended_at: '2026-05-18T10:00:00Z' },
+    ]
+    const continueTopicSpy = vi.spyOn(store, 'continueTopic').mockResolvedValue({ id: 'new-1' })
+    wrapper = mount(Sidebar, { attachTo: document.body })
+    await flushPromises()
+    // Ended rows now live behind the Ended tab (default view is Active).
+    await wrapper.find('[data-testid="sidebar-status-ended"]').trigger('click')
+    await wrapper.find('[data-session-id="e1"] [data-testid="sidebar-row-menu-trigger"]').trigger('click')
+    await wrapper.find('[data-testid="sidebar-row-menu-continue-topic"]').trigger('click')
+    await flushPromises()
+    expect(continueTopicSpy).toHaveBeenCalled()
+    expect(routerPush).toHaveBeenCalledWith({ name: 'session', params: { id: 'new-1' } })
+  })
+
+  it('Ended row still offers Resume alongside Continue topic', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'e1', topic: 'X', ended_at: '2026-05-18T10:00:00Z' },
+    ]
+    wrapper = mount(Sidebar, { attachTo: document.body })
+    await flushPromises()
+    await wrapper.find('[data-testid="sidebar-status-ended"]').trigger('click')
+    await wrapper.find('[data-session-id="e1"] [data-testid="sidebar-row-menu-trigger"]').trigger('click')
+    expect(wrapper.find('[data-testid="sidebar-row-menu-resume"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sidebar-row-menu-continue-topic"]').exists()).toBe(true)
+  })
+
   it('Ended row does not offer End menu item', async () => {
     const store = useSessionStore()
     store.sessions = [

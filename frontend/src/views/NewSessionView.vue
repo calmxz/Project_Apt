@@ -21,7 +21,9 @@
           @keydown.enter="onEnter"
         />
         <p class="help">
-          To continue an ended topic, reopen it from the Ended tab on Home.
+          To continue an ended topic, use "Continue topic" on its card in the
+          Sessions library — the tutor keeps your profile. Reopening from the
+          sidebar picks up the same session instead.
         </p>
       </div>
 
