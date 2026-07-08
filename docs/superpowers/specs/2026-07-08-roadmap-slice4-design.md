@@ -216,3 +216,23 @@ No frontend changes; no vitest additions; no Alembic migration.
   `learning_events` for current confirmed gaps; absent when no gaps.
 - AC7: D1 eval script committed; paid run recorded as owed post-merge gate.
 - AC8: Full backend suite green.
+
+## Deviations from this spec (recorded post-implementation, Task 11)
+
+- **P3.2 snapshots, not `list[int]` boundaries.** This document's design
+  section (P3.2) sketches recording iteration boundaries as `list[int]`
+  offsets and re-tokenizing `full[:b]` slices on cancel. The implementation
+  instead appends a shallow-copied prefix (`[dict(m) for m in full]`) per
+  iteration to `iter_prompt_snapshots`. Reason: P2's
+  `prune_superseded_excerpts` mutates a tool message's `content` value on the
+  shared dict later in the loop; an index-only boundary would tokenize the
+  post-mutation (already-pruned, shorter) prefix on cancel instead of what
+  was actually billed at that iteration. A per-iteration snapshot keeps each
+  iteration's prefix exact regardless of later in-place pruning. Behavior
+  (the cancelled-cost estimate) is unchanged; only the mechanism differs.
+  Covered by the existing cancelled-billing regression tests.
+- No other divergences found: P3.1 landed at the planned <=6/<=7 statement
+  budget (measured exactly 6 and exactly 7 in the two test branches), P3.3
+  and P3.4 match this document as written, and D1.1/D1.2/D1 AC3 match this
+  document as written (80-char stem cap, top-8/600-char `GAP_ACCURACY` cap,
+  eval script committed with the paid run owed post-merge).
