@@ -5,15 +5,27 @@ import { createPinia, setActivePinia } from 'pinia'
 import ProfileView from '@/views/ProfileView.vue'
 import * as profileApi from '@/services/profileApi.js'
 
+const routerPushMock = vi.fn()
+vi.mock('vue-router', () => ({
+  useRouter: () => ({ push: routerPushMock }),
+}))
+
 const stubs = {
   RouterLink: { template: '<a><slot /></a>', props: ['to'] },
   BackButton: { template: '<button />', props: ['label', 'fallback'] },
+  teleport: true,
+  Dialog: {
+    props: ['visible'],
+    emits: ['update:visible'],
+    template: '<div v-if="visible" data-testid="dialog"><slot /></div>',
+  },
 }
 
 describe('SessionProfileView (per-session)', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.restoreAllMocks()
+    routerPushMock.mockClear()
   })
 
   it('renders mastered, gaps, focus, and learning events', async () => {
@@ -160,5 +172,32 @@ describe('SessionProfileView (per-session)', () => {
 
     expect(getSessionProfile).toHaveBeenCalledTimes(2) // initial + refetch
     expect(wrapper.get('[data-testid="sprof-conflict"]').exists()).toBe(true)
+  })
+
+  it('review-gaps button routes to the session with review_gap query', async () => {
+    const wrapper = await mountProfile({ profile: { confirmed_gaps: ['a', 'b'] } })
+    await wrapper.get('[data-testid="sprof-review-gaps"]').trigger('click')
+    await wrapper.get('[data-testid="gap-picker-option-0"]').trigger('click')
+    expect(routerPushMock).toHaveBeenCalledWith({
+      name: 'session',
+      params: { id: 's1' },
+      query: { review_gap: 'a' },
+    })
+  })
+
+  it('review-gaps button skips the picker and routes directly for a single gap', async () => {
+    const wrapper = await mountProfile({ profile: { confirmed_gaps: ['only-gap'] } })
+    await wrapper.get('[data-testid="sprof-review-gaps"]').trigger('click')
+    expect(wrapper.find('[data-testid="gap-picker"]').exists()).toBe(false)
+    expect(routerPushMock).toHaveBeenCalledWith({
+      name: 'session',
+      params: { id: 's1' },
+      query: { review_gap: 'only-gap' },
+    })
+  })
+
+  it('does not show the review-gaps button when there are no confirmed gaps', async () => {
+    const wrapper = await mountProfile({ profile: { confirmed_gaps: [] } })
+    expect(wrapper.find('[data-testid="sprof-review-gaps"]').exists()).toBe(false)
   })
 })

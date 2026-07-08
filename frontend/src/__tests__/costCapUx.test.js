@@ -148,7 +148,8 @@ const stubs = {
 }
 
 vi.mock('vue-router', () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useRoute: () => ({ query: {} }),
   RouterLink: { template: '<a><slot /></a>' },
 }))
 

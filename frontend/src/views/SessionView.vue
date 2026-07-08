@@ -28,6 +28,12 @@
         @resume-gaps="resumeReviewGaps"
       />
 
+      <GapPickerDialog
+        v-model:visible="gapPickerOpen"
+        :gaps="confirmedGaps"
+        @select="onGapPicked"
+      />
+
       <div ref="messagesEl" class="messages" :class="{ 'is-empty': !store.messages.length }" data-testid="session-messages">
         <MessageListSkeleton v-if="store.detailLoading" />
         <template v-else>
@@ -125,7 +131,7 @@
 
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
@@ -135,6 +141,7 @@ import CapBanners from '../components/chat/CapBanners.vue'
 import ChatEmptyState from '../components/chat/EmptyState.vue'
 import CheckQuestion from '../components/chat/CheckQuestion.vue'
 import Composer from '../components/chat/Composer.vue'
+import GapPickerDialog from '../components/GapPickerDialog.vue'
 import MessageList from '../components/chat/MessageList.vue'
 import MessageListSkeleton from '../components/chat/MessageListSkeleton.vue'
 import SessionHeader from '../components/chat/SessionHeader.vue'
@@ -150,6 +157,7 @@ import { formatShortDateTime } from '../utils/formatDate.js'
 
 const props = defineProps({ id: { type: String, required: true } })
 
+const route = useRoute()
 const router = useRouter()
 const store = useSessionStore()
 
@@ -160,6 +168,7 @@ const summaryText = ref('')
 const summaryKind = ref('summary')
 const notFound = ref(false)
 const resuming = ref(false)
+const gapPickerOpen = ref(false)
 const sending = ref(false)
 const messagesEl = ref(null)
 const composerRef = ref(null)
@@ -181,6 +190,11 @@ const isEnded = computed(() =>
 // discriminator-checked currentSession rather than re-deriving it.
 const hasGaps = computed(
   () => (store.currentSession?.topic_profile?.confirmed_gaps?.length ?? 0) > 0,
+)
+// Same discriminator-checked source as hasGaps, but the full list is needed to
+// drive the picker (single gap skips it, >1 gap opens it).
+const confirmedGaps = computed(
+  () => store.currentSession?.topic_profile?.confirmed_gaps ?? [],
 )
 // Discriminator-gated (same as isEnded/headerTopic): during a switch,
 // store.currentSession still holds the PREVIOUS session, so gating on raw
@@ -331,6 +345,9 @@ async function loadCurrent(id) {
     }
   }
   if (!isEnded.value && !notFound.value) focusComposer()
+  // Covers fresh navigation (new id, e.g. from ProfileView's "Review gaps"
+  // button) where the query is already present before the session loads.
+  if (!notFound.value) await handleReviewGapQuery()
 }
 
 onMounted(() => loadCurrent(props.id))
@@ -342,6 +359,21 @@ watch(
   () => props.id,
   (id) => {
     if (id) loadCurrent(id)
+  },
+)
+
+// Covers same-id in-place navigation (e.g. ProfileView -> back to the session
+// already open) where loadCurrent does not re-run. Not immediate: the initial
+// value is handled by loadCurrent above, which waits for the session to load
+// first -- an immediate watch here would fire during setup, before
+// store.currentSession is populated, and either send into the wrong session
+// or throw "no active session".
+watch(
+  () => route.query.review_gap,
+  (gap) => {
+    if (!gap) return
+    if (store.currentSession?.id !== props.id) return
+    handleReviewGapQuery()
   },
 )
 
@@ -471,15 +503,38 @@ async function resume() {
 
 async function resumeReviewGaps() {
   if (!store.currentSession) return
+  if (confirmedGaps.value.length > 1) {
+    gapPickerOpen.value = true
+    return
+  }
+  await sendReviewSeed(confirmedGaps.value[0])
+}
+
+async function onGapPicked(gap) {
+  await sendReviewSeed(gap)
+}
+
+async function sendReviewSeed(gap) {
   resuming.value = true
   try {
-    await store.reopenSession(store.currentSession.id)
-    await store.sendMessageStreaming({ text: 'Review my gaps', reviewGaps: true })
+    if (isEnded.value) await store.reopenSession(store.currentSession.id)
+    await store.sendMessageStreaming({
+      text: `Review my gap: ${gap}`,
+      reviewGaps: true,
+      reviewGap: gap,
+    })
   } catch {
     // store.error already populated
   } finally {
     resuming.value = false
   }
+}
+
+async function handleReviewGapQuery() {
+  const gap = route.query.review_gap
+  if (!gap) return
+  router.replace({ query: { ...route.query, review_gap: undefined } })
+  await sendReviewSeed(String(gap))
 }
 
 async function onAnswerCheck(index) {

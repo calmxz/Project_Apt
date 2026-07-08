@@ -13,19 +13,38 @@
         </p>
       </div>
 
-      <div v-if="data" class="level-edit" data-testid="level-select">
+      <div v-if="data" class="header-actions">
         <button
-          v-for="lvl in ['beginner', 'intermediate', 'advanced']"
-          :key="lvl"
+          v-if="data.profile.confirmed_gaps?.length"
           type="button"
-          class="level-opt"
-          :class="{ active: data.profile.knowledge_level === lvl }"
-          @click="setLevel(lvl)"
+          class="review-gaps-btn"
+          data-testid="sprof-review-gaps"
+          @click="startReview"
         >
-          {{ lvl }}
+          <i class="pi pi-bullseye" aria-hidden="true" />
+          Review gaps
         </button>
+
+        <div class="level-edit" data-testid="level-select">
+          <button
+            v-for="lvl in ['beginner', 'intermediate', 'advanced']"
+            :key="lvl"
+            type="button"
+            class="level-opt"
+            :class="{ active: data.profile.knowledge_level === lvl }"
+            @click="setLevel(lvl)"
+          >
+            {{ lvl }}
+          </button>
+        </div>
       </div>
     </header>
+
+    <GapPickerDialog
+      v-model:visible="gapPickerOpen"
+      :gaps="data?.profile?.confirmed_gaps ?? []"
+      @select="goReview"
+    />
 
     <p v-if="loading" class="muted" data-testid="sprof-loading">Loading...</p>
     <p v-else-if="error" class="error" data-testid="sprof-error">{{ error }}</p>
@@ -180,8 +199,10 @@
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 
 import BackButton from '../components/BackButton.vue'
+import GapPickerDialog from '../components/GapPickerDialog.vue'
 import { friendlyError } from '../lib/errors.js'
 import { deleteProfileItem, getSessionProfile, patchProfile } from '../services/profileApi.js'
 import { useSessionStore } from '../stores/session.js'
@@ -189,6 +210,7 @@ import { formatRelative } from '../utils/formatDate.js'
 
 const props = defineProps({ id: { type: String, required: true } })
 
+const router = useRouter()
 const store = useSessionStore()
 const data = ref(null)
 const loading = ref(false)
@@ -197,6 +219,7 @@ const etag = ref('')
 const conflict = ref(false)
 const newMastered = ref('')
 const newGap = ref('')
+const gapPickerOpen = ref(false)
 
 const topicLabel = computed(() => {
   const fromStore = store.sessions.find((s) => s.id === props.id)?.topic
@@ -252,6 +275,16 @@ function setLevel(level) {
 
 function removeItem(listName, item) {
   return _applyWrite(() => deleteProfileItem(props.id, listName, item, etag.value))
+}
+
+function startReview() {
+  const gaps = data.value?.profile?.confirmed_gaps ?? []
+  if (gaps.length > 1) gapPickerOpen.value = true
+  else if (gaps.length === 1) goReview(gaps[0])
+}
+
+function goReview(gap) {
+  router.push({ name: 'session', params: { id: props.id }, query: { review_gap: gap } })
 }
 
 onMounted(load)
@@ -598,6 +631,44 @@ onMounted(load)
   cursor: pointer;
 }
 .add-btn:hover { background: var(--color-surface-soft); }
+
+/* Header actions */
+.header-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.625rem;
+}
+
+.review-gaps-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.875rem;
+  border: 1px solid var(--accent-coral-200);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  background: var(--accent-coral-100);
+  color: var(--accent-coral-700);
+  cursor: pointer;
+  transition: transform var(--motion-fast) var(--motion-bounce), background var(--motion-fast) ease;
+}
+
+.review-gaps-btn:hover {
+  transform: translateY(-1px);
+  background: var(--accent-coral-200);
+}
+
+:root[data-theme='dark'] .review-gaps-btn {
+  background: rgba(255, 119, 102, 0.18);
+  color: var(--accent-coral-300);
+  border-color: rgba(255, 119, 102, 0.35);
+}
+:root[data-theme='dark'] .review-gaps-btn:hover {
+  background: rgba(255, 119, 102, 0.28);
+}
 
 /* Level control */
 .level-edit {

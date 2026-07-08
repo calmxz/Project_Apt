@@ -11,8 +11,11 @@ import Composer from '@/components/chat/Composer.vue'
 import { useSessionStore } from '@/stores/session.js'
 
 const push = vi.fn()
+const replace = vi.fn()
+const route = { query: {} }
 vi.mock('vue-router', () => ({
-  useRouter: () => ({ push }),
+  useRouter: () => ({ push, replace }),
+  useRoute: () => route,
   RouterLink: { template: '<a><slot /></a>' },
 }))
 
@@ -77,6 +80,8 @@ describe('SessionView', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     push.mockClear()
+    replace.mockClear()
+    route.query = {}
     showError.mockClear()
     uploadDocument.mockReset()
     bannerRefresh.mockReset()
@@ -408,7 +413,7 @@ describe('SessionView', () => {
     expect(reopenSpy).toHaveBeenCalledWith('s1')
   })
 
-  it('resumeReviewGaps reopens then sends a review_gaps seed turn', async () => {
+  it('single confirmed gap skips the picker and sends directly', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'loadSession').mockImplementation(async () => {
       setupSession({ ended: true, confirmedGaps: ['limits'] })
@@ -420,7 +425,66 @@ describe('SessionView', () => {
     await wrapper.get('[data-testid="session-resume-gaps"]').trigger('click')
     await flushPromises()
     expect(reopenSpy).toHaveBeenCalledWith('s1')
-    expect(sendSpy).toHaveBeenCalledWith({ text: 'Review my gaps', reviewGaps: true })
+    expect(wrapper.find('[data-testid="gap-picker"]').exists()).toBe(false)
+    expect(sendSpy).toHaveBeenCalledWith({
+      text: 'Review my gap: limits',
+      reviewGaps: true,
+      reviewGap: 'limits',
+    })
+  })
+
+  it('resumeReviewGaps opens the picker when more than one confirmed gap', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession({ ended: true, confirmedGaps: ['a', 'b'] })
+    })
+    vi.spyOn(store, 'reopenSession').mockResolvedValue()
+    const sendSpy = vi.spyOn(store, 'sendMessageStreaming').mockResolvedValue()
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-testid="session-resume-gaps"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="gap-picker"]').exists()).toBe(true)
+    expect(sendSpy).not.toHaveBeenCalled()
+  })
+
+  it('picker selection reopens then sends the targeted review seed', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession({ ended: true, confirmedGaps: ['a', 'b'] })
+    })
+    const reopenSpy = vi.spyOn(store, 'reopenSession').mockResolvedValue()
+    const sendSpy = vi.spyOn(store, 'sendMessageStreaming').mockResolvedValue()
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-testid="session-resume-gaps"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="gap-picker-option-1"]').trigger('click')
+    await flushPromises()
+    expect(reopenSpy).toHaveBeenCalled()
+    expect(sendSpy).toHaveBeenCalledWith({
+      text: 'Review my gap: b',
+      reviewGaps: true,
+      reviewGap: 'b',
+    })
+  })
+
+  it('review_gap query param triggers the review seed then strips the query', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession({ ended: false, confirmedGaps: ['a', 'b'] })
+    })
+    vi.spyOn(store, 'reopenSession').mockResolvedValue()
+    const sendSpy = vi.spyOn(store, 'sendMessageStreaming').mockResolvedValue()
+    route.query = { review_gap: 'b' }
+    mountView()
+    await flushPromises()
+    expect(sendSpy).toHaveBeenCalledWith({
+      text: 'Review my gap: b',
+      reviewGaps: true,
+      reviewGap: 'b',
+    })
+    expect(replace).toHaveBeenCalledWith({ query: { review_gap: undefined } })
   })
 
   it('daily cap banner shown when cap reached', async () => {
