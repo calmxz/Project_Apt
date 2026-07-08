@@ -123,6 +123,26 @@ def _profile_to_dict(profile) -> dict:
     return profile or {}
 
 
+_MISSED_STEM_CAP = 80
+
+
+def _normalize_missed(missed) -> list[dict]:
+    """Tolerate legacy plain-string missed entries (question stems only)
+    alongside the current {"question", "chosen", "correct"} shape."""
+    out = []
+    for entry in missed or []:
+        if isinstance(entry, dict):
+            q = str(entry.get("question", ""))[:_MISSED_STEM_CAP]
+            out.append({
+                "question": q,
+                "chosen": entry.get("chosen"),
+                "correct": entry.get("correct"),
+            })
+        elif isinstance(entry, str):
+            out.append({"question": entry[:_MISSED_STEM_CAP]})
+    return out
+
+
 def build_dynamic_context(state: dict) -> str:
     topic = state.get("topic", "") or ""
     profile_dict = _profile_to_dict(state.get("profile"))
@@ -148,13 +168,15 @@ def build_dynamic_context(state: dict) -> str:
 
     quiz_cooldown = state.get("quiz_cooldown")
     if quiz_cooldown:
-        qr_label = json.dumps(
-            {
-                "gap": quiz_cooldown.get("gap"),
-                "last_score": quiz_cooldown.get("last_score"),
-                "status": "cooling_down",
-            }
-        )
+        qr = {
+            "gap": quiz_cooldown.get("gap"),
+            "last_score": quiz_cooldown.get("last_score"),
+            "status": "cooling_down",
+        }
+        missed = _normalize_missed(quiz_cooldown.get("missed"))
+        if missed:
+            qr["missed"] = missed
+        qr_label = json.dumps(qr)
     else:
         qr_label = "ready"
 

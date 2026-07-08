@@ -176,3 +176,31 @@ def test_system_prompt_prefix_is_byte_identical_across_turns():
     # No per-turn material may leak into the stable prefix.
     assert "photosynthesis" not in a[:n]
     assert "linear algebra" not in b[:n]
+
+
+def test_quiz_readiness_renders_missed_detail():
+    ctx = prompts.build_dynamic_context({
+        "quiz_cooldown": {
+            "gap": "g", "last_score": "1/2",
+            "missed": [{"question": "What is X?", "chosen": "a", "correct": "b"}],
+        }
+    })
+    line = next(l for l in ctx.split("\n") if l.startswith("QUIZ_READINESS:"))
+    assert "What is X?" in line and '"chosen": "a"' in line and '"correct": "b"' in line
+
+
+def test_quiz_readiness_tolerates_legacy_string_missed():
+    ctx = prompts.build_dynamic_context({
+        "quiz_cooldown": {"gap": "g", "last_score": "0/1", "missed": ["Old stem?"]}
+    })
+    line = next(l for l in ctx.split("\n") if l.startswith("QUIZ_READINESS:"))
+    assert "Old stem?" in line
+
+
+def test_quiz_readiness_truncates_long_question_stems():
+    ctx = prompts.build_dynamic_context({
+        "quiz_cooldown": {"gap": "g", "last_score": "0/1",
+                          "missed": [{"question": "Q" * 300, "chosen": "a", "correct": "b"}]}
+    })
+    line = next(l for l in ctx.split("\n") if l.startswith("QUIZ_READINESS:"))
+    assert "Q" * 81 not in line  # stems capped at 80 chars

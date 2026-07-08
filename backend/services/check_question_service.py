@@ -302,7 +302,15 @@ def build_quiz_cooldown(pc: dict) -> dict | None:
     has_miss = any(it["status"] == "skipped" for it in items) or n_correct < len(graded)
     if not has_miss:
         return None
-    missed = [it["question"] for it in graded if not it.get("correct")]
+    missed = [
+        {
+            "question": it["question"],
+            "chosen": it["options"][it["selected_index"]],
+            "correct": it["options"][it["correct_index"]],
+        }
+        for it in graded
+        if not it.get("correct")
+    ]
     return {
         "gap": pc["gap"],
         "last_score": f"{n_correct}/{len(graded)}",
