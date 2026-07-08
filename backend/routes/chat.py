@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import time
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -214,10 +215,13 @@ async def chat_stream(
     run_streaming owns persistence of the assistant ChatMessage on both normal
     completion and cancellation.
     """
+    t0 = time.perf_counter()
     messages, system_prompt, ctx = await _prepare_turn(req, user_id, db)
+    prepare_ms = (time.perf_counter() - t0) * 1000.0
 
     async def event_stream():
         queue: asyncio.Queue = asyncio.Queue()
+        first_token_logged = False
 
         async def produce():
             try:
@@ -238,6 +242,13 @@ async def chat_stream(
                 if event is None:
                     break
                 yield event.to_sse()
+                if settings.debug_timing and not first_token_logged:
+                    first_token_logged = True
+                    log.info(
+                        "chat timing prepare_ms=%.1f first_token_ms=%.1f",
+                        prepare_ms,
+                        (time.perf_counter() - t0) * 1000.0,
+                    )
                 if event.type in ("done", "error", "cancelled"):
                     break
         finally:

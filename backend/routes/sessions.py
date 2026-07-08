@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import time
 import uuid
 from datetime import datetime, timezone
 
@@ -13,6 +14,7 @@ from sqlalchemy.orm import Session
 from agent import prompts, tutor
 from agent.stream_events import StreamEvent
 from agent.types import ToolContext
+from config import settings
 from contracts import (
     CheckAnswerRequest,
     CheckAnswerResponse,
@@ -287,26 +289,33 @@ async def end_session(
     user_id: str = Depends(current_user_id),
     db: Session = Depends(get_db),
 ):
-    row = db.get(SessionModel, session_id)
-    if row is None or row.user_id != user_id:
-        raise HTTPException(status_code=404, detail="session not found")
+    t0 = time.perf_counter()
+    try:
+        row = db.get(SessionModel, session_id)
+        if row is None or row.user_id != user_id:
+            raise HTTPException(status_code=404, detail="session not found")
 
-    if row.ended_at is not None:
-        profile = profile_service.load_profile(db, session_id)
+        if row.ended_at is not None:
+            profile = profile_service.load_profile(db, session_id)
+            return SessionEndResponse(
+                id=row.id,
+                ended_at=_aware_utc(row.ended_at),
+                summary=_build_end_summary(db, session_id, profile.last_session_summary or ""),
+            )
+
+        check_question_service.abandon_open_batch(db, session_id)
+        summary_text = await summary_service.generate_and_persist(db, row)
+        db.refresh(row)
         return SessionEndResponse(
             id=row.id,
             ended_at=_aware_utc(row.ended_at),
-            summary=_build_end_summary(db, session_id, profile.last_session_summary or ""),
+            summary=_build_end_summary(db, session_id, summary_text),
         )
-
-    check_question_service.abandon_open_batch(db, session_id)
-    summary_text = await summary_service.generate_and_persist(db, row)
-    db.refresh(row)
-    return SessionEndResponse(
-        id=row.id,
-        ended_at=_aware_utc(row.ended_at),
-        summary=_build_end_summary(db, session_id, summary_text),
-    )
+    finally:
+        if settings.debug_timing:
+            logger.info(
+                "end_session timing total_ms=%.1f", (time.perf_counter() - t0) * 1000.0
+            )
 
 
 @router.post("/sessions/{session_id}/reopen", response_model=SessionResponse)

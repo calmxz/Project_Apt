@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     embedding_dim: int = 768
     uploads_path: str = (_DATA_DIR / "uploads").as_posix()
     llm_stub: bool = False
+    debug_timing: bool = False
     cors_origins: str = "http://localhost:5173"
     env: str = "dev"
 
