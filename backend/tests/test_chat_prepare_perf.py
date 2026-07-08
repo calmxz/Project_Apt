@@ -7,7 +7,6 @@ user-create path is excluded from the budget by design.
 """
 
 import asyncio
-import json
 from contextlib import contextmanager
 from uuid import uuid4
 
@@ -78,5 +77,8 @@ def test_prepare_turn_budget_with_gaps(db_session, seeded_session):
     db_session.commit()
     session_id = seeded_session.id
     with count_queries(db_session) as q:
-        _run_prepare(db_session, session_id)
+        messages, system_prompt, ctx = _run_prepare(db_session, session_id)
     assert q["n"] <= 7, f"prepare path used {q['n']} statements:\n" + "\n".join(q["statements"])
+    # Functional proof the aggregate actually ran on this branch (not just
+    # that the statement count happened to fit).
+    assert "GAP_ACCURACY:" in system_prompt and "factoring" in system_prompt

@@ -1,6 +1,7 @@
 """Tests for agent/prompts.py -- IMMUTABLE_RULES and build_dynamic_context."""
 
 from agent import prompts
+from contracts import TopicProfile
 
 
 def test_dynamic_context_includes_pending_check():
@@ -176,6 +177,34 @@ def test_system_prompt_prefix_is_byte_identical_across_turns():
     # No per-turn material may leak into the stable prefix.
     assert "photosynthesis" not in a[:n]
     assert "linear algebra" not in b[:n]
+
+
+def test_gap_accuracy_block_renders_only_profile_gaps():
+    ctx = prompts.build_dynamic_context({
+        "profile": TopicProfile(confirmed_gaps=["frac"]),
+        "gap_accuracy": {"frac": {"attempts": 3, "correct": 1},
+                         "stale-gap": {"attempts": 5, "correct": 5}},
+    })
+    line = next(l for l in ctx.split("\n") if l.startswith("GAP_ACCURACY:"))
+    assert "frac" in line and "stale-gap" not in line
+
+
+def test_gap_accuracy_absent_without_data():
+    ctx = prompts.build_dynamic_context({})
+    line = next(l for l in ctx.split("\n") if l.startswith("GAP_ACCURACY:"))
+    assert line == "GAP_ACCURACY: none"
+
+
+def test_gap_accuracy_caps_at_top_8_by_attempts():
+    gaps = [f"g{i}" for i in range(12)]
+    acc = {g: {"attempts": i + 1, "correct": 0} for i, g in enumerate(gaps)}
+    ctx = prompts.build_dynamic_context({
+        "profile": TopicProfile(confirmed_gaps=gaps),
+        "gap_accuracy": acc,
+    })
+    line = next(l for l in ctx.split("\n") if l.startswith("GAP_ACCURACY:"))
+    assert "g11" in line and "g0" not in line  # highest-attempt 8 kept
+    assert len(line) <= 620  # block char cap: 600 + prefix slack
 
 
 def test_quiz_readiness_renders_missed_detail():

@@ -23,6 +23,7 @@ from services import (
     check_question_service,
     cost_meter,
     documents_service,
+    learning_event_service,
     profile_service,
     rate_limit,
     summary_service,
@@ -59,6 +60,7 @@ def _build_prompt_state(
     review_gap: str | None = None,
     pending_check,
     quiz_cooldown,
+    gap_accuracy: dict | None = None,
 ) -> dict:
     """Build the prompt_state dict consumed by prompts.build_system_prompt.
 
@@ -75,6 +77,7 @@ def _build_prompt_state(
         "rolling_summary": getattr(session, "rolling_summary", None),
         "pending_check": pending_check,
         "quiz_cooldown": quiz_cooldown,
+        "gap_accuracy": gap_accuracy or {},
     }
     if review_gaps and profile.confirmed_gaps:
         target = review_gap if review_gap in profile.confirmed_gaps else profile.confirmed_gaps[0]
@@ -168,6 +171,16 @@ async def _prepare_turn(
 
     profile = profile_service.profile_from_row(session)
 
+    # D1.2: per-gap accuracy, best-effort. Only run when there is something
+    # to enrich (confirmed_gaps non-empty) to keep the no-gaps path inside
+    # the P3.1 budget; a failure here must never kill the turn.
+    gap_accuracy: dict[str, dict] = {}
+    if profile.confirmed_gaps:
+        try:
+            gap_accuracy = learning_event_service.gap_accuracy(db, req.session_id)
+        except Exception as e:  # noqa: BLE001 - best-effort prompt enrichment
+            log.warning("gap_accuracy failed; continuing without it: %s", e)
+
     retrieval_required = keyword_index.match_required(
         req.message, json.loads(session.kw_index_json or "[]")
     )
@@ -181,6 +194,7 @@ async def _prepare_turn(
         review_gap=getattr(req, "review_gap", None),
         pending_check=check_question_service.get_pending_check_from_row(session),
         quiz_cooldown=check_question_service.get_quiz_cooldown_from_row(session),
+        gap_accuracy=gap_accuracy,
     )
     system_prompt = prompts.build_system_prompt(prompt_state)
 
