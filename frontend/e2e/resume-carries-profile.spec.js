@@ -1,16 +1,14 @@
 import { test, expect } from '@playwright/test'
 
-// TODO(phase-8): this still needs the auth-session-seeding helper + Postgres
-// service in e2e.yml (owed WS-G gate — see docs/planning "paid live smokes")
-// before it can pass against a real Supabase-gated deploy: the app now
+// TODO(phase-8): rebuild e2e harness for Phase 7 auth + Postgres. The app now
 // redirects unauthenticated visits to /login (see auth.spec.js), and no
-// seeding helper exists yet to get a Playwright session past that gate.
-// Un-skipped per the roadmap-slice3 plan (Task 12) so the flow/assertions are
-// ready the moment that infra lands; every other content-flow spec in this
-// folder is still skipped for the identical reason. The Playwright job in
-// e2e.yml runs with `continue-on-error: true` (non-blocking soak), so this
-// spec failing today does not gate a PR.
-test.describe('resume carries profile', () => {
+// auth-session-seeding helper exists yet to get a Playwright session past that
+// gate, so the onboarding step below times out. Skipped to match every other
+// content-flow spec in this folder (onboarding-to-chat, chat-stream, etc.),
+// which are skipped for the identical reason. The flow/assertions here target
+// the roadmap-slice3 Continue-topic path and are ready the moment the seeding
+// helper + Postgres service in e2e.yml land — un-skip then.
+test.describe.skip('resume carries profile', () => {
   test.beforeEach(async ({ context }) => {
     await context.clearCookies()
     await context.addInitScript(() => {

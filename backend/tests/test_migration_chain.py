@@ -3,8 +3,6 @@
 import importlib.util
 from pathlib import Path
 
-import pytest
-
 from db.models import Session as SessionModel, User
 
 
