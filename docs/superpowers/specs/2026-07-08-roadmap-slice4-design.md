@@ -15,6 +15,7 @@ Backend-only slice. Two tracks:
   through the quiz-cooldown window and inject per-gap accuracy into the
   dynamic prompt context.
 
+
 Out of scope: R2 spaced repetition (slice 5 candidate), any frontend change,
 any API contract change (`docs/api/openapi.yaml` untouched — no codegen run
 needed).
@@ -26,15 +27,19 @@ needed).
 | Slice composition | P3 + D1, no D2 bolt-on | Follow roadmap sequencing; keep slice M-sized |
 | D1 AC3 reliability eval | Script written in-slice; paid run owed post-merge | Matches slice 1-3 convention of batched post-merge paid gates |
 | End-session summary (P3 AC3) | Keep synchronous, record rationale | Summary text is returned in `SessionEndResponse` and shown by the UI immediately; moving it off-path is a contract + FE change. Resume-create (`routes/sessions.py:123`) shares the same call. p50 measured via the new timing log instead. |
-| Prepare-path query budget (P3 AC1) | Pragmatic <=6 statements (<=7 with D1 aggregate), not roadmap's <=3 | Stack is sync SQLAlchemy on one request-scoped connection; <=3 requires a mega-UNION/CTE that fights the ORM and hurts maintainability. Roadmap is PROPOSAL status; deviation recorded here. |
+| Prepare-path query budget (P3 AC1) | <=6 statements via full consolidation (<=7 with D1 aggregate), not roadmap's <=3 | Stack is sync SQLAlchemy on one request-scoped connection; <=3 requires a mega-UNION/CTE that fights the ORM and hurts maintainability. Roadmap is PROPOSAL status; deviation recorded here. Reaching 6 requires touching guard queries (decision revised during planning after measuring the real baseline; see P3.1). |
 
 ## Current state (audited 2026-07-08)
 
-- `_prepare_turn` (`backend/routes/chat.py:84-174`) issues ~11-12 sequential
-  statements before the stream opens. `get_pending_check` and
-  `get_quiz_cooldown` (`check_question_service.py:308-316`) each re-fetch the
-  `SessionModel` row already loaded at `chat.py:124`; `pending_check` and
-  `quiz_cooldown` are columns on that same row.
+- `_prepare_turn` (`backend/routes/chat.py:84-174`) issues ~10 sequential
+  statements before the stream opens: cost-cap SELECT (1), rate-limit
+  INSERT-on-conflict + UPDATE + SELECT (3), ensure_user SELECT (1), session
+  SELECT (1), history SELECT (1), user-message INSERT (1), post-commit
+  expire/refresh SELECT on the session row (1), ingestion-status SELECT (1).
+  The `get_pending_check`/`get_quiz_cooldown`/`load_profile` `db.get` calls
+  after the refresh are free via the SQLAlchemy identity map — the roadmap's
+  "~9 round trips" audit overcounted; row-accepting variants are still made
+  explicit so correctness does not hinge on identity-map subtleties.
 - `litellm.token_counter` runs per loop iteration (`tutor.py:130-137`),
   accumulating `prompt_tokens_total`. Its only consumer is
   `cost_meter.estimate_cancelled_cost` in the `CancelledError` branch
@@ -57,17 +62,38 @@ needed).
 
 Changes to `_prepare_turn` and the services it calls:
 
-1. `check_question_service.get_pending_check` and `get_quiz_cooldown` gain
-   row-accepting variants (`*_from_row(row)`) used by `_prepare_turn`; the
-   existing session_id-based functions remain as thin wrappers for callers
-   outside the prepare path. Removes 2 redundant `db.get` calls.
-2. `profile_service.load_profile` on the prepare path reuses the loaded
-   session row instead of re-reading it (profile JSON lives on `sessions`).
-3. Guards stay as-is: `cost_meter.check_cap`, `rate_limit.check_and_increment`,
-   `ensure_user`. Separate tables, write semantics, correctness-critical;
-   combining them is not worth the risk.
-4. History select, ingestion-status select, and the user-message insert/commit
-   remain individual statements.
+Target composition — exactly 6 statements on the happy path (existing user,
+no confirmed gaps):
+
+1. **Combined guard read (1 stmt):** one SELECT of two scalar subqueries —
+   today's-spend aggregate (cost cap) and user-existence check — replacing
+   the cost-cap SELECT and the ensure_user SELECT. `cost_meter` gains a pure
+   `check_cap_from_spend(used)` (existing `check_cap(db, user_id)` delegates
+   to it; other callers unchanged). If the user row is missing (first turn
+   ever), `ensure_user` runs as today — the rare create path may exceed the
+   budget and is excluded from the perf test.
+2. **Rate limit 3 -> 2 stmts:** the post-increment SELECT is folded into the
+   UPDATE via `RETURNING count` (SQLAlchemy 2.x supports RETURNING on both
+   Postgres and modern SQLite). The atomic INSERT-on-conflict + guarded
+   UPDATE concurrency pattern is preserved unchanged; when the UPDATE
+   matches no row (cap already reached), a fallback SELECT reads the count —
+   that path raises 429 and is outside the happy-path budget. Existing
+   concurrency-semantics tests must stay green.
+3. **Session + ingestion in one SELECT (1 stmt):** the session load carries
+   correlated scalar subqueries counting the session's documents (total /
+   pending / ready); a new pure `documents_service.status_from_counts`
+   mirrors `aggregate_status` priority (pending > ready > failed > None) so
+   the logic stays single-source. `session_ingestion_status(db, session_id)`
+   remains for other callers.
+4. **History SELECT (1 stmt)** — unchanged.
+5. **User-message INSERT (1 stmt), moved after all reads:** the
+   add+commit moves to the end of `_prepare_turn` (still committed before
+   returning, preserving the survives-early-stream-end guarantee), which
+   eliminates the post-commit expire/refresh SELECT.
+6. `check_question_service.get_pending_check`/`get_quiz_cooldown` and
+   `profile_service` gain row-accepting variants (`*_from_row(row)`) used by
+   `_prepare_turn`; the existing session_id-based functions remain for
+   callers outside the prepare path.
 
 **Budget: at most 6 statements on the prepare path; at most 7 when the D1.2
 gap-accuracy aggregate runs** (it is conditional on non-empty
@@ -76,13 +102,15 @@ test covers both branches (empty and non-empty `confirmed_gaps`).
 
 ## P3.2 — Pre-stream token_counter removal
 
-Stop calling `litellm.token_counter` eagerly per iteration. On
-`CancelledError`, run `token_counter` at that moment over the retained
-message list (same accuracy as today, since the counter is local
-tokenization with no API call) and pass the result to
+Stop calling `litellm.token_counter` eagerly per iteration. Instead, record
+the message-list length at each iteration start (`iter_boundaries:
+list[int]` — an O(1) append). On `CancelledError`, reconstruct today's exact
+accumulation by summing `token_counter(model, messages=full[:b])` over the
+recorded boundaries (each iteration billed the then-current prefix; counter
+is local tokenization, no API call) and pass the sum to
 `estimate_cancelled_cost` unchanged. The happy path performs zero
-tokenization work before or during streaming. Cancelled-billing tests updated to the new call shape; soft-cap
-warning tests untouched.
+tokenization work before or during streaming. Cancelled-billing tests
+updated to the new call shape; soft-cap warning tests untouched.
 
 ## P3.3 — End-session summary: kept synchronous
 
