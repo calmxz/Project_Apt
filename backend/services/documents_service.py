@@ -40,6 +40,18 @@ def aggregate_status(statuses: Iterable[str]) -> IngestionStatus | None:
     return "failed"
 
 
+def status_from_counts(total: int, pending: int, ready: int) -> IngestionStatus | None:
+    """Counts-based twin of aggregate_status (pending > ready > failed > None).
+    Used by the consolidated prepare-path session SELECT."""
+    if total == 0:
+        return None
+    if pending > 0:
+        return "pending"
+    if ready > 0:
+        return "ready"
+    return "failed"
+
+
 def session_ingestion_status(db: Session, session_id: str) -> IngestionStatus | None:
     """Return aggregate ingestion status across all documents in the session."""
     return aggregate_status(

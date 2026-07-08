@@ -118,3 +118,21 @@ def test_register_allowed_when_not_suppressed():
     res = cqs.register(db, ctx, _one_item_args())
     assert res.ok is True
     assert cqs.get_pending_check(db, "s1") is not None
+
+
+def test_get_quiz_cooldown_from_row_matches_db_variant():
+    row = SessionModel(user_id="u", topic="t",
+                       quiz_cooldown_json='{"gap": "g", "last_score": "1/2", "missed": []}')
+    cd = cqs.get_quiz_cooldown_from_row(row)
+    assert cd == {"gap": "g", "last_score": "1/2", "missed": []}
+
+
+def test_get_quiz_cooldown_from_row_bad_json_returns_none():
+    row = SessionModel(user_id="u", topic="t", quiz_cooldown_json="{nope")
+    assert cqs.get_quiz_cooldown_from_row(row) is None
+
+
+def test_get_pending_check_from_row_parses():
+    row = SessionModel(user_id="u", topic="t",
+                       pending_check_json='{"gap": "g", "items": []}')
+    assert cqs.get_pending_check_from_row(row) == {"gap": "g", "items": []}

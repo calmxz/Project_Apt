@@ -72,11 +72,14 @@ def _parse_profile(raw: str | None) -> TopicProfile:
     return profile
 
 
-def load_profile(db: Session, session_id: str) -> TopicProfile:
-    row = db.get(SessionModel, session_id)
+def profile_from_row(row: SessionModel | None) -> TopicProfile:
     if row is None:
         return TopicProfile()
     return _parse_profile(row.topic_profile_json)
+
+
+def load_profile(db: Session, session_id: str) -> TopicProfile:
+    return profile_from_row(db.get(SessionModel, session_id))
 
 
 def save_profile(

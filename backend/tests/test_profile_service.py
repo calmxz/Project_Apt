@@ -365,3 +365,15 @@ def test_remove_missing_item_raises_keyerror(db_session, seeded_session_id):
 def test_apply_user_patch_missing_session_raises_value_error(db_session):
     with pytest.raises(ValueError):
         profile_service.apply_user_patch(db_session, "nonexistent-session-id", add_mastered="x")
+
+
+def test_profile_from_row_parses_without_db(db_session):
+    row = SessionModel(user_id="u", topic="t",
+                       topic_profile_json='{"knowledge_level": "beginner"}')
+    profile = profile_service.profile_from_row(row)
+    assert profile.knowledge_level == "beginner"
+
+
+def test_profile_from_row_tolerates_null_json():
+    row = SessionModel(user_id="u", topic="t", topic_profile_json=None)
+    assert profile_service.profile_from_row(row) is not None

@@ -37,7 +37,12 @@ from db.models import ChatMessage, LearningEvent, Session as SessionModel
 # would create a cyclic import). Only the ones this module calls internally
 # are imported; callers wanting is_gradable / parse_asked_at / clear_pending_check
 # import them from services.pending_check_store directly.
-from services.pending_check_store import _save, clear_pending_check, get_pending_check
+from services.pending_check_store import (
+    _save,
+    clear_pending_check,
+    get_pending_check,
+    get_pending_check_from_row,
+)
 
 log = logging.getLogger(__name__)
 
@@ -305,8 +310,7 @@ def build_quiz_cooldown(pc: dict) -> dict | None:
     }
 
 
-def get_quiz_cooldown(db: Session, session_id: str) -> dict | None:
-    row = db.get(SessionModel, session_id)
+def get_quiz_cooldown_from_row(row: SessionModel | None) -> dict | None:
     if row is None or not row.quiz_cooldown_json:
         return None
     try:
@@ -314,6 +318,10 @@ def get_quiz_cooldown(db: Session, session_id: str) -> dict | None:
     except (ValueError, TypeError):
         return None
     return data if isinstance(data, dict) else None
+
+
+def get_quiz_cooldown(db: Session, session_id: str) -> dict | None:
+    return get_quiz_cooldown_from_row(db.get(SessionModel, session_id))
 
 
 def set_quiz_cooldown(db: Session, session_id: str, cd: dict | None, commit: bool = True) -> None:
