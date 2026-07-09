@@ -105,3 +105,27 @@ def test_queue_makes_no_llm_call(client, db_session, monkeypatch):
     r = client.get("/api/review/queue")
     assert r.status_code == 200
     assert r.json()["total"] == 1
+
+
+def test_grading_updates_schedule(client, db_session):
+    """R2.2 AC3: completing a check moves due_at (via the events, no writes here)."""
+    from services import learning_event_service
+
+    _seed_session(db_session)
+    # one correct answer 2 days ago -> streak 1 -> interval 1 day -> due (overdue)
+    _seed_event(
+        db_session,
+        "s1",
+        "mitosis",
+        True,
+        datetime.now(timezone.utc) - timedelta(days=2),
+    )
+    assert client.get("/api/review/queue").json()["total"] == 1
+
+    # grade another correct answer now (same path check answers use)
+    learning_event_service.record_from_answer(
+        db_session, "s1", gap="mitosis", question="q2", correct=True
+    )
+
+    # streak 2 -> interval 2 days from now -> no longer due
+    assert client.get("/api/review/queue").json()["total"] == 0
