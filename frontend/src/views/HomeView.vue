@@ -106,7 +106,17 @@ async function loadReviewQueue(limit = 3) {
 }
 
 async function startReview(item) {
-  void item
+  const created = await store.continueTopic({
+    id: item.source_session_id,
+    topic: item.source_topic,
+  })
+  if (created) {
+    router.push({
+      name: 'session',
+      params: { id: created.id },
+      query: { review_gap: item.concept },
+    })
+  }
 }
 
 async function expandReview() {
