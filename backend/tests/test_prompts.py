@@ -233,3 +233,28 @@ def test_quiz_readiness_truncates_long_question_stems():
     })
     line = next(l for l in ctx.split("\n") if l.startswith("QUIZ_READINESS:"))
     assert "Q" * 81 not in line  # stems capped at 80 chars
+
+
+def test_review_gaps_label_plain_for_gap_target():
+    from agent.prompts import build_dynamic_context
+
+    ctx = build_dynamic_context(
+        {"review_gaps_target": "gap-a", "review_gaps_retention": False}
+    )
+    assert "REVIEW_GAPS: gap-a" in ctx
+    assert "retention check" not in ctx
+
+
+def test_review_gaps_label_marks_retention_for_mastered_target():
+    from agent.prompts import build_dynamic_context
+
+    ctx = build_dynamic_context(
+        {"review_gaps_target": "photosynthesis", "review_gaps_retention": True}
+    )
+    assert "REVIEW_GAPS: photosynthesis (retention check:" in ctx
+
+
+def test_immutable_rules_explain_retention_check():
+    from agent.prompts import IMMUTABLE_RULES
+
+    assert "retention check" in IMMUTABLE_RULES
