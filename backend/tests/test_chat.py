@@ -228,6 +228,50 @@ def test_build_prompt_state_rolling_summary_defaults_none():
     assert state["rolling_summary"] is None
 
 
+def test_review_gap_mastered_target_accepted():
+    profile = _fake_profile(
+        confirmed_gaps=["gap-a"], mastered_concepts=["photosynthesis"]
+    )
+    state = _call_build_prompt_state(
+        profile, review_gaps=True, review_gap="photosynthesis"
+    )
+    assert state["review_gaps_target"] == "photosynthesis"
+    assert state["review_gaps_retention"] is True
+
+
+def test_review_gap_gap_target_not_retention():
+    profile = _fake_profile(
+        confirmed_gaps=["gap-a"], mastered_concepts=["photosynthesis"]
+    )
+    state = _call_build_prompt_state(profile, review_gaps=True, review_gap="gap-a")
+    assert state["review_gaps_target"] == "gap-a"
+    assert state["review_gaps_retention"] is False
+
+
+def test_review_gaps_activates_with_only_mastered():
+    profile = _fake_profile(confirmed_gaps=[], mastered_concepts=["photosynthesis"])
+    state = _call_build_prompt_state(profile, review_gaps=True)
+    assert state["review_gaps_target"] == "photosynthesis"
+    assert state["review_gaps_retention"] is True
+    assert state["diagnostic_required"] is False
+
+
+def test_review_gap_invalid_still_falls_back_to_first_gap():
+    profile = _fake_profile(
+        confirmed_gaps=["gap-a"], mastered_concepts=["photosynthesis"]
+    )
+    state = _call_build_prompt_state(profile, review_gaps=True, review_gap="junk")
+    assert state["review_gaps_target"] == "gap-a"
+    assert state["review_gaps_retention"] is False
+
+
+def test_review_gaps_off_when_both_lists_empty():
+    profile = _fake_profile(confirmed_gaps=[], mastered_concepts=[])
+    state = _call_build_prompt_state(profile, review_gaps=True)
+    assert "review_gaps_target" not in state
+    assert "review_gaps_retention" not in state
+
+
 def test_resumed_profile_skips_diagnostic():
     """R1.1 AC2: a resume-seeded profile carries a non-null knowledge_level,
     so the 3Q diagnostic branch must not be taken."""
