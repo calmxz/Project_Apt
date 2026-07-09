@@ -75,6 +75,47 @@ def test_record_from_answer_incorrect_demotes_mastered(session_row, db_session):
     assert "atp" not in profile.mastered_concepts
 
 
+def test_record_from_answer_incorrect_demotes_into_confirmed_gaps(session_row, db_session):
+    """Final-review Finding 2: server-side demotion is confirmed-gap evidence."""
+    profile = profile_service.load_profile(db_session, SESSION_ID)
+    profile.mastered_concepts = ["atp"]
+    profile_service.save_profile(db_session, SESSION_ID, profile)
+    learning_event_service.record_from_answer(
+        db_session, SESSION_ID, gap="atp", question="q?", correct=False,
+        clear_pending=False,
+    )
+    profile = profile_service.load_profile(db_session, SESSION_ID)
+    assert "atp" not in profile.mastered_concepts
+    assert "atp" in profile.confirmed_gaps
+
+
+def test_record_from_answer_repeated_demotion_does_not_duplicate_gap(session_row, db_session):
+    profile = profile_service.load_profile(db_session, SESSION_ID)
+    profile.mastered_concepts = ["atp"]
+    profile_service.save_profile(db_session, SESSION_ID, profile)
+    learning_event_service.record_from_answer(
+        db_session, SESSION_ID, gap="atp", question="q?", correct=False,
+        clear_pending=False,
+    )
+    learning_event_service.record_from_answer(
+        db_session, SESSION_ID, gap="atp", question="q2?", correct=False,
+        clear_pending=False,
+    )
+    profile = profile_service.load_profile(db_session, SESSION_ID)
+    assert profile.confirmed_gaps.count("atp") == 1
+
+
+def test_record_from_answer_diagnostic_incorrect_leaves_profile_untouched(db, session_id):
+    """apply_profile_effects=False (diagnostic path) must not touch confirmed_gaps either."""
+    learning_event_service.record_from_answer(
+        db, session_id, gap="atp", question="q?", correct=False,
+        clear_pending=False, apply_profile_effects=False,
+    )
+    profile = profile_service.load_profile(db, session_id)
+    assert "atp" not in (profile.confirmed_gaps or [])
+    assert "atp" not in (profile.mastered_concepts or [])
+
+
 def test_record_from_answer_incorrect_non_mastered_is_noop_on_profile(session_row, db_session):
     seed_ctx = ToolContext(
         db=db_session, session_id=SESSION_ID, user_id=USER_ID,

@@ -44,7 +44,9 @@ def record_from_answer(
     Applies the deterministic profile effects, because the click is silent and
     the agent's only next-turn signal is the profile state:
     - correct  -> add gap to mastered_concepts (tested mastery)
-    - incorrect-> remove gap from mastered_concepts if present (demotion)
+    - incorrect-> remove gap from mastered_concepts if present (demotion), and add
+      gap to confirmed_gaps if not already present (an incorrect retest is
+      confirmed-gap evidence, so the demoted concept is a valid review target)
 
     apply_profile_effects=False (used by the knowledge diagnostic) still writes
     the LearningEvent but skips the mastered_concepts mutation entirely, so a
@@ -73,8 +75,16 @@ def record_from_answer(
                 profile.mastered_concepts = mastered
                 profile_service.save_profile(db, session_id, profile, commit=False)
         else:
+            changed = False
             if gap in mastered:
                 profile.mastered_concepts = [c for c in mastered if c != gap]
+                changed = True
+            confirmed_gaps = list(profile.confirmed_gaps or [])
+            if gap not in confirmed_gaps:
+                confirmed_gaps.append(gap)
+                profile.confirmed_gaps = confirmed_gaps
+                changed = True
+            if changed:
                 profile_service.save_profile(db, session_id, profile, commit=False)
 
     if clear_pending:

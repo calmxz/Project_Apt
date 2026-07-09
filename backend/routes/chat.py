@@ -90,6 +90,10 @@ def _build_prompt_state(
             if review_gap in pool:
                 target = review_gap
             else:
+                # Requested review_gap isn't in the pool (e.g. resolved/renamed
+                # since the queue was fetched): fall back to the first
+                # confirmed gap, deliberately preferring gaps over mastered
+                # retention concepts as the substitute target.
                 target = gaps[0] if gaps else pool[0]
             prompt_state["review_gaps_target"] = target
             prompt_state["review_gaps_retention"] = target in mastered
