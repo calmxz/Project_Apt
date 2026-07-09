@@ -12,7 +12,7 @@ def _seed_session(db, session_id="s1", user_id="test-user", topic="biology"):
     db.commit()
 
 
-def _seed_event(db, session_id, gap, correct, created_at):
+def _seed_event(db, session_id, gap, correct, created_at, purpose=None):
     db.add(
         LearningEvent(
             session_id=session_id,
@@ -20,6 +20,7 @@ def _seed_event(db, session_id, gap, correct, created_at):
             question="q",
             correct=correct,
             created_at=created_at,
+            purpose=purpose,
         )
     )
     db.commit()
@@ -105,6 +106,22 @@ def test_queue_makes_no_llm_call(client, db_session, monkeypatch):
     r = client.get("/api/review/queue")
     assert r.status_code == 200
     assert r.json()["total"] == 1
+
+
+def test_diagnostic_events_excluded_from_queue(client, db_session):
+    """Final-review Finding 1: diagnostic probes must not appear as due concepts."""
+    _seed_session(db_session)
+    _seed_event(db_session, "s1", "mitosis", False, T0, purpose="diagnostic")
+    assert client.get("/api/review/queue").json()["total"] == 0
+
+
+def test_non_diagnostic_events_still_appear_alongside_diagnostic(client, db_session):
+    _seed_session(db_session)
+    _seed_event(db_session, "s1", "mitosis", False, T0, purpose="diagnostic")
+    _seed_event(db_session, "s1", "osmosis", False, T0, purpose="check")
+    body = client.get("/api/review/queue").json()
+    assert body["total"] == 1
+    assert body["items"][0]["concept"] == "osmosis"
 
 
 def test_grading_updates_schedule(client, db_session):

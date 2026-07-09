@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from contracts import ReviewQueueItem, ReviewQueuePage
@@ -26,6 +26,12 @@ def get_review_queue(
         select(LearningEvent, SessionModel.topic)
         .join(SessionModel, LearningEvent.session_id == SessionModel.id)
         .where(SessionModel.user_id == user_id)
+        .where(
+            or_(
+                LearningEvent.purpose.is_(None),
+                LearningEvent.purpose != "diagnostic",
+            )
+        )
         .order_by(LearningEvent.created_at.asc(), LearningEvent.id.asc())
     ).all()
     events = [
