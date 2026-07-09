@@ -33,6 +33,39 @@
           </button>
           <RouterLink to="/new" class="quick-more">Add reference files</RouterLink>
         </div>
+
+        <div
+          v-if="reviewQueue.total > 0"
+          class="mode-card"
+          data-testid="home-mode-review"
+        >
+          <h2 class="mode-title">Due for review</h2>
+          <p class="mode-sub" data-testid="home-review-count">
+            {{ reviewQueue.total }} concept{{ reviewQueue.total === 1 ? '' : 's' }} ready for a quick check.
+          </p>
+          <ul class="review-list">
+            <li v-for="item in reviewQueue.items" :key="item.concept">
+              <button
+                type="button"
+                class="review-item"
+                data-testid="home-review-item"
+                @click="startReview(item)"
+              >
+                <span class="review-concept">{{ item.concept }}</span>
+                <span class="review-meta">{{ item.source_topic }} &middot; streak {{ item.streak }}</span>
+              </button>
+            </li>
+          </ul>
+          <button
+            v-if="!reviewExpanded && reviewQueue.total > reviewQueue.items.length"
+            type="button"
+            class="review-more"
+            data-testid="home-review-more"
+            @click="expandReview"
+          >
+            View all {{ reviewQueue.total }}
+          </button>
+        </div>
       </div>
     </template>
   </section>
@@ -42,19 +75,43 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSessionStore } from '../stores/session.js'
+import { getReviewQueue } from '../services/reviewApi.js'
 import { friendlyError } from '../lib/errors.js'
 
 const router = useRouter()
 const store = useSessionStore()
 const quickTopic = ref('')
+const reviewQueue = ref({ items: [], total: 0 })
+const reviewExpanded = ref(false)
 
-onMounted(() => store.listSessions().catch(() => {}))
+onMounted(() => {
+  store.listSessions().catch(() => {})
+  loadReviewQueue()
+})
 
 async function startQuick() {
   const topic = quickTopic.value.trim()
   if (!topic) return
   const created = await store.createSession({ topic, seedMode: 'fresh', priorSessionId: null })
   if (created) router.push({ name: 'session', params: { id: created.id } })
+}
+
+async function loadReviewQueue(limit = 3) {
+  try {
+    reviewQueue.value = await getReviewQueue({ limit, offset: 0 })
+  } catch {
+    // The review card must never block Home; hide it on failure.
+    reviewQueue.value = { items: [], total: 0 }
+  }
+}
+
+async function startReview(item) {
+  void item
+}
+
+async function expandReview() {
+  reviewExpanded.value = true
+  await loadReviewQueue(100)
 }
 </script>
 
@@ -182,6 +239,73 @@ async function startQuick() {
 }
 
 .quick-more:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.review-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.review-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.125rem;
+  width: 100%;
+  padding: 0.625rem 0.875rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--motion-fast) ease;
+}
+
+.review-item:hover {
+  border-color: var(--color-accent);
+}
+
+.review-item:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+}
+
+.review-concept {
+  font-weight: 600;
+  color: var(--color-heading);
+}
+
+.review-meta {
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+.review-more {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  color: var(--color-accent);
+  cursor: pointer;
+}
+
+.review-more:hover {
+  text-decoration: underline;
+}
+
+.review-more:focus-visible {
   outline: 2px solid var(--color-accent-ring);
   outline-offset: 2px;
   border-radius: var(--radius-sm);
