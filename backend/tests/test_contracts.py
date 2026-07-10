@@ -303,3 +303,20 @@ def test_array_fields_accept_none_quirk():
     p = TopicProfile(confirmed_gaps=None, mastered_concepts=None)
     assert p.confirmed_gaps is None
     assert p.mastered_concepts is None
+
+
+def test_review_queue_contracts_exist():
+    from contracts import ReviewQueueItem, ReviewQueuePage
+
+    item = ReviewQueueItem(
+        concept="photosynthesis",
+        source_session_id="s1",
+        source_topic="biology",
+        last_tested_at="2026-07-01T00:00:00Z",
+        streak=2,
+        due_at="2026-07-03T00:00:00Z",
+    )
+    page = ReviewQueuePage(items=[item], total=1, limit=20, offset=0)
+    assert page.items[0].concept == "photosynthesis"
+    assert page.items[0].streak == 2
+    assert page.total == 1

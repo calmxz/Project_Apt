@@ -31,6 +31,8 @@ tags:
     description: PDF ingestion (Phase 4).
   - name: documents
     description: Document management (delete reference files).
+  - name: review
+    description: Spaced-repetition review queue (Phase 5).
 
 paths:
   /health:
@@ -113,6 +115,28 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SessionLibraryPage"
+
+  /api/review/queue:
+    get:
+      tags: [review]
+      summary: Concepts due for spaced-repetition review across all of the user's sessions.
+      operationId: getReviewQueue
+      parameters:
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer, default: 20, minimum: 1, maximum: 100 }
+        - in: query
+          name: offset
+          required: false
+          schema: { type: integer, default: 0, minimum: 0 }
+      responses:
+        "200":
+          description: A page of due review concepts, most overdue first.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewQueuePage"
 
   /api/sessions/{session_id}:
     get:
@@ -821,6 +845,32 @@ components:
         items:
           type: array
           items: { $ref: "#/components/schemas/SessionListItem" }
+        total:  { type: integer }
+        limit:  { type: integer }
+        offset: { type: integer }
+
+    ReviewQueueItem:
+      type: object
+      additionalProperties: false
+      required: [concept, source_session_id, source_topic, last_tested_at, streak, due_at]
+      description: One concept due for spaced-repetition review.
+      properties:
+        concept: { type: string }
+        source_session_id: { type: string }
+        source_topic: { type: string }
+        last_tested_at: { type: string, format: date-time }
+        streak: { type: integer }
+        due_at: { type: string, format: date-time }
+
+    ReviewQueuePage:
+      type: object
+      additionalProperties: false
+      required: [items, total, limit, offset]
+      description: One page of the review queue, most overdue first.
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/ReviewQueueItem" }
         total:  { type: integer }
         limit:  { type: integer }
         offset: { type: integer }

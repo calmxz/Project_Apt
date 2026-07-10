@@ -336,6 +336,36 @@ class SessionLibraryPage(BaseModel):
     offset: int
 
 
+class ReviewQueueItem(BaseModel):
+    """
+    One concept due for spaced-repetition review.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    concept: str
+    source_session_id: str
+    source_topic: str
+    last_tested_at: datetime
+    streak: int
+    due_at: datetime
+
+
+class ReviewQueuePage(BaseModel):
+    """
+    One page of the review queue, most overdue first.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    items: list[ReviewQueueItem]
+    total: int
+    limit: int
+    offset: int
+
+
 class SessionEndSummary(BaseModel):
     """
     Structured payload describing how a session ended. Frontend branches on

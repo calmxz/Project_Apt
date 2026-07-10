@@ -80,10 +80,24 @@ def _build_prompt_state(
         "quiz_cooldown": quiz_cooldown,
         "gap_accuracy": gap_accuracy or {},
     }
-    if review_gaps and profile.confirmed_gaps:
-        target = review_gap if review_gap in profile.confirmed_gaps else profile.confirmed_gaps[0]
-        prompt_state["review_gaps_target"] = target
-        prompt_state["diagnostic_required"] = False
+    if review_gaps:
+        gaps = list(profile.confirmed_gaps or [])
+        mastered = [
+            c for c in (profile.mastered_concepts or []) if c not in gaps
+        ]
+        pool = gaps + mastered
+        if pool:
+            if review_gap in pool:
+                target = review_gap
+            else:
+                # Requested review_gap isn't in the pool (e.g. resolved/renamed
+                # since the queue was fetched): fall back to the first
+                # confirmed gap, deliberately preferring gaps over mastered
+                # retention concepts as the substitute target.
+                target = gaps[0] if gaps else pool[0]
+            prompt_state["review_gaps_target"] = target
+            prompt_state["review_gaps_retention"] = target in mastered
+            prompt_state["diagnostic_required"] = False
     return prompt_state
 
 

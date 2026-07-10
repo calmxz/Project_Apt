@@ -96,6 +96,9 @@ REVIEW-GAPS MODE:
 - Do NOT ask whether they are ready, and do NOT end the turn with a question in
   place of the check. Do not run the diagnostic and do not ask what they want to
   study first.
+- If the REVIEW_GAPS line is marked "retention check", the learner previously
+  mastered this concept: verify retention with check questions right away
+  instead of re-teaching. Teach only if they answer incorrectly.
 - When REVIEW_GAPS is OFF, ignore this section.
 
 RETRIEVAL POLICY:
@@ -199,7 +202,15 @@ def build_dynamic_context(state: dict) -> str:
         qr_label = "ready"
 
     review_gaps_target = state.get("review_gaps_target")
-    review_gaps_label = review_gaps_target if review_gaps_target else "OFF"
+    if review_gaps_target and state.get("review_gaps_retention"):
+        review_gaps_label = (
+            f"{review_gaps_target} (retention check: previously mastered; "
+            "verify with check questions, do not re-teach from scratch)"
+        )
+    elif review_gaps_target:
+        review_gaps_label = review_gaps_target
+    else:
+        review_gaps_label = "OFF"
 
     return (
         f"TOPIC: {topic}\n"
