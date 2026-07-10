@@ -3,10 +3,10 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, RootModel, conint, constr
+from pydantic import BaseModel, ConfigDict, Field, RootModel, confloat, conint, constr
 
 
 class TopicProfile(BaseModel):
@@ -525,6 +525,84 @@ class RecentSessionSummary(BaseModel):
     progress: SessionProgress | None = None
 
 
+class ConceptAccuracy(BaseModel):
+    """
+    Per-concept check-question accuracy across all of a user's sessions.
+    Diagnostic events are excluded. last_results is oldest-to-newest, at
+    most 5 entries. first_seen_session_id is the session of the concept's
+    earliest learning event.
+
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    concept: str
+    correct_count: conint(ge=0)
+    total_count: conint(ge=1)
+    accuracy: confloat(ge=0.0, le=1.0)
+    last_results: list[bool] = Field(..., max_length=5)
+    first_seen_session_id: str
+
+
+class WeeklyMasteryPoint(BaseModel):
+    """
+    Number of concepts whose first correct non-diagnostic answer falls in
+    the ISO week starting at week_start (a Monday, UTC).
+
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    week_start: date
+    count: conint(ge=0)
+
+
+class DailySpend(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    date_utc: date
+    cost_usd: confloat(ge=0.0)
+
+
+class SessionSpend(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    session_id: str
+    topic: str
+    cost_usd: confloat(ge=0.0)
+
+
+class UsageSummaryResponse(BaseModel):
+    """
+    Spend transparency for the current user. daily covers the last 14 UTC
+    days, oldest first, zero-filled for missing ledger rows. Cap values
+    mirror the runtime cost meter; the urgent tier is derived (0.9 x
+    hard), never a duplicated literal.
+
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    daily: list[DailySpend]
+    today_spend_usd: confloat(ge=0.0)
+    soft_cap_usd: float
+    urgent_cap_usd: float
+    hard_cap_usd: float
+    top_sessions: list[SessionSpend] = Field(..., max_length=3)
+
+
+class ErrorResponse(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    detail: str
+
+
 class AggregateProfileResponse(BaseModel):
     """
     Cross-session aggregate view powering the top-level /profile dashboard.
@@ -545,10 +623,5 @@ class AggregateProfileResponse(BaseModel):
     combined_confirmed_gaps: list[AggregateConceptCount]
     knowledge_level_distribution: KnowledgeLevelDistribution
     recent_topics: list[RecentSessionSummary]
-
-
-class ErrorResponse(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    detail: str
+    concept_accuracy: list[ConceptAccuracy]
+    weekly_mastery: list[WeeklyMasteryPoint]
