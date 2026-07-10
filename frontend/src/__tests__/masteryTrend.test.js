@@ -23,7 +23,7 @@ describe('MasteryTrend', () => {
 
   it('shows hint instead of chart when all weeks are zero', () => {
     const w = mount(MasteryTrend, {
-      props: { weeklyMastery: weeks(new Array(12).fill(0)) },
+      props: { weeklyMastery: weeks(Array.from({ length: 12 }, () => 0)) },
     })
     expect(w.find('[data-testid="trend-empty"]').exists()).toBe(true)
     expect(w.find('.trend-chart').exists()).toBe(false)
