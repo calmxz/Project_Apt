@@ -409,3 +409,16 @@ def test_weekly_mastery_diagnostic_correct_not_counted(db_session):
     _seed_event_for_insights(db_session, "s1", "mitosis", True, T0, purpose="diagnostic")
     resp = aggregate_for_user(db_session, "test-user", now=T0)
     assert sum(p.count for p in resp.weekly_mastery) == 0
+
+
+def test_aggregate_makes_no_llm_call(client, db_session, monkeypatch):
+    import litellm
+
+    def _boom(*args, **kwargs):
+        raise AssertionError("aggregate path must not call the LLM")
+
+    monkeypatch.setattr(litellm, "acompletion", _boom, raising=False)
+    monkeypatch.setattr(litellm, "completion", _boom, raising=False)
+    _seed_session_for_insights(db_session)
+    _seed_event_for_insights(db_session, "s1", "mitosis", True, T0)
+    assert client.get("/api/profile/aggregate").status_code == 200
