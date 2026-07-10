@@ -361,3 +361,51 @@ def test_concept_accuracy_empty_when_no_events(client, db_session):
     body = client.get("/api/profile/aggregate").json()
     assert body["concept_accuracy"] == []
     assert len(body["weekly_mastery"]) == 12
+
+
+def test_weekly_mastery_buckets_first_correct_only(db_session):
+    from services.profile_service import aggregate_for_user
+
+    _seed_session_for_insights(db_session)
+    # mitosis: wrong then correct in week of 2026-06-29, correct again 2 weeks later
+    _seed_event_for_insights(db_session, "s1", "mitosis", False, T0)
+    _seed_event_for_insights(db_session, "s1", "mitosis", True, T0 + timedelta(hours=1))
+    _seed_event_for_insights(db_session, "s1", "mitosis", True, T0 + timedelta(weeks=2))
+    # osmosis: first correct 1 week after T0
+    _seed_event_for_insights(db_session, "s1", "osmosis", True, T0 + timedelta(weeks=1))
+    # diffusion: never correct -> never counted
+    _seed_event_for_insights(db_session, "s1", "diffusion", False, T0)
+
+    now = T0 + timedelta(weeks=2)  # 2026-07-15
+    resp = aggregate_for_user(db_session, "test-user", now=now)
+
+    assert len(resp.weekly_mastery) == 12
+    # oldest first, consecutive Mondays, newest bucket = Monday of `now`
+    assert resp.weekly_mastery[-1].week_start.isoformat() == "2026-07-13"
+    assert resp.weekly_mastery[0].week_start.isoformat() == "2026-04-27"
+    by_week = {p.week_start.isoformat(): p.count for p in resp.weekly_mastery}
+    assert by_week["2026-06-29"] == 1  # mitosis first correct
+    assert by_week["2026-07-06"] == 1  # osmosis
+    assert by_week["2026-07-13"] == 0  # mitosis retest does NOT recount
+    assert sum(p.count for p in resp.weekly_mastery) == 2
+
+
+def test_weekly_mastery_outside_window_dropped(db_session):
+    from services.profile_service import aggregate_for_user
+
+    _seed_session_for_insights(db_session)
+    # first correct 20 weeks before `now` -> outside the 12-week window
+    _seed_event_for_insights(db_session, "s1", "ancient", True, T0)
+    now = T0 + timedelta(weeks=20)
+    resp = aggregate_for_user(db_session, "test-user", now=now)
+    assert sum(p.count for p in resp.weekly_mastery) == 0
+    assert len(resp.weekly_mastery) == 12
+
+
+def test_weekly_mastery_diagnostic_correct_not_counted(db_session):
+    from services.profile_service import aggregate_for_user
+
+    _seed_session_for_insights(db_session)
+    _seed_event_for_insights(db_session, "s1", "mitosis", True, T0, purpose="diagnostic")
+    resp = aggregate_for_user(db_session, "test-user", now=T0)
+    assert sum(p.count for p in resp.weekly_mastery) == 0
