@@ -290,3 +290,74 @@ def test_recent_topics_enrichment_is_set_based(client, db_session):
     # a per-session preview over the 5-row recent window would clear this. Keep the
     # bound tight so the assertion actually proves "set-based", not just "not insane".
     assert q["n"] <= 6, f"aggregate enrichment not set-based: {q['n']} queries"
+
+
+T0 = datetime(2026, 7, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+
+def _seed_session_for_insights(db, session_id="s1", user_id="test-user", topic="biology"):
+    if not db.get(User, user_id):
+        db.add(User(id=user_id))
+    db.add(SessionModel(id=session_id, user_id=user_id, topic=topic))
+    db.commit()
+
+
+def _seed_event_for_insights(db, session_id, gap, correct, created_at, purpose=None):
+    db.add(
+        LearningEvent(
+            session_id=session_id,
+            gap_tested=gap,
+            question="q",
+            correct=correct,
+            created_at=created_at,
+            purpose=purpose,
+        )
+    )
+    db.commit()
+
+
+def test_concept_accuracy_math_and_first_session(client, db_session):
+    _seed_session_for_insights(db_session, session_id="s1")
+    _seed_session_for_insights(db_session, session_id="s2")
+    _seed_event_for_insights(db_session, "s1", "mitosis", False, T0)
+    _seed_event_for_insights(db_session, "s2", "mitosis", True, T0 + timedelta(hours=1))
+    _seed_event_for_insights(db_session, "s2", "mitosis", True, T0 + timedelta(hours=2))
+    body = client.get("/api/profile/aggregate").json()
+    assert len(body["concept_accuracy"]) == 1
+    entry = body["concept_accuracy"][0]
+    assert entry["concept"] == "mitosis"
+    assert entry["correct_count"] == 2
+    assert entry["total_count"] == 3
+    assert abs(entry["accuracy"] - 2 / 3) < 0.001
+    assert entry["first_seen_session_id"] == "s1"  # earliest event, not most events
+
+
+def test_concept_accuracy_excludes_diagnostic_keeps_null_purpose(client, db_session):
+    _seed_session_for_insights(db_session)
+    _seed_event_for_insights(db_session, "s1", "mitosis", True, T0, purpose="diagnostic")
+    _seed_event_for_insights(db_session, "s1", "osmosis", True, T0, purpose=None)
+    _seed_event_for_insights(db_session, "s1", "diffusion", True, T0, purpose="check")
+    body = client.get("/api/profile/aggregate").json()
+    concepts = {e["concept"] for e in body["concept_accuracy"]}
+    assert concepts == {"osmosis", "diffusion"}
+
+
+def test_last_results_capped_at_five_oldest_to_newest(client, db_session):
+    _seed_session_for_insights(db_session)
+    # 7 events: F F F T T T F -> last 5 = F T T T F
+    pattern = [False, False, False, True, True, True, False]
+    for i, ok in enumerate(pattern):
+        _seed_event_for_insights(
+            db_session, "s1", "mitosis", ok, T0 + timedelta(minutes=i)
+        )
+    body = client.get("/api/profile/aggregate").json()
+    entry = body["concept_accuracy"][0]
+    assert entry["last_results"] == [False, True, True, True, False]
+    assert entry["total_count"] == 7
+
+
+def test_concept_accuracy_empty_when_no_events(client, db_session):
+    _seed_session_for_insights(db_session)
+    body = client.get("/api/profile/aggregate").json()
+    assert body["concept_accuracy"] == []
+    assert len(body["weekly_mastery"]) == 12

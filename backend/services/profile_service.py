@@ -13,24 +13,27 @@ Rules:
 import hashlib
 import json
 import logging
+from datetime import date, datetime, timedelta, timezone
 from typing import Literal
 
 from pydantic import ValidationError
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from agent.types import ToolContext
 from contracts import (
     AggregateConceptCount,
     AggregateProfileResponse,
+    ConceptAccuracy,
     KnowledgeLevelDistribution,
     RecentSessionSummary,
     ToolResult,
     TopicProfile,
     UpdateTopicProfileArgs,
+    WeeklyMasteryPoint,
 )
 from db.models import LearningEvent, Session as SessionModel
-from services.session_enrichment import compute_enrichment
+from services.session_enrichment import aware_utc, compute_enrichment
 
 
 log = logging.getLogger(__name__)
@@ -236,7 +239,75 @@ def apply_patch(
     return ToolResult(ok=True, status="ok")
 
 
-def aggregate_for_user(db: Session, user_id: str) -> AggregateProfileResponse:
+def _monday(d: date) -> date:
+    return d - timedelta(days=d.weekday())
+
+
+def _learning_insights(
+    db: Session, session_ids: list[str], now: datetime
+) -> tuple[list[ConceptAccuracy], list[WeeklyMasteryPoint]]:
+    """Per-concept accuracy + weekly mastery buckets from learning_events.
+    Diagnostic probes excluded (NULL purpose kept). Pure SQL + Python."""
+    this_monday = _monday(now.date())
+    weeks = [this_monday - timedelta(weeks=i) for i in range(11, -1, -1)]
+    week_counts: dict[date, int] = {w: 0 for w in weeks}
+
+    if not session_ids:
+        return [], [
+            WeeklyMasteryPoint(week_start=w, count=0) for w in weeks
+        ]
+
+    rows = db.execute(
+        select(LearningEvent)
+        .where(LearningEvent.session_id.in_(session_ids))
+        .where(
+            or_(
+                LearningEvent.purpose.is_(None),
+                LearningEvent.purpose != "diagnostic",
+            )
+        )
+        .order_by(LearningEvent.created_at.asc(), LearningEvent.id.asc())
+    ).scalars().all()
+
+    per: dict[str, dict] = {}
+    first_correct: dict[str, datetime] = {}
+    for ev in rows:
+        entry = per.setdefault(
+            ev.gap_tested,
+            {"correct": 0, "total": 0, "results": [], "first_session": ev.session_id},
+        )
+        entry["total"] += 1
+        entry["results"].append(ev.correct)
+        if ev.correct:
+            entry["correct"] += 1
+            first_correct.setdefault(ev.gap_tested, aware_utc(ev.created_at))
+
+    for ts in first_correct.values():
+        w = _monday(ts.date())
+        if w in week_counts:
+            week_counts[w] += 1
+
+    concept_accuracy = sorted(
+        (
+            ConceptAccuracy(
+                concept=name,
+                correct_count=v["correct"],
+                total_count=v["total"],
+                accuracy=round(v["correct"] / v["total"], 4),
+                last_results=v["results"][-5:],
+                first_seen_session_id=v["first_session"],
+            )
+            for name, v in per.items()
+        ),
+        key=lambda x: (x.accuracy, x.concept),
+    )
+    weekly = [WeeklyMasteryPoint(week_start=w, count=week_counts[w]) for w in weeks]
+    return concept_accuracy, weekly
+
+
+def aggregate_for_user(
+    db: Session, user_id: str, now: datetime | None = None
+) -> AggregateProfileResponse:
     """Cross-session aggregate. Pure SQL + Python, no LLM calls."""
     sessions: list[SessionModel] = db.execute(
         select(SessionModel)
@@ -291,6 +362,9 @@ def aggregate_for_user(db: Session, user_id: str) -> AggregateProfileResponse:
         )
 
     session_ids = [s.id for s in sessions]
+    concept_accuracy, weekly_mastery = _learning_insights(
+        db, session_ids, now or datetime.now(timezone.utc)
+    )
     if session_ids:
         total_events = db.execute(
             select(func.count(LearningEvent.id)).where(
@@ -328,4 +402,6 @@ def aggregate_for_user(db: Session, user_id: str) -> AggregateProfileResponse:
         combined_confirmed_gaps=_to_sorted_list(gap_counts),
         knowledge_level_distribution=KnowledgeLevelDistribution(**level_dist),
         recent_topics=recent_topics,
+        concept_accuracy=concept_accuracy,
+        weekly_mastery=weekly_mastery,
     )
