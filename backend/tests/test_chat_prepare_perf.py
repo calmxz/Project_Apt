@@ -17,6 +17,13 @@ from contracts import ChatRequest, TopicProfile
 from db.models import LearningEvent, Session as SessionModel, User
 from routes.chat import _prepare_turn
 
+# Captured at module-import time (before the autouse fixture below ever runs)
+# so this is a handle on the REAL function, not whatever the autouse fixture
+# has since patched services.retrieval_service.semantic_fallback_required to.
+from services.retrieval_service import (
+    semantic_fallback_required as _real_semantic_fallback_required,
+)
+
 
 @contextmanager
 def count_queries(db):
@@ -96,3 +103,59 @@ def test_prepare_turn_budget_with_gaps(db_session, seeded_session):
     # Functional proof the aggregate actually ran on this branch (not just
     # that the statement count happened to fit).
     assert "GAP_ACCURACY:" in system_prompt and "factoring" in system_prompt
+
+
+def test_prepare_turn_budget_doc_bearing_semantic_fallback(db_session, seeded_session, monkeypatch):
+    """D2.2 TTFT pre-flight guard: on a doc-bearing session whose query misses
+    the lexical gate, _prepare_turn actually calls the REAL
+    semantic_fallback_required (the file's autouse fixture above pins it to
+    `lambda: False` for the other tests here; this test reverses that one
+    patch so the real pre-flight cost -- awaited before StreamingResponse --
+    is what gets measured).
+
+    Sqlite path is deterministic and network-free: semantic_fallback_required
+    -> has_ready_document SELECT (True) -> _session_centroid's dialect guard
+    (bind dialect != "postgresql") returns None immediately -> function
+    returns False. litellm.embedding is never reached on this dialect; the
+    embedding call itself is Postgres-only and is covered by the owed live
+    perf re-measure, not by this statement-count test.
+    """
+    import json as _json
+
+    from config import settings
+    from db.models import Document
+
+    # Reverse the autouse fixture's patch for this test only: rebind
+    # routes.chat's module-level reference back to the real function (the
+    # one captured at module-import time, above, before the autouse fixture
+    # ever ran).
+    monkeypatch.setattr(
+        "routes.chat.retrieval_service.semantic_fallback_required",
+        _real_semantic_fallback_required,
+    )
+    # llm_stub_enabled is a read-only property (llm_stub OR gemini_api_key ==
+    # "test"); patch its inputs directly so this test's outcome does not
+    # depend on ambient .env config.
+    monkeypatch.setattr(settings, "llm_stub", False)
+    monkeypatch.setattr(settings, "gemini_api_key", "")
+
+    db_session.add(
+        Document(session_id=seeded_session.id, filename="notes.pdf", status="ready")
+    )
+    # Populated but disjoint from the "explain factoring" query issued by
+    # _run_prepare below, so keyword_index.match_required is False (lexical
+    # gate misses) and semantic_fallback_required is actually invoked.
+    seeded_session.kw_index_json = _json.dumps(["photosynthesi", "chlorophyl"])
+    db_session.commit()
+
+    session_id = seeded_session.id
+    with count_queries(db_session) as q:
+        _run_prepare(db_session, session_id)
+    # 6 (base no-gaps budget, see test_prepare_turn_budget_no_gaps) + 1
+    # (has_ready_document SELECT inside semantic_fallback_required; on
+    # sqlite, _session_centroid's dialect guard short-circuits before any
+    # further query -- litellm.embedding is unreachable here -- so this is
+    # the fallback's entire statement cost on this dialect). Tight, not <=:
+    # this test's whole point is to prove the fallback's real SQL cost is
+    # exactly one extra SELECT, not to leave headroom for it to grow.
+    assert q["n"] == 7, f"prepare path used {q['n']} statements:\n" + "\n".join(q["statements"])
