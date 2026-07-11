@@ -38,6 +38,7 @@ async def test_prod_with_supabase_url_does_not_raise(monkeypatch):
     monkeypatch.setattr(settings, "database_url", "postgresql://u:p@host:5432/db")
     monkeypatch.setattr(settings, "supabase_url", "https://real-project.supabase.co")
     monkeypatch.setattr(main_module, "create_tables", lambda: None)
+    monkeypatch.setattr(main_module, "validate_jwks_startup", lambda: None)
 
     async with main_module.lifespan(main_module.app):
         pass

@@ -101,6 +101,7 @@ def client(db_session, monkeypatch):
     test_engine = db_session.get_bind()
 
     monkeypatch.setattr(main_module, "create_tables", lambda: Base.metadata.create_all(bind=test_engine))
+    monkeypatch.setattr(main_module, "validate_jwks_startup", lambda: None)
 
     def override_get_db():
         yield db_session
