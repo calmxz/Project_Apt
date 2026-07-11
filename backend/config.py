@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     llm_hard_cap_usd: float = 3.00
     llm_temperature: float = 0.3
     summary_temperature: float = 0.0
+    retrieval_fallback_threshold: float = 0.75
 
     @property
     def cors_origin_list(self) -> list[str]:
