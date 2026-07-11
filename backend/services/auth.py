@@ -40,6 +40,27 @@ def _get_jwks_client() -> PyJWKClient:
     return _JWKS_CACHE["client"]
 
 
+def validate_jwks_startup() -> None:
+    """Fail fast at boot when auth is configured but JWKS is unusable (S3.2).
+
+    Auth is enabled iff `settings.supabase_jwks_url` is non-empty. A fetch
+    failure here means every authenticated request would 500; dying at
+    startup surfaces the misconfiguration immediately. On success the
+    fetched client warms the per-process cache.
+    """
+    if not settings.supabase_jwks_url:
+        return
+    client = PyJWKClient(settings.supabase_jwks_url)
+    try:
+        client.get_jwk_set()
+    except Exception as e:
+        raise RuntimeError(
+            f"JWKS fetch failed at startup ({settings.supabase_jwks_url}): {e}"
+        ) from e
+    _JWKS_CACHE["client"] = client
+    _JWKS_CACHE["fetched_at"] = time.time()
+
+
 def verify_supabase_jwt(token: str) -> str:
     """Return the Supabase user id (`sub`) for a valid JWT, else raise 401."""
     try:
