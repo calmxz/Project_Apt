@@ -143,4 +143,4 @@ The check-question complete path could be driven repeatedly without being counte
 | — | ChromaDB references in old docs | — | Corrected (architecturally replaced by pgvector, Phase 7 T4) |
 | — | Branch protection / required checks | — | Still not applied — repo-settings action, owner: user |
 
-Priority order for remaining fixes (as of 2026-07-06): **1 → 3**. Both Finding 1 and Finding 3 were fixed in slice 7 (S3.1 and S3.3); Findings 2, 5, and 6 shipped previously fixed.
+Fix history: **1 → 3** — both fixed in slice 7 (2026-07-11, S3.1/S3.3). Findings 2, 5, and 6 shipped previously fixed.
