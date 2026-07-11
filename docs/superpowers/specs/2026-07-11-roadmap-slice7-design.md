@@ -150,12 +150,17 @@ rescans the whole buffer from offset 0 on every streaming delta, and
 Change, two parts:
 
 - **Incremental split.** Add an incremental variant in
-  `markdownStreamBuffer.js` that carries `{ lastText, lastSafeEnd }` state:
-  when the new text starts with `lastText` (append-only stream), resume the
-  opener scan from `lastSafeEnd` instead of 0; on any non-append change,
-  reset and scan from 0. `MarkdownContent.vue` holds the state per component
-  instance (ref + watch or a small composable) instead of a stateless
-  computed; non-streaming path unchanged. Correctness invariant, tested
+  `markdownStreamBuffer.js` carrying `{ lastText, anchor }` state: when the
+  new text starts with `lastText` (append-only stream), resume the scan from
+  `anchor` instead of 0; on any non-append change, reset and scan from 0.
+  The anchor is NOT simply the previous safe end — a trailing run of
+  delimiter characters can be reinterpreted when it grows (a committed
+  closed pair "x ``" becomes fence opener "x ```" one backtick later), so
+  the anchor is the largest between-region scanner cursor at or before the
+  position after the text's last non-delimiter character (see the plan for
+  the worked counterexamples). `MarkdownContent.vue` keeps its computed but
+  backs it with a per-instance scan-state object; non-streaming path
+  unchanged. Correctness invariant, tested
   property-style: incremental output === full-scan output for every prefix
   of a set of adversarial fixtures (fences, math, inline code, interleaved).
 - **rAF delta batching.** At the streaming append site (the chat store /
@@ -175,10 +180,11 @@ flush on completion).
 
 Two new `config.py` settings:
 
-- `llm_temperature: float = 0.3` — passed to all tutor `acompletion` calls
-  (`agent/tutor.py`, 4 sites: main loop, streaming, title, retry paths).
-- `summary_temperature: float = 0.0` — passed to all summary
-  `acompletion` calls (`services/summary_service.py`, 4 sites).
+- `llm_temperature: float = 0.3` — passed to the tutor `acompletion` call
+  (`agent/tutor.py:136`, the streaming loop — the only tutor LLM call).
+- `summary_temperature: float = 0.0` — passed to both summary
+  `acompletion` calls (`services/summary_service.py:58` end-of-session,
+  `:142` rolling).
 
 Rationale: 0.3 keeps teaching prose varied while stabilizing tool-call
 argument generation; 0.0 makes summaries deterministic (better prompt-cache
