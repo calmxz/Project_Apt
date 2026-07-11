@@ -53,7 +53,14 @@ Notes:
 - `style-src 'unsafe-inline'` is likely needed for PrimeVue/Vite-injected styles — verify in a dev build before tightening further; don't ship a CSP that's broken vs. one that's perfect.
 - HSTS only matters once TLS termination is confirmed at the edge (Fly.io / reverse proxy in front of this nginx) — harmless to ship now, just confirm it's actually serving over HTTPS in Phase 8 deploy.
 
-**Status update (2026-07-06):** still **Open**. Deploy target moved to Vercel (frontend) + Render (backend) in Phase 8 WS-C, so the remedy now belongs in `vercel.json` `headers`, not `frontend/nginx.conf` (which only serves the local docker-compose stack). Same header set applies.
+**Status update (2026-07-11): Fixed.** The remedy moved from `frontend/nginx.conf`
+(stale — WS-C moved the deploy to Vercel + Render) to `frontend/vercel.json`
+`headers`: Content-Security-Policy (default-src 'self', frame-ancestors 'none',
+object-src 'none', base-uri 'self'), X-Content-Type-Options, X-Frame-Options,
+and Referrer-Policy, shipped in WS-C. The `CRUX_API_HOST` placeholder in
+`connect-src` is substituted at deploy time per `docs/deploy/RUNBOOK.md` step 2
+of the frontend section. Live curl verification of the deployed headers remains
+an open human gate (slice 7 PR body).
 
 ### Finding 2 — JWT `iss` claim not verified — LOW (carried over, independently re-confirmed)
 
@@ -88,6 +95,12 @@ if not settings.supabase_url:
     raise RuntimeError("SUPABASE_URL is required")
 ```
 
+**Status update (2026-07-11): Fixed.** `services/auth.py` now exposes
+`validate_jwks_startup()`, called from the `main.py` lifespan: when
+`supabase_jwks_url` is configured, the JWK set is fetched at startup and any
+failure raises `RuntimeError`, so misconfiguration kills boot instead of
+returning per-request 500s. Commit `53c6f32`.
+
 ### Finding 4 — `v-html` sink confirmed single and sanitized — informational, closes a check
 
 `frontend/src/components/chat/MarkdownContent.vue:22` is the **only** `v-html`/`innerHTML` sink in the frontend (`grep -rn "v-html|innerHTML|dangerouslySetInnerHTML" frontend/src` returns exactly one hit). Per `[[project_katex_plugin_swap]]` this renders through `markdown-it` + DOMPurify (`safeHtml`), not raw model output. No new finding — recorded here because the old audit predates the chat redesign that introduced this rendering path, so it had never been checked against the current renderer until now.
@@ -119,9 +132,9 @@ The check-question complete path could be driven repeatedly without being counte
 
 | # | Finding | Severity | Status |
 |---|---|---|---|
-| 1 | No CSP / security headers on the frontend | Medium | **Open — remedy now belongs in `vercel.json` headers (see 2026-07-06 note)** |
+| 1 | No CSP / security headers on the frontend | Medium | **Fixed (2026-07-11) — `frontend/vercel.json` headers; live curl verify owed** |
 | 2 | JWT `iss` not verified | Low | **Fixed (2026-07-06) — `backend/services/auth.py:53-54`** |
-| 3 | JWKS misconfig → 500 instead of fail-fast | Info | **Open — fix above** |
+| 3 | JWKS misconfig → 500 instead of fail-fast | Info | **Fixed (2026-07-11) — `validate_jwks_startup()` in `services/auth.py`** |
 | 4 | `v-html` sink — confirmed single, sanitized | Info | Closed (no action) |
 | 5 | `document_excerpt` delimiter forgery (S1) | Medium | **Fixed (2026-07-06) — `backend/agent/excerpt.py`** |
 | 6 | check/complete rate-limit bypass (S2) | Medium | **Fixed (2026-07-06) — `backend/routes/sessions.py`** |
@@ -130,4 +143,4 @@ The check-question complete path could be driven repeatedly without being counte
 | — | ChromaDB references in old docs | — | Corrected (architecturally replaced by pgvector, Phase 7 T4) |
 | — | Branch protection / required checks | — | Still not applied — repo-settings action, owner: user |
 
-Priority order for remaining fixes (as of 2026-07-06): **1 → 3**. Finding 1 is the only open Medium and is cheap (one `vercel.json` headers block, no code changes); do it first since it's the real mitigating control for the JWT-in-localStorage tradeoff documented in §2.1. Finding 2 is done; Findings 5 and 6 shipped fixed.
+Priority order for remaining fixes (as of 2026-07-06): **1 → 3**. Both Finding 1 and Finding 3 were fixed in slice 7 (S3.1 and S3.3); Findings 2, 5, and 6 shipped previously fixed.
