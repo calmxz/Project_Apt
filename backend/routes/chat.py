@@ -27,6 +27,7 @@ from services import (
     pending_check_store,
     profile_service,
     rate_limit,
+    retrieval_service,
     summary_service,
 )
 from services.auth import current_user_id
@@ -202,6 +203,10 @@ async def _prepare_turn(
         retrieval_required = keyword_index.match_required(
             req.message, json.loads(session.kw_index_json or "[]")
         )
+        if not retrieval_required:
+            retrieval_required = retrieval_service.semantic_fallback_required(
+                db, req.session_id, req.message
+            )
 
         prompt_state = _build_prompt_state(
             session=session,
