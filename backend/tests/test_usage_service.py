@@ -107,9 +107,8 @@ def test_top_sessions_user_isolation_and_null_session_skipped(db_session):
 def test_usage_service_has_no_tier_literals():
     """Guard: tier thresholds live in config/cost_meter only."""
     import inspect
+    import sys
 
-    import services.usage_service as mod
-
-    src = inspect.getsource(mod)
+    src = inspect.getsource(sys.modules[usage_summary.__module__])
     for literal in ("2.7", "2.70", "2.0", "2.00", "3.0", "3.00", "0.9"):
         assert literal not in src, f"tier literal {literal} duplicated in usage_service"
