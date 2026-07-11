@@ -65,15 +65,15 @@ function findCloser(text, opener) {
   return -1
 }
 
-export function splitSafePrefix(text) {
-  if (!text) return { safe: '', deferred: '' }
-
+function scanSafePrefix(text, cut) {
+  let stableCursor = 0
   let cursor = 0
   while (cursor < text.length) {
+    if (cursor <= cut) stableCursor = cursor
     const tail = text.slice(cursor)
     const opener = findOpener(tail)
     if (!opener) {
-      return { safe: text, deferred: '' }
+      return { safe: text, deferred: '', stableCursor }
     }
     const absoluteOpenerIndex = cursor + opener.index
     const absoluteOpenerEndIndex = absoluteOpenerIndex + opener.len
@@ -83,6 +83,7 @@ export function splitSafePrefix(text) {
       return {
         safe: text.slice(0, absoluteOpenerIndex),
         deferred: text.slice(absoluteOpenerIndex),
+        stableCursor,
       }
     }
     if (localCloser < opener.index + opener.len) {
@@ -92,5 +93,51 @@ export function splitSafePrefix(text) {
     }
     cursor = cursor + localCloser
   }
-  return { safe: text, deferred: '' }
+  return { safe: text, deferred: '', stableCursor }
+}
+
+export function splitSafePrefix(text) {
+  if (!text) return { safe: '', deferred: '' }
+  const { safe, deferred } = scanSafePrefix(text, Infinity)
+  return { safe, deferred }
+}
+
+// P4.3: incremental variant. A streamed buffer only grows at the end, so we
+// resume scanning from a saved anchor instead of offset 0. An anchor is only
+// valid if appended text can never change the interpretation of anything
+// before it. Appended characters can only extend the text's TRAILING run of
+// delimiter characters ('`' or '$') -- e.g. a committed closed pair "x ``"
+// turns into fence opener "x ```" one backtick later. So a stable anchor is
+// the largest between-region scanner cursor that is <= the position right
+// after the last non-delimiter character. scanSafePrefix's `cut` parameter
+// enforces exactly that bound.
+
+function lastNonDelimiterIndex(text) {
+  let i = text.length - 1
+  while (i >= 0 && (text[i] === '`' || text[i] === '$')) i--
+  return i
+}
+
+export function createSplitState() {
+  return { lastText: '', anchor: 0 }
+}
+
+export function splitSafePrefixIncremental(text, state) {
+  if (!text) {
+    state.lastText = ''
+    state.anchor = 0
+    return { safe: '', deferred: '' }
+  }
+  let base = 0
+  if (state.lastText && text.startsWith(state.lastText)) {
+    base = state.anchor
+  }
+  const cut = Math.max(0, lastNonDelimiterIndex(text) + 1 - base)
+  const { safe: tailSafe, deferred, stableCursor } = scanSafePrefix(
+    text.slice(base),
+    cut,
+  )
+  state.lastText = text
+  state.anchor = base + stableCursor
+  return { safe: text.slice(0, base) + tailSafe, deferred }
 }
