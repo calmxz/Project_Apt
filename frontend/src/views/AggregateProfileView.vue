@@ -88,6 +88,15 @@
           </ul>
         </div>
 
+        <div class="two-col" data-testid="agg-insights">
+          <div class="col">
+            <WeakestConcepts :concept-accuracy="data.concept_accuracy" />
+          </div>
+          <div class="col">
+            <MasteryTrend :weekly-mastery="data.weekly_mastery" />
+          </div>
+        </div>
+
         <div class="two-col">
           <div class="col" data-testid="agg-mastered">
             <h2 class="section-title">
@@ -157,6 +166,11 @@
             </li>
           </ul>
         </div>
+
+        <UsagePanel v-if="usage" :usage="usage" />
+        <p v-else-if="usageError" class="muted" data-testid="usage-error">
+          Usage data is unavailable right now.
+        </p>
       </template>
     </template>
   </section>
@@ -166,13 +180,18 @@
 import { computed, onMounted, ref } from 'vue'
 
 import EmptyState from '../components/EmptyState.vue'
+import MasteryTrend from '../components/profile/MasteryTrend.vue'
+import UsagePanel from '../components/profile/UsagePanel.vue'
+import WeakestConcepts from '../components/profile/WeakestConcepts.vue'
 import { friendlyError } from '../lib/errors.js'
-import { getAggregateProfile } from '../services/profileApi.js'
+import { getAggregateProfile, getUsageSummary } from '../services/profileApi.js'
 import { formatRelative } from '../utils/formatDate.js'
 
 const data = ref(null)
 const loading = ref(false)
 const error = ref('')
+const usage = ref(null)
+const usageError = ref(false)
 
 const levelKeys = ['beginner', 'intermediate', 'advanced', 'unknown']
 
@@ -185,13 +204,22 @@ const distAriaLabel = computed(() => {
 async function load() {
   loading.value = true
   error.value = ''
-  try {
-    data.value = await getAggregateProfile()
-  } catch (e) {
-    error.value = friendlyError(e)
-  } finally {
-    loading.value = false
+  usageError.value = false
+  const [agg, use] = await Promise.allSettled([
+    getAggregateProfile(),
+    getUsageSummary(),
+  ])
+  if (agg.status === 'fulfilled') {
+    data.value = agg.value
+  } else {
+    error.value = friendlyError(agg.reason)
   }
+  if (use.status === 'fulfilled') {
+    usage.value = use.value
+  } else {
+    usageError.value = true
+  }
+  loading.value = false
 }
 
 onMounted(load)

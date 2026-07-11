@@ -6,6 +6,8 @@ export const getSessionProfile = (sessionId) => apiGet(`/profile/${sessionId}`)
 
 export const getAggregateProfile = () => apiGet('/profile/aggregate')
 
+export const getUsageSummary = () => apiGet('/usage/summary')
+
 // Both write calls send If-Match so the server can enforce optimistic
 // concurrency against the profile's current etag. Callers must pass the
 // etag from the most recent GET (or the previous write's response).
