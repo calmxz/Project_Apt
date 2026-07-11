@@ -41,3 +41,38 @@ def test_merge_into_session_persists_union(db_session):
     row = db_session.get(SessionModel, "s1")
     stored = set(json.loads(row.kw_index_json))
     assert stored == {"existing", "new_stem"}
+
+
+def test_acronym_and_digit_tokens_indexed():
+    stems = keyword_index.build_from_text(
+        "DNA replication, IPv4 subnetting, and 3NF normalization"
+    )
+    assert "dna" in stems
+    assert "ipv4" in stems
+    assert "3nf" in stems
+
+
+def test_two_char_letter_tokens_indexed():
+    stems = keyword_index.build_from_text("ML pipelines")
+    assert "ml" in stems
+
+
+def test_pure_digit_tokens_dropped():
+    stems = keyword_index.build_from_text("chapter 42 written in 2026")
+    assert "42" not in stems
+    assert "2026" not in stems
+
+
+def test_short_stopwords_not_indexed():
+    stems = keyword_index.build_from_text("of it to in on at be we by no")
+    assert stems == set()
+
+
+def test_short_stopword_query_does_not_flip_gate():
+    index = keyword_index.build_from_text("Database indexes accelerate queries")
+    assert keyword_index.match_required("tell me about it", index) is False
+
+
+def test_digit_query_flips_gate():
+    index = keyword_index.build_from_text("IPv4 addressing and subnets")
+    assert keyword_index.match_required("explain ipv4 to me", index) is True
