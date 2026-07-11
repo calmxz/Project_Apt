@@ -57,6 +57,7 @@ async def generate_and_persist(db: Session, session: SessionModel) -> str:
         try:
             resp = await litellm.acompletion(
                 model=settings.model,
+                temperature=settings.summary_temperature,
                 messages=[
                     {"role": "system", "content": SUMMARY_SYSTEM},
                     {"role": "user", "content": user_prompt},
@@ -141,6 +142,7 @@ async def update_rolling_summary(db: Session, session_id: str) -> str | None:
             # spend is bounded by the debounce, and this call must never block/fail a turn.
             resp = await litellm.acompletion(
                 model=settings.model,
+                temperature=settings.summary_temperature,
                 messages=[
                     {"role": "system", "content": ROLLING_SYSTEM},
                     {"role": "user", "content": f"Topic: {session.topic or '(unspecified)'}\n\n{transcript}"},
