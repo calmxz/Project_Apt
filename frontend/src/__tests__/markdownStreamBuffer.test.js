@@ -116,7 +116,7 @@ describe('splitSafePrefixIncremental', () => {
         const text = fixture.slice(0, i)
         const inc = splitSafePrefixIncremental(text, state)
         const full = splitSafePrefix(text)
-        expect(inc, `fixture=${JSON.stringify(fixture)} len=${i}`).toEqual(full)
+        expect({ fixture, len: i, result: inc }).toEqual({ fixture, len: i, result: full })
       }
     }
   })
