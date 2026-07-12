@@ -416,6 +416,28 @@ paths:
         "412": { $ref: "#/components/responses/PreconditionFailed" }
         "428": { $ref: "#/components/responses/PreconditionRequired" }
 
+  /api/profile/{session_id}/subtopic_levels/{item}:
+    delete:
+      tags: [profile]
+      summary: Remove one subtopic level entry. Optimistic-concurrency guarded.
+      operationId: deleteSubtopicLevel
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - name: item
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "200":
+          description: Updated profile.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProfileMutationResponse" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "412": { $ref: "#/components/responses/PreconditionFailed" }
+        "428": { $ref: "#/components/responses/PreconditionRequired" }
+
 components:
   securitySchemes:
     BearerAuth:
@@ -504,22 +526,60 @@ components:
       enum: [fresh, resume]
 
     # ---- Core domain ----
+    ConceptEvidence:
+      type: string
+      enum: [declared, tested]
+      description: >
+        Persisted provenance on a profile concept. "inferred" exists as tool-arg
+        EvidenceType but is never persisted onto an entry.
+
+    ConceptEntry:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200 }
+        evidence_type:
+          oneOf:
+            - $ref: "#/components/schemas/ConceptEvidence"
+            - type: "null"
+          default: null
+        last_event_at:
+          oneOf:
+            - { type: string, format: date-time }
+            - type: "null"
+          default: null
+
     TopicProfile:
       type: object
       additionalProperties: false
+      description: |
+        v2 (slice 8, 2026-07-12): concept lists carry ConceptEntry objects
+        (previously plain strings) and subtopic_levels was added. Legacy
+        string-element blobs are upgraded on read by the backend's tolerant
+        parser; API consumers only ever see the v2 shape.
       properties:
         knowledge_level:
           oneOf:
             - $ref: "#/components/schemas/KnowledgeLevel"
             - type: "null"
           default: null
+        subtopic_levels:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/KnowledgeLevel"
+          default: {}
+          description: >
+            Per-subtopic knowledge levels keyed by canonicalized
+            (strip+casefold) agent-named subtopic. knowledge_level is the
+            session-wide default for subtopics without an entry.
         confirmed_gaps:
           type: array
-          items: { type: string }
+          items: { $ref: "#/components/schemas/ConceptEntry" }
           default: []
         mastered_concepts:
           type: array
-          items: { type: string }
+          items: { $ref: "#/components/schemas/ConceptEntry" }
           default: []
         focus_target_gap:
           type: [string, "null"]
@@ -574,7 +634,9 @@ components:
         Patch operation for a session's TopicProfile. Sending
         `focus_target_gap: null` explicitly clears focus and requires
         `focus_clear_reason` (server-side guard rail). `evidence_type` is
-        required only when `add_mastered_concept` is present.
+        required only when `add_mastered_concept` is present. `subtopic` and
+        `subtopic_level` must be provided together (service-enforced
+        cross-field rule).
       properties:
         session_id:           { type: string, maxLength: 64 }
         knowledge_level:
@@ -593,6 +655,16 @@ components:
         evidence_type:
           oneOf:
             - $ref: "#/components/schemas/EvidenceType"
+            - type: "null"
+          default: null
+        subtopic:
+          type: [string, "null"]
+          default: null
+          minLength: 1
+          maxLength: 100
+        subtopic_level:
+          oneOf:
+            - $ref: "#/components/schemas/KnowledgeLevel"
             - type: "null"
           default: null
 
@@ -982,7 +1054,9 @@ components:
       description: |
         Add one item to a list and/or set the knowledge level. At least one
         field must be present. Adding an item to one list removes it from the
-        other (mutual exclusion).
+        other (mutual exclusion). `subtopic` + `subtopic_level` (together)
+        update an EXISTING subtopic's level; unknown subtopics are rejected -
+        subtopics are created only by the tutor.
       properties:
         add_mastered:
           type: string
@@ -995,6 +1069,16 @@ components:
         knowledge_level:
           type: string
           enum: [beginner, intermediate, advanced]
+        subtopic:
+          type: [string, "null"]
+          default: null
+          minLength: 1
+          maxLength: 100
+        subtopic_level:
+          oneOf:
+            - $ref: "#/components/schemas/KnowledgeLevel"
+            - type: "null"
+          default: null
 
     ProfileMutationResponse:
       type: object

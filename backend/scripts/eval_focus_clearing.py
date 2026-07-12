@@ -104,7 +104,7 @@ def _seed_session(focus_gap: str) -> tuple[str, str]:
     session_id = uuid.uuid4().hex
     profile = TopicProfile(
         knowledge_level="intermediate",
-        confirmed_gaps=[focus_gap],
+        confirmed_gaps=[{"name": focus_gap}],
         focus_target_gap=focus_gap,
     )
 

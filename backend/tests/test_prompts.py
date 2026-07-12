@@ -181,7 +181,7 @@ def test_system_prompt_prefix_is_byte_identical_across_turns():
 
 def test_gap_accuracy_block_renders_only_profile_gaps():
     ctx = prompts.build_dynamic_context({
-        "profile": TopicProfile(confirmed_gaps=["frac"]),
+        "profile": TopicProfile(confirmed_gaps=[{"name": "frac"}]),
         "gap_accuracy": {"frac": {"attempts": 3, "correct": 1},
                          "stale-gap": {"attempts": 5, "correct": 5}},
     })
@@ -199,7 +199,7 @@ def test_gap_accuracy_caps_at_top_8_by_attempts():
     gaps = [f"g{i}" for i in range(12)]
     acc = {g: {"attempts": i + 1, "correct": 0} for i, g in enumerate(gaps)}
     ctx = prompts.build_dynamic_context({
-        "profile": TopicProfile(confirmed_gaps=gaps),
+        "profile": TopicProfile(confirmed_gaps=[{"name": g} for g in gaps]),
         "gap_accuracy": acc,
     })
     line = next(l for l in ctx.split("\n") if l.startswith("GAP_ACCURACY:"))

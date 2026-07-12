@@ -21,8 +21,8 @@ def seed_session(db_session):
             topic="sql",
             topic_profile_json=TopicProfile(
                 knowledge_level="beginner",
-                confirmed_gaps=["joins"],
-                mastered_concepts=["select"],
+                confirmed_gaps=[{"name": "joins"}],
+                mastered_concepts=[{"name": "select"}],
             ).model_dump_json(),
         )
     )
@@ -69,7 +69,7 @@ def test_profile_route_with_events_desc(client, db_session, seed_session):
     assert r.status_code == 200
     body = r.json()
     assert body["profile"]["knowledge_level"] == "beginner"
-    assert body["profile"]["confirmed_gaps"] == ["joins"]
+    assert [g["name"] for g in body["profile"]["confirmed_gaps"]] == ["joins"]
     assert len(body["recent_learning_events"]) == 3
     # ordered desc by created_at -> latest first
     assert body["recent_learning_events"][0]["gap_tested"] == "gap_2"
@@ -145,7 +145,7 @@ def test_patch_adds_item_and_returns_new_etag(client, auth_headers, seeded_sessi
     )
     assert r.status_code == 200
     body = r.json()
-    assert "loops" in body["profile"]["mastered_concepts"]
+    assert "loops" in [c["name"] for c in body["profile"]["mastered_concepts"]]
     assert body["profile"]["knowledge_level"] == "advanced"
     assert body["etag"] != tag
 

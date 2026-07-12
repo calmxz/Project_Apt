@@ -79,7 +79,7 @@ def _seed_session() -> tuple[str, str]:
     session_id = uuid.uuid4().hex
     profile = TopicProfile(
         knowledge_level="beginner",
-        confirmed_gaps=[GAP],
+        confirmed_gaps=[{"name": GAP}],
     )
     quiz_cooldown = {"gap": GAP, "last_score": "0/1", "missed": [MISSED_ITEM]}
 

@@ -31,7 +31,7 @@ def test_topic_profile_defaults():
 
 
 def test_topic_profile_round_trip_json():
-    raw = '{"knowledge_level":"intermediate","confirmed_gaps":["g1"],"mastered_concepts":[],"focus_target_gap":"g1","last_session_summary":null}'
+    raw = '{"knowledge_level":"intermediate","confirmed_gaps":[{"name":"g1"}],"mastered_concepts":[],"focus_target_gap":"g1","last_session_summary":null}'
     p = TopicProfile.model_validate_json(raw)
     assert p.knowledge_level == "intermediate"
     assert p.focus_target_gap == "g1"
@@ -320,3 +320,52 @@ def test_review_queue_contracts_exist():
     assert page.items[0].concept == "photosynthesis"
     assert page.items[0].streak == 2
     assert page.total == 1
+
+
+def test_concept_entry_defaults():
+    from contracts import ConceptEntry
+
+    e = ConceptEntry(name="limits")
+    assert e.name == "limits"
+    assert e.evidence_type is None
+    assert e.last_event_at is None
+
+
+def test_concept_entry_rejects_inferred():
+    import pytest
+    from pydantic import ValidationError
+    from contracts import ConceptEntry
+
+    with pytest.raises(ValidationError):
+        ConceptEntry(name="limits", evidence_type="inferred")
+
+
+def test_topic_profile_new_shape():
+    from contracts import ConceptEntry, TopicProfile
+
+    p = TopicProfile()
+    assert p.subtopic_levels == {}
+    p2 = TopicProfile(
+        mastered_concepts=[{"name": "limits", "evidence_type": "tested"}],
+        subtopic_levels={"integration by parts": "beginner"},
+    )
+    assert isinstance(p2.mastered_concepts[0], ConceptEntry)
+    assert p2.subtopic_levels["integration by parts"] == "beginner"
+
+
+def test_update_args_subtopic_fields():
+    from contracts import UpdateTopicProfileArgs
+
+    a = UpdateTopicProfileArgs(
+        session_id="s1", subtopic="chain rule", subtopic_level="intermediate"
+    )
+    assert a.subtopic == "chain rule"
+    assert a.subtopic_level == "intermediate"
+
+
+def test_profile_patch_request_subtopic_fields():
+    from contracts import ProfilePatchRequest
+
+    b = ProfilePatchRequest(subtopic="chain rule", subtopic_level="advanced")
+    assert b.subtopic == "chain rule"
+    assert b.subtopic_level == "advanced"

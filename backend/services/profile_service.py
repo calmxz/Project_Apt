@@ -25,6 +25,7 @@ from contracts import (
     AggregateConceptCount,
     AggregateProfileResponse,
     ConceptAccuracy,
+    ConceptEntry,
     KnowledgeLevelDistribution,
     RecentSessionSummary,
     ToolResult,
@@ -38,6 +39,59 @@ from services.session_enrichment import aware_utc, compute_enrichment
 
 log = logging.getLogger(__name__)
 
+MAX_SUBTOPICS = 20
+
+
+def canon(name: str) -> str:
+    return name.strip().casefold()
+
+
+def concept_names(entries: list | None) -> list[str]:
+    return [e.name for e in (entries or [])]
+
+
+def find_entry(entries: list, name: str):
+    key = canon(name)
+    for e in entries or []:
+        if canon(e.name) == key:
+            return e
+    return None
+
+
+def upsert_entry(
+    entries: list, name: str, *, evidence_type: str | None, stamp: datetime | None
+) -> list:
+    """Append a ConceptEntry if name (casefolded) is absent; otherwise update
+    the existing entry's provenance in place. Returns the (new) list."""
+    out = list(entries or [])
+    existing = find_entry(out, name)
+    if existing is None:
+        out.append(
+            ConceptEntry(name=name, evidence_type=evidence_type, last_event_at=stamp)
+        )
+        return out
+    if evidence_type is not None:
+        existing.evidence_type = evidence_type
+    if stamp is not None:
+        existing.last_event_at = stamp
+    return out
+
+
+def _upgrade_concept_lists(data: dict) -> dict:
+    """Element-level legacy upgrade: bare-string concepts become ConceptEntry
+    dicts. Permanent, not a transition shim: seed_from_prior copies raw JSON
+    forward on resume, so pre-slice-8 blobs can arrive indefinitely."""
+    for key in ("mastered_concepts", "confirmed_gaps"):
+        items = data.get(key)
+        if isinstance(items, list):
+            data[key] = [
+                {"name": it, "evidence_type": None, "last_event_at": None}
+                if isinstance(it, str)
+                else it
+                for it in items
+            ]
+    return data
+
 
 def _parse_profile(raw: str | None) -> TopicProfile:
     """Tolerantly deserialize a stored topic_profile_json blob.
@@ -50,12 +104,10 @@ def _parse_profile(raw: str | None) -> TopicProfile:
     would otherwise raise ValidationError and 500 every read of that session
     (and the whole /profile aggregate). So: try strict parse, then drop unknown
     keys and re-validate, then fall back to an empty profile. Never raises.
+    Also upgrades legacy bare-string concept-list elements to ConceptEntry
+    dicts before validation (see _upgrade_concept_lists).
     """
     raw = raw or "{}"
-    try:
-        return TopicProfile.model_validate_json(raw)
-    except ValidationError:
-        pass
     try:
         data = json.loads(raw)
     except (ValueError, TypeError):
@@ -63,6 +115,11 @@ def _parse_profile(raw: str | None) -> TopicProfile:
         return TopicProfile()
     if not isinstance(data, dict):
         return TopicProfile()
+    data = _upgrade_concept_lists(data)
+    try:
+        return TopicProfile.model_validate(data)
+    except ValidationError:
+        pass
     known = {k: v for k, v in data.items() if k in TopicProfile.model_fields}
     dropped = sorted(set(data) - set(known))
     try:
@@ -101,10 +158,6 @@ def seed_from_prior(db: Session, new_session: SessionModel, prior: SessionModel)
     db.commit()
 
 
-def _norm_list(values: list[str] | None) -> list[str]:
-    return list(values) if values else []
-
-
 def profile_etag(profile: TopicProfile) -> str:
     return hashlib.sha256(profile.model_dump_json().encode("utf-8")).hexdigest()
 
@@ -114,15 +167,28 @@ def _null_focus_if_removed(profile: TopicProfile, item: str) -> None:
         profile.focus_target_gap = None
 
 
-def _add_exclusive(profile: TopicProfile, target: str, item: str) -> None:
+def _add_exclusive(
+    profile: TopicProfile,
+    target: str,
+    item: str,
+    *,
+    evidence_type: str | None = None,
+    stamp: datetime | None = None,
+) -> None:
     other = "confirmed_gaps" if target == "mastered_concepts" else "mastered_concepts"
-    tgt = _norm_list(getattr(profile, target))
-    oth = _norm_list(getattr(profile, other))
-    if item not in tgt:
-        tgt.append(item)
-    oth = [x for x in oth if x != item]
-    setattr(profile, target, tgt)
-    setattr(profile, other, oth)
+    setattr(
+        profile,
+        target,
+        upsert_entry(
+            getattr(profile, target) or [], item,
+            evidence_type=evidence_type, stamp=stamp,
+        ),
+    )
+    key = canon(item)
+    setattr(
+        profile, other,
+        [e for e in (getattr(profile, other) or []) if canon(e.name) != key],
+    )
     if other == "confirmed_gaps":
         _null_focus_if_removed(profile, item)
 
@@ -147,9 +213,15 @@ def apply_user_patch(
             raise ValueError("item cannot be empty after stripping whitespace")
     profile = load_profile(db, session_id)
     if add_mastered is not None:
-        _add_exclusive(profile, "mastered_concepts", add_mastered)
+        _add_exclusive(
+            profile, "mastered_concepts", add_mastered,
+            stamp=datetime.now(timezone.utc),
+        )
     if add_gap is not None:
-        _add_exclusive(profile, "confirmed_gaps", add_gap)
+        _add_exclusive(
+            profile, "confirmed_gaps", add_gap,
+            stamp=datetime.now(timezone.utc),
+        )
     if knowledge_level is not None:
         profile.knowledge_level = knowledge_level
     save_profile(db, session_id, profile)
@@ -163,10 +235,11 @@ def remove_profile_item(
     item: str,
 ) -> TopicProfile:
     profile = load_profile(db, session_id)
-    current = _norm_list(getattr(profile, list_name))
-    if item not in current:
+    current = list(getattr(profile, list_name) or [])
+    if find_entry(current, item) is None:
         raise KeyError(item)
-    setattr(profile, list_name, [x for x in current if x != item])
+    key = canon(item)
+    setattr(profile, list_name, [e for e in current if canon(e.name) != key])
     if list_name == "confirmed_gaps":
         _null_focus_if_removed(profile, item)
     save_profile(db, session_id, profile)
@@ -184,15 +257,21 @@ def apply_patch(
         )
 
     profile = load_profile(db, ctx.session_id)
-    confirmed = _norm_list(profile.confirmed_gaps)
-    mastered = _norm_list(profile.mastered_concepts)
     prior_focus = profile.focus_target_gap
 
     if args.knowledge_level is not None:
         profile.knowledge_level = args.knowledge_level
 
-    if args.add_confirmed_gap and args.add_confirmed_gap not in confirmed:
-        confirmed.append(args.add_confirmed_gap)
+    if args.add_confirmed_gap:
+        evidence = (
+            args.evidence_type
+            if args.evidence_type in ("declared", "tested")
+            else None
+        )
+        profile.confirmed_gaps = upsert_entry(
+            profile.confirmed_gaps or [], args.add_confirmed_gap,
+            evidence_type=evidence, stamp=datetime.now(timezone.utc),
+        )
 
     if args.add_mastered_concept:
         if args.evidence_type is None:
@@ -205,8 +284,11 @@ def apply_patch(
                 ),
             )
         if args.evidence_type in ("declared", "tested"):
-            if args.add_mastered_concept not in mastered:
-                mastered.append(args.add_mastered_concept)
+            profile.mastered_concepts = upsert_entry(
+                profile.mastered_concepts or [], args.add_mastered_concept,
+                evidence_type=args.evidence_type,
+                stamp=datetime.now(timezone.utc),
+            )
 
     # focus_target_gap handling
     clearing = prior_focus is not None and args.focus_target_gap is None
@@ -232,8 +314,6 @@ def apply_patch(
     elif args.focus_target_gap is not None:
         profile.focus_target_gap = args.focus_target_gap
 
-    profile.confirmed_gaps = confirmed
-    profile.mastered_concepts = mastered
     save_profile(db, ctx.session_id, profile)
 
     return ToolResult(ok=True, status="ok")
@@ -332,13 +412,13 @@ def aggregate_for_user(
 
         for concept in profile.mastered_concepts or []:
             entry = mastered_counts.setdefault(
-                concept, {"count": 0, "first_seen_session_id": s.id}
+                concept.name, {"count": 0, "first_seen_session_id": s.id}
             )
             entry["count"] += 1
 
         for gap in profile.confirmed_gaps or []:
             entry = gap_counts.setdefault(
-                gap, {"count": 0, "first_seen_session_id": s.id}
+                gap.name, {"count": 0, "first_seen_session_id": s.id}
             )
             entry["count"] += 1
 

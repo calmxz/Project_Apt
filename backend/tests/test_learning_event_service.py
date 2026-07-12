@@ -5,10 +5,11 @@ from datetime import datetime, timezone
 import pytest
 
 from agent.types import ToolContext
-from contracts import AskCheckQuestionsArgs, TopicProfile
+from contracts import AskCheckQuestionsArgs, ConceptEntry, TopicProfile
 from db.models import Session as SessionModel, User
 from services import check_question_service as cq
 from services import learning_event_service, profile_service
+from services.profile_service import concept_names
 
 
 SESSION_ID = "sess_1"
@@ -25,7 +26,7 @@ def session_row(db_session):
             user_id=USER_ID,
             topic="sql",
             topic_profile_json=TopicProfile(
-                mastered_concepts=["joins"]
+                mastered_concepts=[{"name": "joins"}]
             ).model_dump_json(),
         )
     )
@@ -51,13 +52,13 @@ def test_record_from_answer_correct_adds_mastered_and_clears(session_row, db_ses
     )
     assert event.correct is True
     profile = profile_service.load_profile(db_session, SESSION_ID)
-    assert "atp" in profile.mastered_concepts
+    assert "atp" in concept_names(profile.mastered_concepts)
     assert cq.get_pending_check(db_session, SESSION_ID) is None
 
 
 def test_record_from_answer_incorrect_demotes_mastered(session_row, db_session):
     profile = profile_service.load_profile(db_session, SESSION_ID)
-    profile.mastered_concepts = ["atp"]
+    profile.mastered_concepts = [ConceptEntry(name="atp")]
     profile_service.save_profile(db_session, SESSION_ID, profile)
     seed_ctx = ToolContext(
         db=db_session, session_id=SESSION_ID, user_id=USER_ID,
@@ -72,26 +73,26 @@ def test_record_from_answer_incorrect_demotes_mastered(session_row, db_session):
         db_session, SESSION_ID, gap="atp", question="q?", correct=False,
     )
     profile = profile_service.load_profile(db_session, SESSION_ID)
-    assert "atp" not in profile.mastered_concepts
+    assert "atp" not in concept_names(profile.mastered_concepts)
 
 
 def test_record_from_answer_incorrect_demotes_into_confirmed_gaps(session_row, db_session):
     """Final-review Finding 2: server-side demotion is confirmed-gap evidence."""
     profile = profile_service.load_profile(db_session, SESSION_ID)
-    profile.mastered_concepts = ["atp"]
+    profile.mastered_concepts = [ConceptEntry(name="atp")]
     profile_service.save_profile(db_session, SESSION_ID, profile)
     learning_event_service.record_from_answer(
         db_session, SESSION_ID, gap="atp", question="q?", correct=False,
         clear_pending=False,
     )
     profile = profile_service.load_profile(db_session, SESSION_ID)
-    assert "atp" not in profile.mastered_concepts
-    assert "atp" in profile.confirmed_gaps
+    assert "atp" not in concept_names(profile.mastered_concepts)
+    assert "atp" in concept_names(profile.confirmed_gaps)
 
 
 def test_record_from_answer_repeated_demotion_does_not_duplicate_gap(session_row, db_session):
     profile = profile_service.load_profile(db_session, SESSION_ID)
-    profile.mastered_concepts = ["atp"]
+    profile.mastered_concepts = [ConceptEntry(name="atp")]
     profile_service.save_profile(db_session, SESSION_ID, profile)
     learning_event_service.record_from_answer(
         db_session, SESSION_ID, gap="atp", question="q?", correct=False,
@@ -102,7 +103,7 @@ def test_record_from_answer_repeated_demotion_does_not_duplicate_gap(session_row
         clear_pending=False,
     )
     profile = profile_service.load_profile(db_session, SESSION_ID)
-    assert profile.confirmed_gaps.count("atp") == 1
+    assert concept_names(profile.confirmed_gaps).count("atp") == 1
 
 
 def test_record_from_answer_diagnostic_incorrect_leaves_profile_untouched(db, session_id):
@@ -203,7 +204,7 @@ def test_record_from_answer_applies_mastery_by_default(db, session_id):
     les.record_from_answer(db, session_id, gap="loops", question="q",
                            correct=True, clear_pending=False)
     prof = profile_service.load_profile(db, session_id)
-    assert "loops" in (prof.mastered_concepts or [])
+    assert "loops" in concept_names(prof.mastered_concepts)
 
 
 # --- Task 9: gap_accuracy aggregate (D1.2) ---
@@ -221,3 +222,22 @@ def test_gap_accuracy_groups_by_gap(db, session_id):
 
 def test_gap_accuracy_empty_session(db, session_id):
     assert learning_event_service.gap_accuracy(db, session_id) == {}
+
+
+def test_record_from_answer_stamps_tested_evidence(session_row, db_session):
+    from services import learning_event_service, profile_service
+
+    learning_event_service.record_from_answer(
+        db_session, session_row.id, gap="limits", question="q?", correct=True
+    )
+    p = profile_service.load_profile(db_session, session_row.id)
+    m = profile_service.find_entry(p.mastered_concepts, "limits")
+    assert m.evidence_type == "tested" and m.last_event_at is not None
+
+    learning_event_service.record_from_answer(
+        db_session, session_row.id, gap="limits", question="q?", correct=False
+    )
+    p = profile_service.load_profile(db_session, session_row.id)
+    assert profile_service.find_entry(p.mastered_concepts, "limits") is None
+    g = profile_service.find_entry(p.confirmed_gaps, "limits")
+    assert g.evidence_type == "tested"

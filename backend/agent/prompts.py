@@ -122,7 +122,7 @@ update_topic_profile more than once per turn."""
 
 def _profile_to_dict(profile) -> dict:
     if isinstance(profile, TopicProfile):
-        return profile.model_dump()
+        return profile.model_dump(mode="json")
     return profile or {}
 
 
@@ -151,7 +151,10 @@ _GAP_ACCURACY_CHAR_CAP = 600
 
 
 def _gap_accuracy_label(profile_dict: dict, gap_accuracy: dict) -> str:
-    confirmed = profile_dict.get("confirmed_gaps") or []
+    confirmed = [
+        c.get("name") if isinstance(c, dict) else c
+        for c in (profile_dict.get("confirmed_gaps") or [])
+    ]
     scoped = {g: gap_accuracy[g] for g in confirmed if g in (gap_accuracy or {})}
     if not scoped:
         return "none"

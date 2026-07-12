@@ -70,8 +70,8 @@ def test_aggregate_overlapping_concepts_dedupe_and_count(client, db_session):
         created_at=t0,
         profile=TopicProfile(
             knowledge_level="beginner",
-            mastered_concepts=["joins", "select"],
-            confirmed_gaps=["window-fns"],
+            mastered_concepts=[{"name": "joins"}, {"name": "select"}],
+            confirmed_gaps=[{"name": "window-fns"}],
         ),
     )
     _mk_session(
@@ -81,8 +81,8 @@ def test_aggregate_overlapping_concepts_dedupe_and_count(client, db_session):
         created_at=t0 + timedelta(days=1),
         profile=TopicProfile(
             knowledge_level="intermediate",
-            mastered_concepts=["joins", "indexes"],
-            confirmed_gaps=["window-fns", "ctes"],
+            mastered_concepts=[{"name": "joins"}, {"name": "indexes"}],
+            confirmed_gaps=[{"name": "window-fns"}, {"name": "ctes"}],
         ),
     )
     _mk_session(
@@ -92,8 +92,8 @@ def test_aggregate_overlapping_concepts_dedupe_and_count(client, db_session):
         created_at=t0 + timedelta(days=2),
         profile=TopicProfile(
             knowledge_level="intermediate",
-            mastered_concepts=["joins"],
-            confirmed_gaps=["window-fns"],
+            mastered_concepts=[{"name": "joins"}],
+            confirmed_gaps=[{"name": "window-fns"}],
         ),
     )
     db_session.commit()
@@ -186,13 +186,13 @@ def test_aggregate_isolates_per_user(client, db_session):
         db_session,
         "a1",
         user_id="u_alpha",
-        profile=TopicProfile(mastered_concepts=["alpha-only"]),
+        profile=TopicProfile(mastered_concepts=[{"name": "alpha-only"}]),
     )
     _mk_session(
         db_session,
         "b1",
         user_id="u_beta",
-        profile=TopicProfile(mastered_concepts=["beta-only"]),
+        profile=TopicProfile(mastered_concepts=[{"name": "beta-only"}]),
     )
     db_session.commit()
 
