@@ -246,6 +246,84 @@ def test_stream_schedules_rolling_summary(client, monkeypatch):
     assert calls == [SESSION_ID]
 
 
+def test_semantic_fallback_escalates_gate(client, monkeypatch):
+    """D2.2: lexical gate is False (default empty kw_index_json), so the
+    semantic fallback runs and its True result escalates retrieval_required
+    all the way through to _build_prompt_state."""
+    message = "hello"
+    calls = {}
+
+    def fake_fallback(db, session_id, query):
+        calls["args"] = (session_id, query)
+        return True
+
+    monkeypatch.setattr(
+        "routes.chat.retrieval_service.semantic_fallback_required", fake_fallback
+    )
+
+    captured = {}
+    import routes.chat as chat_module
+
+    real_build = chat_module._build_prompt_state
+
+    def spy_build(**kwargs):
+        captured["retrieval_required"] = kwargs.get("retrieval_required")
+        return real_build(**kwargs)
+
+    monkeypatch.setattr(chat_module, "_build_prompt_state", spy_build)
+
+    fake = _make_fake_run_streaming(StreamEvent("done", {"message_id": "1"}))
+    monkeypatch.setattr("agent.tutor.run_streaming", fake)
+
+    with client.stream(
+        "POST",
+        "/api/chat/stream",
+        json={"session_id": SESSION_ID, "message": message},
+        headers=AUTH_HEADERS,
+    ) as resp:
+        assert resp.status_code == 200
+        for _ in resp.iter_lines():
+            pass
+
+    assert calls["args"] == (SESSION_ID, message)
+    assert captured["retrieval_required"] is True
+
+
+def test_semantic_fallback_not_called_when_lexical_gate_true(client, db_session, monkeypatch):
+    """D2.2: when the lexical gate already matches, the semantic fallback
+    must never run. A raising stub proves the OPTIONAL-only escalation
+    path (the `if not retrieval_required:` guard) is respected."""
+    import json
+
+    from lib import keyword_index
+
+    message = "explain foreign keys"
+    stems = keyword_index.build_from_text(message)
+    session = db_session.get(SessionModel, SESSION_ID)
+    session.kw_index_json = json.dumps(sorted(stems))
+    db_session.commit()
+
+    def fail_if_called(db, session_id, query):
+        raise AssertionError("fallback must not run when lexical gate is True")
+
+    monkeypatch.setattr(
+        "routes.chat.retrieval_service.semantic_fallback_required", fail_if_called
+    )
+
+    fake = _make_fake_run_streaming(StreamEvent("done", {"message_id": "1"}))
+    monkeypatch.setattr("agent.tutor.run_streaming", fake)
+
+    with client.stream(
+        "POST",
+        "/api/chat/stream",
+        json={"session_id": SESSION_ID, "message": message},
+        headers=AUTH_HEADERS,
+    ) as resp:
+        assert resp.status_code == 200
+        for _ in resp.iter_lines():
+            pass
+
+
 def test_stream_rolling_summary_failure_does_not_break_turn(client, monkeypatch):
     """A raising update_rolling_summary must not surface to the client: the
     chat turn already completed and sent its response before the background

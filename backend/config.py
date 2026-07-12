@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     supabase_secret_key: str = ""
     llm_soft_cap_usd: float = 2.00
     llm_hard_cap_usd: float = 3.00
+    llm_temperature: float = 0.3
+    summary_temperature: float = 0.0
+    retrieval_fallback_threshold: float = 0.75
 
     @property
     def cors_origin_list(self) -> list[str]:

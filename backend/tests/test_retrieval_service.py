@@ -198,3 +198,103 @@ def test_session_id_mismatch_returns_failed(session, ctx, mock_embed, db_session
     assert result.ok is False
     assert result.status == "failed"
     assert "mismatch" in (result.error or "")
+
+
+# --- D2.2 semantic fallback ---------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _stub_off(monkeypatch):
+    # settings loads .env; a developer's gemini_api_key=test would flip
+    # llm_stub_enabled and short-circuit the fallback. Pin it off for this
+    # module (the stub-mode test re-enables it explicitly).
+    from config import settings
+
+    monkeypatch.setattr(settings, "llm_stub", False)
+    monkeypatch.setattr(settings, "gemini_api_key", "")
+
+
+def _fake_embedding_resp(vec):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(data=[{"embedding": vec}])
+
+
+def test_semantic_fallback_true_above_threshold(db_session, monkeypatch):
+    monkeypatch.setattr(
+        "services.retrieval_service.documents_service.has_ready_document",
+        lambda db, sid: True,
+    )
+    monkeypatch.setattr(
+        "services.retrieval_service._session_centroid",
+        lambda db, sid: [1.0, 0.0, 0.0],
+    )
+    monkeypatch.setattr(
+        "services.retrieval_service.litellm.embedding",
+        lambda **kw: _fake_embedding_resp([1.0, 0.0, 0.0]),  # sim = 1.0
+    )
+    assert retrieval_service.semantic_fallback_required(db_session, "s1", "q") is True
+
+
+def test_semantic_fallback_false_below_threshold(db_session, monkeypatch):
+    monkeypatch.setattr(
+        "services.retrieval_service.documents_service.has_ready_document",
+        lambda db, sid: True,
+    )
+    monkeypatch.setattr(
+        "services.retrieval_service._session_centroid",
+        lambda db, sid: [1.0, 0.0, 0.0],
+    )
+    monkeypatch.setattr(
+        "services.retrieval_service.litellm.embedding",
+        lambda **kw: _fake_embedding_resp([0.0, 1.0, 0.0]),  # sim = 0.0
+    )
+    assert retrieval_service.semantic_fallback_required(db_session, "s1", "q") is False
+
+
+def test_semantic_fallback_false_without_ready_docs(db_session, monkeypatch):
+    monkeypatch.setattr(
+        "services.retrieval_service.documents_service.has_ready_document",
+        lambda db, sid: False,
+    )
+    assert retrieval_service.semantic_fallback_required(db_session, "s1", "q") is False
+
+
+def test_semantic_fallback_false_on_sqlite_centroid_guard(db_session, monkeypatch):
+    # Real _session_centroid on the sqlite test db must return None.
+    monkeypatch.setattr(
+        "services.retrieval_service.documents_service.has_ready_document",
+        lambda db, sid: True,
+    )
+    assert retrieval_service._session_centroid(db_session, "s1") is None
+    assert retrieval_service.semantic_fallback_required(db_session, "s1", "q") is False
+
+
+def test_semantic_fallback_false_on_embedding_error(db_session, monkeypatch):
+    monkeypatch.setattr(
+        "services.retrieval_service.documents_service.has_ready_document",
+        lambda db, sid: True,
+    )
+    monkeypatch.setattr(
+        "services.retrieval_service._session_centroid",
+        lambda db, sid: [1.0, 0.0, 0.0],
+    )
+
+    def boom(**kw):
+        raise RuntimeError("embedding down")
+
+    monkeypatch.setattr("services.retrieval_service.litellm.embedding", boom)
+    assert retrieval_service.semantic_fallback_required(db_session, "s1", "q") is False
+
+
+def test_semantic_fallback_false_in_stub_mode(db_session, monkeypatch):
+    from config import settings
+
+    monkeypatch.setattr(settings, "llm_stub", True)
+    assert retrieval_service.semantic_fallback_required(db_session, "s1", "q") is False
+
+
+def test_cosine_similarity_basics():
+    assert retrieval_service._cosine_similarity([1.0, 0.0], [1.0, 0.0]) == pytest.approx(1.0)
+    assert retrieval_service._cosine_similarity([1.0, 0.0], [0.0, 1.0]) == pytest.approx(0.0)
+    assert retrieval_service._cosine_similarity([0.0, 0.0], [1.0, 0.0]) == 0.0

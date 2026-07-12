@@ -6,6 +6,7 @@ import { streamChat, streamCheckComplete } from '../services/chatStreamService.j
 import { reportCostWarning } from '../services/costBus.js'
 import { friendlyError } from '../lib/errors.js'
 import { mapCapError } from '../lib/capErrors.js'
+import { createDeltaBatcher } from '../lib/deltaBatcher.js'
 
 export const useSessionStore = defineStore('session', () => {
   const currentSessionId = ref(null)
@@ -391,15 +392,17 @@ export const useSessionStore = defineStore('session', () => {
     const ctrl = new AbortController()
     abortController.value = ctrl
     error.value = null
+    const deltaBatcher = createDeltaBatcher(appendAssistantDelta)
     try {
       await streamCheckComplete({
         sessionId: id,
         signal: ctrl.signal,
         onEvent: ({ event, data }) => {
+          if (event !== 'assistant_delta') deltaBatcher.flush()
           switch (event) {
             case 'tool_call_start': recordToolCall({ kind: 'start', tool_call: data }); break
             case 'tool_call_done': recordToolCall({ kind: 'done', tool_call: data }); break
-            case 'assistant_delta': appendAssistantDelta(data.text); break
+            case 'assistant_delta': deltaBatcher.push(data.text); break
             case 'citations': setCitations(data); break
             case 'cost_warning': reportCostWarning(data); break
             case 'check_question': handleCheckQuestion(data); break
@@ -423,6 +426,7 @@ export const useSessionStore = defineStore('session', () => {
         },
       })
     } catch (e) {
+      deltaBatcher.flush()
       if (e?.name === 'AbortError') {
         if (streamingMessage.value) handleCancelled('pending', streamingMessage.value.content.length, '0')
         return
@@ -499,6 +503,7 @@ export const useSessionStore = defineStore('session', () => {
     const ctrl = new AbortController()
     abortController.value = ctrl
     error.value = null
+    const deltaBatcher = createDeltaBatcher(appendAssistantDelta)
     try {
       await streamChat({
         sessionId: currentSessionId.value,
@@ -507,10 +512,11 @@ export const useSessionStore = defineStore('session', () => {
         reviewGap,
         signal: ctrl.signal,
         onEvent: ({ event, data }) => {
+          if (event !== 'assistant_delta') deltaBatcher.flush()
           switch (event) {
             case 'tool_call_start': recordToolCall({ kind: 'start', tool_call: data }); break
             case 'tool_call_done': recordToolCall({ kind: 'done', tool_call: data }); break
-            case 'assistant_delta': appendAssistantDelta(data.text); break
+            case 'assistant_delta': deltaBatcher.push(data.text); break
             case 'citations': setCitations(data); break
             case 'cost_warning': reportCostWarning(data); break
             case 'check_question': handleCheckQuestion(data); break
@@ -527,6 +533,7 @@ export const useSessionStore = defineStore('session', () => {
         },
       })
     } catch (e) {
+      deltaBatcher.flush()
       if (e?.name === 'AbortError') {
         if (streamingMessage.value) handleCancelled('pending', streamingMessage.value.content.length, '0')
         return

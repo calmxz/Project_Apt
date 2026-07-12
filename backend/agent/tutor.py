@@ -135,6 +135,7 @@ async def run_streaming(
 
             resp = await litellm.acompletion(
                 model=settings.model,
+                temperature=settings.llm_temperature,
                 messages=full,
                 tools=tools.TOOLS,
                 tool_choice="auto",
