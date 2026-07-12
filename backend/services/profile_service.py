@@ -257,6 +257,30 @@ def apply_patch(
         )
 
     profile = load_profile(db, ctx.session_id)
+
+    if (args.subtopic is None) != (args.subtopic_level is None):
+        return ToolResult(
+            ok=False,
+            status="failed",
+            error="subtopic and subtopic_level must be provided together",
+        )
+    if args.subtopic is not None:
+        key = canon(args.subtopic)
+        if not key:
+            return ToolResult(ok=False, status="failed", error="subtopic is empty")
+        levels = dict(profile.subtopic_levels or {})
+        if key not in levels and len(levels) >= MAX_SUBTOPICS:
+            return ToolResult(
+                ok=False,
+                status="failed",
+                error=(
+                    f"subtopic_levels is full ({MAX_SUBTOPICS}); update an "
+                    "existing subtopic instead"
+                ),
+            )
+        levels[key] = args.subtopic_level
+        profile.subtopic_levels = levels
+
     prior_focus = profile.focus_target_gap
 
     if args.knowledge_level is not None:

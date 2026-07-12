@@ -39,6 +39,9 @@ TOOLS = [
                 " Inferred mastery is ignored server-side."
                 " To clear focus_target_gap, send it as null and provide"
                 " focus_clear_reason."
+                " Provide subtopic and subtopic_level together to record the"
+                " learner's level on a specific subtopic (agent-named, short"
+                " noun phrase; reuse existing names)."
             ),
             "parameters": _schema(UpdateTopicProfileArgs),
         },

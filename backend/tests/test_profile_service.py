@@ -490,3 +490,53 @@ def test_user_patch_and_delete_are_entry_aware(session_row, db_session):
         db_session, session_row.id, "confirmed_gaps", "Chain Rule"
     )
     assert p.confirmed_gaps == []
+
+
+def _ctx_args(db_session, session_row, **kw):
+    from agent.types import ToolContext
+    from contracts import UpdateTopicProfileArgs
+
+    ctx = ToolContext(
+        db=db_session,
+        session_id=session_row.id,
+        user_id=session_row.user_id,
+        turn_started_at=datetime.now(timezone.utc),
+    )
+    return ctx, UpdateTopicProfileArgs(session_id=session_row.id, **kw)
+
+
+def test_apply_patch_sets_subtopic_level(session_row, db_session):
+    from services import profile_service
+
+    ctx, args = _ctx_args(
+        db_session, session_row, subtopic="  Integration BY Parts ", subtopic_level="beginner"
+    )
+    res = profile_service.apply_patch(db_session, ctx, args)
+    assert res.ok
+    p = profile_service.load_profile(db_session, session_row.id)
+    assert p.subtopic_levels == {"integration by parts": "beginner"}
+
+
+def test_apply_patch_subtopic_requires_pair(session_row, db_session):
+    from services import profile_service
+
+    ctx, args = _ctx_args(db_session, session_row, subtopic="chain rule")
+    res = profile_service.apply_patch(db_session, ctx, args)
+    assert not res.ok
+    assert "together" in res.error
+
+
+def test_apply_patch_subtopic_cap(session_row, db_session):
+    from services import profile_service
+
+    p = profile_service.load_profile(db_session, session_row.id)
+    p.subtopic_levels = {f"topic {i}": "beginner" for i in range(20)}
+    profile_service.save_profile(db_session, session_row.id, p)
+
+    ctx, args = _ctx_args(db_session, session_row, subtopic="one more", subtopic_level="advanced")
+    res = profile_service.apply_patch(db_session, ctx, args)
+    assert not res.ok and "full" in res.error
+
+    # updating an existing key is always allowed
+    ctx, args = _ctx_args(db_session, session_row, subtopic="topic 3", subtopic_level="advanced")
+    assert profile_service.apply_patch(db_session, ctx, args).ok
