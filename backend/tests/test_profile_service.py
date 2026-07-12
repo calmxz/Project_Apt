@@ -540,3 +540,12 @@ def test_apply_patch_subtopic_cap(session_row, db_session):
     # updating an existing key is always allowed
     ctx, args = _ctx_args(db_session, session_row, subtopic="topic 3", subtopic_level="advanced")
     assert profile_service.apply_patch(db_session, ctx, args).ok
+
+
+def test_apply_patch_subtopic_empty_after_strip(session_row, db_session):
+    from services import profile_service
+
+    ctx, args = _ctx_args(db_session, session_row, subtopic="   ", subtopic_level="beginner")
+    res = profile_service.apply_patch(db_session, ctx, args)
+    assert not res.ok
+    assert "empty" in res.error
