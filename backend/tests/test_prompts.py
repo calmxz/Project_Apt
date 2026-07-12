@@ -258,3 +258,11 @@ def test_immutable_rules_explain_retention_check():
     from agent.prompts import IMMUTABLE_RULES
 
     assert "retention check" in IMMUTABLE_RULES
+
+
+def test_immutable_rules_document_subtopics_and_provenance():
+    from agent.prompts import IMMUTABLE_RULES
+
+    assert "SUBTOPIC LEVELS:" in IMMUTABLE_RULES
+    assert "subtopic_level" in IMMUTABLE_RULES
+    assert "last_event_at" in IMMUTABLE_RULES
