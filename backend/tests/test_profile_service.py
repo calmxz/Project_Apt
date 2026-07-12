@@ -343,10 +343,10 @@ def test_add_mastered_nulls_focus_when_it_was_the_focused_gap(db_session, seeded
 def test_remove_profile_item_removes_and_persists(db_session, seeded_session_id):
     profile_service.apply_user_patch(db_session, seeded_session_id, add_mastered="loops")
     p = profile_service.remove_profile_item(db_session, seeded_session_id, "mastered_concepts", "loops")
-    assert "loops" not in p.mastered_concepts
+    assert "loops" not in concept_names(p.mastered_concepts)
     # persisted
     reloaded = profile_service.load_profile(db_session, seeded_session_id)
-    assert "loops" not in reloaded.mastered_concepts
+    assert "loops" not in concept_names(reloaded.mastered_concepts)
 
 
 def test_remove_confirmed_gap_nulls_focus(db_session, seeded_session_id):
@@ -355,11 +355,11 @@ def test_remove_confirmed_gap_nulls_focus(db_session, seeded_session_id):
         TopicProfile(confirmed_gaps=[{"name": "recursion"}], focus_target_gap="recursion"),
     )
     p = profile_service.remove_profile_item(db_session, seeded_session_id, "confirmed_gaps", "recursion")
-    assert "recursion" not in p.confirmed_gaps
+    assert "recursion" not in concept_names(p.confirmed_gaps)
     assert p.focus_target_gap is None
     # persisted
     reloaded = profile_service.load_profile(db_session, seeded_session_id)
-    assert "recursion" not in reloaded.confirmed_gaps
+    assert "recursion" not in concept_names(reloaded.confirmed_gaps)
     assert reloaded.focus_target_gap is None
 
 
