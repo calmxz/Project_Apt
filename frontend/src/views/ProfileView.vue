@@ -27,7 +27,7 @@
 
         <div class="level-edit" data-testid="level-select">
           <button
-            v-for="lvl in ['beginner', 'intermediate', 'advanced']"
+            v-for="lvl in LEVELS"
             :key="lvl"
             type="button"
             class="level-opt"
@@ -66,6 +66,43 @@
           <span class="focus-label">Current focus</span>
           <span class="focus-gap">{{ data.profile.focus_target_gap }}</span>
         </div>
+      </div>
+
+      <div
+        v-if="subtopicEntries.length"
+        class="subtopics"
+        data-testid="sprof-subtopics"
+      >
+        <h2 class="section-title">
+          <i class="pi pi-sliders-h col-icon" aria-hidden="true" />
+          Subtopic levels
+        </h2>
+        <ul class="subtopic-list">
+          <li v-for="[name, lvl] in subtopicEntries" :key="`st-${name}`" class="subtopic-row">
+            <span class="st-name">{{ name }}</span>
+            <div class="level-edit">
+              <button
+                v-for="l in LEVELS"
+                :key="l"
+                type="button"
+                class="level-opt"
+                :class="{ active: lvl === l }"
+                @click="setSubtopicLevel(name, l)"
+              >
+                {{ l }}
+              </button>
+            </div>
+            <button
+              type="button"
+              class="chip-x"
+              data-testid="subtopic-remove"
+              :aria-label="`Remove ${name}`"
+              @click="removeSubtopic(name)"
+            >
+              <i class="pi pi-times" aria-hidden="true" />
+            </button>
+          </li>
+        </ul>
       </div>
 
       <div class="two-col">
@@ -216,6 +253,8 @@ import { formatRelative } from '../utils/formatDate.js'
 
 const props = defineProps({ id: { type: String, required: true } })
 
+const LEVELS = ['beginner', 'intermediate', 'advanced']
+
 const router = useRouter()
 const store = useSessionStore()
 const data = ref(null)
@@ -234,6 +273,10 @@ const topicLabel = computed(() => {
 
 const gapNames = computed(
   () => (data.value?.profile?.confirmed_gaps ?? []).map((g) => g.name),
+)
+
+const subtopicEntries = computed(() =>
+  Object.entries(data.value?.profile?.subtopic_levels ?? {}),
 )
 
 async function load() {
@@ -285,6 +328,18 @@ function setLevel(level) {
 
 function removeItem(listName, item) {
   return _applyWrite(() => deleteProfileItem(props.id, listName, item, etag.value))
+}
+
+function setSubtopicLevel(name, level) {
+  return _applyWrite(() =>
+    patchProfile(props.id, { subtopic: name, subtopic_level: level }, etag.value),
+  )
+}
+
+function removeSubtopic(name) {
+  return _applyWrite(() =>
+    deleteProfileItem(props.id, 'subtopic_levels', name, etag.value),
+  )
 }
 
 function startReview() {
@@ -711,6 +766,35 @@ onMounted(load)
   background: var(--color-accent-strong);
   color: #FFFFFF;
   border-color: var(--color-accent-strong);
+}
+
+.subtopic-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.subtopic-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.875rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.st-name {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
 }
 
 /* Conflict notice */

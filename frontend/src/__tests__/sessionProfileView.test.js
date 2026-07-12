@@ -258,4 +258,48 @@ describe('SessionProfileView (per-session)', () => {
     const wrapper = await mountProfile({ profile: { confirmed_gaps: [] } })
     expect(wrapper.find('[data-testid="sprof-review-gaps"]').exists()).toBe(false)
   })
+
+  it('renders subtopic levels with editable pills and remove', async () => {
+    const wrapper = await mountProfile({
+      profile: { subtopic_levels: { 'chain rule': 'beginner' } },
+    })
+    const sec = wrapper.find('[data-testid="sprof-subtopics"]')
+    expect(sec.exists()).toBe(true)
+    expect(sec.text()).toContain('chain rule')
+    const active = sec.find('.level-opt.active')
+    expect(active.text()).toBe('beginner')
+  })
+
+  it('PATCHes subtopic level on pill click and DELETEs on remove', async () => {
+    const patchProfile = vi.spyOn(profileApi, 'patchProfile').mockResolvedValue({
+      profile: { mastered_concepts: [], confirmed_gaps: [], subtopic_levels: { 'chain rule': 'advanced' } },
+      etag: 'e1',
+    })
+    const deleteProfileItem = vi.spyOn(profileApi, 'deleteProfileItem').mockResolvedValue({
+      profile: { mastered_concepts: [], confirmed_gaps: [], subtopic_levels: {} },
+      etag: 'e2',
+    })
+    const wrapper = await mountProfile({
+      profile: { subtopic_levels: { 'chain rule': 'beginner' } },
+      etag: 'e0',
+    })
+    const row = wrapper.get('[data-testid="sprof-subtopics"] .subtopic-row')
+    const advancedBtn = row.findAll('.level-opt').find((b) => b.text() === 'advanced')
+    await advancedBtn.trigger('click')
+    await flushPromises()
+    expect(patchProfile).toHaveBeenCalledWith(
+      's1',
+      { subtopic: 'chain rule', subtopic_level: 'advanced' },
+      'e0',
+    )
+
+    await wrapper.get('[data-testid="subtopic-remove"]').trigger('click')
+    await flushPromises()
+    expect(deleteProfileItem).toHaveBeenCalledWith('s1', 'subtopic_levels', 'chain rule', 'e1')
+  })
+
+  it('hides the subtopics section when subtopic_levels is empty', async () => {
+    const wrapper = await mountProfile({ profile: { subtopic_levels: {} } })
+    expect(wrapper.find('[data-testid="sprof-subtopics"]').exists()).toBe(false)
+  })
 })
