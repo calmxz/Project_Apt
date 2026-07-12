@@ -1,0 +1,13 @@
+{
+  "name": "declared_level",
+  "topic": "calculus integration techniques",
+  "turns": [
+    "I want to work on integration. I'm totally new to integration by parts, never seen it.",
+    "Can you show me the formula and a first example?"
+  ],
+  "expected": {
+    "subtopic": "integration by parts",
+    "levels": ["beginner"],
+    "by_turn": 2
+  }
+}
