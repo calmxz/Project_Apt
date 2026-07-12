@@ -194,7 +194,10 @@ const hasGaps = computed(
 // Same discriminator-checked source as hasGaps, but the full list is needed to
 // drive the picker (single gap skips it, >1 gap opens it).
 const confirmedGaps = computed(
-  () => store.currentSession?.topic_profile?.confirmed_gaps ?? [],
+  () =>
+    (store.currentSession?.topic_profile?.confirmed_gaps ?? []).map(
+      (g) => g?.name ?? g,
+    ),
 )
 // Discriminator-gated (same as isEnded/headerTopic): during a switch,
 // store.currentSession still holds the PREVIOUS session, so gating on raw

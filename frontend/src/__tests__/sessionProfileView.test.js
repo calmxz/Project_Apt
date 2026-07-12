@@ -32,8 +32,14 @@ describe('SessionProfileView (per-session)', () => {
     vi.spyOn(profileApi, 'getSessionProfile').mockResolvedValue({
       profile: {
         knowledge_level: 'beginner',
-        confirmed_gaps: ['window-fns'],
-        mastered_concepts: ['joins', 'select'],
+        confirmed_gaps: [
+          { name: 'window-fns', evidence_type: null, last_event_at: null },
+        ],
+        mastered_concepts: [
+          { name: 'joins', evidence_type: 'tested', last_event_at: null },
+          { name: 'select', evidence_type: 'declared', last_event_at: null },
+        ],
+        subtopic_levels: {},
         focus_target_gap: 'window-fns',
         last_session_summary: 'Covered joins and selects.',
       },
@@ -62,6 +68,36 @@ describe('SessionProfileView (per-session)', () => {
     expect(wrapper.find('[data-testid="sprof-focus"]').text()).toContain('window-fns')
     expect(wrapper.find('[data-testid="sprof-summary"]').text()).toContain('Covered joins')
     expect(wrapper.find('[data-testid="sprof-events"]').text()).toContain('Inner vs outer')
+  })
+
+  it('renders concept names with evidence badges', async () => {
+    vi.spyOn(profileApi, 'getSessionProfile').mockResolvedValue({
+      profile: {
+        knowledge_level: 'beginner',
+        mastered_concepts: [
+          { name: 'x', evidence_type: 'tested', last_event_at: '2026-07-01T00:00:00Z' },
+        ],
+        confirmed_gaps: [
+          { name: 'y', evidence_type: null, last_event_at: null },
+          { name: 'z', evidence_type: 'declared', last_event_at: null },
+        ],
+        subtopic_levels: {},
+      },
+      recent_learning_events: [],
+    })
+
+    const wrapper = mount(ProfileView, {
+      props: { id: 's1' },
+      global: { stubs },
+    })
+    await flushPromises()
+
+    const chips = wrapper.findAll('[data-testid="sprof-mastered"] .chip')
+    expect(chips[0].text()).toContain('x')
+    expect(chips[0].find('[data-testid="evidence-badge"]').text()).toBe('tested')
+    const gapChips = wrapper.findAll('[data-testid="sprof-gaps"] .chip')
+    expect(gapChips[0].find('[data-testid="evidence-badge"]').exists()).toBe(false)
+    expect(gapChips[1].find('[data-testid="evidence-badge"]').text()).toBe('declared')
   })
 
   it('shows error when API rejects', async () => {
@@ -99,7 +135,10 @@ describe('SessionProfileView (per-session)', () => {
 
   it('adds a mastered concept and threads the etag', async () => {
     const patchProfile = vi.spyOn(profileApi, 'patchProfile').mockResolvedValue({
-      profile: { mastered_concepts: ['loops'], confirmed_gaps: [] },
+      profile: {
+        mastered_concepts: [{ name: 'loops', evidence_type: 'declared', last_event_at: null }],
+        confirmed_gaps: [],
+      },
       etag: 'e1',
     })
     const wrapper = await mountProfile({ etag: 'e0' })
@@ -111,7 +150,10 @@ describe('SessionProfileView (per-session)', () => {
 
   it('adds a confirmed gap and threads the etag', async () => {
     const patchProfile = vi.spyOn(profileApi, 'patchProfile').mockResolvedValue({
-      profile: { mastered_concepts: [], confirmed_gaps: ['window-fns'] },
+      profile: {
+        mastered_concepts: [],
+        confirmed_gaps: [{ name: 'window-fns', evidence_type: 'declared', last_event_at: null }],
+      },
       etag: 'e1',
     })
     const wrapper = await mountProfile({ etag: 'e0' })
@@ -127,7 +169,10 @@ describe('SessionProfileView (per-session)', () => {
       etag: 'e1',
     })
     const wrapper = await mountProfile({
-      profile: { mastered_concepts: ['loops'], confirmed_gaps: [] },
+      profile: {
+        mastered_concepts: [{ name: 'loops', evidence_type: 'tested', last_event_at: null }],
+        confirmed_gaps: [],
+      },
       etag: 'e0',
     })
     await wrapper.get('[data-testid="chip-remove"]').trigger('click')
@@ -175,7 +220,14 @@ describe('SessionProfileView (per-session)', () => {
   })
 
   it('review-gaps button routes to the session with review_gap query', async () => {
-    const wrapper = await mountProfile({ profile: { confirmed_gaps: ['a', 'b'] } })
+    const wrapper = await mountProfile({
+      profile: {
+        confirmed_gaps: [
+          { name: 'a', evidence_type: null, last_event_at: null },
+          { name: 'b', evidence_type: null, last_event_at: null },
+        ],
+      },
+    })
     await wrapper.get('[data-testid="sprof-review-gaps"]').trigger('click')
     await wrapper.get('[data-testid="gap-picker-option-0"]').trigger('click')
     expect(routerPushMock).toHaveBeenCalledWith({
@@ -187,7 +239,11 @@ describe('SessionProfileView (per-session)', () => {
   })
 
   it('review-gaps button skips the picker and routes directly for a single gap', async () => {
-    const wrapper = await mountProfile({ profile: { confirmed_gaps: ['only-gap'] } })
+    const wrapper = await mountProfile({
+      profile: {
+        confirmed_gaps: [{ name: 'only-gap', evidence_type: null, last_event_at: null }],
+      },
+    })
     await wrapper.get('[data-testid="sprof-review-gaps"]').trigger('click')
     expect(wrapper.find('[data-testid="gap-picker"]').exists()).toBe(false)
     expect(routerPushMock).toHaveBeenCalledWith({

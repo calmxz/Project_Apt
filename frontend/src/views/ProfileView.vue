@@ -42,7 +42,7 @@
 
     <GapPickerDialog
       v-model:visible="gapPickerOpen"
-      :gaps="data?.profile?.confirmed_gaps ?? []"
+      :gaps="gapNames"
       @select="goReview"
     />
 
@@ -80,16 +80,19 @@
           <ul v-else class="chip-list">
             <li
               v-for="c in data.profile.mastered_concepts"
-              :key="`m-${c}`"
+              :key="`m-${c.name}`"
               class="chip chip-mastered"
             >
-              {{ c }}
+              {{ c.name }}
+              <span v-if="c.evidence_type" class="chip-badge" data-testid="evidence-badge">
+                {{ c.evidence_type }}
+              </span>
               <button
                 type="button"
                 class="chip-x"
                 data-testid="chip-remove"
-                :aria-label="`Remove ${c}`"
-                @click="removeItem('mastered_concepts', c)"
+                :aria-label="`Remove ${c.name}`"
+                @click="removeItem('mastered_concepts', c.name)"
               >
                 <i class="pi pi-times" aria-hidden="true" />
               </button>
@@ -127,16 +130,19 @@
           <ul v-else class="chip-list">
             <li
               v-for="g in data.profile.confirmed_gaps"
-              :key="`g-${g}`"
+              :key="`g-${g.name}`"
               class="chip chip-gap"
             >
-              {{ g }}
+              {{ g.name }}
+              <span v-if="g.evidence_type" class="chip-badge" data-testid="evidence-badge">
+                {{ g.evidence_type }}
+              </span>
               <button
                 type="button"
                 class="chip-x"
                 data-testid="chip-remove"
-                :aria-label="`Remove ${g}`"
-                @click="removeItem('confirmed_gaps', g)"
+                :aria-label="`Remove ${g.name}`"
+                @click="removeItem('confirmed_gaps', g.name)"
               >
                 <i class="pi pi-times" aria-hidden="true" />
               </button>
@@ -226,6 +232,10 @@ const topicLabel = computed(() => {
   return fromStore || store.currentSession?.topic || 'Session profile'
 })
 
+const gapNames = computed(
+  () => (data.value?.profile?.confirmed_gaps ?? []).map((g) => g.name),
+)
+
 async function load() {
   loading.value = true
   error.value = ''
@@ -278,9 +288,8 @@ function removeItem(listName, item) {
 }
 
 function startReview() {
-  const gaps = data.value?.profile?.confirmed_gaps ?? []
-  if (gaps.length > 1) gapPickerOpen.value = true
-  else if (gaps.length === 1) goReview(gaps[0])
+  if (gapNames.value.length > 1) gapPickerOpen.value = true
+  else if (gapNames.value.length === 1) goReview(gapNames.value[0])
 }
 
 function goReview(gap) {
@@ -578,6 +587,15 @@ onMounted(load)
   font-family: var(--font-sans);
   font-size: 0.75rem;
   color: var(--color-text-faint);
+}
+
+.chip-badge {
+  margin-left: 0.375rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.75;
 }
 
 /* Chip remove button */
