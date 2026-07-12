@@ -47,8 +47,8 @@ def test_post_resume_with_ended_prior_copies_profile(client, db_session, seeded_
         topic="sql",
         topic_profile_json=TopicProfile(
             knowledge_level="beginner",
-            confirmed_gaps=["joins"],
-            mastered_concepts=["select"],
+            confirmed_gaps=[{"name": "joins"}],
+            mastered_concepts=[{"name": "select"}],
             last_session_summary="covered selects",
         ).model_dump_json(),
         ended_at=datetime.now(timezone.utc),
@@ -67,8 +67,8 @@ def test_post_resume_with_ended_prior_copies_profile(client, db_session, seeded_
     )
     assert r.status_code == 201, r.text
     body = r.json()
-    assert body["topic_profile"]["confirmed_gaps"] == ["joins"]
-    assert body["topic_profile"]["mastered_concepts"] == ["select"]
+    assert [g["name"] for g in body["topic_profile"]["confirmed_gaps"]] == ["joins"]
+    assert [c["name"] for c in body["topic_profile"]["mastered_concepts"]] == ["select"]
     assert body["topic_profile"]["last_session_summary"] == "covered selects"
 
 
@@ -85,7 +85,7 @@ def test_post_resume_with_unended_prior_generates_summary(
         id="prior_2",
         user_id=USER_ID,
         topic="sql",
-        topic_profile_json=TopicProfile(mastered_concepts=["select"]).model_dump_json(),
+        topic_profile_json=TopicProfile(mastered_concepts=[{"name": "select"}]).model_dump_json(),
     )
     db_session.add(prior)
     db_session.commit()

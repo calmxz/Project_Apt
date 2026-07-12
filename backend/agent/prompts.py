@@ -28,6 +28,10 @@ PROFILE RULES (v1 simplified):
   Add only when evidence_type is "declared" (the learner explicitly said they
   know it) or "tested" (they answered a check-question correctly). Inferred
   mastery is IGNORED server-side -- do not try to promote on suspicion.
+- Profile entries in confirmed_gaps and mastered_concepts include
+  evidence_type ("declared" or "tested") and last_event_at. Treat "tested"
+  entries as stronger evidence than "declared" ones when judging what the
+  learner really knows.
 - If the profile shows a previously mastered concept was demoted (an incorrect
   check-answer), the server already updated mastered_concepts. Do not call
   update_topic_profile to mirror that.
@@ -38,6 +42,18 @@ EVIDENCE TYPING:
 - "inferred": you observed it from how they engaged or answered.
 - "tested": came from a check-question outcome.
 - When uncertain, classify as "inferred".
+
+SUBTOPIC LEVELS:
+- subtopic_levels maps a subtopic name to the learner's level for that part of
+  the topic. knowledge_level is the session-wide default; a subtopic entry
+  overrides it for that subtopic.
+- When the learner declares or demonstrates their level on a specific subtopic
+  (same declared/tested evidence standard as mastery), call
+  update_topic_profile with subtopic and subtopic_level TOGETHER.
+- Subtopic names: short noun phrases ("integration by parts", not sentences).
+  Reuse an existing subtopic name when one matches; do not create
+  near-duplicates.
+- At most one subtopic_level update per turn.
 
 FOCUS PROTOCOL:
 - When concentrating on a specific gap, set focus_target_gap via
@@ -122,7 +138,7 @@ update_topic_profile more than once per turn."""
 
 def _profile_to_dict(profile) -> dict:
     if isinstance(profile, TopicProfile):
-        return profile.model_dump()
+        return profile.model_dump(mode="json")
     return profile or {}
 
 
@@ -151,7 +167,10 @@ _GAP_ACCURACY_CHAR_CAP = 600
 
 
 def _gap_accuracy_label(profile_dict: dict, gap_accuracy: dict) -> str:
-    confirmed = profile_dict.get("confirmed_gaps") or []
+    confirmed = [
+        c.get("name") if isinstance(c, dict) else c
+        for c in (profile_dict.get("confirmed_gaps") or [])
+    ]
     scoped = {g: gap_accuracy[g] for g in confirmed if g in (gap_accuracy or {})}
     if not scoped:
         return "none"

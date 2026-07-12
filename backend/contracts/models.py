@@ -9,13 +9,37 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, RootModel, confloat, conint, constr
 
 
+class ConceptEntry(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    name: constr(min_length=1, max_length=200)
+    evidence_type: Literal["declared", "tested"] | None = None
+    last_event_at: datetime | None = None
+
+
 class TopicProfile(BaseModel):
+    """
+    v2 (slice 8, 2026-07-12): concept lists carry ConceptEntry objects
+    (previously plain strings) and subtopic_levels was added. Legacy
+    string-element blobs are upgraded on read by the backend's tolerant
+    parser; API consumers only ever see the v2 shape.
+
+    """
+
     model_config = ConfigDict(
         extra="forbid",
     )
     knowledge_level: Literal["beginner", "intermediate", "advanced"] | None = None
-    confirmed_gaps: list[str] | None = []
-    mastered_concepts: list[str] | None = []
+    subtopic_levels: (
+        dict[str, Literal["beginner", "intermediate", "advanced"]] | None
+    ) = {}
+    """
+    Per-subtopic knowledge levels keyed by canonicalized (strip+casefold) agent-named subtopic. knowledge_level is the session-wide default for subtopics without an entry.
+
+    """
+    confirmed_gaps: list[ConceptEntry] | None = []
+    mastered_concepts: list[ConceptEntry] | None = []
     focus_target_gap: str | None = None
     last_session_summary: str | None = None
 
@@ -60,7 +84,9 @@ class UpdateTopicProfileArgs(BaseModel):
     Patch operation for a session's TopicProfile. Sending
     `focus_target_gap: null` explicitly clears focus and requires
     `focus_clear_reason` (server-side guard rail). `evidence_type` is
-    required only when `add_mastered_concept` is present.
+    required only when `add_mastered_concept` is present. `subtopic` and
+    `subtopic_level` must be provided together (service-enforced
+    cross-field rule).
 
     """
 
@@ -76,6 +102,8 @@ class UpdateTopicProfileArgs(BaseModel):
         Literal["demonstrated", "tested_correct", "user_redirected"] | None
     ) = None
     evidence_type: Literal["declared", "inferred", "tested"] | None = None
+    subtopic: constr(min_length=1, max_length=100) | None = None
+    subtopic_level: Literal["beginner", "intermediate", "advanced"] | None = None
 
 
 class RetrieveChunksArgs(BaseModel):
@@ -456,7 +484,9 @@ class ProfilePatchRequest(BaseModel):
     """
     Add one item to a list and/or set the knowledge level. At least one
     field must be present. Adding an item to one list removes it from the
-    other (mutual exclusion).
+    other (mutual exclusion). `subtopic` + `subtopic_level` (together)
+    update an EXISTING subtopic's level; unknown subtopics are rejected -
+    subtopics are created only by the tutor.
 
     """
 
@@ -466,6 +496,8 @@ class ProfilePatchRequest(BaseModel):
     add_mastered: constr(min_length=1, max_length=200) | None = None
     add_gap: constr(min_length=1, max_length=200) | None = None
     knowledge_level: Literal["beginner", "intermediate", "advanced"] | None = None
+    subtopic: constr(min_length=1, max_length=100) | None = None
+    subtopic_level: Literal["beginner", "intermediate", "advanced"] | None = None
 
 
 class ProfileMutationResponse(BaseModel):

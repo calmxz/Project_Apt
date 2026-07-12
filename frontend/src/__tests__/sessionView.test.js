@@ -75,7 +75,13 @@ function setupSession({
     id,
     topic: 'Calculus',
     ended_at: ended ? new Date().toISOString() : null,
-    topic_profile: { confirmed_gaps: confirmedGaps },
+    topic_profile: {
+      confirmed_gaps: confirmedGaps.map((name) => ({
+        name,
+        evidence_type: null,
+        last_event_at: null,
+      })),
+    },
   }
   store.currentSessionId = id
   store.messages = messages

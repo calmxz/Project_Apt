@@ -70,7 +70,7 @@ def test_gap_accuracy_failure_does_not_kill_turn(client, db_session, monkeypatch
     monkeypatch.setattr(settings, "llm_stub", True)
 
     sess = db_session.get(SessionModel, SESSION_ID)
-    sess.topic_profile_json = TopicProfile(confirmed_gaps=["frac"]).model_dump_json()
+    sess.topic_profile_json = TopicProfile(confirmed_gaps=[{"name": "frac"}]).model_dump_json()
     db_session.commit()
 
     def _boom(db, sid):
@@ -132,6 +132,11 @@ def _fake_session(topic="sql"):
 def _fake_profile(**overrides):
     defaults = {"knowledge_level": "intermediate", "confirmed_gaps": []}
     defaults.update(overrides)
+    for key in ("confirmed_gaps", "mastered_concepts"):
+        if defaults.get(key):
+            defaults[key] = [
+                {"name": v} if isinstance(v, str) else v for v in defaults[key]
+            ]
     return TopicProfile(**defaults)
 
 

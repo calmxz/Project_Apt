@@ -54,7 +54,9 @@ def test_answer_first_item_advances(client, db_session, seeded_session):
     assert body["has_next"] is True
     assert body["done"] is False
     assert check_question_service.get_pending_check(db_session, sid) is not None
-    assert "atp" in profile_service.load_profile(db_session, sid).mastered_concepts
+    assert "atp" in profile_service.concept_names(
+        profile_service.load_profile(db_session, sid).mastered_concepts
+    )
 
 
 def test_answer_last_item_done(client, db_session, seeded_session):

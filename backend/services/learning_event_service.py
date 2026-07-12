@@ -9,6 +9,7 @@ is_gradable turn-barrier (pending_check_store) is therefore not consulted here.
 """
 
 import json
+from datetime import datetime, timezone
 
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
@@ -68,24 +69,26 @@ def record_from_answer(
 
     if apply_profile_effects:
         profile = profile_service.load_profile(db, session_id)
-        mastered = list(profile.mastered_concepts or [])
+        stamp = datetime.now(timezone.utc)
         if correct:
-            if gap not in mastered:
-                mastered.append(gap)
-                profile.mastered_concepts = mastered
-                profile_service.save_profile(db, session_id, profile, commit=False)
+            profile.mastered_concepts = profile_service.upsert_entry(
+                profile.mastered_concepts or [], gap,
+                evidence_type="tested", stamp=stamp,
+            )
+            gap_entry = profile_service.find_entry(profile.confirmed_gaps or [], gap)
+            if gap_entry is not None:
+                gap_entry.evidence_type = "tested"
+                gap_entry.last_event_at = stamp
         else:
-            changed = False
-            if gap in mastered:
-                profile.mastered_concepts = [c for c in mastered if c != gap]
-                changed = True
-            confirmed_gaps = list(profile.confirmed_gaps or [])
-            if gap not in confirmed_gaps:
-                confirmed_gaps.append(gap)
-                profile.confirmed_gaps = confirmed_gaps
-                changed = True
-            if changed:
-                profile_service.save_profile(db, session_id, profile, commit=False)
+            key = profile_service.canon(gap)
+            profile.mastered_concepts = [
+                e for e in (profile.mastered_concepts or []) if profile_service.canon(e.name) != key
+            ]
+            profile.confirmed_gaps = profile_service.upsert_entry(
+                profile.confirmed_gaps or [], gap,
+                evidence_type="tested", stamp=stamp,
+            )
+        profile_service.save_profile(db, session_id, profile, commit=False)
 
     if clear_pending:
         pending_check_store.clear_pending_check(db, session_id, commit=False)

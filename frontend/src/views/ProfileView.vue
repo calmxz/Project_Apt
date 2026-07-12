@@ -27,7 +27,7 @@
 
         <div class="level-edit" data-testid="level-select">
           <button
-            v-for="lvl in ['beginner', 'intermediate', 'advanced']"
+            v-for="lvl in LEVELS"
             :key="lvl"
             type="button"
             class="level-opt"
@@ -42,7 +42,7 @@
 
     <GapPickerDialog
       v-model:visible="gapPickerOpen"
-      :gaps="data?.profile?.confirmed_gaps ?? []"
+      :gaps="gapNames"
       @select="goReview"
     />
 
@@ -68,6 +68,43 @@
         </div>
       </div>
 
+      <div
+        v-if="subtopicEntries.length"
+        class="subtopics"
+        data-testid="sprof-subtopics"
+      >
+        <h2 class="section-title">
+          <i class="pi pi-sliders-h col-icon" aria-hidden="true" />
+          Subtopic levels
+        </h2>
+        <ul class="subtopic-list">
+          <li v-for="[name, lvl] in subtopicEntries" :key="`st-${name}`" class="subtopic-row">
+            <span class="st-name">{{ name }}</span>
+            <div class="level-edit">
+              <button
+                v-for="l in LEVELS"
+                :key="l"
+                type="button"
+                class="level-opt"
+                :class="{ active: lvl === l }"
+                @click="setSubtopicLevel(name, l)"
+              >
+                {{ l }}
+              </button>
+            </div>
+            <button
+              type="button"
+              class="chip-x"
+              data-testid="subtopic-remove"
+              :aria-label="`Remove ${name}`"
+              @click="removeSubtopic(name)"
+            >
+              <i class="pi pi-times" aria-hidden="true" />
+            </button>
+          </li>
+        </ul>
+      </div>
+
       <div class="two-col">
         <div class="col" data-testid="sprof-mastered">
           <h2 class="section-title">
@@ -80,16 +117,19 @@
           <ul v-else class="chip-list">
             <li
               v-for="c in data.profile.mastered_concepts"
-              :key="`m-${c}`"
+              :key="`m-${c.name}`"
               class="chip chip-mastered"
             >
-              {{ c }}
+              {{ c.name }}
+              <span v-if="c.evidence_type" class="chip-badge" data-testid="evidence-badge">
+                {{ c.evidence_type }}
+              </span>
               <button
                 type="button"
                 class="chip-x"
                 data-testid="chip-remove"
-                :aria-label="`Remove ${c}`"
-                @click="removeItem('mastered_concepts', c)"
+                :aria-label="`Remove ${c.name}`"
+                @click="removeItem('mastered_concepts', c.name)"
               >
                 <i class="pi pi-times" aria-hidden="true" />
               </button>
@@ -127,16 +167,19 @@
           <ul v-else class="chip-list">
             <li
               v-for="g in data.profile.confirmed_gaps"
-              :key="`g-${g}`"
+              :key="`g-${g.name}`"
               class="chip chip-gap"
             >
-              {{ g }}
+              {{ g.name }}
+              <span v-if="g.evidence_type" class="chip-badge" data-testid="evidence-badge">
+                {{ g.evidence_type }}
+              </span>
               <button
                 type="button"
                 class="chip-x"
                 data-testid="chip-remove"
-                :aria-label="`Remove ${g}`"
-                @click="removeItem('confirmed_gaps', g)"
+                :aria-label="`Remove ${g.name}`"
+                @click="removeItem('confirmed_gaps', g.name)"
               >
                 <i class="pi pi-times" aria-hidden="true" />
               </button>
@@ -210,6 +253,8 @@ import { formatRelative } from '../utils/formatDate.js'
 
 const props = defineProps({ id: { type: String, required: true } })
 
+const LEVELS = ['beginner', 'intermediate', 'advanced']
+
 const router = useRouter()
 const store = useSessionStore()
 const data = ref(null)
@@ -225,6 +270,14 @@ const topicLabel = computed(() => {
   const fromStore = store.sessions.find((s) => s.id === props.id)?.topic
   return fromStore || store.currentSession?.topic || 'Session profile'
 })
+
+const gapNames = computed(
+  () => (data.value?.profile?.confirmed_gaps ?? []).map((g) => g.name),
+)
+
+const subtopicEntries = computed(() =>
+  Object.entries(data.value?.profile?.subtopic_levels ?? {}),
+)
 
 async function load() {
   loading.value = true
@@ -277,10 +330,21 @@ function removeItem(listName, item) {
   return _applyWrite(() => deleteProfileItem(props.id, listName, item, etag.value))
 }
 
+function setSubtopicLevel(name, level) {
+  return _applyWrite(() =>
+    patchProfile(props.id, { subtopic: name, subtopic_level: level }, etag.value),
+  )
+}
+
+function removeSubtopic(name) {
+  return _applyWrite(() =>
+    deleteProfileItem(props.id, 'subtopic_levels', name, etag.value),
+  )
+}
+
 function startReview() {
-  const gaps = data.value?.profile?.confirmed_gaps ?? []
-  if (gaps.length > 1) gapPickerOpen.value = true
-  else if (gaps.length === 1) goReview(gaps[0])
+  if (gapNames.value.length > 1) gapPickerOpen.value = true
+  else if (gapNames.value.length === 1) goReview(gapNames.value[0])
 }
 
 function goReview(gap) {
@@ -580,6 +644,15 @@ onMounted(load)
   color: var(--color-text-faint);
 }
 
+.chip-badge {
+  margin-left: 0.375rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.75;
+}
+
 /* Chip remove button */
 .chip-x {
   display: inline-flex;
@@ -693,6 +766,35 @@ onMounted(load)
   background: var(--color-accent-strong);
   color: #FFFFFF;
   border-color: var(--color-accent-strong);
+}
+
+.subtopic-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.subtopic-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.875rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.st-name {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
 }
 
 /* Conflict notice */

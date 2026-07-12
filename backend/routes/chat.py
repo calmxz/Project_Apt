@@ -82,9 +82,11 @@ def _build_prompt_state(
         "gap_accuracy": gap_accuracy or {},
     }
     if review_gaps:
-        gaps = list(profile.confirmed_gaps or [])
+        gaps = profile_service.concept_names(profile.confirmed_gaps)
         mastered = [
-            c for c in (profile.mastered_concepts or []) if c not in gaps
+            c
+            for c in profile_service.concept_names(profile.mastered_concepts)
+            if c not in gaps
         ]
         pool = gaps + mastered
         if pool:

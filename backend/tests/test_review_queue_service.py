@@ -110,3 +110,22 @@ def test_unsorted_input_is_handled():
     assert len(due) == 1
     assert due[0].streak == 1
     assert due[0].last_tested_at == T0 + timedelta(days=2)
+
+
+def test_due_sort_puts_weak_evidence_first():
+    now = datetime(2026, 7, 12, tzinfo=timezone.utc)
+    old = now - timedelta(days=30)
+    older = now - timedelta(days=31)
+    events = [
+        # "alpha" due earlier (more overdue) but tested evidence
+        EventRow(concept="alpha", correct=True, created_at=older, session_id="s1", topic="t"),
+        # "beta" due later but declared-only evidence
+        EventRow(concept="beta", correct=True, created_at=old, session_id="s1", topic="t"),
+    ]
+    emap = {"alpha": "tested", "beta": "declared"}
+    due = compute_schedule(events, now=now, evidence_map=emap)
+    assert [e.concept for e in due] == ["beta", "alpha"]
+
+    # without a map, ordering falls back to due_at (alpha more overdue)
+    due_plain = compute_schedule(events, now=now)
+    assert [e.concept for e in due_plain] == ["alpha", "beta"]

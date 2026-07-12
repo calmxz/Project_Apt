@@ -85,7 +85,7 @@ def test_prepare_turn_budget_no_gaps(db_session, seeded_session):
 
 
 def test_prepare_turn_budget_with_gaps(db_session, seeded_session):
-    profile = TopicProfile(knowledge_level="beginner", confirmed_gaps=["factoring"])
+    profile = TopicProfile(knowledge_level="beginner", confirmed_gaps=[{"name": "factoring"}])
     seeded_session.topic_profile_json = profile.model_dump_json()
     db_session.add(
         LearningEvent(
