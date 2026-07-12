@@ -574,14 +574,20 @@ git commit
 
 ## Roadmap
 
-Crux v1 is feature-complete. Possible v2 directions:
+Crux v1 is feature-complete, and the post-v1 roadmap (slices 1-8, see `docs/planning/2026-07-06-10x-roadmap.md`) has shipped:
 
+- **Spaced repetition.** SM-2-lite review queue over confirmed gaps, surfaced on the home dashboard.
+- **Learning insights dashboard.** Trends and usage transparency across sessions.
+- **Deeper adaptivity.** Per-subtopic knowledge levels with evidence provenance on every profile change.
+- **Deploy + backups.** Render/Vercel deploy configs, daily automated Postgres backups to R2 with retention pruning, ToS/privacy pages.
+
+Possible future directions:
+
+- **Practice exam mode.** Demand-gated — built only if real users ask for exam prep.
 - **OAuth / social login.** Add Google/GitHub sign-in alongside email/password.
 - **Mobile-friendly redesign.** The current SPA is desktop-first; an adaptive layout for phones is on the wishlist.
 - **Voice mode.** STT in, TTS out — quiz yourself while walking.
-- **Spaced repetition.** Surface previously confirmed gaps for review at SR intervals.
 - **Image / diagram support.** Let the tutor render or accept diagrams (graph theory, geometry, circuits).
-- **Cloud deploy template.** Terraform module for AWS / GCP / Fly.io.
 - **Provider matrix.** First-class support for Anthropic, OpenAI, and local models (Ollama) via LiteLLM.
 
 If you want to tackle one of these, see [Contributing](#contributing).

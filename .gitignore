@@ -41,6 +41,7 @@ backend/venv/
 backend/.pytest_cache/
 backend/htmlcov/
 backend/.coverage
+.coverage
 backend/uv.lock
 
 # Data volumes (never commit SQLite, uploads, or ChromaDB).
