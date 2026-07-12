@@ -88,7 +88,13 @@ def patch_profile(
     if_match: str | None = Header(default=None, alias="If-Match"),
 ):
     _owned_session_or_404(db, session_id, user_id)
-    if body.add_mastered is None and body.add_gap is None and body.knowledge_level is None:
+    if (
+        body.add_mastered is None
+        and body.add_gap is None
+        and body.knowledge_level is None
+        and body.subtopic is None
+        and body.subtopic_level is None
+    ):
         raise HTTPException(status_code=422, detail="empty patch")
     _guard_if_match(db, session_id, if_match)
     try:
@@ -98,6 +104,8 @@ def patch_profile(
             add_mastered=body.add_mastered,
             add_gap=body.add_gap,
             knowledge_level=body.knowledge_level,
+            subtopic=body.subtopic,
+            subtopic_level=body.subtopic_level,
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
@@ -134,3 +142,25 @@ def delete_gap(
     if_match: str | None = Header(default=None, alias="If-Match"),
 ):
     return _delete_item(db, session_id, user_id, "confirmed_gaps", item, if_match)
+
+
+@router.delete(
+    "/profile/{session_id}/subtopic_levels/{item}",
+    response_model=ProfileMutationResponse,
+)
+def delete_subtopic_level(
+    session_id: str,
+    item: str,
+    user_id: str = Depends(current_user_id),
+    db: Session = Depends(get_db),
+    if_match: str | None = Header(default=None, alias="If-Match"),
+):
+    _owned_session_or_404(db, session_id, user_id)
+    _guard_if_match(db, session_id, if_match)
+    try:
+        profile = profile_service.remove_subtopic(db, session_id, item)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="item not found")
+    return ProfileMutationResponse(
+        profile=profile, etag=profile_service.profile_etag(profile)
+    )

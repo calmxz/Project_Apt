@@ -214,3 +214,86 @@ def test_patch_other_users_session_404(client, other_auth_headers, seeded_sessio
         json={"add_mastered": "loops"},
     )
     assert r.status_code == 404
+
+
+# --- user subtopic edit + delete (Task 4) ----------------------------------
+
+
+def test_patch_subtopic_level_updates_existing(client, db_session, auth_headers, seeded_session_id):
+    from services import profile_service
+
+    p = profile_service.load_profile(db_session, seeded_session_id)
+    p.subtopic_levels = {"chain rule": "beginner"}
+    profile_service.save_profile(db_session, seeded_session_id, p)
+
+    tag = _etag(client, auth_headers, seeded_session_id)
+    res = client.patch(
+        f"/api/profile/{seeded_session_id}",
+        json={"subtopic": "Chain Rule", "subtopic_level": "advanced"},
+        headers={**auth_headers, "If-Match": tag},
+    )
+    assert res.status_code == 200
+    assert res.json()["profile"]["subtopic_levels"] == {"chain rule": "advanced"}
+
+
+def test_patch_unknown_subtopic_422(client, auth_headers, seeded_session_id):
+    tag = _etag(client, auth_headers, seeded_session_id)
+    res = client.patch(
+        f"/api/profile/{seeded_session_id}",
+        json={"subtopic": "never seen", "subtopic_level": "beginner"},
+        headers={**auth_headers, "If-Match": tag},
+    )
+    assert res.status_code == 422
+
+
+def test_patch_subtopic_without_level_422(client, db_session, auth_headers, seeded_session_id):
+    from services import profile_service
+
+    p = profile_service.load_profile(db_session, seeded_session_id)
+    p.subtopic_levels = {"chain rule": "beginner"}
+    profile_service.save_profile(db_session, seeded_session_id, p)
+
+    tag = _etag(client, auth_headers, seeded_session_id)
+    res = client.patch(
+        f"/api/profile/{seeded_session_id}",
+        json={"subtopic": "chain rule"},
+        headers={**auth_headers, "If-Match": tag},
+    )
+    assert res.status_code == 422
+
+
+def test_delete_subtopic_level(client, db_session, auth_headers, seeded_session_id):
+    from services import profile_service
+
+    p = profile_service.load_profile(db_session, seeded_session_id)
+    p.subtopic_levels = {"chain rule": "beginner"}
+    profile_service.save_profile(db_session, seeded_session_id, p)
+
+    tag = _etag(client, auth_headers, seeded_session_id)
+    res = client.delete(
+        f"/api/profile/{seeded_session_id}/subtopic_levels/chain%20rule",
+        headers={**auth_headers, "If-Match": tag},
+    )
+    assert res.status_code == 200
+    assert res.json()["profile"]["subtopic_levels"] == {}
+
+    res2 = client.delete(
+        f"/api/profile/{seeded_session_id}/subtopic_levels/nope",
+        headers={**auth_headers, "If-Match": res.json()["etag"]},
+    )
+    assert res2.status_code == 404
+
+
+def test_patch_subtopic_stale_etag_412(client, db_session, auth_headers, seeded_session_id):
+    from services import profile_service
+
+    p = profile_service.load_profile(db_session, seeded_session_id)
+    p.subtopic_levels = {"chain rule": "beginner"}
+    profile_service.save_profile(db_session, seeded_session_id, p)
+
+    res = client.patch(
+        f"/api/profile/{seeded_session_id}",
+        json={"subtopic": "chain rule", "subtopic_level": "advanced"},
+        headers={**auth_headers, "If-Match": "stale-etag"},
+    )
+    assert res.status_code == 412

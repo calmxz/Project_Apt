@@ -200,6 +200,8 @@ def apply_user_patch(
     add_mastered: str | None = None,
     add_gap: str | None = None,
     knowledge_level: str | None = None,
+    subtopic: str | None = None,
+    subtopic_level: str | None = None,
 ) -> TopicProfile:
     if db.get(SessionModel, session_id) is None:
         raise ValueError(f"session not found: {session_id}")
@@ -224,6 +226,17 @@ def apply_user_patch(
         )
     if knowledge_level is not None:
         profile.knowledge_level = knowledge_level
+    if (subtopic is None) != (subtopic_level is None):
+        raise ValueError("subtopic and subtopic_level must be provided together")
+    if subtopic is not None:
+        key = canon(subtopic)
+        if not key:
+            raise ValueError("item cannot be empty after stripping whitespace")
+        levels = dict(profile.subtopic_levels or {})
+        if key not in levels:
+            raise ValueError("unknown subtopic; subtopics are created by the tutor")
+        levels[key] = subtopic_level
+        profile.subtopic_levels = levels
     save_profile(db, session_id, profile)
     return profile
 
@@ -242,6 +255,18 @@ def remove_profile_item(
     setattr(profile, list_name, [e for e in current if canon(e.name) != key])
     if list_name == "confirmed_gaps":
         _null_focus_if_removed(profile, item)
+    save_profile(db, session_id, profile)
+    return profile
+
+
+def remove_subtopic(db: Session, session_id: str, subtopic: str) -> TopicProfile:
+    profile = load_profile(db, session_id)
+    levels = dict(profile.subtopic_levels or {})
+    key = canon(subtopic)
+    if key not in levels:
+        raise KeyError(subtopic)
+    del levels[key]
+    profile.subtopic_levels = levels
     save_profile(db, session_id, profile)
     return profile
 
