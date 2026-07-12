@@ -14,6 +14,12 @@ interval automatically because the demotion event is an incorrect answer
 Concept identity: gap_tested strings are free-text and exact-match across
 sessions, so grouping uses a strip().casefold() key; the displayed concept
 string and source session come from the group's most recent event.
+
+Ordering: weakest-evidence concepts surface first (roadmap R4.2 AC2). An
+optional evidence_map (casefolded concept name -> evidence_type) is joined
+in by the route from the caller's profile(s); concepts with "tested"
+evidence sort after everything else, and within each evidence tier the
+most overdue concept comes first. No map -> pure due_at order.
 """
 
 from collections.abc import Sequence
@@ -50,9 +56,13 @@ def _interval_days(streak: int) -> int:
 
 
 def compute_schedule(
-    events: Sequence[EventRow], now: datetime
+    events: Sequence[EventRow],
+    now: datetime,
+    evidence_map: dict[str, str | None] | None = None,
 ) -> list[ScheduleEntry]:
-    """Return concepts due for review at `now`, most overdue first."""
+    """Return concepts due for review at `now`. Sorted weakest-evidence first
+    (non-"tested" before "tested" per evidence_map, keys casefolded concept
+    names), then most overdue first. No map -> pure due_at order."""
     groups: dict[str, list[EventRow]] = {}
     for ev in events:
         key = ev.concept.strip().casefold()
@@ -81,5 +91,10 @@ def compute_schedule(
                     due_at=due_at,
                 )
             )
-    due.sort(key=lambda e: e.due_at)
+    emap = evidence_map or {}
+
+    def _rank(entry: ScheduleEntry) -> int:
+        return 1 if emap.get(entry.concept.strip().casefold()) == "tested" else 0
+
+    due.sort(key=lambda e: (_rank(e), e.due_at))
     return due

@@ -124,6 +124,30 @@ def test_non_diagnostic_events_still_appear_alongside_diagnostic(client, db_sess
     assert body["items"][0]["concept"] == "osmosis"
 
 
+def test_review_queue_orders_declared_before_tested(client, db_session):
+    """R4.2 AC2: weakly-evidenced concepts (declared/None) surface before
+    tested ones, even when the tested concept is more overdue."""
+    from contracts import ConceptEntry
+    from services import profile_service
+
+    _seed_session(db_session, session_id="s1", topic="biology")
+    # "alpha" more overdue (older event) but evidenced as tested
+    _seed_event(db_session, "s1", "alpha", False, T0)
+    # "beta" less overdue but only declared evidence
+    _seed_event(db_session, "s1", "beta", False, T0 + timedelta(days=1))
+
+    profile = profile_service.load_profile(db_session, "s1")
+    profile.mastered_concepts = [
+        ConceptEntry(name="alpha", evidence_type="tested"),
+        ConceptEntry(name="beta", evidence_type="declared"),
+    ]
+    profile_service.save_profile(db_session, "s1", profile)
+
+    body = client.get("/api/review/queue").json()
+    concepts = [i["concept"] for i in body["items"]]
+    assert concepts.index("beta") < concepts.index("alpha")
+
+
 def test_grading_updates_schedule(client, db_session):
     """R2.2 AC3: completing a check moves due_at (via the events, no writes here)."""
     from services import learning_event_service

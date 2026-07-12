@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from contracts import ReviewQueueItem, ReviewQueuePage
 from db.database import get_db
 from db.models import LearningEvent, Session as SessionModel
+from services import profile_service
 from services.auth import current_user_id
 from services.review_queue_service import EventRow, compute_schedule
 from services.session_enrichment import aware_utc
@@ -44,7 +45,15 @@ def get_review_queue(
         )
         for ev, topic in rows
     ]
-    due = compute_schedule(events, now=now)
+    evidence_map: dict[str, str | None] = {}
+    for sid in {e.session_id for e in events}:
+        prof = profile_service.load_profile(db, sid)
+        for entry in (prof.mastered_concepts or []) + (prof.confirmed_gaps or []):
+            key = profile_service.canon(entry.name)
+            # tested wins across sessions; otherwise last writer is fine
+            if evidence_map.get(key) != "tested":
+                evidence_map[key] = entry.evidence_type
+    due = compute_schedule(events, now=now, evidence_map=evidence_map)
     return ReviewQueuePage(
         items=[
             ReviewQueueItem(
