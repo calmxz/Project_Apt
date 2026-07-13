@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from config import settings
 from db.models import DailyCostLedger, LlmCallLog
+from services.sql_dialect import dialect_insert
 
 
 log = logging.getLogger(__name__)
@@ -60,28 +61,45 @@ class CapStatus:
 
 
 def current_spend(db: Session, user_id: str) -> Decimal:
-    row = db.get(DailyCostLedger, (user_id, _today_utc()))
-    if row is None:
-        return _ZERO
-    return _to_decimal(row.cost_usd)
+    """Today's spend, read with a fresh SELECT every call (F-43).
+
+    db.get returns the identity-map cache without emitting SQL after the
+    first read, which hides other sessions' concurrent spend from the
+    mid-turn cap checks in the tutor loop.
+    """
+    total = db.execute(
+        select(func.coalesce(func.sum(DailyCostLedger.cost_usd), 0)).where(
+            DailyCostLedger.user_id == user_id,
+            DailyCostLedger.date_utc == _today_utc(),
+        )
+    ).scalar_one()
+    return _to_decimal(total)
 
 
 def record_cost(db: Session, user_id: str, cost_usd) -> Decimal:
-    """Add `cost_usd` to today's ledger row for `user_id`. Returns the new
-    total. Safe to call with `0` (no-op write avoided)."""
-    cost = _to_decimal(cost_usd)
+    """Atomically add `cost_usd` to today's ledger row for `user_id` and
+    return the new total (F-17: INSERT .. ON CONFLICT DO UPDATE, so two
+    concurrent writers serialize on the row instead of read-modify-writing
+    a stale total). Safe to call with 0 (no-op write avoided). Flushes into
+    the caller's transaction; the caller's commit publishes it.
+    """
+    cost = _quantize(_to_decimal(cost_usd))
     if cost <= _ZERO:
         return current_spend(db, user_id)
 
-    date_utc = _today_utc()
-    row = db.get(DailyCostLedger, (user_id, date_utc))
-    if row is None:
-        row = DailyCostLedger(user_id=user_id, date_utc=date_utc, cost_usd=_quantize(cost))
-        db.add(row)
-    else:
-        row.cost_usd = _quantize(_to_decimal(row.cost_usd) + cost)
-    db.flush()
-    return _to_decimal(row.cost_usd)
+    ins = dialect_insert(db)(DailyCostLedger).values(
+        user_id=user_id, date_utc=_today_utc(), cost_usd=cost
+    )
+    stmt = ins.on_conflict_do_update(
+        index_elements=["user_id", "date_utc"],
+        set_={
+            "cost_usd": DailyCostLedger.cost_usd + ins.excluded.cost_usd,
+            # onupdate defaults do not fire for ON CONFLICT set_; stamp explicitly.
+            "updated_at": datetime.now(timezone.utc),
+        },
+    ).returning(DailyCostLedger.cost_usd)
+    new_total = db.execute(stmt).scalar_one()
+    return _to_decimal(new_total)
 
 
 def log_call(
