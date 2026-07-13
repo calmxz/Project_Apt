@@ -6,14 +6,16 @@ covered in tests/test_pgvector_retrieval.py against a live Postgres.
 """
 
 from datetime import datetime, timezone
+from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
+from sqlalchemy import select
 
 from agent.types import ToolContext
 from contracts import RetrieveChunksArgs, TopicProfile
-from db.models import Document, Session as SessionModel, User
-from services import pgvector_store, retrieval_service
+from db.models import Document, LlmCallLog, Session as SessionModel, User
+from services import cost_meter, pgvector_store, retrieval_service
 
 
 SESSION_ID = "sess_ret"
@@ -298,3 +300,115 @@ def test_cosine_similarity_basics():
     assert retrieval_service._cosine_similarity([1.0, 0.0], [1.0, 0.0]) == pytest.approx(1.0)
     assert retrieval_service._cosine_similarity([1.0, 0.0], [0.0, 1.0]) == pytest.approx(0.0)
     assert retrieval_service._cosine_similarity([0.0, 0.0], [1.0, 0.0]) == 0.0
+
+
+# --- F-19 / F-06: embedding metering + timeout ---------------------------
+
+
+def test_retrieve_meters_embedding_spend(session, ctx, mock_embed, db_session, monkeypatch):
+    # F-19: every retrieval turn embeds the query; that spend must hit the ledger.
+    _seed_ready_doc(db_session)
+    _stub_query(monkeypatch, [])
+    monkeypatch.setattr(
+        retrieval_service.cost_meter.litellm, "completion_cost", lambda **kw: 0.0005
+    )
+    retrieval_service.retrieve(
+        db_session, ctx, RetrieveChunksArgs(session_id=SESSION_ID, query="query", k=5)
+    )
+    assert cost_meter.current_spend(db_session, USER_ID) == Decimal("0.0005")
+    row = db_session.execute(
+        select(LlmCallLog).where(LlmCallLog.user_id == USER_ID)
+    ).scalar_one()
+    assert row.purpose == "embedding"
+
+
+def test_semantic_fallback_meters_when_user_id_given(db_session, monkeypatch):
+    db_session.add(User(id="u_fallback"))
+    db_session.commit()
+    monkeypatch.setattr(
+        "services.retrieval_service.documents_service.has_ready_document",
+        lambda db, sid: True,
+    )
+    monkeypatch.setattr(
+        "services.retrieval_service._session_centroid",
+        lambda db, sid: [1.0, 0.0, 0.0],
+    )
+    monkeypatch.setattr(
+        "services.retrieval_service.litellm.embedding",
+        lambda **kw: _fake_embedding_resp([1.0, 0.0, 0.0]),  # sim = 1.0
+    )
+    monkeypatch.setattr(
+        retrieval_service.cost_meter.litellm, "completion_cost", lambda **kw: 0.0005
+    )
+    retrieval_service.semantic_fallback_required(
+        db_session, "s1", "q", user_id="u_fallback"
+    )
+    assert cost_meter.current_spend(db_session, "u_fallback") == Decimal("0.0005")
+
+
+def test_semantic_fallback_does_not_meter_without_user_id(db_session, monkeypatch):
+    # Existing positional callers (no user_id) keep working, unmetered.
+    monkeypatch.setattr(
+        "services.retrieval_service.documents_service.has_ready_document",
+        lambda db, sid: True,
+    )
+    monkeypatch.setattr(
+        "services.retrieval_service._session_centroid",
+        lambda db, sid: [1.0, 0.0, 0.0],
+    )
+    monkeypatch.setattr(
+        "services.retrieval_service.litellm.embedding",
+        lambda **kw: _fake_embedding_resp([1.0, 0.0, 0.0]),
+    )
+    called = {"n": 0}
+
+    def _boom_meter(*a, **kw):
+        called["n"] += 1
+        raise AssertionError("metering must not run without user_id")
+
+    monkeypatch.setattr(retrieval_service.cost_meter, "meter_embedding_response", _boom_meter)
+    assert retrieval_service.semantic_fallback_required(db_session, "s1", "q") is True
+    assert called["n"] == 0
+
+
+def test_embedding_calls_pass_timeout(session, ctx, db_session, monkeypatch):
+    from config import settings
+
+    _seed_ready_doc(db_session)
+    _stub_query(monkeypatch, [])
+    captured = {}
+
+    def _fake_embedding(**kw):
+        captured.update(kw)
+        return SimpleNamespace(data=[{"embedding": [0.1] * 8}])
+
+    monkeypatch.setattr(retrieval_service.litellm, "embedding", _fake_embedding)
+    monkeypatch.setattr(
+        retrieval_service.cost_meter.litellm, "completion_cost", lambda **kw: 0.0
+    )
+    retrieval_service.retrieve(
+        db_session, ctx, RetrieveChunksArgs(session_id=SESSION_ID, query="query", k=5)
+    )
+    assert captured["timeout"] == settings.embedding_timeout_s
+
+
+def test_semantic_fallback_calls_pass_timeout(db_session, monkeypatch):
+    from config import settings
+
+    monkeypatch.setattr(
+        "services.retrieval_service.documents_service.has_ready_document",
+        lambda db, sid: True,
+    )
+    monkeypatch.setattr(
+        "services.retrieval_service._session_centroid",
+        lambda db, sid: [1.0, 0.0, 0.0],
+    )
+    captured = {}
+
+    def _fake_embedding(**kw):
+        captured.update(kw)
+        return _fake_embedding_resp([1.0, 0.0, 0.0])
+
+    monkeypatch.setattr("services.retrieval_service.litellm.embedding", _fake_embedding)
+    retrieval_service.semantic_fallback_required(db_session, "s1", "q")
+    assert captured["timeout"] == settings.embedding_timeout_s

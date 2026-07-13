@@ -281,8 +281,9 @@ def test_semantic_fallback_escalates_gate(client, monkeypatch):
     message = "hello"
     calls = {}
 
-    def fake_fallback(db, session_id, query):
+    def fake_fallback(db, session_id, query, *, user_id=None):
         calls["args"] = (session_id, query)
+        calls["user_id"] = user_id
         return True
 
     monkeypatch.setattr(
@@ -314,6 +315,7 @@ def test_semantic_fallback_escalates_gate(client, monkeypatch):
             pass
 
     assert calls["args"] == (SESSION_ID, message)
+    assert calls["user_id"] == USER_ID  # F-19: caller must attribute the metered call
     assert captured["retrieval_required"] is True
 
 

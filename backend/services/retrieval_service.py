@@ -17,7 +17,7 @@ from agent.types import ToolContext
 from config import settings
 from contracts import RetrieveChunksArgs, ToolResult
 from db.models import ChunkEmbedding
-from services import documents_service, pgvector_store
+from services import cost_meter, documents_service, pgvector_store
 
 
 log = logging.getLogger(__name__)
@@ -45,11 +45,16 @@ def retrieve(db: Session, ctx: ToolContext, args: RetrieveChunksArgs) -> ToolRes
             model=settings.embedding_model,
             input=[args.query],
             dimensions=settings.embedding_dim,
+            timeout=settings.embedding_timeout_s,
         )
         query_vec = (
             resp.data[0]["embedding"]
             if isinstance(resp.data[0], dict)
             else resp.data[0].embedding
+        )
+        cost_meter.meter_embedding_response(
+            db, resp, user_id=ctx.user_id, session_id=ctx.session_id,
+            texts=[args.query],
         )
         hits = pgvector_store.query_chunks(
             db, session_id=ctx.session_id, query_embedding=query_vec, k=args.k or 5
@@ -103,11 +108,17 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
     return dot / (norm_a * norm_b)
 
 
-def semantic_fallback_required(db: Session, session_id: str, query: str) -> bool:
+def semantic_fallback_required(
+    db: Session, session_id: str, query: str, *, user_id: str | None = None
+) -> bool:
     """D2.2: escalate the OPTIONAL lexical gate when the query is semantically
     close to the session's uploaded material (paraphrase/acronym misses that
     the stem overlap cannot catch). Best-effort by design: any failure keeps
     the gate OPTIONAL, mirroring gap_accuracy in routes/chat.py.
+
+    F-19: when `user_id` is supplied, the embedding call's spend is metered
+    onto the cost ledger. Callers that cannot attribute the call to a user
+    (or don't have one handy) may omit it and simply skip metering.
     """
     if settings.llm_stub_enabled:
         return False
@@ -121,12 +132,17 @@ def semantic_fallback_required(db: Session, session_id: str, query: str) -> bool
             model=settings.embedding_model,
             input=[query],
             dimensions=settings.embedding_dim,
+            timeout=settings.embedding_timeout_s,
         )
         query_vec = (
             resp.data[0]["embedding"]
             if isinstance(resp.data[0], dict)
             else resp.data[0].embedding
         )
+        if user_id is not None:
+            cost_meter.meter_embedding_response(
+                db, resp, user_id=user_id, session_id=session_id, texts=[query],
+            )
         sim = _cosine_similarity(list(query_vec), centroid)
         return sim >= settings.retrieval_fallback_threshold
     except Exception as e:

@@ -209,7 +209,7 @@ async def _prepare_turn(
         )
         if not retrieval_required:
             retrieval_required = retrieval_service.semantic_fallback_required(
-                db, req.session_id, req.message
+                db, req.session_id, req.message, user_id=user_id
             )
 
         prompt_state = _build_prompt_state(
