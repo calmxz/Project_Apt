@@ -379,6 +379,22 @@ describe('session store — streaming', () => {
     expect(s.streamingMessage).toBeNull()
   })
 
+  it('maps a session_ended 409 to a friendly error and marks the session ended', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 's1'
+    s.currentSession = { id: 's1', ended_at: null }
+    vi.spyOn(streamSvc, 'streamChat').mockRejectedValueOnce(
+      Object.assign(new Error('conflict'), {
+        status: 409,
+        body: { detail: { code: 'session_ended' } },
+      }),
+    )
+    await s.sendMessageStreaming({ text: 'hello' })
+    expect(s.error).toMatch(/ended/i)
+    expect(s.streamState).toBe('idle')
+    expect(s.currentSession.ended_at).not.toBeNull()
+  })
+
   it('sendMessageStreaming maps a mid-turn SSE cost-cap error event into costCapInfo', async () => {
     const s = useSessionStore()
     s.currentSessionId = 's1'

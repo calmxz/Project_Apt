@@ -557,6 +557,14 @@ export const useSessionStore = defineStore('session', () => {
         if (streamingMessage.value) handleCancelled('pending', streamingMessage.value.content.length, '0')
         return
       }
+      if (e?.status === 409 && e?.body?.detail?.code === 'session_ended') {
+        error.value = 'This session was ended elsewhere. Reopen it to continue.'
+        if (currentSession.value) currentSession.value.ended_at = new Date().toISOString()
+        streamingMessage.value = null
+        streamState.value = 'idle'
+        abortController.value = null
+        return
+      }
       if (e?.status === 429) _applyCapError(e?.body?.detail)
       streamingMessage.value = null
       streamState.value = 'idle'
