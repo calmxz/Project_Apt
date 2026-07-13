@@ -7,6 +7,14 @@ COPY . .
 # VITE_API_BASE_URL is baked into the bundle. Prod nginx reverse-proxies /api
 # back to the backend service so the SPA uses a same-origin relative URL.
 ENV VITE_API_BASE_URL=/api
+# Supabase client config is also baked at build time (Vite compile-time
+# substitution). Compose passes these from the root .env; the publishable key
+# is public by design. Without them the bundle falls back to a dead
+# placeholder host and every auth call fails with "Failed to fetch".
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_PUBLISHABLE_KEY
+ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL \
+    VITE_SUPABASE_PUBLISHABLE_KEY=$VITE_SUPABASE_PUBLISHABLE_KEY
 RUN npm run build
 
 # Serve stage: lean nginx with SPA fallback + /api proxy.
