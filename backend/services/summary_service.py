@@ -160,16 +160,20 @@ async def update_rolling_summary(db: Session, session_id: str) -> str | None:
         if settings.llm_stub_enabled:
             summary = _mechanical_rolling(dropped)
         else:
+            if not cost_meter.check_cap(db, session.user_id).allowed:
+                # F-03: capped users skip the rolling summary entirely; count
+                # stays untouched so the next uncapped trigger retries.
+                return None
             transcript = "\n".join(f"{m.role}: {m.content[:500]}" for m in dropped)
-            # Deliberately uncapped: matches generate_and_persist (end-of-session summary),
-            # spend is bounded by the debounce, and this call must never block/fail a turn.
+            rolling_messages = [
+                {"role": "system", "content": ROLLING_SYSTEM},
+                {"role": "user", "content": f"Topic: {session.topic or '(unspecified)'}\n\n{transcript}"},
+            ]
             resp = await litellm.acompletion(
                 model=settings.model,
                 temperature=settings.summary_temperature,
-                messages=[
-                    {"role": "system", "content": ROLLING_SYSTEM},
-                    {"role": "user", "content": f"Topic: {session.topic or '(unspecified)'}\n\n{transcript}"},
-                ],
+                messages=rolling_messages,
+                timeout=settings.summary_timeout_s,
             )
             content = (resp.choices[0].message.content or "").strip()
             if not content:
@@ -177,9 +181,15 @@ async def update_rolling_summary(db: Session, session_id: str) -> str | None:
             summary = content[:ROLLING_SUMMARY_MAX_CHARS]
             try:
                 cost = litellm.completion_cost(completion_response=resp)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 log.warning("rolling summary completion_cost failed: %s", e)
-                cost = 0
+                try:
+                    pt = litellm.token_counter(model=settings.model, messages=rolling_messages)
+                    cost = cost_meter.estimate_cancelled_cost(settings.model, content, pt)
+                except Exception as e2:  # noqa: BLE001
+                    log.warning("rolling summary cost fallback failed: %s", e2)
+                    cost = 0
+            cost_meter.record_cost(db, session.user_id, cost)
             cost_meter.log_call(
                 db,
                 user_id=session.user_id,
