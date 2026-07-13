@@ -4,8 +4,9 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from config import settings
 from contracts import TopicProfile
-from db.models import Document, Session as SessionModel, User
+from db.models import ChatMessage, Document, Session as SessionModel, UsageCounter, User
 
 
 USER_ID = "u1"
@@ -345,6 +346,74 @@ def test_post_end_generates_summary(
     body = r.json()
     assert body["summary"] == {"kind": "summary", "text": "learner covered joins"}
     assert body["ended_at"] is not None
+
+
+# ---------------------------------------------------------------------------
+# F-03: end/resume summary trigger consumes a daily rate-limit slot
+# ---------------------------------------------------------------------------
+
+
+def _create_active_session_with_messages(db_session, sid="s_rate"):
+    """Active (unended) session with a couple of exchanges, so the mechanical
+    fallback summary is non-empty and lands in the "summary" kind, not
+    "no_exchanges". Creates the owning user too."""
+    db_session.add(User(id=USER_ID))
+    db_session.add(
+        SessionModel(
+            id=sid,
+            user_id=USER_ID,
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.add(ChatMessage(session_id=sid, role="user", content="what are joins"))
+    db_session.add(ChatMessage(session_id=sid, role="assistant", content="joins combine tables"))
+    db_session.commit()
+    return sid
+
+
+def _usage_count(db_session, user_id=USER_ID):
+    row = db_session.query(UsageCounter).filter_by(user_id=user_id).one_or_none()
+    return row.count if row else 0
+
+
+def test_end_session_at_rate_cap_returns_mechanical_summary(client, db_session, monkeypatch):
+    # F-03: end must never 429, but a rate-capped user must not trigger LLM spend.
+    # Force the non-stub branch (mirrors Task 4's pattern) so a rate-gate bypass
+    # would actually reach litellm.acompletion instead of being masked by stub mode.
+    monkeypatch.setattr(settings, "llm_stub", False)
+    monkeypatch.setattr(settings, "gemini_api_key", "real")
+    monkeypatch.setattr(settings, "daily_cap", 0)
+
+    called = []
+
+    async def fake_acompletion(**kwargs):
+        called.append(1)
+
+    monkeypatch.setattr("services.summary_service.litellm.acompletion", fake_acompletion)
+
+    session_id = _create_active_session_with_messages(db_session)
+    resp = client.post(f"/api/sessions/{session_id}/end?user_id={USER_ID}")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert called == []  # rate cap must short-circuit before any LLM call
+    assert body["summary"]["kind"] == "summary"
+    assert "joins combine tables" in body["summary"]["text"]
+
+
+def test_end_session_consumes_rate_limit_slot(
+    client, db_session, monkeypatch, llm_text
+):
+    async def fake_acompletion(**kwargs):
+        return llm_text("a fresh summary")
+
+    monkeypatch.setattr("services.summary_service.litellm.acompletion", fake_acompletion)
+
+    session_id = _create_active_session_with_messages(db_session)
+    before = _usage_count(db_session)
+    resp = client.post(f"/api/sessions/{session_id}/end?user_id={USER_ID}")
+    assert resp.status_code == 200, resp.text
+    assert _usage_count(db_session) == before + 1
 
 
 # ---------------------------------------------------------------------------
