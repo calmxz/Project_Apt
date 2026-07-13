@@ -28,7 +28,8 @@ import pytest
 from agent.types import ToolContext
 from config import settings
 from contracts import ToolResult
-from db.models import ChatMessage, LlmCallLog
+from db.models import ChatMessage, LlmCallLog, User
+from services import cost_meter
 from services.cost_meter import CapStatus
 
 
@@ -748,24 +749,23 @@ async def test_prune_superseded_excerpts_wired_into_loop(db_session, monkeypatch
 
 @pytest.mark.asyncio
 async def test_cancelled_stream_prompt_tokens_survive_pruning(db_session, monkeypatch):
-    """Reviewer finding (Task 6, commit 758211f): prune_superseded_excerpts
-    (P2) mutates an earlier tool message's "content" VALUE in place, on the
-    SAME dict object, once a second retrieval round exists. The old
-    iter_boundaries (list[int]) + full[:boundary] cancel-time slicing shared
-    those dict objects, so pruning that ran during iteration 2 retroactively
-    shrank the round-1 boundary's tokenization at cancel time -- lower than
-    what eager per-iteration counting (the old pre-lazy behavior) would have
-    produced. The fix snapshots shallow COPIES of each message dict at the
-    top of every iteration (iter_prompt_snapshots), so a later prune's
-    mutation of the shared dict cannot reach back into an earlier snapshot.
+    """Reviewer finding (Task 6, commit 758211f), updated for Task 9's
+    unbilled-slice billing: prune_superseded_excerpts (P2) mutates an earlier
+    tool message's "content" VALUE in place, on the SAME dict object, once a
+    second retrieval round exists. The snapshot fix (shallow COPIES of each
+    message dict at the top of every iteration) protects any snapshot that
+    is later re-tokenized from a subsequent prune's in-place mutation.
 
-    Two retrieval rounds run (so round 2's prune stubs round 1's excerpt),
-    then the third iteration is cancelled mid-stream. Assert the iteration-2
-    snapshot (taken before round 2's prune runs) still carries round 1's
-    ORIGINAL content, the iteration-3 snapshot (taken after) correctly
-    carries the stub, and prompt_tokens_total is exactly the sum of the
-    per-snapshot fake-counter results (proving no snapshot is double counted
-    or skipped).
+    Two retrieval rounds run (iterations 1 and 2, both tool-call iterations
+    that complete their own per-iteration metering block and are therefore
+    already billed), then the third iteration is cancelled mid-stream. Task 9
+    billing invariant: the cancel arm bills only the UNBILLED tail
+    (iter_prompt_snapshots[billed_iters:]) -- iterations 1 and 2 are already
+    metered and must NOT be re-tokenized at cancel time (that was the latent
+    double-count this task fixes). Only iteration 3's snapshot -- taken AFTER
+    iteration 2's own prune_superseded_excerpts already stubbed round 1's
+    excerpt -- is tokenized, and it must correctly carry that stub (proving
+    the snapshot mechanism still applies to whatever tail is billed).
     """
     _disable_stub(monkeypatch)
     _allow_cap(monkeypatch)
@@ -833,36 +833,136 @@ async def test_cancelled_stream_prompt_tokens_survive_pruning(db_session, monkey
     with pytest.raises(asyncio.CancelledError):
         await task
 
-    # Three iterations were entered before cancel -> three snapshots tokenized.
-    assert len(counter_calls) == 3
+    # Only the cancelled (unbilled) iteration-3 snapshot is tokenized.
+    # Iterations 1 and 2 already ran their own per-iteration metering block
+    # (billed_iters advanced past them) -- re-tokenizing them here would be
+    # exactly the double-count this task fixes.
+    assert len(counter_calls) == 1
 
-    # Iteration-2 snapshot (counter_calls[1]) is copied at the TOP of
-    # iteration 2 -- BEFORE round 2's dispatch and BEFORE
-    # prune_superseded_excerpts runs at the end of that same iteration. Eager
-    # per-iteration counting (the pre-lazy behavior) would have counted
-    # exactly this prefix, with round 1's excerpt still original. This is the
-    # discriminating assertion: the old full[:boundary] slicing re-read the
-    # shared (by-then-mutated) list at CANCEL time, so it saw round 1 already
-    # stubbed here and undercounted. The snapshot fix must not.
-    iter2_tc1 = next(m for m in counter_calls[1] if m.get("tool_call_id") == "tc_1")
-    assert "old material" in iter2_tc1["content"]
-    assert not iter2_tc1["content"].startswith("[superseded retrieval:")
-
-    # Iteration-3 snapshot (counter_calls[2]) is copied AFTER iteration 2's
-    # own prune_superseded_excerpts already stubbed round 1 -- eager
-    # per-iteration counting would see the stub here too, so this snapshot
-    # legitimately (and correctly) carries the stubbed content. Asserting
-    # this guards against an over-correction that keeps every snapshot
-    # unstubbed (which would OVER-count vs. eager) and proves prune actually
-    # ran, so the iter-2 assertion above isn't trivially vacuous.
-    iter3_tc1 = next(m for m in counter_calls[2] if m.get("tool_call_id") == "tc_1")
+    # That lone snapshot is copied AFTER iteration 2's own
+    # prune_superseded_excerpts already stubbed round 1's excerpt -- proving
+    # the snapshot mechanism still reflects the correct (post-prune) prompt
+    # for whatever tail ends up billed at cancel time.
+    iter3_tc1 = next(m for m in counter_calls[0] if m.get("tool_call_id") == "tc_1")
     assert iter3_tc1["content"].startswith("[superseded retrieval:")
 
-    # prompt_tokens_total must be exactly the sum of the per-snapshot counts
-    # -- i.e. eager per-iteration accumulation, reproduced lazily.
+    # prompt_tokens_total must be exactly the single unbilled snapshot's count
+    # -- not a sum including the two already-billed iterations.
     assert estimate_spy.call_count == 1
     prompt_tokens_total = estimate_spy.call_args.args[2]
-    expected_total = sum(
-        sum(len(m.get("content") or "") for m in msgs) for msgs in counter_calls
-    )
+    expected_total = sum(len(m.get("content") or "") for m in counter_calls[0])
     assert prompt_tokens_total == expected_total
+
+
+# ---------------------------------------------------------------------------
+# Task 9: timeout, non-zero cost fallback, partial-cost on error arm
+# ---------------------------------------------------------------------------
+
+def _patch_acompletion_happy_text(monkeypatch, captured=None):
+    """Single-iteration happy stream: one text chunk, no tool calls. If
+    `captured` is given, the kwargs passed to acompletion are copied into it
+    so a test can assert on things like `timeout`."""
+
+    async def _fake_acompletion(*args, **kwargs):
+        if captured is not None:
+            captured.update(kwargs)
+        return _make_stream(_content_chunk("hello world"))
+
+    monkeypatch.setattr("agent.tutor.litellm.acompletion", _fake_acompletion)
+
+
+def _patch_acompletion_raising_midstream(monkeypatch):
+    """A stream that yields one content chunk, then blows up. Adapts the F-01
+    error-arm fake (test_llm_exception_yields_error_event_and_persists_partial)
+    to crash mid-stream instead of on the initial await, so accumulated_text
+    is non-empty when the error arm re-estimates cost."""
+
+    async def _stream():
+        yield _content_chunk("partial ")
+        raise RuntimeError("provider blew up mid-stream")
+
+    async def _fake_acompletion(*args, **kwargs):
+        return _stream()
+
+    monkeypatch.setattr("agent.tutor.litellm.acompletion", _fake_acompletion)
+
+
+@pytest.mark.asyncio
+async def test_error_arm_records_estimated_cost(db_session, monkeypatch):
+    """Batch-1 deferred item (F-03/F-06): a mid-stream provider crash must
+    still bill the started iteration -- the cancel arm already does this, the
+    error arm previously recorded nothing."""
+    _disable_stub(monkeypatch)
+    _allow_cap(monkeypatch)
+    db_session.add(User(id="u1"))
+    db_session.commit()
+
+    from agent import tutor
+
+    ctx = _ctx(db_session, session_id="s_error_bill")
+    _patch_acompletion_raising_midstream(monkeypatch)
+    # 10000 (not e.g. 100): record_cost quantizes to 4 decimal places, so a
+    # too-small token count rounds the estimate down to exactly $0.0000 and
+    # the assertion below would be vacuous.
+    monkeypatch.setattr("agent.tutor.litellm.token_counter", lambda **kw: 10000)
+
+    events = await _drain(
+        tutor.run_streaming([{"role": "user", "content": "hi"}], "sys", ctx)
+    )
+
+    assert any(e.type == "error" for e in events)
+    assert cost_meter.current_spend(db_session, ctx.user_id) > Decimal("0")
+
+
+@pytest.mark.asyncio
+async def test_builder_failure_falls_back_to_token_math(db_session, monkeypatch):
+    """F-19: a pricing-table gap (stream_chunk_builder/completion_cost raising)
+    must not register the turn as $0 -- the token-math fallback must still
+    bill something so the daily cap sees real spend."""
+    _disable_stub(monkeypatch)
+    _allow_cap(monkeypatch)
+    db_session.add(User(id="u1"))
+    db_session.commit()
+
+    from agent import tutor
+
+    ctx = _ctx(db_session, session_id="s_builder_fail")
+    _patch_acompletion_happy_text(monkeypatch)
+    monkeypatch.setattr(
+        "agent.tutor.litellm.stream_chunk_builder",
+        MagicMock(side_effect=ValueError("unknown model")),
+    )
+    # 10000: see comment in test_error_arm_records_estimated_cost above --
+    # avoids the 4-decimal quantization floor turning the estimate into $0.
+    monkeypatch.setattr("agent.tutor.litellm.token_counter", lambda **kw: 10000)
+
+    events = await _drain(
+        tutor.run_streaming([{"role": "user", "content": "hi"}], "sys", ctx)
+    )
+
+    assert any(e.type == "done" for e in events)
+    assert cost_meter.current_spend(db_session, ctx.user_id) > Decimal("0")
+
+
+@pytest.mark.asyncio
+async def test_acompletion_receives_timeout(db_session, monkeypatch):
+    """F-06: a stuck provider connection must not hang the turn forever --
+    litellm.acompletion must be called with the configured LLM timeout."""
+    _disable_stub(monkeypatch)
+    _allow_cap(monkeypatch)
+
+    from agent import tutor
+
+    ctx = _ctx(db_session, session_id="s_timeout")
+    captured = {}
+    _patch_acompletion_happy_text(monkeypatch, captured)
+    monkeypatch.setattr(
+        "agent.tutor.litellm.stream_chunk_builder", MagicMock(return_value=SimpleNamespace())
+    )
+    monkeypatch.setattr("agent.tutor.litellm.completion_cost", MagicMock(return_value=0.0))
+
+    await _drain(
+        tutor.run_streaming([{"role": "user", "content": "hi"}], "sys", ctx)
+    )
+
+    assert captured["timeout"] == settings.llm_timeout_s

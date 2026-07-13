@@ -61,6 +61,37 @@ def _summarize(name: str, result) -> str:
     return "ok"
 
 
+def _record_partial_cost(ctx, snapshots: list[list[dict]], text: str, purpose: str) -> Decimal:
+    """Estimate and record spend for iterations whose acompletion started but
+    was never metered (cancelled or crashed mid-stream). Token-math estimate,
+    same shape as the cancellation arm always used. Never raises."""
+    prompt_tokens_total = 0
+    for snapshot in snapshots:
+        try:
+            prompt_tokens_total += litellm.token_counter(
+                model=settings.model, messages=snapshot
+            )
+        except Exception as e:
+            # Local tokenization only; no credential in the exception.
+            log.warning("token_counter failed: %s", e)  # nosemgrep: python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure
+    try:
+        cost = cost_meter.estimate_cancelled_cost(
+            settings.model, text, prompt_tokens_total
+        )
+    except Exception as e:
+        log.warning("estimate_cancelled_cost failed: %s", e)
+        cost = Decimal("0")
+    try:
+        cost_meter.record_cost(ctx.db, ctx.user_id, cost)
+    except Exception as e:
+        log.warning("cost_meter.record_cost (partial) failed: %s", e)
+    cost_meter.log_call(
+        ctx.db, user_id=ctx.user_id, session_id=ctx.session_id,
+        purpose=purpose, model=settings.model, cost_usd=cost,
+    )
+    return cost
+
+
 def _chunk_text(text: str, parts: int = 3) -> list[str]:
     """Split text into ~`parts` word-boundary chunks for stub streaming."""
     words = text.split(" ")
@@ -102,7 +133,9 @@ async def run_streaming(
 
     full: list[dict] = [{"role": "system", "content": system_prompt}] + list(messages)
     accumulated_text = ""
-    iter_prompt_snapshots: list[list[dict]] = []  # shallow-copied prefix at each iteration start; used only on cancel
+    iter_prompt_snapshots: list[list[dict]] = []  # shallow-copied prefix at each iteration start; used only on cancel/error
+    billed_iters = 0  # iterations whose cost was metered (real or fallback)
+    billed_chars = 0  # accumulated_text length at the last metering point
     tool_calls_record: list[ToolCallRecord] = []
     citations: list[Citation] = []
     asked_check = False  # hoisted so the except asyncio.CancelledError: branch can read it
@@ -140,6 +173,7 @@ async def run_streaming(
                 tools=tools.TOOLS,
                 tool_choice="auto",
                 stream=True,
+                timeout=settings.llm_timeout_s,
             )
 
             content_buf = ""
@@ -186,7 +220,16 @@ async def run_streaming(
                 cost = litellm.completion_cost(completion_response=built) or 0.0
             except Exception as e:
                 log.warning("stream completion_cost failed: %s", e)
-                cost = 0.0
+                # F-19: a pricing-table gap must not register the turn as $0 --
+                # fall back to token math so the cap still sees real spend.
+                try:
+                    pt = litellm.token_counter(model=settings.model, messages=full)
+                    cost = cost_meter.estimate_cancelled_cost(
+                        settings.model, content_buf, pt
+                    )
+                except Exception as e2:  # noqa: BLE001
+                    log.warning("stream cost token-math fallback failed: %s", e2)
+                    cost = 0.0
             if cost > 0:
                 try:
                     cost_meter.record_cost(ctx.db, ctx.user_id, cost)
@@ -201,6 +244,8 @@ async def run_streaming(
                     cost_usd=cost,
                     **cost_meter.extract_usage(built),
                 )
+            billed_iters = len(iter_prompt_snapshots)
+            billed_chars = len(accumulated_text)
 
             # No tool calls assembled -> the streamed content was the final answer.
             if not tool_frags:
@@ -368,33 +413,13 @@ async def run_streaming(
         return
 
     except asyncio.CancelledError:
-        prompt_tokens_total = 0
-        for snapshot in iter_prompt_snapshots:
-            try:
-                prompt_tokens_total += litellm.token_counter(
-                    model=settings.model, messages=snapshot
-                )
-            except Exception as e:
-                # Local tokenization only; no credential in the exception.
-                log.warning("token_counter failed: %s", e)  # nosemgrep: python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure
-        try:
-            cost = cost_meter.estimate_cancelled_cost(
-                settings.model, accumulated_text, prompt_tokens_total
-            )
-        except Exception as e:
-            log.warning("estimate_cancelled_cost failed: %s", e)
-            cost = Decimal("0")
-        try:
-            cost_meter.record_cost(ctx.db, ctx.user_id, cost)
-        except Exception as e:
-            log.warning("cost_meter.record_cost (cancel) failed: %s", e)
-        cost_meter.log_call(
-            ctx.db,
-            user_id=ctx.user_id,
-            session_id=ctx.session_id,
-            purpose="followup" if getattr(ctx, "suppress_check", False) else "chat",
-            model=settings.model,
-            cost_usd=cost,
+        # Bill only iterations not yet metered: completed iterations already
+        # recorded real cost above (previously this arm re-billed all of them).
+        cost = _record_partial_cost(
+            ctx,
+            iter_prompt_snapshots[billed_iters:],
+            accumulated_text[billed_chars:],
+            "followup" if getattr(ctx, "suppress_check", False) else "chat",
         )
 
         msg_id = _persist_assistant_message(
@@ -426,6 +451,17 @@ async def run_streaming(
             ctx.db.rollback()  # the session may hold a failed transaction
         except Exception as rb_err:
             log.warning("rollback after agent-loop failure failed: %s", rb_err)
+        # Deferred F-03 item: the rollback above discards this turn's
+        # uncommitted ledger flushes, so re-estimate the WHOLE turn (all
+        # snapshots), not just the unbilled tail. Overcounts if a mid-turn
+        # tool commit already published earlier increments -- conservative
+        # in the cap's favor.
+        _record_partial_cost(
+            ctx,
+            iter_prompt_snapshots,
+            accumulated_text,
+            "followup" if getattr(ctx, "suppress_check", False) else "chat",
+        )
         try:
             _persist_assistant_message(
                 ctx,
