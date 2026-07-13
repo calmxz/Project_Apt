@@ -37,9 +37,10 @@ async def generate_and_persist(db: Session, session: SessionModel) -> str:
     messages = db.execute(
         select(ChatMessage)
         .where(ChatMessage.session_id == session.id)
-        .order_by(ChatMessage.id.asc())
+        .order_by(ChatMessage.id.desc())
         .limit(30)
     ).scalars().all()
+    messages = list(reversed(messages))  # chronological order for the transcript
 
     profile = profile_service.load_profile(db, session.id)
 
