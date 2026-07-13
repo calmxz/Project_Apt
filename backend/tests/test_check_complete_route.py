@@ -101,6 +101,18 @@ def test_complete_foreign_session_404(client, db_session, monkeypatch):
     assert r.status_code == 404
 
 
+def test_complete_on_ended_session_is_409(client, db_session, seeded_session, monkeypatch):
+    sid = seeded_session.id
+    _resolved_batch(db_session, sid)
+    seeded_session.ended_at = datetime.now(timezone.utc)
+    db_session.commit()
+    monkeypatch.setattr("agent.tutor.run_streaming",
+                        _make_fake_run_streaming(db_session, sid))
+    r = client.post(f"/api/sessions/{sid}/check/complete", json={"user_id": USER_ID})
+    assert r.status_code == 409
+    assert r.json()["detail"]["code"] == "session_ended"
+
+
 def _resolved_batch_miss(db, sid):
     """Same as _resolved_batch but answers WRONG (selected_index=1, correct=0)."""
     ctx = ToolContext(db=db, session_id=sid, user_id=USER_ID,
