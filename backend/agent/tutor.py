@@ -416,3 +416,31 @@ async def run_streaming(
             },
         )
         raise
+
+    except Exception:
+        # F-01: a provider 429/timeout, malformed stream chunk, or tool crash
+        # must surface as an error SSE, not a silent stream end that leaves the
+        # client stuck in 'streaming'. Persist whatever text already streamed.
+        log.exception("agent loop failed (stream); emitting error event")
+        try:
+            ctx.db.rollback()  # the session may hold a failed transaction
+        except Exception as rb_err:
+            log.warning("rollback after agent-loop failure failed: %s", rb_err)
+        try:
+            _persist_assistant_message(
+                ctx,
+                accumulated_text,
+                "error",
+                tool_calls=tool_calls_record,
+                citations=citations,
+            )
+        except Exception:
+            log.exception("failed to persist assistant message after agent-loop failure")
+        yield StreamEvent(
+            "error",
+            {
+                "code": "llm_failed",
+                "message": "The tutor could not finish responding. Please try again.",
+            },
+        )
+        return
