@@ -26,6 +26,8 @@ cleanly after that event and does not hang. True network-disconnect cancellation
 a running server; it is not reliably testable under TestClient.
 """
 
+from datetime import datetime, timezone
+
 import pytest
 from contracts import TopicProfile
 from db.models import Session as SessionModel, User
@@ -136,6 +138,32 @@ def test_chat_stream_unknown_session_404(client, monkeypatch):
         headers=AUTH_HEADERS,
     )
     assert r.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Test: ended session -> 409 session_ended (F-05)
+# ---------------------------------------------------------------------------
+
+
+def test_chat_stream_on_ended_session_returns_409(client, db_session, monkeypatch):
+    """_prepare_turn must reject chat turns on an ended session before any
+    tutor/LLM work happens."""
+    fake = _make_fake_run_streaming(
+        StreamEvent("done", {"message_id": "1"}),
+    )
+    monkeypatch.setattr("agent.tutor.run_streaming", fake)
+
+    session = db_session.get(SessionModel, SESSION_ID)
+    session.ended_at = datetime.now(timezone.utc)
+    db_session.commit()
+
+    r = client.post(
+        "/api/chat/stream",
+        json={"session_id": SESSION_ID, "message": "hi"},
+        headers=AUTH_HEADERS,
+    )
+    assert r.status_code == 409
+    assert r.json()["detail"]["code"] == "session_ended"
 
 
 # ---------------------------------------------------------------------------

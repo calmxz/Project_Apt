@@ -18,9 +18,9 @@ services:
       - key: DAILY_CAP
         value: "50"
       - key: LLM_SOFT_CAP_USD
-        value: "2.00"
+        value: "0.8"
       - key: LLM_HARD_CAP_USD
-        value: "3.00"
+        value: "1.00"
       - key: GEMINI_API_KEY
         sync: false
       - key: DATABASE_URL

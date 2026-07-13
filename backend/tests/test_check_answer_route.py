@@ -92,6 +92,17 @@ def test_answer_foreign_session_is_404(client, db_session):
     assert r.status_code == 404
 
 
+def test_answer_on_ended_session_is_409(client, db_session, seeded_session):
+    sid = seeded_session.id
+    _open_batch(db_session, sid)
+    seeded_session.ended_at = datetime.now(timezone.utc)
+    db_session.commit()
+    r = client.post(f"/api/sessions/{sid}/check/answer",
+                    json={"index": 0, "selected_index": 0, "user_id": USER_ID})
+    assert r.status_code == 409
+    assert r.json()["detail"]["code"] == "session_ended"
+
+
 def test_answer_writes_check_batch_to_message(client, db_session, seeded_session):
     sid = seeded_session.id
     _open_batch(db_session, sid)

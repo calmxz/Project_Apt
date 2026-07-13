@@ -386,6 +386,8 @@ def skip_check(
     row = db.get(SessionModel, session_id)
     if row is None or row.user_id != user_id:
         raise HTTPException(status_code=404, detail="session not found")
+    if row.ended_at is not None:
+        raise HTTPException(status_code=409, detail={"code": "session_ended"})
     try:
         prog = check_question_service.skip(db, session_id, req.index)
     except check_question_service.CheckStateError as e:
@@ -410,6 +412,8 @@ def answer_check(
     row = db.get(SessionModel, session_id)
     if row is None or row.user_id != user_id:
         raise HTTPException(status_code=404, detail="session not found")
+    if row.ended_at is not None:
+        raise HTTPException(status_code=409, detail={"code": "session_ended"})
     try:
         result = check_question_service.answer(db, session_id, req.index, req.selected_index)
     except check_question_service.CheckStateError as e:
@@ -449,6 +453,8 @@ async def complete_check(
     row = db.get(SessionModel, session_id)
     if row is None or row.user_id != user_id:
         raise HTTPException(status_code=404, detail="session not found")
+    if row.ended_at is not None:
+        raise HTTPException(status_code=409, detail={"code": "session_ended"})
 
     pc = check_question_service.get_pending_check(db, session_id)
     if pc is None or not check_question_service.is_done(pc):

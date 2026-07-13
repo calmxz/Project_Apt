@@ -393,6 +393,7 @@ export const useSessionStore = defineStore('session', () => {
     abortController.value = ctrl
     error.value = null
     const deltaBatcher = createDeltaBatcher(appendAssistantDelta)
+    let sawTerminal = false
     try {
       await streamCheckComplete({
         sessionId: id,
@@ -406,9 +407,10 @@ export const useSessionStore = defineStore('session', () => {
             case 'citations': setCitations(data); break
             case 'cost_warning': reportCostWarning(data); break
             case 'check_question': handleCheckQuestion(data); break
-            case 'done': finalizeMessage(data.message_id); break
-            case 'cancelled': handleCancelled(data.message_id, data.partial_content_chars, data.estimated_cost_usd); break
+            case 'done': sawTerminal = true; finalizeMessage(data.message_id); break
+            case 'cancelled': sawTerminal = true; handleCancelled(data.message_id, data.partial_content_chars, data.estimated_cost_usd); break
             case 'followup_skipped':
+              sawTerminal = true
               followupNotice.value =
                 'Daily message limit reached - recap saved, tutor follow-up skipped.'
               streamingMessage.value = null
@@ -416,6 +418,7 @@ export const useSessionStore = defineStore('session', () => {
               abortController.value = null
               break
             case 'error':
+              sawTerminal = true
               _applyCapError(data)
               error.value = data.message || data.code
               streamingMessage.value = null
@@ -425,6 +428,13 @@ export const useSessionStore = defineStore('session', () => {
           }
         },
       })
+      deltaBatcher.flush()
+      if (!sawTerminal) {
+        error.value = 'The tutor stopped responding. Please try again.'
+        streamingMessage.value = null
+        streamState.value = 'idle'
+        abortController.value = null
+      }
     } catch (e) {
       deltaBatcher.flush()
       if (e?.name === 'AbortError') {
@@ -504,6 +514,7 @@ export const useSessionStore = defineStore('session', () => {
     abortController.value = ctrl
     error.value = null
     const deltaBatcher = createDeltaBatcher(appendAssistantDelta)
+    let sawTerminal = false
     try {
       await streamChat({
         sessionId: currentSessionId.value,
@@ -520,9 +531,10 @@ export const useSessionStore = defineStore('session', () => {
             case 'citations': setCitations(data); break
             case 'cost_warning': reportCostWarning(data); break
             case 'check_question': handleCheckQuestion(data); break
-            case 'done': finalizeMessage(data.message_id); break
-            case 'cancelled': handleCancelled(data.message_id, data.partial_content_chars, data.estimated_cost_usd); break
+            case 'done': sawTerminal = true; finalizeMessage(data.message_id); break
+            case 'cancelled': sawTerminal = true; handleCancelled(data.message_id, data.partial_content_chars, data.estimated_cost_usd); break
             case 'error':
+              sawTerminal = true
               _applyCapError(data)
               error.value = data.message || data.code
               streamingMessage.value = null
@@ -532,10 +544,25 @@ export const useSessionStore = defineStore('session', () => {
           }
         },
       })
+      deltaBatcher.flush()
+      if (!sawTerminal) {
+        error.value = 'The tutor stopped responding. Please try again.'
+        streamingMessage.value = null
+        streamState.value = 'idle'
+        abortController.value = null
+      }
     } catch (e) {
       deltaBatcher.flush()
       if (e?.name === 'AbortError') {
         if (streamingMessage.value) handleCancelled('pending', streamingMessage.value.content.length, '0')
+        return
+      }
+      if (e?.status === 409 && e?.body?.detail?.code === 'session_ended') {
+        error.value = 'This session was ended elsewhere. Reopen it to continue.'
+        if (currentSession.value) currentSession.value.ended_at = new Date().toISOString()
+        streamingMessage.value = null
+        streamState.value = 'idle'
+        abortController.value = null
         return
       }
       if (e?.status === 429) _applyCapError(e?.body?.detail)

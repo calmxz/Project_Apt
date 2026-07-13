@@ -128,3 +128,42 @@ def test_empty_messages_still_returns_string(db_session, monkeypatch):
     summary = asyncio.run(summary_service.generate_and_persist(db_session, session))
     assert isinstance(summary, str)
     assert len(summary) > 0
+
+
+def test_summary_uses_last_30_messages(db_session, monkeypatch):
+    from types import SimpleNamespace
+
+    db_session.add(User(id="u_last30"))
+    db_session.flush()
+    session = SessionModel(
+        id="s_last30",
+        user_id="u_last30",
+        topic="sql",
+        topic_profile_json=TopicProfile().model_dump_json(),
+    )
+    db_session.add(session)
+    db_session.flush()
+    for i in range(1, 41):
+        db_session.add(
+            ChatMessage(session_id="s_last30", role="user", content=f"marker-{i}")
+        )
+    db_session.commit()
+
+    captured = {}
+
+    async def fake_acompletion(**kwargs):
+        captured["messages"] = kwargs["messages"]
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="a real summary"))]
+        )
+
+    monkeypatch.setattr("services.summary_service.litellm.acompletion", fake_acompletion)
+
+    asyncio.run(summary_service.generate_and_persist(db_session, session))
+
+    user_prompt = captured["messages"][1]["content"]
+    assert "marker-40" in user_prompt  # newest message present
+    # marker-1 is a prefix of marker-10..19, so assert on the exact oldest
+    # surviving-window boundary instead: with 40 messages and a 30-window,
+    # messages 1-10 must have fallen out.
+    assert "user: marker-9" not in user_prompt

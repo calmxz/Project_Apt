@@ -654,6 +654,39 @@ async def test_run_streaming_writes_llm_call_log_row(db_session, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_llm_exception_yields_error_event_and_persists_partial(db_session, monkeypatch):
+    """F-01: a non-cancel exception (provider 429/timeout, malformed chunk, tool
+    crash) must surface as exactly one error SSE event -- not escape the
+    generator and leave the client stuck in 'streaming' forever -- and the
+    partial assistant text must be persisted with status='error'."""
+    _disable_stub(monkeypatch)
+    _allow_cap(monkeypatch)
+
+    from agent import tutor
+
+    async def exploding_acompletion(**kwargs):
+        raise RuntimeError("provider blew up")
+
+    monkeypatch.setattr("agent.tutor.litellm.acompletion", exploding_acompletion)
+
+    ctx = _ctx(db_session, session_id="s_llm_exception")
+    events = await _drain(
+        tutor.run_streaming([{"role": "user", "content": "hi"}], "sys", ctx)
+    )
+
+    error_events = [e for e in events if e.type == "error"]
+    assert len(error_events) == 1
+    assert error_events[0].data["code"] == "llm_failed"
+
+    msg = (
+        db_session.query(ChatMessage)
+        .filter(ChatMessage.session_id == "s_llm_exception")
+        .one()
+    )
+    assert msg.status == "error"
+
+
+@pytest.mark.asyncio
 async def test_prune_superseded_excerpts_wired_into_loop(db_session, monkeypatch):
     """Integration (Task 7): prune_superseded_excerpts runs after each
     tool-dispatch iteration. Two same-turn retrieve_chunks calls (iterations 1

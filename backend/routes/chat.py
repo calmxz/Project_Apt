@@ -166,6 +166,8 @@ async def _prepare_turn(
     if row is None or row[0].user_id != user_id:
         raise HTTPException(status_code=404, detail="session not found")
     session = row[0]
+    if session.ended_at is not None:
+        raise HTTPException(status_code=409, detail={"code": "session_ended"})
     ingestion_status = documents_service.status_from_counts(
         row.doc_total, row.doc_pending, row.doc_ready
     )

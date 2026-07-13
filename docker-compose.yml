@@ -7,6 +7,10 @@ services:
   frontend:
     build:
       context: ./frontend
+      args:
+        # Baked into the Vite bundle at build time. Sourced from root .env.
+        VITE_SUPABASE_URL: ${SUPABASE_URL}
+        VITE_SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY}
     ports:
       - "5173:8080"   # nginx serves the built app; host port matches dev muscle-memory
     depends_on:
