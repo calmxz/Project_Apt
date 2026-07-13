@@ -109,7 +109,7 @@ def _path_exists_stub(monkeypatch):
     monkeypatch.setattr("services.ingestion_service.os.path.exists", lambda p: True)
 
 
-def test_embed_all_requests_configured_dimension(monkeypatch):
+def test_embed_all_requests_configured_dimension(db_session, monkeypatch):
     """Embeddings must be requested at settings.embedding_dim so they match the
     chunk_embeddings.embedding column. Without an explicit dimensions argument
     the model emits its native size (e.g. gemini-embedding-2 -> 3072), which the
@@ -130,7 +130,9 @@ def test_embed_all_requests_configured_dimension(monkeypatch):
     monkeypatch.setattr(
         "services.ingestion_service.litellm.embedding", fake_embedding
     )
-    ingestion_service._embed_all(["hello world"])
+    ingestion_service._embed_all(
+        db_session, ["hello world"], user_id=None, session_id="s_dim"
+    )
     expected_dim = settings.embedding_dim  # local int: keep secrets out of failure repr
     assert captured["dimensions"] == expected_dim
 
@@ -313,6 +315,55 @@ def test_extract_slides_includes_table_cell_text(monkeypatch):
     assert pages[0][0] == 1
     assert "r1c1 r1c2" in pages[0][1]
     assert "r2c1 r2c2" in pages[0][1]
+
+
+def test_ingestion_meters_embedding_spend(
+    db_session, insert_capture, mock_embed, monkeypatch, tmp_path
+):
+    """F-19: ingestion is the largest embedding spender; its litellm.embedding
+    calls must land on the same daily_cost_ledger as chat/retrieval spend."""
+    from decimal import Decimal
+
+    from sqlalchemy import select
+    from sqlalchemy.orm import sessionmaker
+
+    from services import cost_meter, ingestion_service
+
+    db_session.add(User(id="u_meter"))
+    db_session.flush()
+    db_session.add(
+        SessionModel(
+            id="s_meter",
+            user_id="u_meter",
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.flush()
+    doc = Document(session_id="s_meter", filename="ref.txt", status="pending")
+    db_session.add(doc)
+    db_session.commit()
+    db_session.refresh(doc)
+
+    monkeypatch.setattr("services.ingestion_service.settings.uploads_path", str(tmp_path))
+    (tmp_path / f"{doc.id}_ref.txt").write_text(
+        "Indexes accelerate database queries. " * 20, encoding="utf-8"
+    )
+    monkeypatch.setattr(
+        "services.ingestion_service.SessionLocal",
+        sessionmaker(autocommit=False, autoflush=False, bind=db_session.get_bind()),
+    )
+    monkeypatch.setattr(
+        "services.ingestion_service.cost_meter.litellm.completion_cost",
+        lambda **kw: 0.004,
+    )
+
+    ingestion_service.run(doc.id)
+
+    user_id = db_session.execute(
+        select(SessionModel.user_id).where(SessionModel.id == doc.session_id)
+    ).scalar_one()
+    assert cost_meter.current_spend(db_session, user_id) == Decimal("0.0040")
 
 
 def test_run_txt_success(db_session, insert_capture, mock_embed, monkeypatch, tmp_path):
