@@ -69,11 +69,23 @@ def test_current_spend_reads_through_identity_map(db_session):
     db_session.commit()
     # Prime the identity map the way a long turn does.
     assert cost_meter.current_spend(db_session, "u43") == Decimal("0.5000")
+    # Hold a strong reference to the cached row. SQLAlchemy's identity map is
+    # a WeakInstanceDict: without this, CPython's GC can reclaim the cached
+    # instance between calls and a buggy db.get()-based current_spend would
+    # accidentally re-query, letting this test pass even against the old
+    # cached-read bug. Keeping `row` alive across the mutation and the final
+    # assertion pins the fresh-read behavior deterministically (mirrors the
+    # F-17 test below).
+    row = db_session.get(DailyCostLedger, ("u43", cost_meter._today_utc()))
+    assert row is not None
     # Mutate the row behind the ORM's back (simulates another session's commit).
     db_session.execute(
         text("UPDATE daily_cost_ledger SET cost_usd = 2.0 WHERE user_id = 'u43'")
     )
     assert cost_meter.current_spend(db_session, "u43") == Decimal("2.0000")
+    # The cached instance must remain stale (proves `row` was the identity-map
+    # hit a cached read would have returned) while current_spend is fresh.
+    assert row.cost_usd == Decimal("0.5")
 
 
 def test_record_cost_is_an_atomic_increment(db_session):
