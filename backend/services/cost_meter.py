@@ -212,6 +212,11 @@ MODEL_RATES: dict[str, dict[str, Decimal]] = {
         "input_per_1k": Decimal("0.003"),      # $3.00  / 1M tokens
         "output_per_1k": Decimal("0.015"),     # $15.00 / 1M tokens
     },
+    # Google Gemini embedding model — placeholder; verify at ai.google.dev/pricing
+    "gemini/gemini-embedding-2": {
+        "input_per_1k": Decimal("0.000150"),  # $0.15 / 1M tokens
+        "output_per_1k": Decimal("0"),
+    },
 }
 
 
@@ -246,3 +251,51 @@ def estimate_cancelled_cost(model: str, delta_text: str, prompt_tokens: int) -> 
     except Exception as e:  # noqa: BLE001 - cancellation metering must not raise
         log.warning("cost fallback failed for model %s: %s", model, e)
         return Decimal("0")
+
+
+def embedding_cost(model: str, resp, texts: list[str]) -> Decimal:
+    """USD cost of a litellm.embedding response.
+
+    Tries litellm's own accounting first; on failure (pricing-table gap for
+    the model id) falls back to token math against MODEL_RATES so real spend
+    never silently registers as 0 (F-19). Unknown models return 0 with a
+    warning.
+    """
+    try:
+        cost = litellm.completion_cost(completion_response=resp)
+        if cost and cost > 0:
+            return _to_decimal(cost)
+    except Exception as e:  # noqa: BLE001 - metering must not raise
+        log.warning("embedding completion_cost failed: %s", e)
+    rates = MODEL_RATES.get(model)
+    if rates is None:
+        log.warning("no MODEL_RATES entry for embedding model %s; cost=0", model)
+        return Decimal("0")
+    try:
+        tokens = extract_usage(resp)["prompt_tokens"]
+        if tokens is None:
+            tokens = sum(
+                litellm.token_counter(model=model, text=t or "") for t in texts
+            )
+        return Decimal(tokens) * rates["input_per_1k"] / Decimal(1000)
+    except Exception as e:  # noqa: BLE001
+        log.warning("embedding token-math fallback failed: %s", e)
+        return Decimal("0")
+
+
+def meter_embedding_response(
+    db: Session, resp, *, user_id: str, session_id, texts: list[str],
+    purpose: str = "embedding",
+) -> None:
+    """Record an embedding call on the capped ledger and the analytics log
+    (F-19). Never raises: metering must not fail the calling feature."""
+    try:
+        cost = embedding_cost(settings.embedding_model, resp, texts)
+        record_cost(db, user_id, cost)
+        log_call(
+            db, user_id=user_id, session_id=session_id, purpose=purpose,
+            model=settings.embedding_model, cost_usd=cost,
+            **extract_usage(resp),
+        )
+    except Exception as e:  # noqa: BLE001
+        log.warning("embedding metering failed: %s", e)
