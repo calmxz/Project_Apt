@@ -6,6 +6,10 @@ import { reportApiError } from './errorBus.js'
 // Default mirrors uploadApi.js — backend routers all mount under /api.
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
 
+// F-06: a hung backend must not spin the UI forever. 30s covers the slowest
+// legitimate JSON call (end-session runs a 20s-capped summary LLM call).
+export const REQUEST_TIMEOUT_MS = 30000
+
 export class ApiError extends Error {
   constructor(status, body, path) {
     super(`API ${status} ${path}: ${typeof body === 'string' ? body : JSON.stringify(body)}`)
@@ -44,6 +48,10 @@ async function request(method, path, { body, params, silent = false, headers } =
     init.body = JSON.stringify(body)
   }
 
+  if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+    init.signal = AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+  }
+
   const token = _getAccessToken()
   if (token) init.headers['authorization'] = `Bearer ${token}`
 
@@ -51,7 +59,8 @@ async function request(method, path, { body, params, silent = false, headers } =
   try {
     resp = await fetch(url, init)
   } catch (e) {
-    const err = new ApiError(0, { detail: e.message }, path)
+    const detail = e?.name === 'TimeoutError' ? 'request timed out' : e.message
+    const err = new ApiError(0, { detail }, path)
     if (!silent) reportApiError(err)
     throw err
   }
