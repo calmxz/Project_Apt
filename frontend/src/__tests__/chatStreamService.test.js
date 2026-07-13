@@ -138,6 +138,20 @@ describe('chatStreamService', () => {
     await expect(p).rejects.toMatchObject({ name: 'AbortError' })
   })
 
+  it('a caller abort MID-STREAM (after headers + at least one event) propagates as an AbortError, not a generic Error or ApiError', async () => {
+    const ctrl = new AbortController()
+    // Headers arrive fine; the stream then emits one event and hangs -- the
+    // caller (e.g. a Stop button) aborts once it has seen that first event,
+    // simulating a genuine mid-stream user cancel.
+    fetchMock.mockResolvedValueOnce(sseResponseThatHangsAfterOneEvent())
+    const onEvent = vi.fn(() => { ctrl.abort() })
+
+    const p = streamChat({ sessionId: 's1', message: 'hi', onEvent, signal: ctrl.signal })
+
+    await expect(p).rejects.toMatchObject({ name: 'AbortError' })
+    expect(onEvent).toHaveBeenCalledTimes(1)
+  })
+
   it('streamChat puts review_gaps in the request body when reviewGaps is true', async () => {
     const sseBody = 'event: done\ndata: {}\n\n'
     fetchMock.mockResolvedValueOnce(mockResponse(sseBody))

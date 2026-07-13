@@ -81,6 +81,16 @@ async function _fetchSse(url, payload, { onEvent, signal, path }) {
     await parseSSEStream(resp.body, wrappedOnEvent, { signal: ctrl.signal })
   } catch (e) {
     if (timedOut()) throw new ApiError(0, { detail: 'stream timed out' }, path)
+    // Not a timeout: if the internal controller was aborted, it's because the
+    // caller's own signal aborted (a mid-stream user cancel). sseParser's
+    // reader.cancel() resolves the pending read() with {done: true} and then
+    // throws a GENERIC Error('aborted') -- not the original AbortError -- so
+    // normalize back to the caller's abort reason here rather than leaking
+    // that generic Error past the AbortError contract callers rely on.
+    if (ctrl.signal.aborted) {
+      const reason = ctrl.signal.reason
+      throw reason?.name === 'AbortError' ? reason : new DOMException('aborted', 'AbortError')
+    }
     throw e
   } finally {
     clearTimeout(idleTimer)
