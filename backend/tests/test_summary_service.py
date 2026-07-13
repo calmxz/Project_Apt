@@ -1,12 +1,14 @@
 """TDD: summary_service.generate_and_persist."""
 
 import asyncio
+from decimal import Decimal
 
 import pytest
 
+from config import settings
 from contracts import TopicProfile
 from db.models import ChatMessage, LlmCallLog, Session as SessionModel, User
-from services import profile_service, summary_service
+from services import cost_meter, profile_service, summary_service
 
 
 USER_ID = "u1"
@@ -167,3 +169,71 @@ def test_summary_uses_last_30_messages(db_session, monkeypatch):
     # surviving-window boundary instead: with 40 messages and a 30-window,
     # messages 1-10 must have fallen out.
     assert "user: marker-9" not in user_prompt
+
+
+def test_summary_capped_user_gets_mechanical_no_llm_no_ledger(
+    session_with_messages, db_session, monkeypatch
+):
+    # F-03: at the hard cap the summary path must not spend.
+    monkeypatch.setattr(settings, "llm_stub", False)
+    monkeypatch.setattr(settings, "gemini_api_key", "real")
+    cost_meter.record_cost(
+        db_session, session_with_messages.user_id, Decimal(str(settings.llm_hard_cap_usd))
+    )
+    db_session.commit()
+    called = []
+
+    async def _boom(**kwargs):
+        called.append(1)
+
+    monkeypatch.setattr(summary_service.litellm, "acompletion", _boom)
+    summary = asyncio.run(
+        summary_service.generate_and_persist(db_session, session_with_messages)
+    )
+    assert summary.startswith("[auto]")
+    assert called == []
+
+
+def test_summary_allow_llm_false_gets_mechanical(
+    session_with_messages, db_session, monkeypatch
+):
+    monkeypatch.setattr(settings, "llm_stub", False)
+    monkeypatch.setattr(settings, "gemini_api_key", "real")
+    called = []
+
+    async def _boom(**kwargs):
+        called.append(1)
+
+    monkeypatch.setattr(summary_service.litellm, "acompletion", _boom)
+    summary = asyncio.run(
+        summary_service.generate_and_persist(
+            db_session, session_with_messages, allow_llm=False
+        )
+    )
+    assert summary.startswith("[auto]")
+    assert called == []
+
+
+def test_summary_success_records_ledger_and_passes_timeout(
+    session_with_messages, db_session, monkeypatch
+):
+    # F-03 meter + F-06 timeout kwarg.
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(settings, "llm_stub", False)
+    monkeypatch.setattr(settings, "gemini_api_key", "real")
+    captured = {}
+
+    async def _fake(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="A real summary."))]
+        )
+
+    monkeypatch.setattr(summary_service.litellm, "acompletion", _fake)
+    monkeypatch.setattr(summary_service.litellm, "completion_cost", lambda **kwargs: 0.003)
+    asyncio.run(
+        summary_service.generate_and_persist(db_session, session_with_messages)
+    )
+    assert captured["timeout"] == settings.summary_timeout_s
+    assert cost_meter.current_spend(db_session, session_with_messages.user_id) == Decimal("0.0030")

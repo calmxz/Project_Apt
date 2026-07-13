@@ -33,7 +33,12 @@ def _mechanical_fallback(messages: list[ChatMessage]) -> str:
     return ("[auto] " + body)[:400]
 
 
-async def generate_and_persist(db: Session, session: SessionModel) -> str:
+async def generate_and_persist(
+    db: Session, session: SessionModel, *, allow_llm: bool = True
+) -> str:
+    """allow_llm=False (rate-limited caller) or a breached hard cost cap
+    short-circuits to the mechanical summary -- an end must always succeed,
+    but must not spend (F-03)."""
     messages = db.execute(
         select(ChatMessage)
         .where(ChatMessage.session_id == session.id)
@@ -54,6 +59,10 @@ async def generate_and_persist(db: Session, session: SessionModel) -> str:
     summary: str
     if settings.llm_stub_enabled:
         summary = _mechanical_fallback(messages)
+    elif not allow_llm or not cost_meter.check_cap(db, session.user_id).allowed:
+        # F-03: the summary LLM call is real spend and must respect the same
+        # daily ledger and rate limit the chat path is gated on.
+        summary = _mechanical_fallback(messages)
     else:
         try:
             resp = await litellm.acompletion(
@@ -63,6 +72,7 @@ async def generate_and_persist(db: Session, session: SessionModel) -> str:
                     {"role": "system", "content": SUMMARY_SYSTEM},
                     {"role": "user", "content": user_prompt},
                 ],
+                timeout=settings.summary_timeout_s,
             )
             content = (resp.choices[0].message.content or "").strip()
             summary = content if content else _mechanical_fallback(messages)
@@ -70,7 +80,19 @@ async def generate_and_persist(db: Session, session: SessionModel) -> str:
                 cost = litellm.completion_cost(completion_response=resp)
             except Exception as e:
                 log.warning("summary completion_cost failed: %s", e)
-                cost = 0
+                try:
+                    pt = litellm.token_counter(
+                        model=settings.model,
+                        messages=[
+                            {"role": "system", "content": SUMMARY_SYSTEM},
+                            {"role": "user", "content": user_prompt},
+                        ],
+                    )
+                    cost = cost_meter.estimate_cancelled_cost(settings.model, content, pt)
+                except Exception as e2:  # noqa: BLE001
+                    log.warning("summary cost fallback failed: %s", e2)
+                    cost = 0
+            cost_meter.record_cost(db, session.user_id, cost)
             cost_meter.log_call(
                 db,
                 user_id=session.user_id,

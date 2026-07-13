@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     summary_temperature: float = 0.0
     retrieval_fallback_threshold: float = 0.75
 
+    # F-06: explicit LiteLLM timeouts. Chat streams get the longest budget;
+    # summaries and embeddings are shorter single-shot calls.
+    llm_timeout_s: float = 30.0
+    summary_timeout_s: float = 20.0
+    embedding_timeout_s: float = 15.0
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
