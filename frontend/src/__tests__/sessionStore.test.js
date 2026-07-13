@@ -397,6 +397,19 @@ describe('session store — streaming', () => {
     expect(s.streamState).toBe('idle')
   })
 
+  it('resets stream state when the stream ends without a terminal event', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 's1'
+    vi.spyOn(streamSvc, 'streamChat').mockImplementation(async ({ onEvent }) => {
+      onEvent({ event: 'assistant_delta', data: { text: 'partial' } })
+      // resolves without emitting done/cancelled/error -- simulates a dropped connection
+    })
+    await s.sendMessageStreaming({ text: 'hello' })
+    expect(s.streamState).toBe('idle')
+    expect(s.streamingMessage).toBeNull()
+    expect(s.error).toBeTruthy()
+  })
+
   it('stopStream invokes abortController.abort() and transitions to stopping', () => {
     const s = useSessionStore()
     const abort = vi.fn()
