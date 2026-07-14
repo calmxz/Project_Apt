@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from config import settings
 from db.models import UsageCounter
+from services.sql_dialect import dialect_insert
 
 
 def _today_utc() -> str:
@@ -17,20 +18,6 @@ def midnight_utc_iso() -> str:
     now = datetime.now(timezone.utc)
     tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
     return tomorrow.isoformat()
-
-
-def _dialect_insert(db: Session):
-    """Return the dialect-specific INSERT that supports ON CONFLICT.
-
-    Both Postgres (prod) and SQLite (tests) implement `on_conflict_do_nothing`;
-    the dialect-agnostic `sqlalchemy.insert()` does not.
-    """
-    name = db.get_bind().dialect.name
-    if name == "postgresql":
-        from sqlalchemy.dialects.postgresql import insert as _insert
-    else:
-        from sqlalchemy.dialects.sqlite import insert as _insert
-    return _insert
 
 
 def check_and_increment(db: Session, user_id: str) -> tuple[bool, int]:
@@ -54,7 +41,7 @@ def check_and_increment(db: Session, user_id: str) -> tuple[bool, int]:
     """
     date_utc = _today_utc()
 
-    insert = _dialect_insert(db)
+    insert = dialect_insert(db)
     db.execute(
         insert(UsageCounter)
         .values(user_id=user_id, date_utc=date_utc, count=0)

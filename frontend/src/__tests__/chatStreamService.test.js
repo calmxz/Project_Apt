@@ -20,6 +20,22 @@ function mockResponse(sseBody) {
   })
 }
 
+// Build a Response whose body is a ReadableStream that emits one SSE frame
+// and then never closes -- used to simulate an idle (hung) stream.
+function sseResponseThatHangsAfterOneEvent() {
+  const encoder = new TextEncoder()
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode('event: assistant_delta\ndata: {"delta":"hi"}\n\n'))
+      // deliberately never close/enqueue again
+    },
+  })
+  return new Response(stream, {
+    status: 200,
+    headers: { 'content-type': 'text/event-stream' },
+  })
+}
+
 describe('chatStreamService', () => {
   let fetchMock
 
@@ -77,7 +93,65 @@ describe('chatStreamService', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
     const init = fetchMock.mock.calls[0][1]
-    expect(init.signal).toBe(ctrl.signal)
+    // The service wires the caller's signal into an internal controller (needed
+    // to layer header/idle timeouts on top), so it is no longer literally the
+    // same object -- assert it is a live AbortSignal that tracks the caller's.
+    expect(init.signal).toBeInstanceOf(AbortSignal)
+    expect(init.signal.aborted).toBe(false)
+  })
+
+  it('rejects with a timeout ApiError when headers never arrive', async () => {
+    vi.useFakeTimers()
+    fetchMock.mockImplementationOnce(() => new Promise(() => {})) // never resolves
+    const p = streamChat({ sessionId: 's1', message: 'hi', onEvent: vi.fn() })
+    await Promise.all([
+      expect(p).rejects.toMatchObject({
+        status: 0,
+        body: { detail: 'request timed out' },
+      }),
+      vi.advanceTimersByTimeAsync(30000),
+    ])
+    vi.useRealTimers()
+  })
+
+  it('rejects with a timeout ApiError when the stream goes idle', async () => {
+    vi.useFakeTimers()
+    // A stream that emits one event then hangs forever.
+    fetchMock.mockResolvedValueOnce(sseResponseThatHangsAfterOneEvent())
+    const onEvent = vi.fn()
+    const p = streamChat({ sessionId: 's1', message: 'hi', onEvent })
+    await Promise.all([
+      expect(p).rejects.toMatchObject({
+        status: 0,
+        body: { detail: 'stream timed out' },
+      }),
+      vi.advanceTimersByTimeAsync(61000),
+    ])
+    vi.useRealTimers()
+  })
+
+  it('a caller abort propagates as an abort, not an ApiError', async () => {
+    const ctrl = new AbortController()
+    fetchMock.mockImplementationOnce((url, init) => new Promise((_, reject) => {
+      init.signal.addEventListener('abort', () => reject(init.signal.reason ?? new DOMException('aborted', 'AbortError')))
+    }))
+    const p = streamChat({ sessionId: 's1', message: 'hi', onEvent: vi.fn(), signal: ctrl.signal })
+    ctrl.abort()
+    await expect(p).rejects.toMatchObject({ name: 'AbortError' })
+  })
+
+  it('a caller abort MID-STREAM (after headers + at least one event) propagates as an AbortError, not a generic Error or ApiError', async () => {
+    const ctrl = new AbortController()
+    // Headers arrive fine; the stream then emits one event and hangs -- the
+    // caller (e.g. a Stop button) aborts once it has seen that first event,
+    // simulating a genuine mid-stream user cancel.
+    fetchMock.mockResolvedValueOnce(sseResponseThatHangsAfterOneEvent())
+    const onEvent = vi.fn(() => { ctrl.abort() })
+
+    const p = streamChat({ sessionId: 's1', message: 'hi', onEvent, signal: ctrl.signal })
+
+    await expect(p).rejects.toMatchObject({ name: 'AbortError' })
+    expect(onEvent).toHaveBeenCalledTimes(1)
   })
 
   it('streamChat puts review_gaps in the request body when reviewGaps is true', async () => {

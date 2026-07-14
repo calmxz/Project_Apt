@@ -105,10 +105,10 @@ in `MODEL_RATES` is `[UNVERIFIED]` against live vendor pricing.
 |----|-----|------|-----------|--------|
 | F-01 | P0 | chat/stream | agent/tutor.py:370 | Non-cancel exception in agent loop emits no error SSE; frontend locks in "streaming" forever — FIXED (Batch 1) |
 | F-02 | P0 | profile / docs | profile_service.py:343-364 | Flagship focus-clear guard deleted; design doc + CLAUDE.md still claim it is enforced |
-| F-03 | P1 | cost cap | summary_service.py:73-90 | Summary LLM spend bypasses cost ledger AND rate limit; end/reopen loop = unbounded spend |
+| F-03 | P1 | cost cap | summary_service.py:73-90 | Summary LLM spend bypasses cost ledger AND rate limit; end/reopen loop = unbounded spend — FIXED (Batch 2, fix/adversarial-batch-2, 2026-07-13) |
 | F-04 | P1 | summary | summary_service.py:37-42 | Session summary reads FIRST 30 messages, not last 30 (docstring lies) — FIXED (Batch 1) |
 | F-05 | P1 | session state | routes/chat.py (no ended_at) | Ended sessions still accept chat turns and check answers server-side — FIXED (Batch 1) |
-| F-06 | P1 | reliability | summary_service.py:58 | No timeout on summary/LLM calls; sync DB conn held across await; FE fetch no timeout |
+| F-06 | P1 | reliability | summary_service.py:58 | No timeout on summary/LLM calls; sync DB conn held across await; FE fetch no timeout — FIXED (Batch 2, fix/adversarial-batch-2, 2026-07-13, scope: timeouts on 6 backend LLM call sites + FE request/header/idle timeouts; no retry-once-shorter/503; pool sizing out of scope) |
 | F-07 | P1 | auth | services/auth.py:77 | JWKS/unknown-kid raises uncaught PyJWKClientError → 500 storm; unauth-triggerable JWKS refetch |
 | F-08 | P1 | auth / privacy | frontend/src/stores/user.js:9 | Cross-account leak: user store localStorage key is constant, never cleared on sign-out |
 | F-09 | P1 | frontend | services/apiClient.js:62-66 | No 401 handling anywhere: no refresh-retry, no sign-out, no redirect |
@@ -119,9 +119,9 @@ in `MODEL_RATES` is `[UNVERIFIED]` against live vendor pricing.
 | F-14 | P1 | chat/stream | agent/tutor.py:366-368 | max_iters / mid-turn cap discards already-streamed text; leaves orphan open batch |
 | F-15 | P1 | storage | render.yaml / upload.py:103 | Uploads on ephemeral disk in prod (no persistent mount); lost on deploy/restart |
 | F-16 | P1 | deploy | frontend/Dockerfile (HEAD) | Committed dev HEAD builds frontend without Supabase env → dead auth client — FIXED (Batch 1) |
-| F-17 | P2 | cost cap | cost_meter.py:77-84 | Cost-ledger update is a lost-update race; cap check is check-then-act |
+| F-17 | P2 | cost cap | cost_meter.py:77-84 | Cost-ledger update is a lost-update race; cap check is check-then-act — FIXED (Batch 2, fix/adversarial-batch-2, 2026-07-13) |
 | F-18 | P2 | perf | retrieval_service.py:44-48 | Sync `litellm.embedding` + sync dispatch on the async loop stalls all concurrent streams |
-| F-19 | P2 | cost cap | retrieval_service.py / tutor.py:184-189 | Embedding calls never metered; per-iter cost silently 0 on builder failure |
+| F-19 | P2 | cost cap | retrieval_service.py / tutor.py:184-189 | Embedding calls never metered; per-iter cost silently 0 on builder failure — FIXED (Batch 2, fix/adversarial-batch-2, 2026-07-13, note: Batch-1-deferred error-arm billing item also closed) |
 | F-20 | P2 | profile | agent/tutor.py:266-270 | Malformed tool-args JSON → empty patch that reports "Profile updated" |
 | F-21 | P2 | profile | profile_service.py:335-341 | Evidence provenance (R4) is LLM-self-reported and gates only review-queue sort order |
 | F-22 | P2 | profile | profile_service.py:165-167 | Case-mismatch leaves focus dangling on a removed gap (exact vs canon compare) |
@@ -145,7 +145,7 @@ in `MODEL_RATES` is `[UNVERIFIED]` against live vendor pricing.
 | F-40 | P2 | upload | upload.py:58-94 | Full body read before size enforcement when Content-Length absent/spoofed |
 | F-41 | P2 | auth | services/auth.py:69-76 | Zero clock-skew tolerance in JWT decode; boundary 401s |
 | F-42 | P2 | transport | frontend/nginx.conf | No per-request rate limiting anywhere (only daily LLM caps) |
-| F-43 | P2 | cost cap | cost_meter.py:62-66 | Mid-turn `check_cap` reads through the ORM identity map, not the DB |
+| F-43 | P2 | cost cap | cost_meter.py:62-66 | Mid-turn `check_cap` reads through the ORM identity map, not the DB — FIXED (Batch 2, fix/adversarial-batch-2, 2026-07-13) |
 | F-44 | P3 | frontend | SessionView.vue:432-441 | End-summary dialog silently dropped when ending from anywhere but the open session view |
 | F-45 | P3 | frontend | HomeView.vue:92-120 | Review/quick-start have no in-flight guard; unhandled rejection; double-click dupes sessions |
 | F-46 | P3 | auth | router/index.js:106-113 | Onboarding state per-browser; existing user on a new device force-routed to onboarding |

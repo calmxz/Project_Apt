@@ -25,12 +25,14 @@ import os
 import litellm
 from pptx import Presentation
 from pypdf import PdfReader
+from sqlalchemy import select
 
 from config import settings
 from db.database import SessionLocal
 from db.models import Document
+from db.models import Session as SessionModel
 from lib import chunking, keyword_index
-from services import pgvector_store
+from services import cost_meter, pgvector_store
 
 
 log = logging.getLogger(__name__)
@@ -84,7 +86,9 @@ def _extract(path: str, filename: str) -> list[tuple[int | None, str]]:
     raise ValueError(f"unsupported file type: {ext!r}")
 
 
-def _embed_all(texts: list[str]) -> list[list[float]]:
+def _embed_all(
+    db, texts: list[str], *, user_id: str | None, session_id: str
+) -> list[list[float]]:
     out: list[list[float]] = []
     for i in range(0, len(texts), EMBED_BATCH):
         batch = texts[i : i + EMBED_BATCH]
@@ -93,9 +97,18 @@ def _embed_all(texts: list[str]) -> list[list[float]]:
                 model=settings.embedding_model,
                 input=batch,
                 dimensions=settings.embedding_dim,
+                timeout=settings.embedding_timeout_s,
             )
         except Exception as e:
             raise RuntimeError(f"embedding api failed: {e}") from e
+        if user_id is not None:
+            # F-19: ingestion is the largest embedding spender; meter it.
+            # Metering only -- NO cap gate here. Ingestion is already
+            # rate-limited at upload time, and failing a document mid-pipeline
+            # for a cap breach would strand it (F-26 territory, Batch 5).
+            cost_meter.meter_embedding_response(
+                db, resp, user_id=user_id, session_id=session_id, texts=batch,
+            )
         for item in resp.data:
             out.append(item["embedding"] if isinstance(item, dict) else item.embedding)
     return out
@@ -123,7 +136,12 @@ def run(document_id: int) -> None:
                 db.commit()
                 return
 
-            embeddings = _embed_all([c.text for c in chunks])
+            owner_id = db.execute(
+                select(SessionModel.user_id).where(SessionModel.id == doc.session_id)
+            ).scalar_one_or_none()
+            embeddings = _embed_all(
+                db, [c.text for c in chunks], user_id=owner_id, session_id=doc.session_id
+            )
 
             pgvector_store.insert_chunks(
                 db,

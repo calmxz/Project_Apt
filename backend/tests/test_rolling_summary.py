@@ -6,11 +6,15 @@ the stored summary ran. Due when at least ROLLING_DEBOUNCE new messages have
 dropped since.
 """
 
+from decimal import Decimal
+from types import SimpleNamespace
+
 import pytest
 
+from config import settings
 from contracts import TopicProfile
 from db.models import ChatMessage, Session as SessionModel, User
-from services import summary_service
+from services import cost_meter, summary_service
 
 
 USER_ID = "u_roll"
@@ -92,3 +96,78 @@ async def test_update_rolling_summary_llm_failure_skips(
     db_session.refresh(s)
     assert s.rolling_summary is None
     assert s.rolling_summary_count is None  # unchanged -> next trigger retries
+
+
+async def test_update_rolling_summary_capped_user_skips_llm(
+    db_session, session_with_messages, monkeypatch
+):
+    # F-03: at the hard cap, skip (return None, debounce untouched) instead of spending.
+    s = session_with_messages(n=31)  # due: 31-20=11 dropped >= 10
+    monkeypatch.setattr(settings, "llm_stub", False)
+    monkeypatch.setattr(settings, "gemini_api_key", "real")
+    cost_meter.record_cost(db_session, s.user_id, Decimal(str(settings.llm_hard_cap_usd)))
+    db_session.commit()
+    called = []
+
+    async def _boom(**kwargs):
+        called.append(1)
+
+    monkeypatch.setattr(summary_service.litellm, "acompletion", _boom)
+    result = await summary_service.update_rolling_summary(db_session, s.id)
+    assert result is None
+    assert called == []
+    db_session.refresh(s)
+    assert s.rolling_summary is None
+    assert s.rolling_summary_count is None
+
+
+async def test_update_rolling_summary_success_records_ledger_and_timeout(
+    db_session, session_with_messages, monkeypatch
+):
+    s = session_with_messages(n=31)
+    monkeypatch.setattr(settings, "llm_stub", False)
+    monkeypatch.setattr(settings, "gemini_api_key", "real")
+    captured = {}
+
+    async def _fake(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content="Earlier the learner studied X.")
+                )
+            ]
+        )
+
+    monkeypatch.setattr(summary_service.litellm, "acompletion", _fake)
+    monkeypatch.setattr(summary_service.litellm, "completion_cost", lambda **kwargs: 0.001)
+    result = await summary_service.update_rolling_summary(db_session, s.id)
+    assert result == "Earlier the learner studied X."
+    assert captured["timeout"] == settings.summary_timeout_s
+    assert cost_meter.current_spend(db_session, s.user_id) == Decimal("0.0010")
+
+
+async def test_update_rolling_summary_empty_content_still_meters_before_returning_none(
+    db_session, session_with_messages, monkeypatch
+):
+    # F-related fix wave: an empty-content response is still a paid
+    # acompletion call and must be metered before the early return, not
+    # skipped unbilled.
+    s = session_with_messages(n=31)
+    monkeypatch.setattr(settings, "llm_stub", False)
+    monkeypatch.setattr(settings, "gemini_api_key", "real")
+
+    async def _fake_empty(**kwargs):
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=""))]
+        )
+
+    monkeypatch.setattr(summary_service.litellm, "acompletion", _fake_empty)
+    monkeypatch.setattr(summary_service.litellm, "completion_cost", lambda **kwargs: 0.002)
+    result = await summary_service.update_rolling_summary(db_session, s.id)
+    assert result is None
+    assert cost_meter.current_spend(db_session, s.user_id) == Decimal("0.0020")
+    db_session.refresh(s)
+    # empty-content debounce behavior unchanged: neither field is written
+    assert s.rolling_summary is None
+    assert s.rolling_summary_count is None

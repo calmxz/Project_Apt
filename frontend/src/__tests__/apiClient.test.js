@@ -91,4 +91,19 @@ describe('apiClient', () => {
     const err = await apiGet('/x').catch((e) => e)
     expect(err.body).toBe('plain text')
   })
+
+  it('sends an abort signal with each request', async () => {
+    fetchMock.mockReturnValueOnce(jsonResp(200, {}))
+    await apiGet('/ping')
+    const init = fetchMock.mock.calls[0][1]
+    expect(init.signal).toBeInstanceOf(AbortSignal)
+  })
+
+  it('maps a timeout abort to a friendly ApiError', async () => {
+    fetchMock.mockRejectedValueOnce(new DOMException('signal timed out', 'TimeoutError'))
+    await expect(apiGet('/slow', undefined, { silent: true })).rejects.toMatchObject({
+      status: 0,
+      body: { detail: 'request timed out' },
+    })
+  })
 })

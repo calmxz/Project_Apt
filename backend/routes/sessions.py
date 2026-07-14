@@ -122,7 +122,10 @@ async def create_session(
         if prior is None or prior.user_id != user_id:
             raise HTTPException(status_code=404, detail="prior session not found")
         if prior.ended_at is None:
-            await summary_service.generate_and_persist(db, prior)
+            # F-03: a resume-triggered summary fires a full-transcript LLM call;
+            # count it like a chat turn. At the cap it still succeeds mechanically.
+            allow_llm, _ = rate_limit.check_and_increment(db, user_id)
+            await summary_service.generate_and_persist(db, prior, allow_llm=allow_llm)
             db.refresh(prior)
         profile_json = prior.topic_profile_json
 
@@ -303,8 +306,11 @@ async def end_session(
                 summary=_build_end_summary(db, session_id, profile.last_session_summary or ""),
             )
 
+        # F-03: an end fires a full-transcript LLM call; count it like a chat
+        # turn. At the cap the end still succeeds with a mechanical summary.
+        allow_llm, _ = rate_limit.check_and_increment(db, user_id)
         check_question_service.abandon_open_batch(db, session_id)
-        summary_text = await summary_service.generate_and_persist(db, row)
+        summary_text = await summary_service.generate_and_persist(db, row, allow_llm=allow_llm)
         db.refresh(row)
         return SessionEndResponse(
             id=row.id,

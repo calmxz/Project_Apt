@@ -1,8 +1,14 @@
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 
+from db.models import DailyCostLedger, User
 from services import cost_meter
+
+
+def _mk_user(db, uid):
+    db.add(User(id=uid))
+    db.flush()
 
 
 def test_check_cap_urgent_tier(db_session, monkeypatch):
@@ -53,3 +59,55 @@ def test_spend_subquery_zero_when_no_ledger_row(db_session):
         select(cost_meter.spend_subquery("nobody"))
     ).scalar_one()
     assert Decimal(str(used or 0)) == Decimal("0")
+
+
+def test_current_spend_reads_through_identity_map(db_session):
+    # F-43: db.get returns the identity-map cache without SQL, hiding other
+    # sessions' concurrent spend. current_spend must emit a fresh SELECT.
+    _mk_user(db_session, "u43")
+    cost_meter.record_cost(db_session, "u43", Decimal("0.5"))
+    db_session.commit()
+    # Prime the identity map the way a long turn does.
+    assert cost_meter.current_spend(db_session, "u43") == Decimal("0.5000")
+    # Hold a strong reference to the cached row. SQLAlchemy's identity map is
+    # a WeakInstanceDict: without this, CPython's GC can reclaim the cached
+    # instance between calls and a buggy db.get()-based current_spend would
+    # accidentally re-query, letting this test pass even against the old
+    # cached-read bug. Keeping `row` alive across the mutation and the final
+    # assertion pins the fresh-read behavior deterministically (mirrors the
+    # F-17 test below).
+    row = db_session.get(DailyCostLedger, ("u43", cost_meter._today_utc()))
+    assert row is not None
+    # Mutate the row behind the ORM's back (simulates another session's commit).
+    db_session.execute(
+        text("UPDATE daily_cost_ledger SET cost_usd = 2.0 WHERE user_id = 'u43'")
+    )
+    assert cost_meter.current_spend(db_session, "u43") == Decimal("2.0000")
+    # The cached instance must remain stale (proves `row` was the identity-map
+    # hit a cached read would have returned) while current_spend is fresh.
+    assert row.cost_usd == Decimal("0.5")
+
+
+def test_record_cost_is_an_atomic_increment(db_session):
+    # F-17: record_cost must not read-modify-write. After the ORM has a stale
+    # cached instance, a subsequent record_cost must still add to the DB
+    # value, not to the cached one.
+    _mk_user(db_session, "u17")
+    cost_meter.record_cost(db_session, "u17", Decimal("0.5"))
+    db_session.commit()
+    row = db_session.get(DailyCostLedger, ("u17", cost_meter._today_utc()))
+    assert row is not None  # instance now cached with 0.5
+    db_session.execute(
+        text("UPDATE daily_cost_ledger SET cost_usd = 1.0 WHERE user_id = 'u17'")
+    )
+    total = cost_meter.record_cost(db_session, "u17", Decimal("0.25"))
+    # Read-modify-write on the cached 0.5 would yield 0.75; atomic SQL yields 1.25.
+    assert total == Decimal("1.2500")
+
+
+def test_record_cost_returns_running_total_and_quantizes(db_session):
+    _mk_user(db_session, "uq")
+    assert cost_meter.record_cost(db_session, "uq", 0.00006) == Decimal("0.0001")
+    assert cost_meter.record_cost(db_session, "uq", Decimal("0.1")) == Decimal("0.1001")
+    # Sub-precision cost quantizes to zero and is a no-op.
+    assert cost_meter.record_cost(db_session, "uq", 0.00001) == Decimal("0.1001")

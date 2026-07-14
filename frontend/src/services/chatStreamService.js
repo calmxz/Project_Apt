@@ -4,63 +4,111 @@ import { ApiError } from './apiClient.js'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
 
+// F-06: bound time-to-headers and inter-event silence, NOT total stream
+// duration -- multi-tool turns legitimately run long, and the backend's
+// per-iteration llm_timeout_s bounds each silent gap well under 60s.
+export const SSE_HEADER_TIMEOUT_MS = 30000
+export const SSE_IDLE_TIMEOUT_MS = 60000
+
 function _authToken() {
   try { return useAuthStore().accessToken ?? null } catch { return null }
 }
 
-export async function streamChat({ sessionId, message, reviewGaps = false, reviewGap = null, onEvent, signal }) {
+function _timeoutError() {
+  return new DOMException('timed out', 'TimeoutError')
+}
+
+async function _fetchSse(url, payload, { onEvent, signal, path }) {
   const headers = { 'content-type': 'application/json' }
   const token = _authToken()
   if (token) headers['authorization'] = `Bearer ${token}`
 
-  const payload = { session_id: sessionId, message, review_gaps: reviewGaps }
-  if (reviewGap) payload.review_gap = reviewGap
+  // Internal controller: layers the header/idle timeouts on top of whatever
+  // signal the caller passed in (e.g. the "stop" button), without mutating
+  // or replacing the caller's own AbortController.
+  const ctrl = new AbortController()
+  if (signal) {
+    if (signal.aborted) ctrl.abort(signal.reason)
+    else signal.addEventListener('abort', () => ctrl.abort(signal.reason), { once: true })
+  }
+
+  // Race the fetch against an explicit timeout promise rather than relying
+  // solely on the abort signal reaching fetch -- guarantees the 30s cap
+  // fires even against fetch implementations/mocks that don't act on abort.
+  let headerTimer
+  const headerTimeout = new Promise((_, reject) => {
+    headerTimer = setTimeout(() => {
+      ctrl.abort(_timeoutError())
+      reject(new ApiError(0, { detail: 'request timed out' }, path))
+    }, SSE_HEADER_TIMEOUT_MS)
+  })
 
   let resp
   try {
-    resp = await fetch(`${BASE_URL}/chat/stream`, {
+    // Race the ORIGINAL fetch promise, not a .catch()-wrapped copy (that
+    // would return a new promise and leave this one un-raced). When the
+    // timeout wins, ctrl.abort() below makes the real fetch eventually
+    // reject with AbortError; nothing else observes that rejection since
+    // the race already settled, which would surface as an unhandled
+    // promise rejection in production. Attach a no-op handler to the same
+    // promise object so its eventual rejection is observed either way.
+    const fetchPromise = fetch(url, {
       method: 'POST',
       headers,
       body: JSON.stringify(payload),
-      signal,
+      signal: ctrl.signal,
     })
+    fetchPromise.catch(() => {})
+    resp = await Promise.race([fetchPromise, headerTimeout])
   } catch (e) {
-    throw new ApiError(0, { detail: e.message }, '/chat/stream')
+    if (e instanceof ApiError) throw e
+    if (e?.name === 'TimeoutError') throw new ApiError(0, { detail: 'request timed out' }, path)
+    throw e instanceof TypeError ? new ApiError(0, { detail: e.message }, path) : e
+  } finally {
+    clearTimeout(headerTimer)
   }
 
   if (!resp.ok) {
     const text = await resp.text().catch(() => '')
     let body
     try { body = text ? JSON.parse(text) : null } catch { body = text }
-    throw new ApiError(resp.status, body, '/chat/stream')
+    throw new ApiError(resp.status, body, path)
   }
 
-  await parseSSEStream(resp.body, onEvent, { signal })
+  const timedOut = () => ctrl.signal.aborted && ctrl.signal.reason?.name === 'TimeoutError'
+
+  let idleTimer = setTimeout(() => ctrl.abort(_timeoutError()), SSE_IDLE_TIMEOUT_MS)
+  const wrappedOnEvent = (evt) => {
+    clearTimeout(idleTimer)
+    idleTimer = setTimeout(() => ctrl.abort(_timeoutError()), SSE_IDLE_TIMEOUT_MS)
+    onEvent(evt)
+  }
+  try {
+    await parseSSEStream(resp.body, wrappedOnEvent, { signal: ctrl.signal })
+  } catch (e) {
+    if (timedOut()) throw new ApiError(0, { detail: 'stream timed out' }, path)
+    // Not a timeout: if the internal controller was aborted, it's because the
+    // caller's own signal aborted (a mid-stream user cancel). sseParser's
+    // reader.cancel() resolves the pending read() with {done: true} and then
+    // throws a GENERIC Error('aborted') -- not the original AbortError -- so
+    // normalize back to the caller's abort reason here rather than leaking
+    // that generic Error past the AbortError contract callers rely on.
+    if (ctrl.signal.aborted) {
+      const reason = ctrl.signal.reason
+      throw reason?.name === 'AbortError' ? reason : new DOMException('aborted', 'AbortError')
+    }
+    throw e
+  } finally {
+    clearTimeout(idleTimer)
+  }
+}
+
+export async function streamChat({ sessionId, message, reviewGaps = false, reviewGap = null, onEvent, signal }) {
+  const payload = { session_id: sessionId, message, review_gaps: reviewGaps }
+  if (reviewGap) payload.review_gap = reviewGap
+  await _fetchSse(`${BASE_URL}/chat/stream`, payload, { onEvent, signal, path: '/chat/stream' })
 }
 
 export async function streamCheckComplete({ sessionId, onEvent, signal }) {
-  const headers = { 'content-type': 'application/json' }
-  const token = _authToken()
-  if (token) headers['authorization'] = `Bearer ${token}`
-
-  let resp
-  try {
-    resp = await fetch(`${BASE_URL}/sessions/${sessionId}/check/complete`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({}),
-      signal,
-    })
-  } catch (e) {
-    throw new ApiError(0, { detail: e.message }, '/check/complete')
-  }
-
-  if (!resp.ok) {
-    const text = await resp.text().catch(() => '')
-    let body
-    try { body = text ? JSON.parse(text) : null } catch { body = text }
-    throw new ApiError(resp.status, body, '/check/complete')
-  }
-
-  await parseSSEStream(resp.body, onEvent, { signal })
+  await _fetchSse(`${BASE_URL}/sessions/${sessionId}/check/complete`, {}, { onEvent, signal, path: '/check/complete' })
 }
