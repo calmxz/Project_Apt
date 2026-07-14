@@ -26,13 +26,18 @@ cleanly after that event and does not hang. True network-disconnect cancellation
 a running server; it is not reliably testable under TestClient.
 """
 
+import asyncio
 from datetime import datetime, timezone
 
 import pytest
-from contracts import TopicProfile
-from db.models import Session as SessionModel, User
+from fastapi import HTTPException
+from sqlalchemy import delete, func, select
+
+from contracts import ChatRequest, TopicProfile
+from db.models import Session as SessionModel, UsageCounter, User
 from agent.stream_events import StreamEvent
-from services import summary_service
+from routes.chat import _prepare_turn
+from services import rate_limit, summary_service
 
 
 SESSION_ID = "stream-s1"
@@ -377,3 +382,85 @@ def test_stream_rolling_summary_failure_does_not_break_turn(client, monkeypatch)
     assert resp.status_code == 200
     body = resp.text  # drain the SSE body; background task raises after this
     assert "event: done" in body
+
+
+# ---------------------------------------------------------------------------
+# Task 3: _prepare_turn ordering - F-36 + Batch-1 deferred rate-limit slot
+#
+# Session.user_id has a FK to users.id (db/models.py), but the db_session
+# fixture's sqlite engine (tests/conftest.py) never issues `PRAGMA
+# foreign_keys=ON`, so sqlite does not enforce it here. That lets these tests
+# re-home a session onto a not-yet-created user id and then delete any
+# pre-existing row for that id, producing the "valid JWT, no users row" state
+# F-36 targets, without a delete-blocked-by-FK failure.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def seeded_session(db_session):
+    uid = "prep-guard-user"
+    db_session.add(User(id=uid))
+    sess = SessionModel(id="prep-guard-session", user_id=uid, topic="algebra")
+    db_session.add(sess)
+    db_session.commit()
+    return sess
+
+
+@pytest.fixture
+def seeded_ended_session(db_session):
+    uid = "prep-guard-ended-user"
+    db_session.add(User(id=uid))
+    sess = SessionModel(
+        id="prep-guard-ended-session",
+        user_id=uid,
+        topic="algebra",
+        ended_at=datetime.now(timezone.utc),
+    )
+    db_session.add(sess)
+    db_session.commit()
+    return sess
+
+
+def _today_counter_count(db):
+    return db.execute(select(func.count()).select_from(UsageCounter)).scalar_one()
+
+
+def test_ended_session_409_consumes_no_rate_slot(db_session, seeded_ended_session):
+    """Batch-1 deferral: a 409'd turn must not burn a daily rate-limit slot."""
+    req = ChatRequest(session_id=seeded_ended_session.id, message="hi")
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(_prepare_turn(req, seeded_ended_session.user_id, db_session))
+    assert exc.value.status_code == 409
+    assert _today_counter_count(db_session) == 0
+
+
+def test_foreign_session_404_consumes_no_rate_slot(db_session, seeded_session):
+    req = ChatRequest(session_id=seeded_session.id, message="hi")
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(_prepare_turn(req, "someone-else", db_session))
+    assert exc.value.status_code == 404
+    assert _today_counter_count(db_session) == 0
+
+
+def test_first_turn_creates_user_before_rate_limit_insert(db_session, seeded_session, monkeypatch):
+    """F-36: the users row must exist when check_and_increment INSERTs the
+    FK-bearing usage_counters row (sqlite doesn't enforce the FK; assert
+    ordering explicitly)."""
+    new_uid = "brand-new-user"
+    # Re-home the seeded session onto the new user so the session guard passes.
+    seeded_session.user_id = new_uid
+    db_session.commit()
+    db_session.execute(delete(User).where(User.id == new_uid))
+    db_session.commit()
+
+    real = rate_limit.check_and_increment
+
+    def spy(db, uid):
+        assert db.execute(select(User.id).where(User.id == uid)).scalar_one_or_none() is not None, (
+            "usage-counter insert would FK-violate: users row missing"
+        )
+        return real(db, uid)
+
+    monkeypatch.setattr(rate_limit, "check_and_increment", spy)
+    asyncio.run(_prepare_turn(ChatRequest(session_id=seeded_session.id, message="hi"), new_uid, db_session))
+    assert db_session.get(User, new_uid) is not None
