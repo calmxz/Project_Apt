@@ -91,10 +91,11 @@ def attach_message_id(db: Session, session_id: str, message_id: int) -> None:
     _save(db, session_id, pc)
 
 
-def write_check_batch(db: Session, pc: dict | None) -> None:
+def write_check_batch(db: Session, pc: dict | None, commit: bool = True) -> None:
     """Persist public_view(pc) JSON onto the linked ChatMessage.
 
-    No-op when pc is falsy, carries no message_id, or the message is gone."""
+    No-op when pc is falsy, carries no message_id, or the message is gone.
+    commit=False leaves the write pending for the caller's transaction (F-33)."""
     if not pc:
         return
     message_id = pc.get("message_id")
@@ -105,7 +106,8 @@ def write_check_batch(db: Session, pc: dict | None) -> None:
         log.debug("write_check_batch: message %s not found", message_id)
         return
     msg.check_batch_json = json.dumps(public_view(pc))
-    db.commit()
+    if commit:
+        db.commit()
 
 
 def is_done(pc: dict | None) -> bool:
@@ -247,7 +249,7 @@ def skip(db: Session, session_id: str, index: int) -> dict:
     return _progress(pc)
 
 
-def abandon_open_batch(db: Session, session_id: str) -> bool:
+def abandon_open_batch(db: Session, session_id: str, commit: bool = True) -> bool:
     """Clear any lingering pending check batch: mark still-pending items
     "skipped", freeze the batch onto its message for honest history, and clear
     the pending pointer. Side-effect free -- logs no learning events and does
@@ -258,6 +260,8 @@ def abandon_open_batch(db: Session, session_id: str) -> bool:
     ANY non-null pending_check, so a fully-answered-but-uncleared batch blocks
     just as a half-answered one does -- both must be cleared here, hence no
     is_done() short-circuit.
+
+    commit=False defers both writes to the caller's single commit (F-33).
     """
     pc = get_pending_check(db, session_id)
     if pc is None:
@@ -266,8 +270,8 @@ def abandon_open_batch(db: Session, session_id: str) -> bool:
         if item.get("status") == "pending":
             item["status"] = "skipped"
     pc["current_index"] = len(pc.get("items", []))
-    write_check_batch(db, pc)
-    clear_pending_check(db, session_id)
+    write_check_batch(db, pc, commit=commit)
+    clear_pending_check(db, session_id, commit=commit)
     return True
 
 
