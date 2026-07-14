@@ -104,11 +104,13 @@ describe('chatStreamService', () => {
     vi.useFakeTimers()
     fetchMock.mockImplementationOnce(() => new Promise(() => {})) // never resolves
     const p = streamChat({ sessionId: 's1', message: 'hi', onEvent: vi.fn() })
-    await vi.advanceTimersByTimeAsync(30000)
-    await expect(p).rejects.toMatchObject({
-      status: 0,
-      body: { detail: 'request timed out' },
-    })
+    await Promise.all([
+      expect(p).rejects.toMatchObject({
+        status: 0,
+        body: { detail: 'request timed out' },
+      }),
+      vi.advanceTimersByTimeAsync(30000),
+    ])
     vi.useRealTimers()
   })
 
@@ -118,11 +120,13 @@ describe('chatStreamService', () => {
     fetchMock.mockResolvedValueOnce(sseResponseThatHangsAfterOneEvent())
     const onEvent = vi.fn()
     const p = streamChat({ sessionId: 's1', message: 'hi', onEvent })
-    await vi.advanceTimersByTimeAsync(61000)
-    await expect(p).rejects.toMatchObject({
-      status: 0,
-      body: { detail: 'stream timed out' },
-    })
+    await Promise.all([
+      expect(p).rejects.toMatchObject({
+        status: 0,
+        body: { detail: 'stream timed out' },
+      }),
+      vi.advanceTimersByTimeAsync(61000),
+    ])
     vi.useRealTimers()
   })
 

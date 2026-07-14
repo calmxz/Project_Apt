@@ -228,7 +228,8 @@ async def run_streaming(
                         settings.model, content_buf, pt
                     )
                 except Exception as e2:  # noqa: BLE001
-                    log.warning("stream cost token-math fallback failed: %s", e2)
+                    # Local tokenization/cost-estimation only; no credential in the exception.
+                    log.warning("stream cost token-math fallback failed: %s", e2)  # nosemgrep: python.lang.security.audit.logging.logger-credential-leak.python-logger-credential-disclosure
                     cost = 0.0
             if cost > 0:
                 try:
