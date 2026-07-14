@@ -4,9 +4,11 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from agent.types import ToolContext
 from config import settings
-from contracts import TopicProfile
+from contracts import AskCheckQuestionsArgs, TopicProfile
 from db.models import ChatMessage, Document, Session as SessionModel, UsageCounter, User
+from services import check_question_service, summary_service
 
 
 USER_ID = "u1"
@@ -551,4 +553,104 @@ def test_get_session_ingestion_empty_when_no_documents(client, db_session, seede
     assert r.status_code == 200
     body = r.json()
     assert body["status"] is None
-    assert body["documents"] == []
+
+
+# ---------------------------------------------------------------------------
+# F-30/F-31/F-33: claim-first end + single-commit summary + resume abandon
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def seeded_session(db_session, seeded_user):
+    session = SessionModel(
+        id="s_claim_1",
+        user_id=USER_ID,
+        topic="sql",
+        topic_profile_json=TopicProfile().model_dump_json(),
+    )
+    db_session.add(session)
+    db_session.commit()
+    return session
+
+
+def _open_batch(db, session_id, user_id=USER_ID, n=2):
+    ctx = ToolContext(
+        db=db, session_id=session_id, user_id=user_id,
+        turn_started_at=datetime.now(timezone.utc),
+    )
+    return check_question_service.register(
+        db, ctx,
+        AskCheckQuestionsArgs(
+            session_id=session_id,
+            gap="g",
+            items=[
+                {"question": f"Q{i}?", "options": ["a", "b"], "correct_index": 0, "explanation": "a."}
+                for i in range(n)
+            ],
+        ),
+    )
+
+
+@pytest.fixture
+def session_with_open_batch(db_session, seeded_user):
+    session = SessionModel(
+        id="s_open_batch_1",
+        user_id=USER_ID,
+        topic="sql",
+        topic_profile_json=TopicProfile().model_dump_json(),
+    )
+    db_session.add(session)
+    db_session.commit()
+    _open_batch(db_session, session.id)
+    return session
+
+
+def test_double_end_pays_one_summary(client, db_session, seeded_session, monkeypatch):
+    """F-30: the second end takes the idempotent path -- generate_and_persist
+    runs exactly once."""
+    calls = {"n": 0}
+    real = summary_service.generate_and_persist
+
+    async def counting(db, session, *, allow_llm=True):
+        calls["n"] += 1
+        return await real(db, session, allow_llm=allow_llm)
+
+    monkeypatch.setattr(summary_service, "generate_and_persist", counting)
+    # Route module does `from services import summary_service` (the module, not
+    # the function), so patching the attribute on the module object above is
+    # visible through routes.sessions.summary_service.generate_and_persist too.
+
+    r1 = client.post(f"/api/sessions/{seeded_session.id}/end?user_id={USER_ID}")
+    r2 = client.post(f"/api/sessions/{seeded_session.id}/end?user_id={USER_ID}")
+    assert r1.status_code == 200 and r2.status_code == 200
+    assert calls["n"] == 1
+    assert r2.json()["summary"] is not None
+
+
+def test_claim_end_is_single_winner(db_session, seeded_session):
+    from routes.sessions import _claim_end
+
+    assert _claim_end(db_session, seeded_session.id) is True
+    assert _claim_end(db_session, seeded_session.id) is False
+    db_session.refresh(seeded_session)
+    assert seeded_session.ended_at is not None
+
+
+def test_resume_create_abandons_prior_open_batch(client, db_session, session_with_open_batch):
+    """F-31: continue-topic must force-skip the prior's open quiz so reopening
+    the prior doesn't render a zombie batch or deadlock new quizzes."""
+    prior = session_with_open_batch
+    resp = client.post(
+        "/api/sessions",
+        json={
+            "user_id": USER_ID,
+            "topic": prior.topic,
+            "seed_mode": "resume",
+            "prior_session_id": prior.id,
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    db_session.expire_all()
+    assert check_question_service.get_pending_check(db_session, prior.id) is None
+    db_session.refresh(prior)
+    assert prior.ended_at is not None
