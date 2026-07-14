@@ -89,6 +89,11 @@ def test_post_resume_with_unended_prior_generates_summary(
         topic_profile_json=TopicProfile(mastered_concepts=[{"name": "select"}]).model_dump_json(),
     )
     db_session.add(prior)
+    db_session.flush()
+    # F-32: generate_and_persist short-circuits zero-message sessions to the
+    # mechanical fallback and never calls the LLM, so a message is required
+    # here to exercise the LLM-summary path this test targets.
+    db_session.add(ChatMessage(session_id="prior_2", role="user", content="what is a join"))
     db_session.commit()
 
     r = client.post(
@@ -339,6 +344,11 @@ def test_post_end_generates_summary(
             topic_profile_json=TopicProfile().model_dump_json(),
         )
     )
+    db_session.flush()
+    # F-32: generate_and_persist short-circuits zero-message sessions to the
+    # mechanical fallback and never calls the LLM, so a message is required
+    # here to exercise the LLM-summary path this test targets.
+    db_session.add(ChatMessage(session_id="s1", role="user", content="what is a join"))
     db_session.commit()
 
     r = client.post(f"/api/sessions/s1/end?user_id={USER_ID}")

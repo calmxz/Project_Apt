@@ -3,6 +3,7 @@
 import asyncio
 from decimal import Decimal
 
+import litellm
 import pytest
 
 from config import settings
@@ -13,6 +14,22 @@ from services import cost_meter, profile_service, summary_service
 
 USER_ID = "u1"
 SESSION_ID = "s1"
+
+
+@pytest.fixture
+def fresh_session(db_session):
+    """A seeded session row with zero ChatMessages (F-32)."""
+    db_session.add(User(id="u_fresh"))
+    db_session.flush()
+    session = SessionModel(
+        id="s_fresh",
+        user_id="u_fresh",
+        topic="sql",
+        topic_profile_json=TopicProfile().model_dump_json(),
+    )
+    db_session.add(session)
+    db_session.commit()
+    return session
 
 
 @pytest.fixture
@@ -237,3 +254,28 @@ def test_summary_success_records_ledger_and_passes_timeout(
     )
     assert captured["timeout"] == settings.summary_timeout_s
     assert cost_meter.current_spend(db_session, session_with_messages.user_id) == Decimal("0.0030")
+
+
+def test_zero_message_end_skips_llm(db_session, fresh_session, monkeypatch):
+    """F-32: ending a session with no messages must not pay for an LLM call
+    nor persist hallucinated prose.
+
+    Note: acompletion is asserted via a call-tracking list rather than a
+    raise-inside-the-mock, because generate_and_persist wraps the LLM call in
+    a broad try/except that falls back to the same mechanical string on any
+    exception -- a raise-based mock would be silently swallowed and the test
+    would pass even without the fix (verified empirically: it does).
+    """
+    monkeypatch.setattr(settings, "llm_stub", False)  # llm_stub_enabled is a property
+    called = []
+
+    async def _boom(*args, **kwargs):
+        called.append(1)
+        raise AssertionError("LLM must not be called for an empty transcript")
+
+    monkeypatch.setattr(litellm, "acompletion", _boom)
+    summary = asyncio.run(
+        summary_service.generate_and_persist(db_session, fresh_session)
+    )
+    assert summary == "[auto] no exchanges recorded"
+    assert called == []

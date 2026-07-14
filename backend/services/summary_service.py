@@ -57,7 +57,9 @@ async def generate_and_persist(
     )
 
     summary: str
-    if settings.llm_stub_enabled:
+    if settings.llm_stub_enabled or not messages:
+        # F-32: an empty transcript has nothing to summarize -- never pay for
+        # an LLM call, never persist hallucinated prose about it.
         summary = _mechanical_fallback(messages)
     elif not allow_llm or not cost_meter.check_cap(db, session.user_id).allowed:
         # F-03: the summary LLM call is real spend and must respect the same
