@@ -14,7 +14,6 @@ import { definePreset } from '@primeuix/themes'
 import App from './App.vue'
 import router from './router'
 import { useAuthStore } from './stores/auth.js'
-import { useUserStore } from './stores/user.js'
 import { useTheme } from './composables/useTheme.js'
 import { adaptPresetConfig } from './theme/adaptPreset.js'
 
@@ -23,11 +22,11 @@ const AdaptPreset = definePreset(Aura, adaptPresetConfig)
 async function bootstrap() {
   const app = createApp(App)
   app.use(createPinia())
-  useUserStore().loadFromLocalStorage()
   useTheme().init()
   // Resolve Supabase session before the router guard fires, so the first
   // navigation has a deterministic auth answer rather than racing with the
-  // SDK's initial getSession() call.
+  // SDK's initial getSession() call. auth.init() also re-keys the user
+  // store to the resolved uid (F-08), so no separate boot-time load here.
   await useAuthStore().init()
   app.use(router)
   app.use(PrimeVue, {

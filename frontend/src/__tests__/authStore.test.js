@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
 import { useAuthStore } from '@/stores/auth.js'
+import { useUserStore } from '@/stores/user.js'
 
 describe('auth store', () => {
   beforeEach(() => {
@@ -185,5 +186,19 @@ describe('auth store', () => {
     })
     const auth = useAuthStore()
     await expect(auth.updatePassword('newpass12')).rejects.toThrow('same password')
+  })
+
+  it('auth state changes re-key the user store (F-08)', async () => {
+    const auth = useAuthStore()
+    const user = useUserStore()
+    await auth.init()
+    const fire = globalThis.__supabaseAuthStub.onAuthStateChange.mock.calls[0][0]
+
+    fire('SIGNED_IN', { user: { id: 'user-a' }, access_token: 't' })
+    expect(user.activeUserId).toBe('user-a')
+
+    fire('SIGNED_OUT', null)
+    expect(user.activeUserId).toBeNull()
+    expect(user.onboardingComplete).toBe(false)
   })
 })
