@@ -33,7 +33,39 @@ function _getAccessToken() {
   }
 }
 
-async function request(method, path, { body, params, silent = false, headers } = {}) {
+// F-09: one refresh-then-retry on 401. getSession() refreshes an expired
+// access token via the SDK; a second 401 means the session is truly dead --
+// sign out and land on login instead of stranding a signed-in-looking UI.
+export async function _refreshAccessToken() {
+  try {
+    const { getSupabase } = await import('./supabase.js')
+    const { data } = await getSupabase().auth.getSession()
+    return data?.session?.access_token ?? null
+  } catch {
+    return null
+  }
+}
+
+export async function _onAuthExpired() {
+  try {
+    const store = useAuthStore()
+    try {
+      await store.signOut()
+    } catch {
+      // Supabase signOut failure must not block the local redirect.
+    }
+  } catch {
+    // No active pinia (unit tests) -- nothing to sign out.
+  }
+  try {
+    const { default: router } = await import('../router/index.js')
+    router.push({ name: 'login' })
+  } catch {
+    // Router unavailable outside the app shell.
+  }
+}
+
+async function request(method, path, { body, params, silent = false, headers } = {}, _retried = false) {
   let url = `${BASE_URL}${path}`
   if (params) {
     const qs = new URLSearchParams(
@@ -52,7 +84,7 @@ async function request(method, path, { body, params, silent = false, headers } =
     init.signal = AbortSignal.timeout(REQUEST_TIMEOUT_MS)
   }
 
-  const token = _getAccessToken()
+  const token = _retried ? await _refreshAccessToken() : _getAccessToken()
   if (token) init.headers['authorization'] = `Bearer ${token}`
 
   let resp
@@ -65,10 +97,16 @@ async function request(method, path, { body, params, silent = false, headers } =
     throw err
   }
 
+  if (resp.status === 401 && !_retried) {
+    // F-09: silent first 401 -- refresh and retry once before surfacing.
+    return request(method, path, { body, params, silent, headers }, true)
+  }
+
   const text = await resp.text()
   const parsed = text ? safeJson(text) : null
 
   if (!resp.ok) {
+    if (resp.status === 401 && _retried) await _onAuthExpired()
     const err = new ApiError(resp.status, parsed ?? text, path)
     if (!silent) reportApiError(err)
     throw err

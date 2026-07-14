@@ -1,11 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
 import { ApiError, apiGet, apiPost } from '../services/apiClient.js'
 import { errorBus } from '../services/errorBus.js'
+
+vi.mock('../router/index.js', () => ({ default: { push: vi.fn() } }))
 
 describe('apiClient', () => {
   let listener
   let fetchMock
   beforeEach(() => {
+    setActivePinia(createPinia())
     listener = vi.fn()
     errorBus.addEventListener('api-error', listener)
     fetchMock = vi.fn()
@@ -105,5 +109,37 @@ describe('apiClient', () => {
       status: 0,
       body: { detail: 'request timed out' },
     })
+  })
+
+  it('retries once with a refreshed token on 401 (F-09)', async () => {
+    globalThis.__supabaseAuthStub.getSession.mockResolvedValueOnce({
+      data: { session: { access_token: 'fresh-token', user: { id: 'u1' } } },
+    })
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('{"detail":"invalid_token"}', { status: 401 }))
+      .mockResolvedValueOnce(new Response('{"ok":true}', { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await apiGet('/whatever')
+    expect(result).toEqual({ ok: true })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock.mock.calls[1][1].headers.authorization).toBe('Bearer fresh-token')
+  })
+
+  it('signs out and redirects to login after a second 401', async () => {
+    const router = (await import('../router/index.js')).default
+    globalThis.__supabaseAuthStub.getSession.mockResolvedValue({
+      data: { session: { access_token: 'still-dead', user: { id: 'u1' } } },
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response('{"detail":"invalid_token"}', { status: 401 })),
+    )
+
+    await expect(apiGet('/whatever')).rejects.toMatchObject({ status: 401 })
+    expect(globalThis.__supabaseAuthStub.signOut).toHaveBeenCalled()
+    expect(router.push).toHaveBeenCalledWith({ name: 'login' })
+    expect(fetch).toHaveBeenCalledTimes(2) // hard cap: one retry
   })
 })
