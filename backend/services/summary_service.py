@@ -117,7 +117,16 @@ async def generate_and_persist(
     # F-33: single write window AFTER the LLM await. Abandon any open check
     # batch (F-31 -- resume-create reaches here too) and persist the summary
     # in one commit. ended_at is NOT written here: the caller's _claim_end
-    # owns it (F-30) and has already committed it.
+    # owns it (F-30) and has already committed it. Cost-ledger writes above
+    # (record_cost, log_call) are NOT independently committed -- record_cost
+    # only flushes and log_call uses a savepoint (db.begin_nested()); both
+    # publish only when this function's db.commit() below runs, alongside the
+    # abandon + summary write. If that commit fails, the spend rolls back
+    # with it -- same atomicity as the pre-refactor code, and if it fails
+    # after the claim above already won, the session is left ended with no
+    # summary and any open check batch still open; that is an honest state
+    # (versus the old partial-write windows) -- subsequent end calls take the
+    # idempotent replay path and do not retry this write.
     check_question_service.abandon_open_batch(db, session.id, commit=False)
     profile.last_session_summary = summary
     profile_service.save_profile(db, session.id, profile, commit=False)
