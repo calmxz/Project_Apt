@@ -20,6 +20,12 @@ function mockResponse(sseBody) {
   })
 }
 
+// Build a 401 Response with a JSON body, matching the shape apiClient's
+// F-09 tests use for the same scenario.
+function mock401Response() {
+  return new Response(JSON.stringify({ detail: 'invalid_token' }), { status: 401 })
+}
+
 // Build a Response whose body is a ReadableStream that emits one SSE frame
 // and then never closes -- used to simulate an idle (hung) stream.
 function sseResponseThatHangsAfterOneEvent() {
@@ -203,5 +209,31 @@ describe('chatStreamService', () => {
     await expect(
       streamChat({ sessionId: 's1', message: 'hi', onEvent: () => {} }),
     ).rejects.toMatchObject({ status: 400 })
+  })
+
+  it('retries the SSE POST once with a refreshed token on 401 (F-09)', async () => {
+    globalThis.__supabaseAuthStub.getSession.mockResolvedValueOnce({
+      data: { session: { access_token: 'fresh-token', user: { id: 'u1' } } },
+    })
+    const events = []
+    fetchMock
+      .mockResolvedValueOnce(mock401Response())
+      .mockResolvedValueOnce(mockResponse('event: done\ndata: {}\n\n'))
+
+    await streamChat({ sessionId: 's1', message: 'hi', onEvent: (e) => events.push(e) })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock.mock.calls[1][1].headers.authorization).toBe('Bearer fresh-token')
+  })
+
+  it('signs out after a second 401 on the SSE POST', async () => {
+    globalThis.__supabaseAuthStub.getSession.mockResolvedValue({
+      data: { session: { access_token: 'still-dead', user: { id: 'u1' } } },
+    })
+    fetchMock.mockResolvedValue(mock401Response())
+
+    await expect(streamChat({ sessionId: 's1', message: 'hi', onEvent: () => {} }))
+      .rejects.toMatchObject({ status: 401 })
+    expect(globalThis.__supabaseAuthStub.signOut).toHaveBeenCalled()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 })

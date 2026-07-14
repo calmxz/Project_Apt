@@ -1,6 +1,6 @@
 import { parseSSEStream } from '@/lib/sseParser.js'
 import { useAuthStore } from '@/stores/auth.js'
-import { ApiError } from './apiClient.js'
+import { ApiError, _onAuthExpired, _refreshAccessToken } from './apiClient.js'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
 
@@ -18,9 +18,9 @@ function _timeoutError() {
   return new DOMException('timed out', 'TimeoutError')
 }
 
-async function _fetchSse(url, payload, { onEvent, signal, path }) {
+async function _fetchSse(url, payload, { onEvent, signal, path }, _retried = false) {
   const headers = { 'content-type': 'application/json' }
-  const token = _authToken()
+  const token = _retried ? await _refreshAccessToken() : _authToken()
   if (token) headers['authorization'] = `Bearer ${token}`
 
   // Internal controller: layers the header/idle timeouts on top of whatever
@@ -69,6 +69,12 @@ async function _fetchSse(url, payload, { onEvent, signal, path }) {
   }
 
   if (!resp.ok) {
+    if (resp.status === 401 && !_retried) {
+      // F-09: refresh-then-retry once. Safe pre-stream: no SSE bytes have
+      // been consumed yet, so the whole POST can simply be re-issued.
+      return _fetchSse(url, payload, { onEvent, signal, path }, true)
+    }
+    if (resp.status === 401) await _onAuthExpired()
     const text = await resp.text().catch(() => '')
     let body
     try { body = text ? JSON.parse(text) : null } catch { body = text }
