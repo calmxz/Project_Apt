@@ -145,3 +145,29 @@ async def test_update_rolling_summary_success_records_ledger_and_timeout(
     assert result == "Earlier the learner studied X."
     assert captured["timeout"] == settings.summary_timeout_s
     assert cost_meter.current_spend(db_session, s.user_id) == Decimal("0.0010")
+
+
+async def test_update_rolling_summary_empty_content_still_meters_before_returning_none(
+    db_session, session_with_messages, monkeypatch
+):
+    # F-related fix wave: an empty-content response is still a paid
+    # acompletion call and must be metered before the early return, not
+    # skipped unbilled.
+    s = session_with_messages(n=31)
+    monkeypatch.setattr(settings, "llm_stub", False)
+    monkeypatch.setattr(settings, "gemini_api_key", "real")
+
+    async def _fake_empty(**kwargs):
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=""))]
+        )
+
+    monkeypatch.setattr(summary_service.litellm, "acompletion", _fake_empty)
+    monkeypatch.setattr(summary_service.litellm, "completion_cost", lambda **kwargs: 0.002)
+    result = await summary_service.update_rolling_summary(db_session, s.id)
+    assert result is None
+    assert cost_meter.current_spend(db_session, s.user_id) == Decimal("0.0020")
+    db_session.refresh(s)
+    # empty-content debounce behavior unchanged: neither field is written
+    assert s.rolling_summary is None
+    assert s.rolling_summary_count is None

@@ -455,7 +455,11 @@ async def run_streaming(
         # uncommitted ledger flushes, so re-estimate the WHOLE turn (all
         # snapshots), not just the unbilled tail. Overcounts if a mid-turn
         # tool commit already published earlier increments -- conservative
-        # in the cap's favor.
+        # in the cap's favor. The same rollback also discards any in-turn
+        # retrieval-embedding metering on ctx.db, which this re-estimate does
+        # not account for (it only re-tokenizes chat prompt snapshots) -- a
+        # known, negligible undercount (~$0.0005/query) opposite the
+        # accepted completion overcount above.
         _record_partial_cost(
             ctx,
             iter_prompt_snapshots,

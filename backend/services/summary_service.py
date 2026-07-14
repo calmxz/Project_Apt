@@ -176,9 +176,10 @@ async def update_rolling_summary(db: Session, session_id: str) -> str | None:
                 timeout=settings.summary_timeout_s,
             )
             content = (resp.choices[0].message.content or "").strip()
-            if not content:
-                return None
-            summary = content[:ROLLING_SUMMARY_MAX_CHARS]
+            # Meter before branching on content: an empty response is still a
+            # paid acompletion call and must hit the ledger, not just the
+            # non-empty path (previously an empty-content early return here
+            # skipped the whole cost block -- tokens spent, nothing billed).
             try:
                 cost = litellm.completion_cost(completion_response=resp)
             except Exception as e:
@@ -199,6 +200,9 @@ async def update_rolling_summary(db: Session, session_id: str) -> str | None:
                 cost_usd=cost,
                 **cost_meter.extract_usage(resp),
             )
+            if not content:
+                return None
+            summary = content[:ROLLING_SUMMARY_MAX_CHARS]
 
         session.rolling_summary = summary
         session.rolling_summary_count = total - ROLLING_WINDOW

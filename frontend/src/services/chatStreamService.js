@@ -45,15 +45,21 @@ async function _fetchSse(url, payload, { onEvent, signal, path }) {
 
   let resp
   try {
-    resp = await Promise.race([
-      fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payload),
-        signal: ctrl.signal,
-      }),
-      headerTimeout,
-    ])
+    // Race the ORIGINAL fetch promise, not a .catch()-wrapped copy (that
+    // would return a new promise and leave this one un-raced). When the
+    // timeout wins, ctrl.abort() below makes the real fetch eventually
+    // reject with AbortError; nothing else observes that rejection since
+    // the race already settled, which would surface as an unhandled
+    // promise rejection in production. Attach a no-op handler to the same
+    // promise object so its eventual rejection is observed either way.
+    const fetchPromise = fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+      signal: ctrl.signal,
+    })
+    fetchPromise.catch(() => {})
+    resp = await Promise.race([fetchPromise, headerTimeout])
   } catch (e) {
     if (e instanceof ApiError) throw e
     if (e?.name === 'TimeoutError') throw new ApiError(0, { detail: 'request timed out' }, path)

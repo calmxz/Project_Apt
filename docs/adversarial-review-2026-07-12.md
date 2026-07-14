@@ -108,7 +108,7 @@ in `MODEL_RATES` is `[UNVERIFIED]` against live vendor pricing.
 | F-03 | P1 | cost cap | summary_service.py:73-90 | Summary LLM spend bypasses cost ledger AND rate limit; end/reopen loop = unbounded spend — FIXED (Batch 2, fix/adversarial-batch-2, 2026-07-13) |
 | F-04 | P1 | summary | summary_service.py:37-42 | Session summary reads FIRST 30 messages, not last 30 (docstring lies) — FIXED (Batch 1) |
 | F-05 | P1 | session state | routes/chat.py (no ended_at) | Ended sessions still accept chat turns and check answers server-side — FIXED (Batch 1) |
-| F-06 | P1 | reliability | summary_service.py:58 | No timeout on summary/LLM calls; sync DB conn held across await; FE fetch no timeout — FIXED (Batch 2, fix/adversarial-batch-2, 2026-07-13, scope: timeouts on 7 LLM call sites + FE request/header/idle; no retry-once-shorter/503; pool sizing out of scope) |
+| F-06 | P1 | reliability | summary_service.py:58 | No timeout on summary/LLM calls; sync DB conn held across await; FE fetch no timeout — FIXED (Batch 2, fix/adversarial-batch-2, 2026-07-13, scope: timeouts on 6 backend LLM call sites + FE request/header/idle timeouts; no retry-once-shorter/503; pool sizing out of scope) |
 | F-07 | P1 | auth | services/auth.py:77 | JWKS/unknown-kid raises uncaught PyJWKClientError → 500 storm; unauth-triggerable JWKS refetch |
 | F-08 | P1 | auth / privacy | frontend/src/stores/user.js:9 | Cross-account leak: user store localStorage key is constant, never cleared on sign-out |
 | F-09 | P1 | frontend | services/apiClient.js:62-66 | No 401 handling anywhere: no refresh-retry, no sign-out, no redirect |
