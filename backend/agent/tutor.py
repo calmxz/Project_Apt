@@ -280,14 +280,17 @@ async def run_streaming(
 
             # Tool calls present: append the assistant turn, then dispatch each.
             ordered = [tool_frags[k] for k in sorted(tool_frags)]
-            # ask_check_questions is turn-terminating. If the model bundles other tool
-            # calls in the same response (e.g. prematurely grading the question it is
-            # asking), drop them: only the ask is dispatched. Reduce BEFORE building the
-            # assistant message so the turn's persisted tool calls and `full` stay
-            # consistent.
+            # ask_check_questions is turn-terminating and must be the LAST call
+            # of the turn. F-10: bundled non-ask calls (profile patches,
+            # retrieval) are legitimate and are dispatched FIRST in their
+            # original order instead of being dropped; only ADDITIONAL asks
+            # (e.g. the model prematurely grading its own question) are
+            # dropped. Reduce BEFORE building the assistant message so the
+            # persisted tool calls and `full` stay consistent.
             ask_slots = [s for s in ordered if s["name"] == "ask_check_questions"]
             if ask_slots:
-                ordered = ask_slots[:1]
+                non_ask = [s for s in ordered if s["name"] != "ask_check_questions"]
+                ordered = non_ask + ask_slots[:1]
             full.append(
                 {
                     "role": "assistant",

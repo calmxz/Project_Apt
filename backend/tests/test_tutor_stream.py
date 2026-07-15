@@ -587,10 +587,11 @@ async def test_run_streaming_records_cost_on_tool_iterations(db_session, monkeyp
 
 
 @pytest.mark.asyncio
-async def test_run_streaming_ask_check_question_skips_siblings(db_session, monkeypatch):
-    """ask_check_questions is turn-terminating: a sibling tool call streamed in the
-    same response (e.g. a premature self-grade) must NOT be dispatched, so no
-    spurious 'Recording failed' chip is emitted."""
+async def test_run_streaming_ask_check_question_dispatches_sibling_first(db_session, monkeypatch):
+    """ask_check_questions is turn-terminating and must be the LAST call
+    dispatched. F-10: a sibling non-ask tool call streamed in the same
+    response (e.g. a bundled record_learning_event) is legitimate and IS
+    dispatched -- before the ask, not dropped."""
     _disable_stub(monkeypatch)
     _allow_cap(monkeypatch)
 
@@ -636,9 +637,9 @@ async def test_run_streaming_ask_check_question_skips_siblings(db_session, monke
         tutor.run_streaming([{"role": "user", "content": "quiz me"}], "sys", ctx)
     )
 
-    # Only ask_check_questions reached dispatch; the premature grade was dropped.
+    # F-10: the bundled non-ask call is dispatched first, then the ask last.
     dispatched = [c.args[0] for c in dispatch.call_args_list]
-    assert dispatched == ["ask_check_questions"]
+    assert dispatched == ["record_learning_event", "ask_check_questions"]
 
     types = [e.type for e in events]
     assert "check_question" in types

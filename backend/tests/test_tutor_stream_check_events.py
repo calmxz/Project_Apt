@@ -18,7 +18,7 @@ from agent.types import ToolContext
 from config import settings
 from db.models import ChatMessage, Session as SessionModel, User as UserModel
 
-from services import check_question_service
+from services import check_question_service, profile_service
 from services.cost_meter import CapStatus
 
 
@@ -356,4 +356,156 @@ async def test_cancel_mid_text_stream_does_not_raise_name_error(monkeypatch, db_
     assert any(m.status == "cancelled" for m in msgs), (
         "Expected a ChatMessage with status='cancelled' after the cancel branch ran"
     )
+
+
+@pytest.mark.asyncio
+async def test_bundled_profile_patch_dispatched_before_ask(monkeypatch, db_session):
+    """F-10: a response bundling update_topic_profile + ask_check_questions in
+    one iteration dispatches BOTH -- the patch first, the ask last -- instead
+    of dropping the patch. The ask still terminates the turn.
+    """
+    _disable_stub(monkeypatch)
+    _allow_cap(monkeypatch)
+
+    sid = "sc_bundle"
+    _insert_session(db_session, session_id=sid)
+    ctx = _ctx(db_session, session_id=sid)
+
+    turn1 = _make_stream(
+        _tool_chunk(
+            _tool_fragment(
+                index=0,
+                id="tc_patch",
+                name="update_topic_profile",
+                arguments=json.dumps(
+                    {
+                        "session_id": sid,
+                        "focus_target_gap": "chain rule",
+                    }
+                ),
+            ),
+            _tool_fragment(
+                index=1,
+                id="tc_ask",
+                name="ask_check_questions",
+                arguments=json.dumps(
+                    {
+                        "session_id": sid,
+                        "gap": "chain rule",
+                        "items": [
+                            {
+                                "question": "What is d/dx f(g(x))?",
+                                "options": ["f'(g(x))g'(x)", "f'(x)g'(x)"],
+                                "correct_index": 0,
+                                "explanation": "Chain rule.",
+                            }
+                        ],
+                    }
+                ),
+            ),
+        ),
+    )
+
+    monkeypatch.setattr(
+        "agent.tutor.litellm.acompletion",
+        AsyncMock(side_effect=[turn1]),
+    )
+
+    events = await _drain(
+        tutor.run_streaming(
+            [{"role": "user", "content": "quiz me on chain rule"}],
+            "sys",
+            ctx,
+        )
+    )
+
+    types = [e.type for e in events]
+    assert "check_question" in types, f"check_question missing from events: {types}"
+    assert "done" in types, f"done missing from events: {types}"
+
+    # the profile patch was NOT dropped:
+    profile = profile_service.load_profile(db_session, sid)
+    assert profile.focus_target_gap == "chain rule", (
+        "bundled update_topic_profile patch must be dispatched, not dropped"
+    )
+
+    # persisted record lists both calls, patch first:
+    msg = (
+        db_session.query(ChatMessage)
+        .filter(ChatMessage.session_id == sid)
+        .one()
+    )
+    names = [tc["name"] for tc in json.loads(msg.tool_calls_json)]
+    assert names == ["update_topic_profile", "ask_check_questions"], names
+
+
+@pytest.mark.asyncio
+async def test_second_bundled_ask_is_dropped(monkeypatch, db_session):
+    """Only ONE ask_check_questions may run per turn: if the model streams two
+    asks in the same response, the first is dispatched and the second is
+    dropped (not two check_question events / two registered batches)."""
+    _disable_stub(monkeypatch)
+    _allow_cap(monkeypatch)
+
+    sid = "sc_double_ask"
+    _insert_session(db_session, session_id=sid)
+    ctx = _ctx(db_session, session_id=sid)
+
+    item = {
+        "question": "Q?",
+        "options": ["a", "b"],
+        "correct_index": 0,
+        "explanation": "because.",
+    }
+
+    turn1 = _make_stream(
+        _tool_chunk(
+            _tool_fragment(
+                index=0,
+                id="tc_ask1",
+                name="ask_check_questions",
+                arguments=json.dumps(
+                    {"session_id": sid, "gap": "first_gap", "items": [item]}
+                ),
+            ),
+            _tool_fragment(
+                index=1,
+                id="tc_ask2",
+                name="ask_check_questions",
+                arguments=json.dumps(
+                    {"session_id": sid, "gap": "second_gap", "items": [item]}
+                ),
+            ),
+        ),
+    )
+
+    monkeypatch.setattr(
+        "agent.tutor.litellm.acompletion",
+        AsyncMock(side_effect=[turn1]),
+    )
+
+    events = await _drain(
+        tutor.run_streaming(
+            [{"role": "user", "content": "quiz me"}],
+            "sys",
+            ctx,
+        )
+    )
+
+    cq_events = [e for e in events if e.type == "check_question"]
+    assert len(cq_events) == 1, f"expected exactly one check_question event: {cq_events}"
+    assert cq_events[0].data["gap"] == "first_gap"
+
+    # persisted record lists only the first ask -- the second was dropped
+    # before dispatch, so only one batch was ever registered.
+    msg = (
+        db_session.query(ChatMessage)
+        .filter(ChatMessage.session_id == sid)
+        .one()
+    )
+    names = [tc["name"] for tc in json.loads(msg.tool_calls_json)]
+    assert names == ["ask_check_questions"], names
+
+    pc = check_question_service.get_pending_check(db_session, sid)
+    assert pc is not None and pc.get("gap") == "first_gap"
 
