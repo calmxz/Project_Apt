@@ -337,8 +337,8 @@ def apply_patch(
                 ),
             )
         if args.evidence_type in ("declared", "tested"):
-            profile.mastered_concepts = upsert_entry(
-                profile.mastered_concepts or [], args.add_mastered_concept,
+            add_exclusive(
+                profile, "mastered_concepts", args.add_mastered_concept,
                 evidence_type=args.evidence_type,
                 stamp=datetime.now(timezone.utc),
             )

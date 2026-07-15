@@ -224,6 +224,27 @@ def test_gap_accuracy_empty_session(db, session_id):
     assert learning_event_service.gap_accuracy(db, session_id) == {}
 
 
+def test_correct_answer_promotes_out_of_confirmed_gaps(db_session, session_row):
+    profile = TopicProfile(
+        confirmed_gaps=[ConceptEntry(name="Chain Rule")],
+        focus_target_gap="chain rule",
+    )
+    profile_service.save_profile(db_session, session_row.id, profile)
+
+    learning_event_service.record_from_answer(
+        db_session, session_row.id,
+        gap="Chain Rule", question="q?", correct=True,
+    )
+
+    after = profile_service.load_profile(db_session, session_row.id)
+    assert profile_service.concept_names(after.confirmed_gaps) == []
+    assert profile_service.concept_names(after.mastered_concepts) == ["Chain Rule"]
+    entry = profile_service.find_entry(after.mastered_concepts, "Chain Rule")
+    assert entry.evidence_type == "tested"
+    assert entry.last_event_at is not None
+    assert after.focus_target_gap is None
+
+
 def test_record_from_answer_stamps_tested_evidence(session_row, db_session):
     from services import learning_event_service, profile_service
 
