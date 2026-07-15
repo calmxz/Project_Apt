@@ -126,6 +126,68 @@ def test_apply_patch_mastery_add_removes_gap_with_dangling_focus_cleared(
     assert after.focus_target_gap is None
 
 
+def test_apply_patch_mastery_add_rejects_explicit_focus_resend_of_mastered_gap(
+    session_row, ctx, db_session
+):
+    """Regression (F-13 review, Fix Wave 1): add_exclusive nulls a canon-equal
+    prior focus when a gap is mastered. If the same call also explicitly
+    resends focus_target_gap equal to the just-mastered concept, the later
+    elif branch (args.focus_target_gap is not None) must not resurrect it --
+    the mastered concept is no longer in confirmed_gaps, so a focus pointing
+    at it is dangling regardless of what the caller resent."""
+    profile = TopicProfile(
+        confirmed_gaps=[ConceptEntry(name="chain rule")],
+        focus_target_gap="chain rule",
+    )
+    profile_service.save_profile(db_session, SESSION_ID, profile)
+
+    result = profile_service.apply_patch(
+        db_session, ctx,
+        _patch(
+            add_mastered_concept="Chain Rule",
+            evidence_type="declared",
+            focus_target_gap="chain rule",
+        ),
+    )
+
+    assert result.ok
+    after = profile_service.load_profile(db_session, SESSION_ID)
+    assert concept_names(after.confirmed_gaps) == []
+    assert concept_names(after.mastered_concepts) == ["Chain Rule"]
+    assert after.focus_target_gap is None
+
+
+def test_apply_patch_mastery_add_allows_unrelated_explicit_focus(
+    session_row, ctx, db_session
+):
+    """An explicit focus_target_gap unrelated to the mastered concept must
+    still be set -- only the resurrection of the just-mastered gap's own
+    focus is suppressed."""
+    profile = TopicProfile(
+        confirmed_gaps=[
+            ConceptEntry(name="chain rule"),
+            ConceptEntry(name="product rule"),
+        ],
+        focus_target_gap="chain rule",
+    )
+    profile_service.save_profile(db_session, SESSION_ID, profile)
+
+    result = profile_service.apply_patch(
+        db_session, ctx,
+        _patch(
+            add_mastered_concept="Chain Rule",
+            evidence_type="declared",
+            focus_target_gap="product rule",
+        ),
+    )
+
+    assert result.ok
+    after = profile_service.load_profile(db_session, SESSION_ID)
+    assert concept_names(after.confirmed_gaps) == ["product rule"]
+    assert concept_names(after.mastered_concepts) == ["Chain Rule"]
+    assert after.focus_target_gap == "product rule"
+
+
 def test_inferred_mastery_ignored(session_row, ctx, db_session):
     result = profile_service.apply_patch(
         db_session, ctx, _patch(add_mastered_concept="joins", evidence_type="inferred")

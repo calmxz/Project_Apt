@@ -326,6 +326,7 @@ def apply_patch(
             evidence_type=evidence, stamp=datetime.now(timezone.utc),
         )
 
+    mastered_this_call = False
     if args.add_mastered_concept:
         if args.evidence_type is None:
             return ToolResult(
@@ -342,6 +343,7 @@ def apply_patch(
                 evidence_type=args.evidence_type,
                 stamp=datetime.now(timezone.utc),
             )
+            mastered_this_call = True
 
     # focus_target_gap handling
     clearing = prior_focus is not None and args.focus_target_gap is None
@@ -366,6 +368,12 @@ def apply_patch(
         profile.focus_target_gap = None
     elif args.focus_target_gap is not None:
         profile.focus_target_gap = args.focus_target_gap
+
+    # F-13 review: if this call just mastered a concept, an explicit
+    # focus_target_gap resend (canon-equal to that concept) in the elif
+    # above must not resurrect a focus that add_exclusive already cleared.
+    if mastered_this_call:
+        _null_focus_if_removed(profile, args.add_mastered_concept)
 
     save_profile(db, ctx.session_id, profile)
 
