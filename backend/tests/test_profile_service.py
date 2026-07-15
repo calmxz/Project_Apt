@@ -602,11 +602,16 @@ def test_apply_patch_stamps_provenance(session_row, db_session):
     assert entry.name == "limits"
     assert entry.evidence_type == "declared"
     assert entry.last_event_at is not None
+    first_stamp = entry.last_event_at
 
     # repeat with tested evidence: agent-supplied "tested" is downgraded to
     # "declared" (F-21) -- "tested" provenance is reserved for the server's
     # own grading path (record_from_answer). No duplicate entry either way.
-    profile_service.apply_patch(
+    # Assert on the second call's own result (not just re-reading state
+    # after call 1) so a silent no-op on the second call would fail here,
+    # and assert the re-stamp actually advanced last_event_at -- otherwise
+    # this test would pass even if upsert_entry never re-stamped on repeat.
+    res2 = profile_service.apply_patch(
         db_session, ctx,
         UpdateTopicProfileArgs(
             session_id=session_row.id,
@@ -614,9 +619,12 @@ def test_apply_patch_stamps_provenance(session_row, db_session):
             evidence_type="tested",
         ),
     )
+    assert res2.ok
     p = profile_service.load_profile(db_session, session_row.id)
     assert len(p.mastered_concepts) == 1
     assert p.mastered_concepts[0].evidence_type == "declared"
+    assert p.mastered_concepts[0].last_event_at is not None
+    assert p.mastered_concepts[0].last_event_at > first_stamp
 
 
 def test_user_patch_and_delete_are_entry_aware(session_row, db_session):

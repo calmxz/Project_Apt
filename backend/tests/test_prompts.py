@@ -268,6 +268,29 @@ def test_immutable_rules_document_subtopics_and_provenance():
     assert "last_event_at" in IMMUTABLE_RULES
 
 
+def test_immutable_rules_documents_evidence_typing_tested_reserved():
+    # F-21: agent-supplied evidence_type="tested" must be documented as
+    # reserved for server grading and silently downgraded to "declared".
+    from agent.prompts import IMMUTABLE_RULES
+
+    section = IMMUTABLE_RULES.split("EVIDENCE TYPING:")[1].split(
+        "SUBTOPIC LEVELS:"
+    )[0]
+    assert "reserved for the server's own deterministic grading" in section
+    assert 'recorded as "declared"' in section
+
+
+def test_profile_rules_requires_evidence_for_knowledge_level_change():
+    # F-21: PROFILE RULES must document the knowledge_level evidence gate
+    # added to apply_patch.
+    from agent.prompts import IMMUTABLE_RULES
+
+    section = IMMUTABLE_RULES.split("PROFILE RULES")[1].split(
+        "EVIDENCE TYPING:"
+    )[0]
+    assert 'Change knowledge_level only with evidence_type "declared" or "tested"' in section
+
+
 def test_focus_protocol_documents_omission_and_server_verification():
     # F-02/F-23 (restored, decision Q1): the FOCUS PROTOCOL must tell the
     # agent that omitting focus_target_gap never clears it, and that

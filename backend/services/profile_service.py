@@ -366,7 +366,7 @@ def apply_patch(
                     "add_mastered_concept is set"
                 ),
             )
-        if args.evidence_type in ("declared", "tested"):
+        if evidence in ("declared", "tested"):
             add_exclusive(
                 profile, "mastered_concepts", args.add_mastered_concept,
                 evidence_type=evidence,
