@@ -44,7 +44,9 @@ def record_from_answer(
 
     Applies the deterministic profile effects, because the click is silent and
     the agent's only next-turn signal is the profile state:
-    - correct  -> add gap to mastered_concepts (tested mastery)
+    - correct  -> add gap to mastered_concepts (tested mastery) and remove it
+      from confirmed_gaps (exclusivity, F-13); a focus pointing at that gap
+      is cleared
     - incorrect-> remove gap from mastered_concepts if present (demotion), and add
       gap to confirmed_gaps if not already present (an incorrect retest is
       confirmed-gap evidence, so the demoted concept is a valid review target)
@@ -68,24 +70,25 @@ def record_from_answer(
     db.flush()
 
     if apply_profile_effects:
+        # F-12: lock before the load-mutate-save span. When the batch caller
+        # (check_question_service.answer, Task 10) already holds the lock in
+        # this same transaction, this re-lock is a no-op.
+        profile_service.lock_session_row(db, session_id)
         profile = profile_service.load_profile(db, session_id)
         stamp = datetime.now(timezone.utc)
         if correct:
-            profile.mastered_concepts = profile_service.upsert_entry(
-                profile.mastered_concepts or [], gap,
+            # F-13 (decision Q2): full promote through the single exclusivity
+            # choke point -- removes the gap from confirmed_gaps and clears a
+            # canon-equal dangling focus. Reversible: a later wrong retest
+            # demotes and re-adds the gap below.
+            profile_service.add_exclusive(
+                profile, "mastered_concepts", gap,
                 evidence_type="tested", stamp=stamp,
             )
-            gap_entry = profile_service.find_entry(profile.confirmed_gaps or [], gap)
-            if gap_entry is not None:
-                gap_entry.evidence_type = "tested"
-                gap_entry.last_event_at = stamp
         else:
-            key = profile_service.canon(gap)
-            profile.mastered_concepts = [
-                e for e in (profile.mastered_concepts or []) if profile_service.canon(e.name) != key
-            ]
-            profile.confirmed_gaps = profile_service.upsert_entry(
-                profile.confirmed_gaps or [], gap,
+            # Demotion + confirmed-gap evidence via the same choke point.
+            profile_service.add_exclusive(
+                profile, "confirmed_gaps", gap,
                 evidence_type="tested", stamp=stamp,
             )
         profile_service.save_profile(db, session_id, profile, commit=False)

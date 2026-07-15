@@ -1,12 +1,15 @@
 """Spec A5 interaction test: focus set in prior turn, cleared same or later turn.
 
-Previously, clearing focus_target_gap with focus_clear_reason="tested_correct" required
-the server to find a correct LearningEvent logged in the same turn (created_at >=
-ctx.turn_started_at). That guard is removed: record_learning_event is no longer an LLM
-tool, so the LLM cannot fabricate a LearningEvent, and the ask-and-self-grade exploit
-the guard prevented is impossible. Mastery is now server-authoritative (record_from_answer).
+F-02 (restored, decision Q1): clearing focus_target_gap with
+focus_clear_reason="tested_correct" requires a correct LearningEvent for the
+(canon-equal) focused gap recorded ANYWHERE in this session -- not scoped to
+the current turn. record_learning_event is no longer an LLM tool (a human
+click writes the event via record_from_answer), so the LLM cannot fabricate
+one; only the gap-label match is policed here.
 
-The remaining rule: clearing focus WITHOUT a focus_clear_reason still FAILS.
+F-23: clearing focus WITHOUT a focus_clear_reason is not treated as a clear at
+all -- it succeeds and leaves focus unchanged (indistinguishable from an
+omitted field after JSON parsing).
 """
 
 from datetime import datetime, timedelta, timezone
@@ -50,12 +53,9 @@ def ctx(db_session):
     )
 
 
-def test_tested_correct_clear_no_longer_requires_in_turn_event(session_row, ctx, db_session):
-    """Guard removed: tested_correct clears focus with no in-turn LearningEvent at all.
-
-    Previously this would have FAILED (guard required a correct LearningEvent this turn).
-    Now it succeeds because the guard is gone: record_learning_event is a human click,
-    not an LLM tool, so the exploit the guard defended against is no longer possible.
+def test_tested_correct_clear_rejected_with_no_event_at_all(session_row, ctx, db_session):
+    """F-02 restored: tested_correct is rejected with zero LearningEvents in
+    the session at all -- there is nothing to prove the gap was tested.
     """
     profile = profile_service.load_profile(db_session, SESSION_ID)
     profile.focus_target_gap = "atp"
@@ -71,16 +71,17 @@ def test_tested_correct_clear_no_longer_requires_in_turn_event(session_row, ctx,
             evidence_type="tested",
         ),
     )
-    assert res.ok is True
-    assert profile_service.load_profile(db_session, ctx.session_id).focus_target_gap is None
+    assert res.ok is False
+    assert "tested_correct" in (res.error or "")
+    assert profile_service.load_profile(db_session, ctx.session_id).focus_target_gap == "atp"
 
 
 def test_grade_then_clear_focus_tested_correct_same_turn(session_row, ctx, db_session):
     """A5: focus set + question asked in a prior turn; grade + clear focus in grading turn.
 
-    The in-turn LearningEvent is no longer required by the guard (which is removed), but
-    grading still works correctly and focus still clears. This test confirms the full
-    grading-then-clear flow remains valid end-to-end.
+    The F-02 guard is session-scoped, not turn-scoped, so the LearningEvent recorded
+    in this same turn still satisfies it. This test confirms the full grading-then-clear
+    flow remains valid end-to-end.
     """
     # Focus set in a "prior turn" — apply_patch with focus_target_gap="g"
     set_result = profile_service.apply_patch(
@@ -134,11 +135,16 @@ def test_grade_then_clear_focus_tested_correct_same_turn(session_row, ctx, db_se
 
 
 def test_clear_focus_tested_correct_with_divergent_gap_label(session_row, ctx, db_session):
-    """Correct grade clears focus even when the check-question gap label differs from focus_target_gap.
+    """F-02 restored: an explicit tested_correct clear is REJECTED when the only
+    correct LearningEvent's gap_tested label does not canon-match focus_target_gap.
 
-    The model picks the check-question `gap` independently of `focus_target_gap`,
-    so the two labels routinely diverge. With the guard removed, divergent gap labels
-    are a non-issue: no LearningEvent lookup is performed at all.
+    The model can pick the check-question `gap` independently of `focus_target_gap`,
+    so the two labels can diverge. The guard is a strict canon-equality match (known
+    limit), so a divergent label does not prove the FOCUSED gap was tested; the agent
+    must use the same gap label for the check-question as the focus it intends to clear.
+    Note: in the common case, record_from_answer's own add_exclusive call already
+    auto-clears a canon-equal focus on a correct answer -- this test exercises the
+    agent's explicit clear call for a gap that does NOT canon-match.
     """
     focus_gap = "electron transport chain"
     check_gap = "electron transport chain location"
@@ -182,12 +188,17 @@ def test_clear_focus_tested_correct_with_divergent_gap_label(session_row, ctx, d
             focus_clear_reason="tested_correct",
         ),
     )
-    assert clr.ok is True, clr.error
-    assert profile_service.load_profile(db_session, ctx.session_id).focus_target_gap is None
+    assert clr.ok is False
+    assert "tested_correct" in (clr.error or "")
+    assert profile_service.load_profile(db_session, ctx.session_id).focus_target_gap == focus_gap
 
 
-def test_clear_focus_without_reason_still_fails(session_row, ctx, db_session):
-    """Clearing focus WITHOUT a focus_clear_reason still FAILS. This rule is kept."""
+def test_clear_focus_without_reason_is_not_a_clear(session_row, ctx, db_session):
+    """F-23 (restored): a null focus_target_gap WITHOUT focus_clear_reason is
+    indistinguishable from an omitted field, so it does not clear focus --
+    focus is left unchanged either way. Under F-20, this second call carries
+    no actionable field at all, so it is now rejected as an empty patch
+    rather than silently succeeding."""
     set_result = profile_service.apply_patch(
         db_session,
         ctx,
@@ -210,6 +221,6 @@ def test_clear_focus_without_reason_still_fails(session_row, ctx, db_session):
         ),
     )
     assert clr.ok is False
-    assert "focus_clear_reason required" in clr.error
-    # Focus must remain set
+    assert clr.status == "failed"
+    # Focus must remain set -- this was not treated as a clear.
     assert profile_service.load_profile(db_session, ctx.session_id).focus_target_gap == "some_gap"

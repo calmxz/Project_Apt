@@ -44,7 +44,8 @@ async def generate_and_persist(
     Does NOT set Session.ended_at -- the caller must claim the end first (see
     routes/sessions.py `_claim_end`, F-30). After the summary is computed,
     force-skips any open check batch and writes the summary in a single
-    commit (F-31, F-33)."""
+    commit (F-31, F-33). F-11: the summary merges onto a freshly re-read
+    profile; concurrent writes during the LLM call survive."""
     messages = db.execute(
         select(ChatMessage)
         .where(ChatMessage.session_id == session.id)
@@ -114,22 +115,20 @@ async def generate_and_persist(
             log.warning("summary LLM failed, using mechanical fallback: %s", e)
             summary = _mechanical_fallback(messages)
 
-    # F-33: single write window AFTER the LLM await. Abandon any open check
-    # batch (F-31 -- resume-create reaches here too) and persist the summary
-    # in one commit. ended_at is NOT written here: the caller's _claim_end
-    # owns it (F-30) and has already committed it. Cost-ledger writes above
-    # (record_cost, log_call) are NOT independently committed -- record_cost
-    # only flushes and log_call uses a savepoint (db.begin_nested()); both
-    # publish only when this function's db.commit() below runs, alongside the
-    # abandon + summary write. If that commit fails, the spend rolls back
-    # with it -- same atomicity as the pre-refactor code, and if it fails
-    # after the claim above already won, the session is left ended with no
-    # summary and any open check batch still open; that is an honest state
-    # (versus the old partial-write windows) -- subsequent end calls take the
-    # idempotent replay path and do not retry this write.
+    # F-33: single write window AFTER the LLM await; F-30: the caller's
+    # _claim_end owns ended_at. F-11 + F-12: re-read the profile UNDER THE ROW
+    # LOCK now that the await is over -- the pre-await copy fed the prompt but
+    # any write that landed during the multi-second call (user PATCH, check
+    # answer in another tab) must not be clobbered, so only
+    # last_session_summary is merged onto the fresh blob. Cost-ledger writes
+    # above publish with this same commit (see prior F-33 note): if the commit
+    # fails after a won claim, the session is ended with no summary -- an
+    # honest state; later end calls take the idempotent replay path.
+    row = profile_service.lock_session_row(db, session.id)
     check_question_service.abandon_open_batch(db, session.id, commit=False)
-    profile.last_session_summary = summary
-    profile_service.save_profile(db, session.id, profile, commit=False)
+    fresh = profile_service.profile_from_row(row)
+    fresh.last_session_summary = summary
+    profile_service.save_profile(db, session.id, fresh, commit=False)
     db.commit()
     db.refresh(session)
     return summary

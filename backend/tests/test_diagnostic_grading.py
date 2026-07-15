@@ -7,7 +7,7 @@ import pytest
 from agent.types import ToolContext
 from contracts import AskCheckQuestionsArgs, TopicProfile
 from db.models import Session as SessionModel, User
-from services import check_question_service, profile_service
+from services import check_question_service, diagnostic_service, profile_service
 from services.diagnostic_service import level_for_score
 
 
@@ -116,6 +116,51 @@ def session_with_level_and_check_batch(db_session):
         ),
     )
     return row.id
+
+
+@pytest.fixture
+def session_with_diagnostic_batch(fresh_session_with_diagnostic_batch):
+    """Alias returning just the session id (drops the correct_indices half of
+    the tuple) for tests that read correct_index off the persisted items
+    themselves via _correct_choice below."""
+    sid, _correct_indices = fresh_session_with_diagnostic_batch
+    return sid
+
+
+def _correct_choice(db, session_id, index):
+    pc = check_question_service.get_pending_check(db, session_id)
+    return pc["items"][index]["correct_index"]
+
+
+def _wrong_choice(db, session_id, index):
+    pc = check_question_service.get_pending_check(db, session_id)
+    item = pc["items"][index]
+    for i in range(len(item["options"])):
+        if i != item["correct_index"]:
+            return i
+    raise AssertionError("item has no wrong option to choose")
+
+
+def test_all_skip_diagnostic_leaves_level_none(db, session_with_diagnostic_batch):
+    sid = session_with_diagnostic_batch
+    for i in range(3):
+        check_question_service.skip(db, sid, i)
+    diagnostic_service.grade_if_diagnostic(db, sid)
+    assert profile_service.load_profile(db, sid).knowledge_level is None
+
+
+def test_user_set_level_not_clobbered_by_diagnostic(db, session_with_diagnostic_batch):
+    # Items 1 and 2 are answered WRONG so the diagnostic-computed score
+    # (1/3 correct -> "beginner") diverges from the user's explicit
+    # mid-batch PATCH ("advanced") -- a genuine clobber scenario, not a
+    # same-value coincidence.
+    sid = session_with_diagnostic_batch
+    check_question_service.answer(db, sid, 0, _correct_choice(db, sid, 0))
+    profile_service.apply_user_patch(db, sid, knowledge_level="advanced")
+    check_question_service.answer(db, sid, 1, _wrong_choice(db, sid, 1))
+    check_question_service.answer(db, sid, 2, _wrong_choice(db, sid, 2))
+    diagnostic_service.grade_if_diagnostic(db, sid)
+    assert profile_service.load_profile(db, sid).knowledge_level == "advanced"
 
 
 def test_answer_check_sets_level_on_diagnostic_completion(

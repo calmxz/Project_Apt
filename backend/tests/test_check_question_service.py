@@ -9,6 +9,7 @@ from contracts import AskCheckQuestionsArgs, TopicProfile
 from db.models import Session as SessionModel, User
 from services import check_question_service as cq
 from services import pending_check_store as pcs
+from services import profile_service
 
 
 SESSION_ID = "sess_1"
@@ -265,6 +266,30 @@ def test_public_view_does_not_leak_purpose(db, ctx_fresh_session):
     assert pc["purpose"] == "diagnostic"
     view = cq.public_view(pc)
     assert "purpose" not in view
+
+
+def test_answer_takes_row_lock(db, ctx, session_id, monkeypatch):
+    cq.register(db, ctx, _batch_args(session_id))
+    calls = []
+    real = profile_service.lock_session_row
+    monkeypatch.setattr(
+        "services.profile_service.lock_session_row",
+        lambda db_, s: calls.append(s) or real(db_, s),
+    )
+    cq.answer(db, session_id, 0, 0)
+    assert session_id in calls
+
+
+def test_skip_takes_row_lock(db, ctx, session_id, monkeypatch):
+    cq.register(db, ctx, _batch_args(session_id))
+    calls = []
+    real = profile_service.lock_session_row
+    monkeypatch.setattr(
+        "services.profile_service.lock_session_row",
+        lambda db_, s: calls.append(s) or real(db_, s),
+    )
+    cq.skip(db, session_id, 0)
+    assert session_id in calls
 
 
 def test_abandon_open_batch_commit_false_leaves_writes_pending(db, ctx, session_id):

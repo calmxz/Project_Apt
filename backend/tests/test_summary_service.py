@@ -342,3 +342,33 @@ def test_summary_write_window_is_atomic(db_session, session_with_open_batch, mon
         asyncio.run(summary_service.generate_and_persist(db_session, session_with_open_batch))
     db_session.rollback()
     assert check_question_service.get_pending_check(db_session, session_with_open_batch.id) is not None
+
+
+def test_concurrent_profile_write_survives_summary(
+    session_with_messages, db_session, monkeypatch
+):
+    """F-11: a profile mutation that lands while the summary LLM call is in
+    flight (user PATCH, check answer in another tab) must survive -- the
+    final write window re-reads the profile under the row lock AFTER the
+    await and merges only last_session_summary onto that fresh blob, instead
+    of writing back the stale pre-await copy that fed the prompt."""
+    from types import SimpleNamespace
+
+    async def slow_llm(**kwargs):
+        # simulate a write landing while the summary call is in flight
+        profile_service.apply_user_patch(
+            db_session, session_with_messages.id, add_gap="mid-await gap"
+        )
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="A real summary."))]
+        )
+
+    monkeypatch.setattr("services.summary_service.litellm.acompletion", slow_llm)
+
+    asyncio.run(
+        summary_service.generate_and_persist(db_session, session_with_messages)
+    )
+
+    after = profile_service.load_profile(db_session, session_with_messages.id)
+    assert "mid-await gap" in profile_service.concept_names(after.confirmed_gaps)  # not clobbered
+    assert after.last_session_summary == "A real summary."

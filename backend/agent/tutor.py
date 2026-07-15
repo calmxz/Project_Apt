@@ -18,7 +18,7 @@ from agent.excerpt import wrap_chunk
 from agent.stream_events import StreamEvent
 from agent.types import ToolContext
 from config import settings
-from contracts import Citation, ToolCallRecord
+from contracts import Citation, ToolCallRecord, ToolResult
 from db.models import ChatMessage
 from services import check_question_service, cost_meter
 
@@ -55,6 +55,8 @@ def _summarize(name: str, result) -> str:
     if name == "retrieve_chunks":
         return f"Found {len((result.data or {}).get('chunks', []))} passages"
     if name == "update_topic_profile":
+        if result.status == "ignored":
+            return "Profile change ignored (inferred evidence)"
         return "Profile updated"
     if name == "ask_check_questions":
         return "Questions asked"
@@ -278,14 +280,17 @@ async def run_streaming(
 
             # Tool calls present: append the assistant turn, then dispatch each.
             ordered = [tool_frags[k] for k in sorted(tool_frags)]
-            # ask_check_questions is turn-terminating. If the model bundles other tool
-            # calls in the same response (e.g. prematurely grading the question it is
-            # asking), drop them: only the ask is dispatched. Reduce BEFORE building the
-            # assistant message so the turn's persisted tool calls and `full` stay
-            # consistent.
+            # ask_check_questions is turn-terminating and must be the LAST call
+            # of the turn. F-10: bundled non-ask calls (profile patches,
+            # retrieval) are legitimate and are dispatched FIRST in their
+            # original order instead of being dropped; only ADDITIONAL asks
+            # (e.g. the model prematurely grading its own question) are
+            # dropped. Reduce BEFORE building the assistant message so the
+            # persisted tool calls and `full` stay consistent.
             ask_slots = [s for s in ordered if s["name"] == "ask_check_questions"]
             if ask_slots:
-                ordered = ask_slots[:1]
+                non_ask = [s for s in ordered if s["name"] != "ask_check_questions"]
+                ordered = non_ask + ask_slots[:1]
             full.append(
                 {
                     "role": "assistant",
@@ -312,8 +317,33 @@ async def run_streaming(
                 try:
                     args = json.loads(slot["args"]) if slot["args"] else {}
                 except json.JSONDecodeError as e:
-                    args = {}
+                    # F-20: a truncated/garbled streamed argument blob must
+                    # fail loudly. Dispatching {} would validate (session_id
+                    # is injected) and report "Profile updated" for a no-op.
                     log.warning("invalid tool args json (stream): %s", e)
+                    result = ToolResult(
+                        ok=False, status="failed",
+                        error="malformed tool arguments (invalid JSON); retry the call",
+                    )
+                    tool_calls_record.append(
+                        ToolCallRecord(name=name, args={}, status=result.status, error=result.error)
+                    )
+                    yield StreamEvent(
+                        "tool_call_start", {"id": call_id, "name": name, "args": {}}
+                    )
+                    yield StreamEvent(
+                        "tool_call_done",
+                        {"id": call_id, "status": "error", "error": result.error},
+                    )
+                    full.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": call_id,
+                            "name": name,
+                            "content": json.dumps(result.model_dump()),
+                        }
+                    )
+                    continue
 
                 yield StreamEvent(
                     "tool_call_start",

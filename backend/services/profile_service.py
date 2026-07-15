@@ -5,9 +5,10 @@ Rules:
 - Inferred mastery -> ignored (no-op, ok=True).
 - Duplicate gap or concept additions -> no-op.
 - knowledge_level overwrites.
-- focus_target_gap clearing requires focus_clear_reason (any non-None value).
-  The tested_correct in-turn-event guard is removed: record_learning_event is
-  now a human click, not an LLM tool, so server-side event evidence is moot.
+- focus_target_gap clearing requires focus_clear_reason; omitting the focus
+  field without a reason leaves focus unchanged (F-23). Reason
+  "tested_correct" is server-verified against a correct LearningEvent for the
+  focused gap in this session (F-02, restored per owner decision Q1).
 """
 
 import hashlib
@@ -44,6 +45,21 @@ MAX_SUBTOPICS = 20
 
 def canon(name: str) -> str:
     return name.strip().casefold()
+
+
+def _has_correct_event_for(db: Session, session_id: str, gap: str) -> bool:
+    """F-02 guard (decision Q1): session-scoped proof that a correct
+    check-question answer was recorded for this gap. canon-compared in Python
+    because gap_tested is stored raw."""
+    key = canon(gap)
+    rows = db.execute(
+        select(LearningEvent.gap_tested)
+        .where(
+            LearningEvent.session_id == session_id,
+            LearningEvent.correct.is_(True),
+        )
+    ).scalars().all()
+    return any(canon(g) == key for g in rows)
 
 
 def concept_names(entries: list | None) -> list[str]:
@@ -153,6 +169,18 @@ def save_profile(
         db.commit()
 
 
+def lock_session_row(db: Session, session_id: str) -> SessionModel:
+    """F-12: SELECT ... FOR UPDATE on the session row, serializing profile
+    read-modify-write spans on Postgres (blind whole-blob writes were losing
+    concurrent updates). No-op on SQLite (single-writer). The lock releases at
+    the transaction's commit/rollback -- callers must commit promptly and must
+    NEVER hold it across an LLM await. Raises ValueError when missing."""
+    row = db.get(SessionModel, session_id, with_for_update=True)
+    if row is None:
+        raise ValueError(f"session not found: {session_id}")
+    return row
+
+
 def seed_from_prior(db: Session, new_session: SessionModel, prior: SessionModel) -> None:
     new_session.topic_profile_json = prior.topic_profile_json
     db.commit()
@@ -163,11 +191,12 @@ def profile_etag(profile: TopicProfile) -> str:
 
 
 def _null_focus_if_removed(profile: TopicProfile, item: str) -> None:
-    if profile.focus_target_gap == item:
+    # F-22: removal matches by canon(), so the dangling-focus check must too.
+    if profile.focus_target_gap is not None and canon(profile.focus_target_gap) == canon(item):
         profile.focus_target_gap = None
 
 
-def _add_exclusive(
+def add_exclusive(
     profile: TopicProfile,
     target: str,
     item: str,
@@ -175,6 +204,9 @@ def _add_exclusive(
     evidence_type: str | None = None,
     stamp: datetime | None = None,
 ) -> None:
+    """Single choke point for the exclusivity invariant (F-13, decision Q2):
+    adding a concept to one list removes it from the other; removing it from
+    confirmed_gaps also clears a (canon-equal) dangling focus."""
     other = "confirmed_gaps" if target == "mastered_concepts" else "mastered_concepts"
     setattr(
         profile,
@@ -203,8 +235,7 @@ def apply_user_patch(
     subtopic: str | None = None,
     subtopic_level: str | None = None,
 ) -> TopicProfile:
-    if db.get(SessionModel, session_id) is None:
-        raise ValueError(f"session not found: {session_id}")
+    lock_session_row(db, session_id)
     if add_mastered is not None:
         add_mastered = add_mastered.strip()
         if not add_mastered:
@@ -215,12 +246,12 @@ def apply_user_patch(
             raise ValueError("item cannot be empty after stripping whitespace")
     profile = load_profile(db, session_id)
     if add_mastered is not None:
-        _add_exclusive(
+        add_exclusive(
             profile, "mastered_concepts", add_mastered,
             stamp=datetime.now(timezone.utc),
         )
     if add_gap is not None:
-        _add_exclusive(
+        add_exclusive(
             profile, "confirmed_gaps", add_gap,
             stamp=datetime.now(timezone.utc),
         )
@@ -247,6 +278,7 @@ def remove_profile_item(
     list_name: Literal["mastered_concepts", "confirmed_gaps"],
     item: str,
 ) -> TopicProfile:
+    lock_session_row(db, session_id)
     profile = load_profile(db, session_id)
     current = list(getattr(profile, list_name) or [])
     if find_entry(current, item) is None:
@@ -260,6 +292,7 @@ def remove_profile_item(
 
 
 def remove_subtopic(db: Session, session_id: str, subtopic: str) -> TopicProfile:
+    lock_session_row(db, session_id)
     profile = load_profile(db, session_id)
     levels = dict(profile.subtopic_levels or {})
     key = canon(subtopic)
@@ -281,6 +314,27 @@ def apply_patch(
             error=f"session_id mismatch: args={args.session_id} ctx={ctx.session_id}",
         )
 
+    # F-21: "tested" provenance is reserved for the server's own grading path
+    # (record_from_answer). An agent-supplied "tested" is a self-attested
+    # claim, so it is recorded as "declared".
+    evidence = "declared" if args.evidence_type == "tested" else args.evidence_type
+
+    if (
+        args.knowledge_level is None
+        and not args.add_confirmed_gap
+        and not args.add_mastered_concept
+        and args.focus_target_gap is None
+        and args.focus_clear_reason is None
+        and args.subtopic is None
+    ):
+        # F-20: a no-op patch (e.g. reconstructed from malformed args) must
+        # not be reported to the model as "Profile updated".
+        return ToolResult(ok=False, status="failed", error="empty patch: no fields provided")
+
+    # F-12: lock before the read so the load-mutate-save span is one atomic
+    # unit; taken after the pure-arg checks above so a patch that fails
+    # validation never takes the lock.
+    lock_session_row(db, ctx.session_id)
     profile = load_profile(db, ctx.session_id)
 
     if (args.subtopic is None) != (args.subtopic_level is None):
@@ -309,19 +363,29 @@ def apply_patch(
     prior_focus = profile.focus_target_gap
 
     if args.knowledge_level is not None:
+        if evidence not in ("declared", "tested"):
+            # F-39: level changes need the same evidence standard as mastery.
+            # (The knowledge diagnostic sets level server-side and does not
+            # pass through this function.)
+            return ToolResult(
+                ok=False,
+                status="failed",
+                error=(
+                    "knowledge_level change requires evidence_type 'declared' "
+                    "or 'tested'"
+                ),
+            )
         profile.knowledge_level = args.knowledge_level
 
     if args.add_confirmed_gap:
-        evidence = (
-            args.evidence_type
-            if args.evidence_type in ("declared", "tested")
-            else None
-        )
+        gap_evidence = evidence if evidence in ("declared", "tested") else None
         profile.confirmed_gaps = upsert_entry(
             profile.confirmed_gaps or [], args.add_confirmed_gap,
-            evidence_type=evidence, stamp=datetime.now(timezone.utc),
+            evidence_type=gap_evidence, stamp=datetime.now(timezone.utc),
         )
 
+    ignored_notes: list[str] = []
+    mastered_this_call = False
     if args.add_mastered_concept:
         if args.evidence_type is None:
             return ToolResult(
@@ -332,27 +396,47 @@ def apply_patch(
                     "add_mastered_concept is set"
                 ),
             )
-        if args.evidence_type in ("declared", "tested"):
-            profile.mastered_concepts = upsert_entry(
-                profile.mastered_concepts or [], args.add_mastered_concept,
-                evidence_type=args.evidence_type,
+        if evidence in ("declared", "tested"):
+            add_exclusive(
+                profile, "mastered_concepts", args.add_mastered_concept,
+                evidence_type=evidence,
                 stamp=datetime.now(timezone.utc),
             )
+            mastered_this_call = True
+        else:
+            # F-48: ignoring inferred mastery is policy (spec v1 rules), but
+            # the model must be told it was a no-op, not "Profile updated".
+            ignored_notes.append(
+                "inferred mastery ignored: only 'declared' or 'tested' "
+                "evidence promotes to mastered_concepts"
+            )
 
-    # focus_target_gap handling
-    clearing = prior_focus is not None and args.focus_target_gap is None
+    # focus_target_gap handling.
+    # F-23: an omitted focus field is indistinguishable from an explicit null
+    # after JSON parsing, so clearing is treated as INTENT only when a reason
+    # accompanies it; a patch that merely omits focus leaves focus unchanged.
+    clearing = (
+        prior_focus is not None
+        and args.focus_target_gap is None
+        and args.focus_clear_reason is not None
+    )
     if clearing:
-        if args.focus_clear_reason is None:
+        if args.focus_clear_reason == "tested_correct" and not _has_correct_event_for(
+            db, ctx.session_id, prior_focus
+        ):
+            # F-02 (decision Q1): the flagship guard rail. "tested_correct" is
+            # accepted only when a correct LearningEvent for the focused gap
+            # exists in this session (record_from_answer writes one on the
+            # human-click grading path). Known limit: other reason labels are
+            # accepted on the agent's word.
             return ToolResult(
                 ok=False,
                 status="failed",
-                error="focus_clear_reason required when clearing focus",
+                error=(
+                    "focus_clear_reason 'tested_correct' rejected: no correct "
+                    f"check answer recorded for '{prior_focus}' in this session"
+                ),
             )
-        # The tested_correct evidence guard was removed: record_learning_event is
-        # no longer a tool, so the LLM cannot fabricate a LearningEvent, and the
-        # ask-and-self-grade exploit the guard prevented is impossible. Mastery is
-        # now server-authoritative (record_from_answer), so the agent clears focus
-        # by judgment from the profile it reads, not from in-turn event evidence.
         log.info(
             "focus_clear session=%s gap=%s reason=%s",
             ctx.session_id,
@@ -363,8 +447,27 @@ def apply_patch(
     elif args.focus_target_gap is not None:
         profile.focus_target_gap = args.focus_target_gap
 
+    # F-13 review: if this call just mastered a concept, an explicit
+    # focus_target_gap resend (canon-equal to that concept) in the elif
+    # above must not resurrect a focus that add_exclusive already cleared.
+    if mastered_this_call:
+        _null_focus_if_removed(profile, args.add_mastered_concept)
+
     save_profile(db, ctx.session_id, profile)
 
+    if ignored_notes:
+        only_ignored = (
+            args.knowledge_level is None
+            and not args.add_confirmed_gap
+            and args.focus_target_gap is None
+            and args.focus_clear_reason is None
+            and args.subtopic is None
+        )
+        return ToolResult(
+            ok=True,
+            status="ignored" if only_ignored else "ok",
+            data={"notes": ignored_notes},
+        )
     return ToolResult(ok=True, status="ok")
 
 
