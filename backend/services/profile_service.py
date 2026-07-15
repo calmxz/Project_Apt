@@ -169,6 +169,18 @@ def save_profile(
         db.commit()
 
 
+def lock_session_row(db: Session, session_id: str) -> SessionModel:
+    """F-12: SELECT ... FOR UPDATE on the session row, serializing profile
+    read-modify-write spans on Postgres (blind whole-blob writes were losing
+    concurrent updates). No-op on SQLite (single-writer). The lock releases at
+    the transaction's commit/rollback -- callers must commit promptly and must
+    NEVER hold it across an LLM await. Raises ValueError when missing."""
+    row = db.get(SessionModel, session_id, with_for_update=True)
+    if row is None:
+        raise ValueError(f"session not found: {session_id}")
+    return row
+
+
 def seed_from_prior(db: Session, new_session: SessionModel, prior: SessionModel) -> None:
     new_session.topic_profile_json = prior.topic_profile_json
     db.commit()
@@ -223,8 +235,7 @@ def apply_user_patch(
     subtopic: str | None = None,
     subtopic_level: str | None = None,
 ) -> TopicProfile:
-    if db.get(SessionModel, session_id) is None:
-        raise ValueError(f"session not found: {session_id}")
+    lock_session_row(db, session_id)
     if add_mastered is not None:
         add_mastered = add_mastered.strip()
         if not add_mastered:
@@ -267,6 +278,7 @@ def remove_profile_item(
     list_name: Literal["mastered_concepts", "confirmed_gaps"],
     item: str,
 ) -> TopicProfile:
+    lock_session_row(db, session_id)
     profile = load_profile(db, session_id)
     current = list(getattr(profile, list_name) or [])
     if find_entry(current, item) is None:
@@ -280,6 +292,7 @@ def remove_profile_item(
 
 
 def remove_subtopic(db: Session, session_id: str, subtopic: str) -> TopicProfile:
+    lock_session_row(db, session_id)
     profile = load_profile(db, session_id)
     levels = dict(profile.subtopic_levels or {})
     key = canon(subtopic)
@@ -318,6 +331,10 @@ def apply_patch(
         # not be reported to the model as "Profile updated".
         return ToolResult(ok=False, status="failed", error="empty patch: no fields provided")
 
+    # F-12: lock before the read so the load-mutate-save span is one atomic
+    # unit; taken after the pure-arg checks above so a patch that fails
+    # validation never takes the lock.
+    lock_session_row(db, ctx.session_id)
     profile = load_profile(db, ctx.session_id)
 
     if (args.subtopic is None) != (args.subtopic_level is None):

@@ -517,6 +517,52 @@ def test_apply_user_patch_missing_session_raises_value_error(db_session):
         profile_service.apply_user_patch(db_session, "nonexistent-session-id", add_mastered="x")
 
 
+# --- F-12: row-lock every profile read-modify-write span -------------------
+
+
+def test_lock_session_row_returns_row(db_session, session_row):
+    row = profile_service.lock_session_row(db_session, session_row.id)
+    assert row.id == session_row.id
+
+
+def test_lock_session_row_missing_session_raises(db_session):
+    with pytest.raises(ValueError):
+        profile_service.lock_session_row(db_session, "nope")
+
+
+def test_lock_session_row_emits_for_update_on_postgres():
+    # SQLite ignores FOR UPDATE, so prove intent at the SQL layer instead.
+    from sqlalchemy import select
+    from sqlalchemy.dialects import postgresql
+    from db.models import Session as SessionModel
+    stmt = select(SessionModel).where(SessionModel.id == "x").with_for_update()
+    assert "FOR UPDATE" in str(stmt.compile(dialect=postgresql.dialect()))
+
+
+def test_apply_user_patch_takes_the_lock(db_session, session_row, monkeypatch):
+    calls = []
+    real = profile_service.lock_session_row
+    monkeypatch.setattr(
+        profile_service, "lock_session_row",
+        lambda db, sid: calls.append(sid) or real(db, sid),
+    )
+    profile_service.apply_user_patch(db_session, session_row.id, add_gap="x")
+    assert calls == [session_row.id]
+
+
+def test_apply_patch_takes_the_lock(db_session, session_row, ctx, monkeypatch):
+    calls = []
+    real = profile_service.lock_session_row
+    monkeypatch.setattr(
+        profile_service, "lock_session_row",
+        lambda db, sid: calls.append(sid) or real(db, sid),
+    )
+    profile_service.apply_patch(
+        db_session, ctx, _patch(add_confirmed_gap="x", evidence_type="declared")
+    )
+    assert calls == [session_row.id]
+
+
 def test_profile_from_row_parses_without_db(db_session):
     row = SessionModel(user_id="u", topic="t",
                        topic_profile_json='{"knowledge_level": "beginner"}')

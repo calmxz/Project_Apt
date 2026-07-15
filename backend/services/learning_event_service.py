@@ -70,6 +70,10 @@ def record_from_answer(
     db.flush()
 
     if apply_profile_effects:
+        # F-12: lock before the load-mutate-save span. When the batch caller
+        # (check_question_service.answer, Task 10) already holds the lock in
+        # this same transaction, this re-lock is a no-op.
+        profile_service.lock_session_row(db, session_id)
         profile = profile_service.load_profile(db, session_id)
         stamp = datetime.now(timezone.utc)
         if correct:

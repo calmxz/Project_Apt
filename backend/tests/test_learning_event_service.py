@@ -262,3 +262,38 @@ def test_record_from_answer_stamps_tested_evidence(session_row, db_session):
     assert profile_service.find_entry(p.mastered_concepts, "limits") is None
     g = profile_service.find_entry(p.confirmed_gaps, "limits")
     assert g.evidence_type == "tested"
+
+
+# --- F-12: row-lock every profile read-modify-write span -------------------
+
+
+def test_record_from_answer_takes_the_lock_when_applying_profile_effects(
+    session_row, db_session, monkeypatch
+):
+    calls = []
+    real = profile_service.lock_session_row
+    monkeypatch.setattr(
+        profile_service, "lock_session_row",
+        lambda db, sid: calls.append(sid) or real(db, sid),
+    )
+    learning_event_service.record_from_answer(
+        db_session, session_row.id, gap="atp", question="q?", correct=True,
+        clear_pending=False, apply_profile_effects=True,
+    )
+    assert calls == [session_row.id]
+
+
+def test_record_from_answer_skips_lock_when_profile_effects_disabled(
+    session_row, db_session, monkeypatch
+):
+    calls = []
+    real = profile_service.lock_session_row
+    monkeypatch.setattr(
+        profile_service, "lock_session_row",
+        lambda db, sid: calls.append(sid) or real(db, sid),
+    )
+    learning_event_service.record_from_answer(
+        db_session, session_row.id, gap="atp", question="q?", correct=True,
+        clear_pending=False, apply_profile_effects=False,
+    )
+    assert calls == []

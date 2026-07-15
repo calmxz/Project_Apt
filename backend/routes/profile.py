@@ -96,6 +96,8 @@ def patch_profile(
         and body.subtopic_level is None
     ):
         raise HTTPException(status_code=422, detail="empty patch")
+    # F-12: lock before the If-Match read so compare and write are one atomic span.
+    profile_service.lock_session_row(db, session_id)
     _guard_if_match(db, session_id, if_match)
     try:
         profile = profile_service.apply_user_patch(
@@ -114,6 +116,8 @@ def patch_profile(
 
 def _delete_item(db, session_id, user_id, list_name, item, if_match):
     _owned_session_or_404(db, session_id, user_id)
+    # F-12: lock before the If-Match read so compare and write are one atomic span.
+    profile_service.lock_session_row(db, session_id)
     _guard_if_match(db, session_id, if_match)
     try:
         profile = profile_service.remove_profile_item(db, session_id, list_name, item)
@@ -156,6 +160,8 @@ def delete_subtopic_level(
     if_match: str | None = Header(default=None, alias="If-Match"),
 ):
     _owned_session_or_404(db, session_id, user_id)
+    # F-12: lock before the If-Match read so compare and write are one atomic span.
+    profile_service.lock_session_row(db, session_id)
     _guard_if_match(db, session_id, if_match)
     try:
         profile = profile_service.remove_subtopic(db, session_id, item)
