@@ -55,6 +55,8 @@ def _summarize(name: str, result) -> str:
     if name == "retrieve_chunks":
         return f"Found {len((result.data or {}).get('chunks', []))} passages"
     if name == "update_topic_profile":
+        if result.status == "ignored":
+            return "Profile change ignored (inferred evidence)"
         return "Profile updated"
     if name == "ask_check_questions":
         return "Questions asked"

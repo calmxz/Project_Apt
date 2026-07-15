@@ -269,12 +269,16 @@ def _set_focus(db_session, ctx, gap: str):
 def test_focus_clear_without_reason_is_not_a_clear(session_row, ctx, db_session):
     # F-23 (restored): a null focus_target_gap without focus_clear_reason is
     # indistinguishable from an omitted field, so it is NOT treated as a
-    # clear -- it succeeds and leaves focus unchanged, it does not fail.
+    # clear -- focus is left unchanged either way. Under F-20 this specific
+    # call carries no actionable field at all (only evidence_type is set),
+    # so it is now rejected as an empty patch rather than silently
+    # succeeding.
     _set_focus(db_session, ctx, "joins")
     result = profile_service.apply_patch(
         db_session, ctx, _patch(focus_target_gap=None, evidence_type="inferred")
     )
-    assert result.ok is True
+    assert result.ok is False
+    assert result.status == "failed"
     profile = profile_service.load_profile(db_session, SESSION_ID)
     assert profile.focus_target_gap == "joins"
 
@@ -853,3 +857,45 @@ def test_knowledge_level_with_declared_evidence_accepted(db_session, tool_ctx):
     )
     assert result.ok
     assert profile_service.load_profile(db_session, tool_ctx.session_id).knowledge_level == "advanced"
+
+
+def test_empty_patch_fails(db_session, tool_ctx):
+    result = profile_service.apply_patch(
+        db_session, tool_ctx, UpdateTopicProfileArgs(session_id=tool_ctx.session_id)
+    )
+    assert not result.ok
+    assert result.status == "failed"
+    assert "empty patch" in (result.error or "")
+
+
+def test_inferred_only_patch_returns_ignored(db_session, tool_ctx):
+    result = profile_service.apply_patch(
+        db_session, tool_ctx,
+        UpdateTopicProfileArgs(
+            session_id=tool_ctx.session_id,
+            add_mastered_concept="chain rule",
+            evidence_type="inferred",
+        ),
+    )
+    assert result.ok
+    assert result.status == "ignored"
+    assert "inferred" in json.dumps(result.data or {})
+    after = profile_service.load_profile(db_session, tool_ctx.session_id)
+    assert profile_service.concept_names(after.mastered_concepts) == []
+
+
+def test_inferred_mastery_alongside_real_change_is_ok_with_note(db_session, tool_ctx):
+    result = profile_service.apply_patch(
+        db_session, tool_ctx,
+        UpdateTopicProfileArgs(
+            session_id=tool_ctx.session_id,
+            add_mastered_concept="chain rule",
+            add_confirmed_gap="product rule",
+            evidence_type="inferred",
+        ),
+    )
+    assert result.ok
+    assert result.status == "ok"
+    assert "inferred" in json.dumps(result.data or {})
+    after = profile_service.load_profile(db_session, tool_ctx.session_id)
+    assert "product rule" in profile_service.concept_names(after.confirmed_gaps)

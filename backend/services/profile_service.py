@@ -306,6 +306,18 @@ def apply_patch(
     # claim, so it is recorded as "declared".
     evidence = "declared" if args.evidence_type == "tested" else args.evidence_type
 
+    if (
+        args.knowledge_level is None
+        and not args.add_confirmed_gap
+        and not args.add_mastered_concept
+        and args.focus_target_gap is None
+        and args.focus_clear_reason is None
+        and args.subtopic is None
+    ):
+        # F-20: a no-op patch (e.g. reconstructed from malformed args) must
+        # not be reported to the model as "Profile updated".
+        return ToolResult(ok=False, status="failed", error="empty patch: no fields provided")
+
     profile = load_profile(db, ctx.session_id)
 
     if (args.subtopic is None) != (args.subtopic_level is None):
@@ -355,6 +367,7 @@ def apply_patch(
             evidence_type=gap_evidence, stamp=datetime.now(timezone.utc),
         )
 
+    ignored_notes: list[str] = []
     mastered_this_call = False
     if args.add_mastered_concept:
         if args.evidence_type is None:
@@ -373,6 +386,13 @@ def apply_patch(
                 stamp=datetime.now(timezone.utc),
             )
             mastered_this_call = True
+        else:
+            # F-48: ignoring inferred mastery is policy (spec v1 rules), but
+            # the model must be told it was a no-op, not "Profile updated".
+            ignored_notes.append(
+                "inferred mastery ignored: only 'declared' or 'tested' "
+                "evidence promotes to mastered_concepts"
+            )
 
     # focus_target_gap handling.
     # F-23: an omitted focus field is indistinguishable from an explicit null
@@ -418,6 +438,19 @@ def apply_patch(
 
     save_profile(db, ctx.session_id, profile)
 
+    if ignored_notes:
+        only_ignored = (
+            args.knowledge_level is None
+            and not args.add_confirmed_gap
+            and args.focus_target_gap is None
+            and args.focus_clear_reason is None
+            and args.subtopic is None
+        )
+        return ToolResult(
+            ok=True,
+            status="ignored" if only_ignored else "ok",
+            data={"notes": ignored_notes},
+        )
     return ToolResult(ok=True, status="ok")
 
 

@@ -966,3 +966,9 @@ async def test_acompletion_receives_timeout(db_session, monkeypatch):
     )
 
     assert captured["timeout"] == settings.llm_timeout_s
+
+
+def test_summarize_labels_ignored_profile_patch():
+    from agent.tutor import _summarize
+    result = ToolResult(ok=True, status="ignored", data={"notes": ["inferred mastery ignored"]})
+    assert "ignored" in _summarize("update_topic_profile", result).lower()

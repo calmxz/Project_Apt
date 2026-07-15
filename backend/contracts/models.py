@@ -60,7 +60,7 @@ class ToolCallRecord(BaseModel):
     )
     name: str
     args: dict[str, Any]
-    status: Literal["ok", "failed", "no_results"]
+    status: Literal["ok", "failed", "no_results", "ignored"]
     error: str | None = None
 
 
@@ -233,7 +233,7 @@ class ToolResult(BaseModel):
         extra="forbid",
     )
     ok: bool
-    status: Literal["ok", "failed", "no_results"]
+    status: Literal["ok", "failed", "no_results", "ignored"]
     error: str | None = None
     data: dict[str, Any] | None = None
 

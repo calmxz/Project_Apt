@@ -195,8 +195,10 @@ def test_clear_focus_tested_correct_with_divergent_gap_label(session_row, ctx, d
 
 def test_clear_focus_without_reason_is_not_a_clear(session_row, ctx, db_session):
     """F-23 (restored): a null focus_target_gap WITHOUT focus_clear_reason is
-    indistinguishable from an omitted field, so it does not clear focus and
-    does not fail -- the patch succeeds with focus left unchanged."""
+    indistinguishable from an omitted field, so it does not clear focus --
+    focus is left unchanged either way. Under F-20, this second call carries
+    no actionable field at all, so it is now rejected as an empty patch
+    rather than silently succeeding."""
     set_result = profile_service.apply_patch(
         db_session,
         ctx,
@@ -218,6 +220,7 @@ def test_clear_focus_without_reason_is_not_a_clear(session_row, ctx, db_session)
             evidence_type=None,
         ),
     )
-    assert clr.ok is True
+    assert clr.ok is False
+    assert clr.status == "failed"
     # Focus must remain set -- this was not treated as a clear.
     assert profile_service.load_profile(db_session, ctx.session_id).focus_target_gap == "some_gap"

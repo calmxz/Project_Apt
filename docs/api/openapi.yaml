@@ -519,7 +519,7 @@ components:
 
     ToolStatus:
       type: string
-      enum: [ok, failed, no_results]
+      enum: [ok, failed, no_results, ignored]
 
     SeedMode:
       type: string
