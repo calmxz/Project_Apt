@@ -549,3 +549,26 @@ def test_apply_patch_subtopic_empty_after_strip(session_row, db_session):
     res = profile_service.apply_patch(db_session, ctx, args)
     assert not res.ok
     assert "empty" in res.error
+
+
+def test_null_focus_if_removed_matches_canonically():
+    profile = TopicProfile(focus_target_gap="Chain Rule")
+    profile_service._null_focus_if_removed(profile, "  chain rule ")
+    assert profile.focus_target_gap is None
+
+
+def test_null_focus_if_removed_leaves_unrelated_focus():
+    profile = TopicProfile(focus_target_gap="Chain Rule")
+    profile_service._null_focus_if_removed(profile, "product rule")
+    assert profile.focus_target_gap == "Chain Rule"
+
+
+def test_add_exclusive_is_public_and_clears_canon_focus():
+    profile = TopicProfile(
+        focus_target_gap="chain rule",
+        confirmed_gaps=[ConceptEntry(name="Chain Rule")],
+    )
+    profile_service.add_exclusive(profile, "mastered_concepts", "CHAIN RULE")
+    assert profile_service.concept_names(profile.confirmed_gaps) == []
+    assert profile.focus_target_gap is None
+    assert profile_service.concept_names(profile.mastered_concepts) == ["CHAIN RULE"]

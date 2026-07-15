@@ -163,11 +163,12 @@ def profile_etag(profile: TopicProfile) -> str:
 
 
 def _null_focus_if_removed(profile: TopicProfile, item: str) -> None:
-    if profile.focus_target_gap == item:
+    # F-22: removal matches by canon(), so the dangling-focus check must too.
+    if profile.focus_target_gap is not None and canon(profile.focus_target_gap) == canon(item):
         profile.focus_target_gap = None
 
 
-def _add_exclusive(
+def add_exclusive(
     profile: TopicProfile,
     target: str,
     item: str,
@@ -175,6 +176,9 @@ def _add_exclusive(
     evidence_type: str | None = None,
     stamp: datetime | None = None,
 ) -> None:
+    """Single choke point for the exclusivity invariant (F-13, decision Q2):
+    adding a concept to one list removes it from the other; removing it from
+    confirmed_gaps also clears a (canon-equal) dangling focus."""
     other = "confirmed_gaps" if target == "mastered_concepts" else "mastered_concepts"
     setattr(
         profile,
@@ -215,12 +219,12 @@ def apply_user_patch(
             raise ValueError("item cannot be empty after stripping whitespace")
     profile = load_profile(db, session_id)
     if add_mastered is not None:
-        _add_exclusive(
+        add_exclusive(
             profile, "mastered_concepts", add_mastered,
             stamp=datetime.now(timezone.utc),
         )
     if add_gap is not None:
-        _add_exclusive(
+        add_exclusive(
             profile, "confirmed_gaps", add_gap,
             stamp=datetime.now(timezone.utc),
         )
