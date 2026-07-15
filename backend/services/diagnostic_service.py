@@ -13,8 +13,8 @@ def grade_if_diagnostic(db: "Session", session_id: str) -> None:
     No-op unless the pending check's purpose is "diagnostic" AND it is fully
     resolved (is_done). Safe to call from any route that may resolve the final
     item of a batch (answer or skip) - resolving the same already-graded batch
-    twice is harmless since it recomputes the same score from persisted item
-    state.
+    twice is a no-op because knowledge_level is only ever written from None
+    (see the guard below), never overwritten once set.
 
     Local imports avoid circular imports (check_question_service and
     profile_service both sit alongside this module in services/).
@@ -26,9 +26,20 @@ def grade_if_diagnostic(db: "Session", session_id: str) -> None:
         return
     items = pc.get("items", [])
     graded = [it for it in items if it["status"] == "answered"]
+    if not graded:
+        # F-25: an all-skip batch is zero evidence. Leave knowledge_level None
+        # so diagnostic_required fires again next turn instead of branding the
+        # learner "beginner" forever.
+        return
     n_correct = sum(1 for it in graded if it.get("correct"))
     level = level_for_score(n_correct, len(items))
+    profile_service.lock_session_row(db, session_id)
     profile = profile_service.load_profile(db, session_id)
+    if profile.knowledge_level is not None:
+        # F-39: a user PATCH mid-batch already set the level; the diagnostic
+        # must not clobber explicit user intent. (This also makes re-grading
+        # a resolved batch a no-op, replacing the old recompute-idempotency.)
+        return
     profile.knowledge_level = level
     profile_service.save_profile(db, session_id, profile)
 

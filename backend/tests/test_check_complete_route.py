@@ -10,7 +10,7 @@ from agent.stream_events import StreamEvent
 from contracts import AskCheckQuestionsArgs, TopicProfile
 from agent.types import ToolContext
 from db.models import ChatMessage, Session as SessionModel, User
-from services import check_question_service
+from services import check_question_service, profile_service
 
 
 USER_ID = "u_done_1"
@@ -49,6 +49,49 @@ def _make_fake_run_streaming(db, session_id):
         yield StreamEvent("assistant_delta", {"text": "Great job!"})
         yield StreamEvent("done", {"message_id": str(msg.id)})
     return fake
+
+
+@pytest.fixture
+def resolved_diagnostic_batch_session(db_session):
+    """A diagnostic batch fully resolved by writing pending_check_json DIRECTLY
+    onto the session row -- bypassing check_question_service.answer(), which
+    would grade. Simulates the F-24 crash window: the per-item grade call
+    never ran (e.g. process died right after the answer commit), but the
+    batch itself is fully done. knowledge_level must still be None here."""
+    db_session.add(User(id=USER_ID))
+    row = SessionModel(
+        id="s_diag_backstop", user_id=USER_ID, topic="bio",
+        topic_profile_json=TopicProfile().model_dump_json(),
+    )
+    db_session.add(row)
+    db_session.commit()
+    ctx = ToolContext(db=db_session, session_id=row.id, user_id=USER_ID,
+                      turn_started_at=datetime(2026, 1, 1, tzinfo=timezone.utc))
+    check_question_service.register(db_session, ctx, AskCheckQuestionsArgs(
+        session_id=row.id, gap="atp",
+        items=[{"question": "Q1?", "options": ["a", "b"],
+                "correct_index": 0, "explanation": "a."}]))
+    pc = check_question_service.get_pending_check(db_session, row.id)
+    pc["items"][0]["status"] = "answered"
+    pc["items"][0]["selected_index"] = 0
+    pc["items"][0]["correct"] = True
+    pc["current_index"] = 1
+    row.pending_check_json = json.dumps(pc)
+    db_session.commit()
+    return row.id
+
+
+def test_complete_grades_diagnostic_before_clearing(client, db_session, resolved_diagnostic_batch_session, monkeypatch):
+    # F-24 crash-window backstop: the batch is fully resolved but
+    # grade_if_diagnostic never ran per-item. POST /check/complete must grade
+    # before clearing the batch.
+    sid = resolved_diagnostic_batch_session
+    monkeypatch.setattr("agent.tutor.run_streaming",
+                        _make_fake_run_streaming(db_session, sid))
+    assert profile_service.load_profile(db_session, sid).knowledge_level is None
+    resp = client.post(f"/api/sessions/{sid}/check/complete", json={"user_id": USER_ID})
+    assert resp.status_code == 200
+    assert profile_service.load_profile(db_session, sid).knowledge_level is not None
 
 
 def test_complete_streams_reply_clears_batch_no_user_message(client, db_session, seeded_session, monkeypatch):

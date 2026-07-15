@@ -487,6 +487,11 @@ async def complete_check(
 
     summary = check_question_service.build_results_summary(pc)
     cooldown = check_question_service.build_quiz_cooldown(pc)
+    # F-24 crash-window backstop: if the per-item grade call never ran (crash
+    # between the answer commit and grade), grade the diagnostic NOW, while
+    # the resolved batch still exists -- clearing below would otherwise leave
+    # knowledge_level None and re-trigger the diagnostic.
+    diagnostic_service.grade_if_diagnostic(db, session_id)
     check_question_service.write_check_batch(db, pc)
     pending_check_store.clear_pending_check(db, session_id)
     check_question_service.set_quiz_cooldown(db, session_id, cooldown)

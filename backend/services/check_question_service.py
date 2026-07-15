@@ -193,7 +193,11 @@ def answer(db: Session, session_id: str, index: int, selected_index: int) -> dic
     """Grade item `index` (must equal current_index), record the LearningEvent
     + profile effect, mark the item answered, advance current_index, persist -
     all in ONE commit. Does NOT clear the batch."""
-    from services import learning_event_service  # local import avoids circular
+    from services import learning_event_service, profile_service  # local import avoids circular
+
+    # F-24: serialize concurrent submits on the session row; the loser then
+    # sees the advanced current_index and raises CheckStateError -> 409.
+    profile_service.lock_session_row(db, session_id)
 
     pc = get_pending_check(db, session_id)
     if pc is None:
@@ -235,6 +239,12 @@ def answer(db: Session, session_id: str, index: int, selected_index: int) -> dic
 
 
 def skip(db: Session, session_id: str, index: int) -> dict:
+    from services import profile_service  # local import avoids circular
+
+    # F-24: serialize concurrent submits on the session row; the loser then
+    # sees the advanced current_index and raises CheckStateError -> 409.
+    profile_service.lock_session_row(db, session_id)
+
     pc = get_pending_check(db, session_id)
     if pc is None:
         raise CheckStateError("no open check-question batch")
