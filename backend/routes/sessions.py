@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from typing import Literal
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from agent import prompts, tutor
@@ -121,12 +121,14 @@ async def create_session(
         prior = db.get(SessionModel, req.prior_session_id)
         if prior is None or prior.user_id != user_id:
             raise HTTPException(status_code=404, detail="prior session not found")
-        if prior.ended_at is None:
-            # F-03: a resume-triggered summary fires a full-transcript LLM call;
-            # count it like a chat turn. At the cap it still succeeds mechanically.
+        if prior.ended_at is None and _claim_end(db, prior.id):
+            # F-03: a resume-triggered summary fires a full-transcript LLM
+            # call; count it like a chat turn. F-30: claim-first so a
+            # concurrent explicit end cannot double-pay. F-31: the open check
+            # batch is abandoned inside generate_and_persist.
             allow_llm, _ = rate_limit.check_and_increment(db, user_id)
             await summary_service.generate_and_persist(db, prior, allow_llm=allow_llm)
-            db.refresh(prior)
+        db.refresh(prior)
         profile_json = prior.topic_profile_json
 
     new_session = SessionModel(
@@ -286,6 +288,21 @@ def get_session(
     )
 
 
+def _claim_end(db: Session, session_id: str) -> bool:
+    """Atomically claim a session's end (F-30). The conditional UPDATE lets
+    exactly one caller win under concurrency (double-click End, End racing a
+    continue-topic resume); losers take the idempotent path and never pay a
+    second summary LLM call. Committed immediately: the claim must be visible
+    to concurrent requests before the multi-second summary await."""
+    result = db.execute(
+        update(SessionModel)
+        .where(SessionModel.id == session_id, SessionModel.ended_at.is_(None))
+        .values(ended_at=datetime.now(timezone.utc))
+    )
+    db.commit()
+    return result.rowcount == 1
+
+
 @router.post("/sessions/{session_id}/end", response_model=SessionEndResponse)
 async def end_session(
     session_id: str,
@@ -298,7 +315,10 @@ async def end_session(
         if row is None or row.user_id != user_id:
             raise HTTPException(status_code=404, detail="session not found")
 
-        if row.ended_at is not None:
+        if not _claim_end(db, session_id):
+            # Already ended, or lost the race to a concurrent end: replay the
+            # stored summary; no second LLM call (F-30).
+            db.refresh(row)
             profile = profile_service.load_profile(db, session_id)
             return SessionEndResponse(
                 id=row.id,
@@ -309,7 +329,6 @@ async def end_session(
         # F-03: an end fires a full-transcript LLM call; count it like a chat
         # turn. At the cap the end still succeeds with a mechanical summary.
         allow_llm, _ = rate_limit.check_and_increment(db, user_id)
-        check_question_service.abandon_open_batch(db, session_id)
         summary_text = await summary_service.generate_and_persist(db, row, allow_llm=allow_llm)
         db.refresh(row)
         return SessionEndResponse(

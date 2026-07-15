@@ -265,3 +265,16 @@ def test_public_view_does_not_leak_purpose(db, ctx_fresh_session):
     assert pc["purpose"] == "diagnostic"
     view = cq.public_view(pc)
     assert "purpose" not in view
+
+
+def test_abandon_open_batch_commit_false_leaves_writes_pending(db, ctx, session_id):
+    """F-33: with commit=False nothing is committed -- a rollback restores the
+    open batch, proving the writes joined the caller's transaction."""
+    cq.register(db, ctx, _batch_args(session_id))
+    assert cq.get_pending_check(db, session_id) is not None
+
+    cleared = cq.abandon_open_batch(db, session_id, commit=False)
+    assert cleared is True
+
+    db.rollback()
+    assert cq.get_pending_check(db, session_id) is not None

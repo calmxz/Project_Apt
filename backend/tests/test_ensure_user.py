@@ -39,3 +39,28 @@ def test_ensure_user_returns_existing_unstamped_row_untouched(db_session):
 
     assert user.accepted_terms_at is None
     assert user.terms_version is None
+
+
+def test_ensure_user_lost_insert_race_returns_existing_row(db_session, monkeypatch):
+    """F-37: simulate the get-miss/insert-exists race. A row that appears
+    between the identity check and the INSERT must be returned unchanged
+    (no IntegrityError, no re-stamp)."""
+    existing = User(
+        id="race-user",
+        accepted_terms_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        terms_version="v-old",
+    )
+    db_session.add(existing)
+    db_session.commit()
+
+    # Force the create path even though the row exists.
+    real_get = db_session.get
+    monkeypatch.setattr(
+        db_session,
+        "get",
+        lambda model, pk: None if (model is User and pk == "race-user") else real_get(model, pk),
+    )
+
+    user = ensure_user(db_session, "race-user")
+    assert user.id == "race-user"
+    assert user.terms_version == "v-old"  # existing stamp preserved

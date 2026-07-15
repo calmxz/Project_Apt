@@ -1,18 +1,37 @@
 """TDD: summary_service.generate_and_persist."""
 
 import asyncio
+from datetime import datetime, timezone
 from decimal import Decimal
 
+import litellm
 import pytest
 
+from agent.types import ToolContext
 from config import settings
-from contracts import TopicProfile
+from contracts import AskCheckQuestionsArgs, TopicProfile
 from db.models import ChatMessage, LlmCallLog, Session as SessionModel, User
-from services import cost_meter, profile_service, summary_service
+from services import check_question_service, cost_meter, profile_service, summary_service
 
 
 USER_ID = "u1"
 SESSION_ID = "s1"
+
+
+@pytest.fixture
+def fresh_session(db_session):
+    """A seeded session row with zero ChatMessages (F-32)."""
+    db_session.add(User(id="u_fresh"))
+    db_session.flush()
+    session = SessionModel(
+        id="s_fresh",
+        user_id="u_fresh",
+        topic="sql",
+        topic_profile_json=TopicProfile().model_dump_json(),
+    )
+    db_session.add(session)
+    db_session.commit()
+    return session
 
 
 @pytest.fixture
@@ -56,7 +75,9 @@ def test_successful_summary_persists_into_profile(
     assert summary == "a good summary"
     profile = profile_service.load_profile(db_session, SESSION_ID)
     assert profile.last_session_summary == "a good summary"
-    assert session_with_messages.ended_at is not None
+    # F-30: ended_at is no longer generate_and_persist's job -- the caller's
+    # _claim_end (routes/sessions.py) owns it and commits before the LLM await.
+    assert session_with_messages.ended_at is None
 
 
 def test_successful_summary_logs_llm_call(
@@ -237,3 +258,87 @@ def test_summary_success_records_ledger_and_passes_timeout(
     )
     assert captured["timeout"] == settings.summary_timeout_s
     assert cost_meter.current_spend(db_session, session_with_messages.user_id) == Decimal("0.0030")
+
+
+def test_zero_message_end_skips_llm(db_session, fresh_session, monkeypatch):
+    """F-32: ending a session with no messages must not pay for an LLM call
+    nor persist hallucinated prose.
+
+    Note: acompletion is asserted via a call-tracking list rather than a
+    raise-inside-the-mock, because generate_and_persist wraps the LLM call in
+    a broad try/except that falls back to the same mechanical string on any
+    exception -- a raise-based mock would be silently swallowed and the test
+    would pass even without the fix (verified empirically: it does).
+    """
+    monkeypatch.setattr(settings, "llm_stub", False)  # llm_stub_enabled is a property
+    called = []
+
+    async def _boom(*args, **kwargs):
+        called.append(1)
+        raise AssertionError("LLM must not be called for an empty transcript")
+
+    monkeypatch.setattr(litellm, "acompletion", _boom)
+    summary = asyncio.run(
+        summary_service.generate_and_persist(db_session, fresh_session)
+    )
+    assert summary == "[auto] no exchanges recorded"
+    assert called == []
+
+
+# ---------------------------------------------------------------------------
+# F-30/F-31/F-33: claim-first end + single-commit summary + resume abandon
+# ---------------------------------------------------------------------------
+
+
+def _open_batch(db, session_id, user_id=USER_ID, n=2):
+    ctx = ToolContext(
+        db=db, session_id=session_id, user_id=user_id,
+        turn_started_at=datetime.now(timezone.utc),
+    )
+    return check_question_service.register(
+        db, ctx,
+        AskCheckQuestionsArgs(
+            session_id=session_id,
+            gap="g",
+            items=[
+                {"question": f"Q{i}?", "options": ["a", "b"], "correct_index": 0, "explanation": "a."}
+                for i in range(n)
+            ],
+        ),
+    )
+
+
+@pytest.fixture
+def session_with_open_batch(db_session):
+    db_session.add(User(id="u_open_batch"))
+    db_session.flush()
+    session = SessionModel(
+        id="s_open_batch",
+        user_id="u_open_batch",
+        topic="sql",
+        topic_profile_json=TopicProfile().model_dump_json(),
+    )
+    db_session.add(session)
+    db_session.commit()
+    _open_batch(db_session, session.id, user_id="u_open_batch")
+    return session
+
+
+def test_generate_and_persist_no_longer_sets_ended_at(db_session, fresh_session):
+    """F-30: ended_at is the claim's job (routes), not the summary's."""
+    asyncio.run(summary_service.generate_and_persist(db_session, fresh_session))
+    db_session.refresh(fresh_session)
+    assert fresh_session.ended_at is None
+
+
+def test_summary_write_window_is_atomic(db_session, session_with_open_batch, monkeypatch):
+    """F-33: if the profile write fails, the batch-abandon must roll back with
+    it -- no half-committed end state."""
+    def _boom(*args, **kwargs):
+        raise RuntimeError("simulated write failure")
+
+    monkeypatch.setattr(profile_service, "save_profile", _boom)
+    with pytest.raises(RuntimeError):
+        asyncio.run(summary_service.generate_and_persist(db_session, session_with_open_batch))
+    db_session.rollback()
+    assert check_question_service.get_pending_check(db_session, session_with_open_batch.id) is not None

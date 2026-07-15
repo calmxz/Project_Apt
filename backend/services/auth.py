@@ -12,7 +12,6 @@ from __future__ import annotations
 import time
 from typing import Any
 
-import httpx
 import jwt
 from fastapi import Depends, HTTPException, Request, status
 from jwt import PyJWKClient
@@ -22,6 +21,7 @@ from config import settings
 
 _JWKS_CACHE: dict[str, Any] = {"client": None, "fetched_at": 0.0}
 _JWKS_TTL_SECONDS = 60 * 60  # refresh hourly
+JWT_LEEWAY_SECONDS = 30  # F-41: absorb small backend-vs-Supabase clock skew
 
 
 def _get_jwks_client() -> PyJWKClient:
@@ -62,7 +62,11 @@ def validate_jwks_startup() -> None:
 
 
 def verify_supabase_jwt(token: str) -> str:
-    """Return the Supabase user id (`sub`) for a valid JWT, else raise 401."""
+    """Return the Supabase user id (`sub`) for a valid JWT, else raise 401.
+
+    JWKS connectivity failures raise 503 (upstream outage, retryable);
+    an unknown `kid` or any invalid token raises 401 (F-07).
+    """
     try:
         jwks_client = _get_jwks_client()
         signing_key = jwks_client.get_signing_key_from_jwt(token).key
@@ -72,9 +76,18 @@ def verify_supabase_jwt(token: str) -> str:
             algorithms=["RS256", "ES256"],
             audience="authenticated",
             issuer=f"{settings.supabase_url}/auth/v1",
+            leeway=JWT_LEEWAY_SECONDS,
             options={"verify_aud": True, "verify_exp": True, "verify_iss": True},
         )
-    except (jwt.InvalidTokenError, httpx.HTTPError, KeyError) as e:
+    except jwt.PyJWKClientConnectionError as e:
+        # F-07: JWKS endpoint unreachable -- an upstream outage, not a bad
+        # token. 503 keeps client retry semantics honest. Must precede the
+        # PyJWKClientError arm (it is a subclass).
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="auth_unavailable",
+        ) from e
+    except (jwt.PyJWKClientError, jwt.InvalidTokenError, KeyError) as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="invalid_token",

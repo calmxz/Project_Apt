@@ -15,12 +15,14 @@ from __future__ import annotations
 import time
 
 import jwt
+import jwt as pyjwt
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
+from services import auth
 from services import auth as auth_module
 from services.auth import current_user_id
 
@@ -220,3 +222,59 @@ def test_auth_not_configured_when_jwks_url_missing(monkeypatch, app, rsa_keys):
 
     # Restore module state for any later tests in the session.
     importlib.reload(auth_module)
+
+
+class _RaisingJwksClient:
+    def __init__(self, exc):
+        self._exc = exc
+
+    def get_signing_key_from_jwt(self, token):
+        raise self._exc
+
+
+def test_unknown_kid_returns_401_not_500(monkeypatch):
+    """F-07: a spoofed/unknown kid is a bad token (401), not a server error."""
+    monkeypatch.setattr(
+        auth,
+        "_get_jwks_client",
+        lambda: _RaisingJwksClient(pyjwt.PyJWKClientError('Unable to find a signing key')),
+    )
+    with pytest.raises(HTTPException) as exc:
+        auth.verify_supabase_jwt("h.p.s")
+    assert exc.value.status_code == 401
+    assert exc.value.detail == "invalid_token"
+
+
+def test_jwks_connection_failure_returns_503(monkeypatch):
+    """F-07: JWKS unreachable is an upstream outage (503), not invalid auth."""
+    monkeypatch.setattr(
+        auth,
+        "_get_jwks_client",
+        lambda: _RaisingJwksClient(pyjwt.PyJWKClientConnectionError("fetch failed")),
+    )
+    with pytest.raises(HTTPException) as exc:
+        auth.verify_supabase_jwt("h.p.s")
+    assert exc.value.status_code == 503
+    assert exc.value.detail == "auth_unavailable"
+
+
+def test_decode_called_with_leeway(monkeypatch):
+    """F-41: 30s leeway absorbs backend-vs-Supabase clock skew at exp boundary."""
+
+    class _Key:
+        key = "test-key"
+
+    class _Client:
+        def get_signing_key_from_jwt(self, token):
+            return _Key()
+
+    captured = {}
+
+    def _fake_decode(token, key, **kwargs):
+        captured.update(kwargs)
+        return {"sub": "user-1"}
+
+    monkeypatch.setattr(auth, "_get_jwks_client", lambda: _Client())
+    monkeypatch.setattr(auth.jwt, "decode", _fake_decode)
+    assert auth.verify_supabase_jwt("h.p.s") == "user-1"
+    assert captured["leeway"] == auth.JWT_LEEWAY_SECONDS == 30

@@ -12,6 +12,7 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import { getSupabase } from '../services/supabase.js'
+import { useUserStore } from './user.js'
 
 export const useAuthStore = defineStore('auth', () => {
   const session = ref(null)
@@ -28,8 +29,10 @@ export const useAuthStore = defineStore('auth', () => {
     const sb = getSupabase()
     const { data } = await sb.auth.getSession()
     session.value = data?.session ?? null
+    useUserStore().setActiveUser(session.value?.user?.id ?? null)
     const sub = sb.auth.onAuthStateChange((_event, sess) => {
       session.value = sess ?? null
+      useUserStore().setActiveUser(sess?.user?.id ?? null)
     })
     _unsubscribe.value = sub?.data?.subscription?.unsubscribe ?? null
     ready.value = true
@@ -83,6 +86,9 @@ export const useAuthStore = defineStore('auth', () => {
     const { error } = await sb.auth.signOut()
     if (error) throw error
     session.value = null
+    // Belt-and-braces: the SIGNED_OUT event from onAuthStateChange also
+    // clears the user store; setActiveUser(null) is idempotent.
+    useUserStore().setActiveUser(null)
   }
 
   function _resetForTests() {

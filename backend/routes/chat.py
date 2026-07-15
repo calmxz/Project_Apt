@@ -111,11 +111,16 @@ async def _prepare_turn(
 ) -> tuple[list[dict], str, ToolContext]:
     """Pre-flight for /chat/stream.
 
-    Checks cost cap and rate limit (raises HTTPException 429 on breach),
-    auto-creates User if missing, validates session (raises 404 if absent),
-    loads history, builds the system prompt, then persists the user ChatMessage
-    last (committed before returning so it survives even if the stream ends early),
-    and returns (messages, system_prompt, ctx).
+    Guard order: cost cap -> session 404/409 -> ensure_user -> rate limit.
+    The session guard runs before ensure_user and the rate limiter so a
+    rejected turn (unknown/foreign session 404, ended session 409) neither
+    creates a user row nor consumes a daily rate-limit slot. ensure_user runs
+    before check_and_increment so the FK-bearing usage_counters insert never
+    races ahead of the users row it references (F-36); check_and_increment's
+    internal commit persists both together. Loads history, builds the system
+    prompt, then persists the user ChatMessage last (committed before
+    returning so it survives even if the stream ends early), and returns
+    (messages, system_prompt, ctx).
     """
     # 1) Combined guard read: today's spend + user existence, one statement.
     exists_subq = select(literal(True)).where(User.id == user_id).exists()
@@ -136,24 +141,10 @@ async def _prepare_turn(
             },
         )
 
-    # 2-3) Rate limit: 2 statements on the allowed path (Task 3).
-    allowed, used = rate_limit.check_and_increment(db, user_id)
-    if not allowed:
-        raise HTTPException(  # unchanged detail payload
-            status_code=429,
-            detail={
-                "code": DAILY_CAP_REACHED,
-                "cap": settings.daily_cap,
-                "used": used,
-                "resets_at": rate_limit.midnight_utc_iso(),
-            },
-        )
-
-    # First-turn-ever: create the user row (rare path, excluded from budget).
-    if not user_exists:
-        ensure_user(db, user_id)
-
-    # 4) Session + ingestion counts in one statement.
+    # 2) Session + ingestion counts in one statement. Runs BEFORE the rate
+    # limiter so a rejected turn (foreign 404 / ended 409) does not consume
+    # a daily slot (Batch-1 deferral), and before ensure_user so bogus
+    # session ids don't create user rows.
     doc_base = select(func.count()).where(Document.session_id == req.session_id)
     row = db.execute(
         select(
@@ -171,8 +162,34 @@ async def _prepare_turn(
     ingestion_status = documents_service.status_from_counts(
         row.doc_total, row.doc_pending, row.doc_ready
     )
+    # Detach: ensure_user/check_and_increment commit below would otherwise
+    # expire this already-fully-loaded row (expire_on_commit), forcing a
+    # refresh SELECT the first time a column is read afterwards. All later
+    # reads of `session` are plain columns already fetched by the SELECT
+    # above, so detaching is safe and keeps the reorder statement-count
+    # neutral (Task 3).
+    db.expunge(session)
 
-    # 5) History through prompt build. An unexpected crash here must not lose
+    # 3) First-turn-ever: create the user row BEFORE the usage-counter
+    # insert whose FK references it (F-36). check_and_increment's internal
+    # commit persists both together.
+    if not user_exists:
+        ensure_user(db, user_id)
+
+    # 4-5) Rate limit: 2 statements on the allowed path (Task 3).
+    allowed, used = rate_limit.check_and_increment(db, user_id)
+    if not allowed:
+        raise HTTPException(  # unchanged detail payload
+            status_code=429,
+            detail={
+                "code": DAILY_CAP_REACHED,
+                "cap": settings.daily_cap,
+                "used": used,
+                "resets_at": rate_limit.midnight_utc_iso(),
+            },
+        )
+
+    # 6) History through prompt build. An unexpected crash here must not lose
     # the user's message (before the P3.1 consolidation it was persisted
     # up-front): persist it, then re-raise. Happy path pays no extra statement.
     try:
@@ -230,7 +247,7 @@ async def _prepare_turn(
         db.commit()
         raise
 
-    # 6) Persist the user turn LAST (still committed before returning, so it
+    # 7) Persist the user turn LAST (still committed before returning, so it
     # survives an early stream end) - after all reads, so commit-expiry does
     # not trigger a refresh SELECT.
     user_msg = ChatMessage(session_id=req.session_id, role="user", content=req.message)
