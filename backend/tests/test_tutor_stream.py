@@ -228,6 +228,57 @@ async def test_run_streaming_persists_cancelled_on_cancel(db_session, monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_malformed_tool_args_yield_error_not_dispatch(db_session, monkeypatch):
+    """F-20a: a truncated/garbled streamed tool-args blob must fail loudly
+    instead of dispatching {} (which would validate -- session_id is
+    injected -- and silently report a no-op patch as ok)."""
+    _disable_stub(monkeypatch)
+    _allow_cap(monkeypatch)
+
+    from agent import tutor
+
+    # Turn 1: a tool call whose accumulated arguments are truncated JSON.
+    turn1 = _make_stream(
+        _tool_chunk(
+            _tool_fragment(
+                0,
+                id="tc_1",
+                name="update_topic_profile",
+                arguments='{"session_id": "s1", "add_confirm',
+            )
+        ),
+    )
+    # Turn 2: plain text so the loop terminates.
+    turn2 = _make_stream(_content_chunk("done"))
+
+    monkeypatch.setattr(
+        "agent.tutor.litellm.acompletion",
+        AsyncMock(side_effect=[turn1, turn2]),
+    )
+    monkeypatch.setattr(
+        "agent.tutor.litellm.stream_chunk_builder", MagicMock(return_value=SimpleNamespace())
+    )
+    monkeypatch.setattr("agent.tutor.litellm.completion_cost", MagicMock(return_value=0.0))
+
+    dispatched = []
+    monkeypatch.setattr(
+        "agent.tutor.tools.dispatch",
+        MagicMock(side_effect=lambda name, args, ctx: dispatched.append(name)),
+    )
+
+    ctx = _ctx(db_session, session_id="s1")
+    events = await _drain(
+        tutor.run_streaming([{"role": "user", "content": "update my profile"}], "sys", ctx)
+    )
+
+    done_events = [e for e in events if e.type == "tool_call_done"]
+    assert done_events and done_events[0].data["status"] == "error"
+    assert "malformed" in done_events[0].data["error"]
+    assert dispatched == []
+    assert events[-1].type == "done"
+
+
+@pytest.mark.asyncio
 async def test_no_token_counter_on_happy_path(db_session, monkeypatch):
     """P3.2: litellm.token_counter is billing-estimate overhead needed only if
     the stream is cancelled mid-flight. A normal (non-cancelled) turn must do
