@@ -266,3 +266,16 @@ def test_immutable_rules_document_subtopics_and_provenance():
     assert "SUBTOPIC LEVELS:" in IMMUTABLE_RULES
     assert "subtopic_level" in IMMUTABLE_RULES
     assert "last_event_at" in IMMUTABLE_RULES
+
+
+def test_focus_protocol_documents_omission_and_server_verification():
+    # F-02/F-23 (restored, decision Q1): the FOCUS PROTOCOL must tell the
+    # agent that omitting focus_target_gap never clears it, and that
+    # tested_correct is checked server-side against recorded events.
+    from agent.prompts import IMMUTABLE_RULES
+
+    section = IMMUTABLE_RULES.split("FOCUS PROTOCOL:")[1].split(
+        "CHECK-QUESTION PROTOCOL"
+    )[0]
+    assert "leaves focus UNCHANGED" in section
+    assert "verified server-side" in section

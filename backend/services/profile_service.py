@@ -5,9 +5,10 @@ Rules:
 - Inferred mastery -> ignored (no-op, ok=True).
 - Duplicate gap or concept additions -> no-op.
 - knowledge_level overwrites.
-- focus_target_gap clearing requires focus_clear_reason (any non-None value).
-  The tested_correct in-turn-event guard is removed: record_learning_event is
-  now a human click, not an LLM tool, so server-side event evidence is moot.
+- focus_target_gap clearing requires focus_clear_reason; omitting the focus
+  field without a reason leaves focus unchanged (F-23). Reason
+  "tested_correct" is server-verified against a correct LearningEvent for the
+  focused gap in this session (F-02, restored per owner decision Q1).
 """
 
 import hashlib
@@ -44,6 +45,21 @@ MAX_SUBTOPICS = 20
 
 def canon(name: str) -> str:
     return name.strip().casefold()
+
+
+def _has_correct_event_for(db: Session, session_id: str, gap: str) -> bool:
+    """F-02 guard (decision Q1): session-scoped proof that a correct
+    check-question answer was recorded for this gap. canon-compared in Python
+    because gap_tested is stored raw."""
+    key = canon(gap)
+    rows = db.execute(
+        select(LearningEvent.gap_tested)
+        .where(
+            LearningEvent.session_id == session_id,
+            LearningEvent.correct.is_(True),
+        )
+    ).scalars().all()
+    return any(canon(g) == key for g in rows)
 
 
 def concept_names(entries: list | None) -> list[str]:
@@ -345,20 +361,32 @@ def apply_patch(
             )
             mastered_this_call = True
 
-    # focus_target_gap handling
-    clearing = prior_focus is not None and args.focus_target_gap is None
+    # focus_target_gap handling.
+    # F-23: an omitted focus field is indistinguishable from an explicit null
+    # after JSON parsing, so clearing is treated as INTENT only when a reason
+    # accompanies it; a patch that merely omits focus leaves focus unchanged.
+    clearing = (
+        prior_focus is not None
+        and args.focus_target_gap is None
+        and args.focus_clear_reason is not None
+    )
     if clearing:
-        if args.focus_clear_reason is None:
+        if args.focus_clear_reason == "tested_correct" and not _has_correct_event_for(
+            db, ctx.session_id, prior_focus
+        ):
+            # F-02 (decision Q1): the flagship guard rail. "tested_correct" is
+            # accepted only when a correct LearningEvent for the focused gap
+            # exists in this session (record_from_answer writes one on the
+            # human-click grading path). Known limit: other reason labels are
+            # accepted on the agent's word.
             return ToolResult(
                 ok=False,
                 status="failed",
-                error="focus_clear_reason required when clearing focus",
+                error=(
+                    "focus_clear_reason 'tested_correct' rejected: no correct "
+                    f"check answer recorded for '{prior_focus}' in this session"
+                ),
             )
-        # The tested_correct evidence guard was removed: record_learning_event is
-        # no longer a tool, so the LLM cannot fabricate a LearningEvent, and the
-        # ask-and-self-grade exploit the guard prevented is impossible. Mastery is
-        # now server-authoritative (record_from_answer), so the agent clears focus
-        # by judgment from the profile it reads, not from in-turn event evidence.
         log.info(
             "focus_clear session=%s gap=%s reason=%s",
             ctx.session_id,

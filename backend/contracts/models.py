@@ -82,11 +82,12 @@ class LearningEventResponse(BaseModel):
 class UpdateTopicProfileArgs(BaseModel):
     """
     Patch operation for a session's TopicProfile. Sending
-    `focus_target_gap: null` explicitly clears focus and requires
-    `focus_clear_reason` (server-side guard rail). `evidence_type` is
-    required only when `add_mastered_concept` is present. `subtopic` and
-    `subtopic_level` must be provided together (service-enforced
-    cross-field rule).
+    `focus_target_gap: null` together with `focus_clear_reason` clears
+    focus; omitting the field leaves focus unchanged.
+    `focus_clear_reason=tested_correct` is verified server-side against
+    the session's learning events. `evidence_type` is required only when
+    `add_mastered_concept` is present. `subtopic` and `subtopic_level`
+    must be provided together (service-enforced cross-field rule).
 
     """
 

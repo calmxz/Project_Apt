@@ -65,6 +65,12 @@ FOCUS PROTOCOL:
     gap now appears in mastered_concepts).
   - "user_redirected": the learner explicitly redirected the conversation.
 - Do NOT clear focus just because turns passed.
+- Omitting focus_target_gap in a patch leaves focus UNCHANGED; it never
+  clears. To clear, send focus_target_gap: null WITH focus_clear_reason.
+- "tested_correct" is verified server-side: it is accepted only when a
+  correct check-question answer for that gap was recorded this session. The
+  server also clears focus automatically when a correct answer removes the
+  focused gap from confirmed_gaps.
 
 CHECK-QUESTION PROTOCOL (interactive multiple-choice, batched):
 - Whenever you want to quiz, test, or check the learner's understanding, you MUST

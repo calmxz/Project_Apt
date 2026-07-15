@@ -7,7 +7,7 @@ import pytest
 
 from agent.types import ToolContext
 from contracts import ConceptEntry, TopicProfile, UpdateTopicProfileArgs
-from db.models import Session as SessionModel, User
+from db.models import LearningEvent, Session as SessionModel, User
 from services import profile_service
 from services.profile_service import concept_names
 
@@ -34,6 +34,29 @@ def session_row(db_session):
 
 @pytest.fixture
 def ctx(db_session):
+    return ToolContext(
+        db=db_session,
+        session_id=SESSION_ID,
+        user_id=USER_ID,
+        turn_started_at=datetime.now(timezone.utc),
+    )
+
+
+@pytest.fixture
+def tool_ctx(db_session):
+    """F-02 guard tests: a self-contained ToolContext that also creates the
+    backing session row (save_profile requires the row to exist)."""
+    db_session.add(User(id=USER_ID))
+    db_session.flush()
+    db_session.add(
+        SessionModel(
+            id=SESSION_ID,
+            user_id=USER_ID,
+            topic="calculus",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.commit()
     return ToolContext(
         db=db_session,
         session_id=SESSION_ID,
@@ -243,21 +266,22 @@ def _set_focus(db_session, ctx, gap: str):
     )
 
 
-def test_focus_clear_without_reason_fails(session_row, ctx, db_session):
+def test_focus_clear_without_reason_is_not_a_clear(session_row, ctx, db_session):
+    # F-23 (restored): a null focus_target_gap without focus_clear_reason is
+    # indistinguishable from an omitted field, so it is NOT treated as a
+    # clear -- it succeeds and leaves focus unchanged, it does not fail.
     _set_focus(db_session, ctx, "joins")
     result = profile_service.apply_patch(
         db_session, ctx, _patch(focus_target_gap=None, evidence_type="inferred")
     )
-    assert result.ok is False
-    assert result.status == "failed"
-    assert "focus_clear_reason" in (result.error or "")
+    assert result.ok is True
     profile = profile_service.load_profile(db_session, SESSION_ID)
     assert profile.focus_target_gap == "joins"
 
 
-def test_focus_clear_tested_correct_no_event_succeeds(session_row, ctx, db_session):
-    # Guard removed: tested_correct clears focus even with no in-turn LearningEvent.
-    # Previously this asserted ok=False; inverted because the guard is gone.
+def test_focus_clear_tested_correct_no_event_rejected(session_row, ctx, db_session):
+    # F-02 (restored, decision Q1): tested_correct is rejected when no correct
+    # LearningEvent for the focused gap exists in this session.
     _set_focus(db_session, ctx, "joins")
     result = profile_service.apply_patch(
         db_session,
@@ -268,15 +292,20 @@ def test_focus_clear_tested_correct_no_event_succeeds(session_row, ctx, db_sessi
             evidence_type="tested",
         ),
     )
-    assert result.ok is True
+    assert result.ok is False
+    assert "tested_correct" in (result.error or "")
     profile = profile_service.load_profile(db_session, SESSION_ID)
-    assert profile.focus_target_gap is None
+    assert profile.focus_target_gap == "joins"
 
 
 def test_focus_clear_tested_correct_ok(session_row, ctx, db_session):
-    # Guard removed: event setup was only needed to satisfy the old in-turn evidence
-    # check, which no longer exists. Clear still succeeds; focus is cleared.
+    # F-02 (restored): with a correct LearningEvent recorded for the focused
+    # gap in this session, the clear is accepted.
     _set_focus(db_session, ctx, "joins")
+    db_session.add(LearningEvent(
+        session_id=SESSION_ID, gap_tested="joins", question="q?", correct=True,
+    ))
+    db_session.commit()
     result = profile_service.apply_patch(
         db_session,
         ctx,
@@ -683,3 +712,81 @@ def test_add_exclusive_is_public_and_clears_canon_focus():
     assert profile_service.concept_names(profile.confirmed_gaps) == []
     assert profile.focus_target_gap is None
     assert profile_service.concept_names(profile.mastered_concepts) == ["CHAIN RULE"]
+
+
+def _clear_args(session_id, reason):
+    return UpdateTopicProfileArgs(session_id=session_id, focus_clear_reason=reason)
+
+
+def test_tested_correct_clear_rejected_without_event(db_session, tool_ctx):
+    profile = TopicProfile(focus_target_gap="chain rule")
+    profile_service.save_profile(db_session, tool_ctx.session_id, profile)
+
+    result = profile_service.apply_patch(
+        db_session, tool_ctx, _clear_args(tool_ctx.session_id, "tested_correct")
+    )
+
+    assert not result.ok
+    assert "tested_correct" in (result.error or "")
+    after = profile_service.load_profile(db_session, tool_ctx.session_id)
+    assert after.focus_target_gap == "chain rule"
+
+
+def test_tested_correct_clear_accepted_with_canon_matching_event(db_session, tool_ctx):
+    profile = TopicProfile(focus_target_gap="Chain Rule")
+    profile_service.save_profile(db_session, tool_ctx.session_id, profile)
+    db_session.add(LearningEvent(
+        session_id=tool_ctx.session_id, gap_tested="  chain rule ",
+        question="q?", correct=True,
+    ))
+    db_session.commit()
+
+    result = profile_service.apply_patch(
+        db_session, tool_ctx, _clear_args(tool_ctx.session_id, "tested_correct")
+    )
+
+    assert result.ok
+    assert profile_service.load_profile(db_session, tool_ctx.session_id).focus_target_gap is None
+
+
+def test_tested_correct_clear_rejected_for_event_on_other_gap(db_session, tool_ctx):
+    profile = TopicProfile(focus_target_gap="chain rule")
+    profile_service.save_profile(db_session, tool_ctx.session_id, profile)
+    db_session.add(LearningEvent(
+        session_id=tool_ctx.session_id, gap_tested="product rule",
+        question="q?", correct=True,
+    ))
+    db_session.commit()
+
+    result = profile_service.apply_patch(
+        db_session, tool_ctx, _clear_args(tool_ctx.session_id, "tested_correct")
+    )
+
+    assert not result.ok
+
+
+def test_non_tested_reasons_clear_without_event(db_session, tool_ctx):
+    for reason in ("demonstrated", "user_redirected"):
+        profile = TopicProfile(focus_target_gap="chain rule")
+        profile_service.save_profile(db_session, tool_ctx.session_id, profile)
+        result = profile_service.apply_patch(
+            db_session, tool_ctx, _clear_args(tool_ctx.session_id, reason)
+        )
+        assert result.ok
+        assert profile_service.load_profile(db_session, tool_ctx.session_id).focus_target_gap is None
+
+
+def test_omitted_focus_without_reason_is_not_a_clear(db_session, tool_ctx):
+    # F-23: a non-focus patch while focus is set must neither fail nor clear.
+    profile = TopicProfile(focus_target_gap="chain rule")
+    profile_service.save_profile(db_session, tool_ctx.session_id, profile)
+
+    result = profile_service.apply_patch(
+        db_session, tool_ctx,
+        UpdateTopicProfileArgs(session_id=tool_ctx.session_id, add_confirmed_gap="product rule"),
+    )
+
+    assert result.ok
+    after = profile_service.load_profile(db_session, tool_ctx.session_id)
+    assert after.focus_target_gap == "chain rule"
+    assert "product rule" in profile_service.concept_names(after.confirmed_gaps)
