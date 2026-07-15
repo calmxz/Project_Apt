@@ -603,7 +603,9 @@ def test_apply_patch_stamps_provenance(session_row, db_session):
     assert entry.evidence_type == "declared"
     assert entry.last_event_at is not None
 
-    # repeat with tested evidence upgrades in place, no duplicate
+    # repeat with tested evidence: agent-supplied "tested" is downgraded to
+    # "declared" (F-21) -- "tested" provenance is reserved for the server's
+    # own grading path (record_from_answer). No duplicate entry either way.
     profile_service.apply_patch(
         db_session, ctx,
         UpdateTopicProfileArgs(
@@ -614,7 +616,7 @@ def test_apply_patch_stamps_provenance(session_row, db_session):
     )
     p = profile_service.load_profile(db_session, session_row.id)
     assert len(p.mastered_concepts) == 1
-    assert p.mastered_concepts[0].evidence_type == "tested"
+    assert p.mastered_concepts[0].evidence_type == "declared"
 
 
 def test_user_patch_and_delete_are_entry_aware(session_row, db_session):
@@ -790,3 +792,56 @@ def test_omitted_focus_without_reason_is_not_a_clear(db_session, tool_ctx):
     after = profile_service.load_profile(db_session, tool_ctx.session_id)
     assert after.focus_target_gap == "chain rule"
     assert "product rule" in profile_service.concept_names(after.confirmed_gaps)
+
+
+def test_agent_tested_evidence_downgraded_to_declared(db_session, tool_ctx):
+    result = profile_service.apply_patch(
+        db_session, tool_ctx,
+        UpdateTopicProfileArgs(
+            session_id=tool_ctx.session_id,
+            add_mastered_concept="chain rule",
+            evidence_type="tested",
+        ),
+    )
+    assert result.ok
+    after = profile_service.load_profile(db_session, tool_ctx.session_id)
+    entry = profile_service.find_entry(after.mastered_concepts, "chain rule")
+    assert entry.evidence_type == "declared"
+
+
+def test_agent_tested_gap_evidence_downgraded(db_session, tool_ctx):
+    result = profile_service.apply_patch(
+        db_session, tool_ctx,
+        UpdateTopicProfileArgs(
+            session_id=tool_ctx.session_id,
+            add_confirmed_gap="chain rule",
+            evidence_type="tested",
+        ),
+    )
+    assert result.ok
+    after = profile_service.load_profile(db_session, tool_ctx.session_id)
+    entry = profile_service.find_entry(after.confirmed_gaps, "chain rule")
+    assert entry.evidence_type == "declared"
+
+
+def test_knowledge_level_requires_evidence(db_session, tool_ctx):
+    result = profile_service.apply_patch(
+        db_session, tool_ctx,
+        UpdateTopicProfileArgs(session_id=tool_ctx.session_id, knowledge_level="advanced"),
+    )
+    assert not result.ok
+    assert "evidence" in (result.error or "").lower()
+    assert profile_service.load_profile(db_session, tool_ctx.session_id).knowledge_level is None
+
+
+def test_knowledge_level_with_declared_evidence_accepted(db_session, tool_ctx):
+    result = profile_service.apply_patch(
+        db_session, tool_ctx,
+        UpdateTopicProfileArgs(
+            session_id=tool_ctx.session_id,
+            knowledge_level="advanced",
+            evidence_type="declared",
+        ),
+    )
+    assert result.ok
+    assert profile_service.load_profile(db_session, tool_ctx.session_id).knowledge_level == "advanced"

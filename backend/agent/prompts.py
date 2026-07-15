@@ -21,6 +21,9 @@ Do not hallucinate citations or facts.
 
 PROFILE RULES (v1 simplified):
 - knowledge_level is a coarse baseline.
+- Change knowledge_level only with evidence_type "declared" or "tested"
+  (i.e., the learner said so, or check answers showed it); a level patch
+  without evidence is rejected.
 - confirmed_gaps: things the learner does not yet know. Add via
   update_topic_profile with add_confirmed_gap. Declared gaps and observed
   gaps both belong here.
@@ -42,6 +45,8 @@ EVIDENCE TYPING:
 - "inferred": you observed it from how they engaged or answered.
 - "tested": came from a check-question outcome.
 - When uncertain, classify as "inferred".
+- "tested" is reserved for the server's own deterministic grading; if you
+  send evidence_type="tested" it is recorded as "declared".
 
 SUBTOPIC LEVELS:
 - subtopic_levels maps a subtopic name to the learner's level for that part of

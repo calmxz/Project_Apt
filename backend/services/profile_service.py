@@ -301,6 +301,11 @@ def apply_patch(
             error=f"session_id mismatch: args={args.session_id} ctx={ctx.session_id}",
         )
 
+    # F-21: "tested" provenance is reserved for the server's own grading path
+    # (record_from_answer). An agent-supplied "tested" is a self-attested
+    # claim, so it is recorded as "declared".
+    evidence = "declared" if args.evidence_type == "tested" else args.evidence_type
+
     profile = load_profile(db, ctx.session_id)
 
     if (args.subtopic is None) != (args.subtopic_level is None):
@@ -329,17 +334,25 @@ def apply_patch(
     prior_focus = profile.focus_target_gap
 
     if args.knowledge_level is not None:
+        if evidence not in ("declared", "tested"):
+            # F-39: level changes need the same evidence standard as mastery.
+            # (The knowledge diagnostic sets level server-side and does not
+            # pass through this function.)
+            return ToolResult(
+                ok=False,
+                status="failed",
+                error=(
+                    "knowledge_level change requires evidence_type 'declared' "
+                    "or 'tested'"
+                ),
+            )
         profile.knowledge_level = args.knowledge_level
 
     if args.add_confirmed_gap:
-        evidence = (
-            args.evidence_type
-            if args.evidence_type in ("declared", "tested")
-            else None
-        )
+        gap_evidence = evidence if evidence in ("declared", "tested") else None
         profile.confirmed_gaps = upsert_entry(
             profile.confirmed_gaps or [], args.add_confirmed_gap,
-            evidence_type=evidence, stamp=datetime.now(timezone.utc),
+            evidence_type=gap_evidence, stamp=datetime.now(timezone.utc),
         )
 
     mastered_this_call = False
@@ -356,7 +369,7 @@ def apply_patch(
         if args.evidence_type in ("declared", "tested"):
             add_exclusive(
                 profile, "mastered_concepts", args.add_mastered_concept,
-                evidence_type=args.evidence_type,
+                evidence_type=evidence,
                 stamp=datetime.now(timezone.utc),
             )
             mastered_this_call = True
