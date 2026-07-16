@@ -195,9 +195,13 @@ export const useSessionStore = defineStore('session', () => {
       const summaryText = resp?.summary?.text ?? ''
       if (currentSession.value && currentSession.value.id === id) {
         currentSession.value.ended_at = resp.ended_at
-        currentSession.value.topic_profile = {
-          ...currentSession.value.topic_profile,
-          last_session_summary: summaryText,
+        if (resp?.summary?.kind === 'summary') {
+          // F-54: only a real summary belongs in the profile; the
+          // no_exchanges display sentence is UI copy, not profile state.
+          currentSession.value.topic_profile = {
+            ...currentSession.value.topic_profile,
+            last_session_summary: summaryText,
+          }
         }
       }
       const idx = sessions.value.findIndex((s) => s.id === id)

@@ -210,7 +210,7 @@
       <div v-if="data.profile.last_session_summary" class="summary" data-testid="sprof-summary">
         <h2 class="section-title">Session summary</h2>
         <div class="summary-card">
-          <p class="summary-text">{{ data.profile.last_session_summary }}</p>
+          <p class="summary-text">{{ stripAutoPrefix(data.profile.last_session_summary) }}</p>
         </div>
       </div>
 
@@ -250,6 +250,7 @@ import { friendlyError } from '../lib/errors.js'
 import { deleteProfileItem, getSessionProfile, patchProfile } from '../services/profileApi.js'
 import { useSessionStore } from '../stores/session.js'
 import { formatRelative } from '../utils/formatDate.js'
+import { stripAutoPrefix } from '../utils/sessionCard.js'
 
 const props = defineProps({ id: { type: String, required: true } })
 

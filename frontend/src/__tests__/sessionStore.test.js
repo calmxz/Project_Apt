@@ -98,6 +98,36 @@ describe('session store', () => {
     expect(s.currentSession.ended_at).toBe('2026-01-01')
   })
 
+  // F-54: 'no_exchanges' summary.text is UI display copy for the closing
+  // dialog, not a real recap -- it must not be written into topic_profile.
+  it('endSession writes the profile summary when kind is summary', async () => {
+    sessionsApi.createSession.mockResolvedValueOnce({
+      id: 's1', topic: 't', topic_profile: { last_session_summary: 'old' },
+    })
+    sessionsApi.endSession.mockResolvedValueOnce({
+      ended_at: '2026-01-01',
+      summary: { kind: 'summary', text: 'display copy' },
+    })
+    const s = useSessionStore()
+    await s.createSession({ userId: 'u', topic: 't' })
+    await s.endSession()
+    expect(s.currentSession.topic_profile.last_session_summary).toBe('display copy')
+  })
+
+  it('endSession does NOT write the profile summary when kind is no_exchanges', async () => {
+    sessionsApi.createSession.mockResolvedValueOnce({
+      id: 's1', topic: 't', topic_profile: { last_session_summary: 'old' },
+    })
+    sessionsApi.endSession.mockResolvedValueOnce({
+      ended_at: '2026-01-01',
+      summary: { kind: 'no_exchanges', text: 'display copy' },
+    })
+    const s = useSessionStore()
+    await s.createSession({ userId: 'u', topic: 't' })
+    await s.endSession()
+    expect(s.currentSession.topic_profile.last_session_summary).toBe('old')
+  })
+
   it('reopenSession clears ended_at when ids match', async () => {
     sessionsApi.createSession.mockResolvedValueOnce({
       id: 's1',

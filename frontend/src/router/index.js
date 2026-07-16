@@ -96,7 +96,8 @@ router.beforeEach(async (to) => {
 
   const isPublic = to.meta?.public === true
   if (!auth.isAuthenticated && !isPublic) {
-    return { name: 'login' }
+    // F-49: carry the intended path through login so a deep link survives.
+    return { name: 'login', query: { redirect: to.fullPath } }
   }
   if (auth.isAuthenticated && (to.name === 'login' || to.name === 'register')) {
     return { name: 'home' }

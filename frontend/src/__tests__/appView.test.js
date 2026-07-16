@@ -30,22 +30,30 @@ describe('App.vue error listener', () => {
   })
   afterEach(() => wrapper.unmount())
 
-  it('shows toast for generic API error', async () => {
-    reportApiError({ status: 500, body: { detail: 'boom' } })
+  // F-51: raw backend detail strings (internal error codes, stack fragments)
+  // must never reach the toast -- friendlyError() maps by status instead.
+  it('shows a friendly toast for a generic API error, not the raw detail', async () => {
+    reportApiError({ status: 500, body: { detail: 'raw_internal_code' } })
     await flushPromises()
-    expect(showError).toHaveBeenCalledWith('boom')
+    expect(showError).toHaveBeenCalledWith(
+      'Something went wrong on our side. Try again shortly.',
+    )
   })
 
-  it('falls back to error.message when no body.detail', async () => {
+  it('maps a 503 to the tutor-unavailable message regardless of err.message', async () => {
     reportApiError({ status: 503, message: 'gateway' })
     await flushPromises()
-    expect(showError).toHaveBeenCalledWith('gateway')
+    expect(showError).toHaveBeenCalledWith(
+      'The tutor is temporarily unavailable. Try again in a moment.',
+    )
   })
 
-  it('falls back to "Request failed" when body and message are empty', async () => {
+  it('maps a bare 500 (no body, no message) to the same friendly copy', async () => {
     reportApiError({ status: 500 })
     await flushPromises()
-    expect(showError).toHaveBeenCalledWith('Request failed')
+    expect(showError).toHaveBeenCalledWith(
+      'Something went wrong on our side. Try again shortly.',
+    )
   })
 
   it('skips 429 (daily-cap has dedicated UI)', async () => {
@@ -67,9 +75,11 @@ describe('App.vue error listener', () => {
     expect(showError).not.toHaveBeenCalled()
   })
 
-  it('stringifies non-string body.detail', async () => {
+  it('maps a non-string body.detail to friendly copy instead of stringifying it', async () => {
     reportApiError({ status: 500, body: { detail: { code: 'x' } } })
     await flushPromises()
-    expect(showError).toHaveBeenCalledWith(JSON.stringify({ code: 'x' }))
+    expect(showError).toHaveBeenCalledWith(
+      'Something went wrong on our side. Try again shortly.',
+    )
   })
 })

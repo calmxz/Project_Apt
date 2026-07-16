@@ -86,6 +86,7 @@ import InputText from 'primevue/inputtext'
 
 import Logo from '../components/Logo.vue'
 import { useAuthStore } from '../stores/auth.js'
+import { safeRedirect } from '../utils/safeRedirect.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -118,7 +119,10 @@ async function submit() {
     // only redirects on navigation. Push explicitly so the user lands on home
     // without needing a manual refresh; the guard then bounces to onboarding
     // if it is still incomplete.
-    await router.push({ name: 'home' })
+    // F-49: honor a deep-link redirect the guard attached to /login, guarded
+    // against open-redirect via safeRedirect.
+    const target = safeRedirect(route.query.redirect)
+    await (target ? router.push(target) : router.push({ name: 'home' }))
   } catch (e) {
     const msg = e?.message || 'Could not sign in. Try again.'
     error.value = msg
