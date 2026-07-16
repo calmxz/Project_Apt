@@ -93,6 +93,26 @@ def _enrich_list_items(db: Session, rows: list[SessionModel]) -> list[SessionLis
     ]
 
 
+def _active_session_on_topic(
+    db: Session, user_id: str, topic: str, *, exclude_id: str | None = None
+) -> str | None:
+    """F-34: id of this user's active (ended_at IS NULL) session with the
+    same casefolded topic, else None. The FE guard self-disables on list
+    failure and covers only one tab; this is the authoritative check."""
+    stmt = (
+        select(SessionModel.id)
+        .where(
+            SessionModel.user_id == user_id,
+            SessionModel.ended_at.is_(None),
+            func.lower(SessionModel.topic) == (topic or "").strip().lower(),
+        )
+        .limit(1)
+    )
+    if exclude_id is not None:
+        stmt = stmt.where(SessionModel.id != exclude_id)
+    return db.execute(stmt).scalar_one_or_none()
+
+
 @router.post(
     "/sessions",
     response_model=SessionResponse,
@@ -130,6 +150,13 @@ async def create_session(
             await summary_service.generate_and_persist(db, prior, allow_llm=allow_llm)
         db.refresh(prior)
         profile_json = prior.topic_profile_json
+
+    existing = _active_session_on_topic(db, user_id, req.topic)
+    if existing is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "duplicate_topic", "session_id": existing},
+        )
 
     new_session = SessionModel(
         id=new_id,
@@ -354,6 +381,14 @@ def reopen_session(
     if row is None or row.user_id != user_id:
         raise HTTPException(status_code=404, detail="session not found")
     if row.ended_at is not None:
+        existing = _active_session_on_topic(
+            db, user_id, row.topic, exclude_id=row.id
+        )
+        if existing is not None:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "duplicate_topic", "session_id": existing},
+            )
         row.ended_at = None
         db.commit()
         db.refresh(row)

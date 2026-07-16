@@ -92,8 +92,15 @@ onMounted(() => {
 async function startQuick() {
   const topic = quickTopic.value.trim()
   if (!topic) return
-  const created = await store.createSession({ topic, seedMode: 'fresh', priorSessionId: null })
-  if (created) router.push({ name: 'session', params: { id: created.id } })
+  try {
+    const created = await store.createSession({ topic, seedMode: 'fresh', priorSessionId: null })
+    if (created) router.push({ name: 'session', params: { id: created.id } })
+  } catch (e) {
+    if (e?.status === 409 && e?.body?.detail?.code === 'duplicate_topic') {
+      router.push({ name: 'session', params: { id: e.body.detail.session_id } })
+    }
+    // other errors already surface via store.error / friendlyError
+  }
 }
 
 async function loadReviewQueue(limit = 3) {

@@ -139,6 +139,22 @@ describe('NewSessionView', () => {
     expect(wrapper.get('[data-testid="new-error"]').text()).toBe('boom')
   })
 
+  it('shows open-existing-session button on server-side 409 duplicate_topic', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'listSessions').mockResolvedValue([])
+    vi.spyOn(store, 'createSession').mockRejectedValue({
+      status: 409,
+      body: { detail: { code: 'duplicate_topic', session_id: 's-1' } },
+    })
+    const wrapper = mountView()
+    await wrapper.get('[data-testid="new-topic"]').setValue('Calculus')
+    await wrapper.get('[data-testid="new-submit"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="open-existing-session"]').exists()).toBe(true)
+    await wrapper.get('[data-testid="open-existing-session"]').trigger('click')
+    expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 's-1' } })
+  })
+
   it('enter key submits when valid', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'listSessions').mockResolvedValue([])

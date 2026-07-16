@@ -118,6 +118,21 @@ describe('HomeView', () => {
     expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'sess1' } })
   })
 
+  it('New lesson navigates to the existing session on server-side 409 duplicate_topic', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'listSessions').mockResolvedValue([])
+    vi.spyOn(store, 'createSession').mockRejectedValue({
+      status: 409,
+      body: { detail: { code: 'duplicate_topic', session_id: 'sess-existing' } },
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-testid="home-quick-topic"]').setValue('Recursion')
+    await wrapper.get('[data-testid="home-quick-go"]').trigger('click')
+    await flushPromises()
+    expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'sess-existing' } })
+  })
+
   it('does not render the dupe banner or recent feed (relocated)', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'listSessions').mockResolvedValue([])
