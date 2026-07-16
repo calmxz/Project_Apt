@@ -64,3 +64,20 @@ async def test_prod_with_supabase_url_does_not_raise(monkeypatch, isolated_db):
 
     async with main_module.lifespan(main_module.app):
         pass
+
+
+@pytest.mark.asyncio
+async def test_reaper_failure_does_not_abort_startup(monkeypatch, isolated_db):
+    """Final-review fix wave, Finding 3: reap_stale_pending is best-effort
+    startup cleanup, not a boot precondition. A transient DB error during
+    the reap UPDATE must not prevent the app from finishing startup."""
+    monkeypatch.setattr(settings, "env", "dev")
+    monkeypatch.setattr(settings, "supabase_url", "")
+
+    def boom(db):
+        raise RuntimeError("reap query failed")
+
+    monkeypatch.setattr(main_module.ingestion_service, "reap_stale_pending", boom)
+
+    async with main_module.lifespan(main_module.app):
+        pass

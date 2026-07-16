@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -10,6 +11,9 @@ from services import ingestion_service
 from services.auth import validate_jwks_startup
 
 
+log = logging.getLogger(__name__)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     assert_prod_database(settings.env, settings.database_url)
@@ -19,7 +23,13 @@ async def lifespan(app: FastAPI):
     create_tables()
     db = SessionLocal()
     try:
-        ingestion_service.reap_stale_pending(db)
+        # Best-effort startup cleanup (F-26): a transient DB error reaping
+        # stale pending documents must not prevent the app from booting
+        # (final-review fix wave, Finding 3).
+        try:
+            ingestion_service.reap_stale_pending(db)
+        except Exception as e:  # noqa: BLE001 - startup must not be gated on this
+            log.warning("startup reap_stale_pending failed: %s", e)
     finally:
         db.close()
     yield

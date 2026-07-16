@@ -22,12 +22,22 @@ flush, and the single db.commit() after step 7 covers all three atomically
 (F-27). On exception at any step: db.rollback() first (discards any
 unflushed/uncommitted work from this run), then status=failed,
 error=str(exc)[:1000], committed alone.
+
+Embedding spend survives that rollback (final-review fix wave, Finding 1):
+_embed_all's per-batch cost_meter.meter_embedding_response call only flushes
+into this same transaction, so a failure after embeddings were purchased
+(e.g. merge_into_session raising) would otherwise roll back a real vendor
+charge, undercounting it against the daily cap (F-19). run() tracks the
+metered cost per batch in a holder list and, if the run fails, re-records
+the accumulated total on the fresh post-rollback transaction so it commits
+alongside the failure-status update.
 """
 
 import io
 import logging
 import os
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 
 import litellm
 from pptx import Presentation
@@ -120,8 +130,14 @@ def _extract(blob: bytes, filename: str) -> list[tuple[int | None, str]]:
 
 
 def _embed_all(
-    db, texts: list[str], *, user_id: str | None, session_id: str
+    db, texts: list[str], *, user_id: str | None, session_id: str,
+    cost_holder: list[Decimal] | None = None,
 ) -> list[list[float]]:
+    """cost_holder, if given, collects the metered cost of each successfully
+    embedded batch (Decimal per batch). It is a mutable out-param rather than
+    part of the return value so a caller can read what was actually spent
+    even if a later batch in this same call raises -- run() needs that to
+    re-record spend after a rollback (see module docstring, Finding 1)."""
     out: list[list[float]] = []
     for i in range(0, len(texts), EMBED_BATCH):
         batch = texts[i : i + EMBED_BATCH]
@@ -139,9 +155,11 @@ def _embed_all(
             # Metering only -- NO cap gate here. Ingestion is already
             # rate-limited at upload time, and failing a document mid-pipeline
             # for a cap breach would strand it (F-26 territory, Batch 5).
-            cost_meter.meter_embedding_response(
+            cost = cost_meter.meter_embedding_response(
                 db, resp, user_id=user_id, session_id=session_id, texts=batch,
             )
+            if cost_holder is not None:
+                cost_holder.append(cost)
         for item in resp.data:
             out.append(item["embedding"] if isinstance(item, dict) else item.embedding)
     return out
@@ -155,6 +173,8 @@ def run(document_id: int) -> None:
             log.warning("ingestion run: document %s not found", document_id)
             return
 
+        owner_id: str | None = None
+        embed_cost_holder: list[Decimal] = []
         try:
             blob = _load_blob(object_store.get_store(), doc)
             pages = _extract(blob, doc.filename)
@@ -173,7 +193,8 @@ def run(document_id: int) -> None:
                 select(SessionModel.user_id).where(SessionModel.id == doc.session_id)
             ).scalar_one_or_none()
             embeddings = _embed_all(
-                db, [c.text for c in chunks], user_id=owner_id, session_id=doc.session_id
+                db, [c.text for c in chunks], user_id=owner_id, session_id=doc.session_id,
+                cost_holder=embed_cost_holder,
             )
 
             pgvector_store.insert_chunks(
@@ -202,6 +223,23 @@ def run(document_id: int) -> None:
                 extra={"err_type": type(e).__name__, "doc_id": document_id},
                 exc_info=settings.env != "prod",
             )
+            # Finding 1: db.rollback() above also discarded the ledger
+            # increment(s) meter_embedding_response flushed inside
+            # _embed_all -- F-27 gives this run a single end-of-pipeline
+            # commit, so nothing embedding-related was durable yet. The
+            # vendor was still paid for any batches that got that far, so
+            # re-record that real spend on the fresh transaction and let it
+            # ride along with the failure-status commit below.
+            total_embed_cost = sum(embed_cost_holder, Decimal("0"))
+            if total_embed_cost > Decimal("0") and owner_id is not None:
+                try:
+                    cost_meter.record_cost(db, owner_id, total_embed_cost)
+                except Exception:
+                    log.error(
+                        "failed to re-record embedding spend after rollback",
+                        extra={"doc_id": document_id},
+                        exc_info=settings.env != "prod",
+                    )
             doc = db.get(Document, document_id)
             if doc is not None:
                 doc.status = "failed"

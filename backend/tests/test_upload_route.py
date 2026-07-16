@@ -294,6 +294,26 @@ def test_storage_write_failure_507_holds_even_if_mark_failed_commit_raises(
     assert r.json()["detail"]["code"] == "STORAGE_WRITE_FAILED"
 
 
+def test_store_construction_failure_marks_failed_and_507(client, seeded, db_session, monkeypatch):
+    """Final-review fix wave, Finding 2: object_store.get_store() itself
+    (not just store.put) can raise -- e.g. bad R2 config. Before the fix it
+    sat outside the try/except around store.put, so a construction failure
+    stranded the pending row and surfaced a bare 500 instead of the F-29
+    507-plus-marked-failed contract."""
+
+    def boom_get_store():
+        raise RuntimeError("bad R2 config")
+
+    monkeypatch.setattr("routes.upload.object_store.get_store", boom_get_store)
+    files = {"file": ("notes.pdf", io.BytesIO(b"%PDF-fake"), "application/pdf")}
+    r = client.post("/api/upload", data={"user_id": USER_ID, "session_id": SESSION_ID}, files=files)
+    assert r.status_code == 507
+    assert r.json()["detail"]["code"] == "STORAGE_WRITE_FAILED"
+    doc = db_session.query(Document).one()
+    assert doc.status == "failed"
+    assert doc.error is not None
+
+
 def test_upload_writes_through_object_store(client, seeded, db_session, monkeypatch):
     class RecordingStore:
         def __init__(self):

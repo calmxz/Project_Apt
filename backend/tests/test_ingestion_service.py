@@ -286,6 +286,74 @@ def test_merge_failure_leaves_no_chunks_and_marks_failed(db_session, monkeypatch
     assert db_session.query(ChunkEmbedding).filter_by(document_id=doc.id).count() == 0
 
 
+def test_merge_failure_still_records_embedding_spend_after_rollback(
+    db_session, monkeypatch, tmp_path
+):
+    """Final-review fix wave, Finding 1 (F-27 x F-19 interaction): F-27 made
+    the pipeline atomic (one commit at the end), so db.rollback() in run()'s
+    except block also discards the ledger increment meter_embedding_response
+    flushed during _embed_all. But the embedding vendor was genuinely paid
+    for those tokens before the later merge_into_session failure -- that
+    real spend must still land on the daily cost ledger even though the doc
+    ends up 'failed' with zero committed chunks."""
+    from decimal import Decimal
+    from sqlalchemy.orm import sessionmaker
+
+    from config import settings
+    from db.models import ChunkEmbedding
+    from services import cost_meter, ingestion_service
+
+    db_session.add(User(id="u_merge_boom2"))
+    db_session.flush()
+    db_session.add(
+        SessionModel(
+            id="s_merge_boom2",
+            user_id="u_merge_boom2",
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.flush()
+    doc = Document(session_id="s_merge_boom2", filename="ref.txt", status="pending")
+    db_session.add(doc)
+    db_session.commit()
+    db_session.refresh(doc)
+
+    monkeypatch.setattr("services.ingestion_service.settings.uploads_path", str(tmp_path))
+    (tmp_path / f"{doc.id}_ref.txt").write_text(
+        "Indexes accelerate database queries. " * 20, encoding="utf-8"
+    )
+    monkeypatch.setattr(
+        "services.ingestion_service.SessionLocal",
+        sessionmaker(autocommit=False, autoflush=False, bind=db_session.get_bind()),
+    )
+
+    def fake_embedding(model, input, **_):
+        if isinstance(input, str):
+            input = [input]
+        return SimpleNamespace(
+            data=[{"embedding": [0.1] * settings.embedding_dim} for _ in input]
+        )
+
+    monkeypatch.setattr("services.ingestion_service.litellm.embedding", fake_embedding)
+    monkeypatch.setattr(
+        "services.ingestion_service.cost_meter.litellm.completion_cost",
+        lambda **kw: 0.004,
+    )
+
+    def boom(db, session_id, stems):
+        raise RuntimeError("kw merge exploded")
+
+    monkeypatch.setattr("services.ingestion_service.keyword_index.merge_into_session", boom)
+
+    ingestion_service.run(doc.id)
+    db_session.expire_all()
+    refreshed = db_session.get(Document, doc.id)
+    assert refreshed.status == "failed"
+    assert db_session.query(ChunkEmbedding).filter_by(document_id=doc.id).count() == 0
+    assert cost_meter.current_spend(db_session, "u_merge_boom2") == Decimal("0.0040")
+
+
 def test_extract_plaintext_txt_and_md():
     from services import ingestion_service
 

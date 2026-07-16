@@ -115,8 +115,11 @@ def upload_file(
 
     # F-29: a failed blob write must not strand a permanent "pending" row.
     # Mark the row failed (visible in the UI banner) and report 507.
-    store = object_store.get_store()
+    # get_store() itself is inside the try (final-review fix wave, Finding
+    # 2): a bad R2 config can raise on construction, before put() is ever
+    # called, and that must route through the same mark-failed + 507 path.
     try:
+        store = object_store.get_store()
         store.put(object_store.key_for(doc.id, doc.filename), data)
     except Exception:
         log.error(
