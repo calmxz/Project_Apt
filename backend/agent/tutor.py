@@ -159,8 +159,13 @@ async def run_streaming(
     billed_iters = 0  # iterations whose cost was metered (real or fallback)
     billed_chars = 0  # accumulated_text length at the last metering point
     tool_calls_record: list[ToolCallRecord] = []
-    citations: list[Citation] = []
+    citations: list[Citation] = list(ctx.prefetched_citations or [])
     asked_check = False  # hoisted so the except asyncio.CancelledError: branch can read it
+
+    if citations:
+        # F-56: server-prefetched excerpts -- emit their citations up front so
+        # the FE renders sources even though no retrieve_chunks call happens.
+        yield StreamEvent("citations", [c.model_dump() for c in citations])
 
     try:
         for _i in range(max_iters):
