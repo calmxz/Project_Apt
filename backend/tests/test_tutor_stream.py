@@ -27,7 +27,7 @@ import pytest
 
 from agent.types import ToolContext
 from config import settings
-from contracts import ToolResult
+from contracts import Citation, ToolResult
 from db.models import ChatMessage, LlmCallLog, User
 from services import cost_meter
 from services.cost_meter import CapStatus
@@ -181,6 +181,125 @@ async def test_run_streaming_yields_tool_then_delta_then_done(db_session, monkey
     assert len(persisted_tcs) == 1
     assert persisted_tcs[0]["name"] == "retrieve_chunks"
     assert persisted_tcs[0]["status"] == "ok"
+
+
+@pytest.mark.asyncio
+async def test_prefetched_citations_yielded_up_front(db_session, monkeypatch):
+    """F-56: ctx.prefetched_citations (server force-retrieve, Task 11) must be
+    yielded as a citations event BEFORE the LLM loop runs, so the FE renders
+    sources even when the model answers directly without calling
+    retrieve_chunks this turn -- and the persisted message carries them too."""
+    _disable_stub(monkeypatch)
+    _allow_cap(monkeypatch)
+
+    from agent import tutor
+
+    turn = _make_stream(_content_chunk("answer"))
+    monkeypatch.setattr("agent.tutor.litellm.acompletion", AsyncMock(side_effect=[turn]))
+    monkeypatch.setattr(
+        "agent.tutor.litellm.stream_chunk_builder", MagicMock(return_value=SimpleNamespace())
+    )
+    monkeypatch.setattr("agent.tutor.litellm.completion_cost", MagicMock(return_value=0.0))
+
+    ctx = ToolContext(
+        db=db_session,
+        session_id="s_prefetch",
+        user_id="u1",
+        turn_started_at=datetime.now(timezone.utc),
+        prefetched_citations=[
+            Citation(doc_id="d1", text="prefetched excerpt", page=3, doc_name="notes.pdf")
+        ],
+    )
+
+    events = await _drain(
+        tutor.run_streaming([{"role": "user", "content": "explain"}], "sys", ctx)
+    )
+
+    # The citations event fires up front -- before the first assistant_delta.
+    first_relevant = next(e for e in events if e.type in ("citations", "assistant_delta"))
+    assert first_relevant.type == "citations"
+    assert first_relevant.data == [
+        {"doc_id": "d1", "text": "prefetched excerpt", "page": 3, "doc_name": "notes.pdf"}
+    ]
+    assert [e.type for e in events].count("citations") == 1
+
+    msg = db_session.query(ChatMessage).filter(ChatMessage.session_id == "s_prefetch").one()
+    assert json.loads(msg.citations_json) == [
+        {"doc_id": "d1", "text": "prefetched excerpt", "page": 3, "doc_name": "notes.pdf"}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_retrieve_chunks_dedupes_against_prefetched_citations(db_session, monkeypatch):
+    """F-56 fix: a same-turn retrieve_chunks call that overlaps with the
+    server-prefetched citations must not duplicate the persisted/streamed
+    citation list (identity: doc_id + text), and the citations event it
+    emits must carry the FULL merged set -- the FE's setCitations REPLACES
+    its list on each "citations" event (session.js), so a partial (new-only)
+    yield would drop the prefetched entry from the live view."""
+    _disable_stub(monkeypatch)
+    _allow_cap(monkeypatch)
+
+    from agent import tutor
+
+    turn1 = _make_stream(
+        _tool_chunk(_tool_fragment(0, id="tc_1", name="retrieve_chunks", arguments='{"query":"x"}')),
+    )
+    turn2 = _make_stream(_content_chunk("final"))
+    monkeypatch.setattr(
+        "agent.tutor.litellm.acompletion", AsyncMock(side_effect=[turn1, turn2])
+    )
+    monkeypatch.setattr(
+        "agent.tutor.litellm.stream_chunk_builder", MagicMock(return_value=SimpleNamespace())
+    )
+    monkeypatch.setattr("agent.tutor.litellm.completion_cost", MagicMock(return_value=0.0))
+
+    result = ToolResult(
+        ok=True,
+        status="ok",
+        error=None,
+        data={
+            "chunks": [
+                {"doc_id": "d1", "text": "leaves convert light"},  # overlaps the prefetch
+                {"doc_id": "d2", "text": "chlorophyll absorbs red and blue light"},
+            ]
+        },
+    )
+    monkeypatch.setattr("agent.tutor.tools.dispatch", MagicMock(return_value=result))
+
+    ctx = ToolContext(
+        db=db_session,
+        session_id="s_dedup",
+        user_id="u1",
+        turn_started_at=datetime.now(timezone.utc),
+        prefetched_citations=[Citation(doc_id="d1", text="leaves convert light")],
+    )
+
+    events = await _drain(
+        tutor.run_streaming([{"role": "user", "content": "explain"}], "sys", ctx)
+    )
+
+    citation_events = [e for e in events if e.type == "citations"]
+    # One up-front (prefetch seed) + one from the tool-path merge.
+    assert len(citation_events) == 2
+    assert citation_events[0].data == [
+        {"doc_id": "d1", "text": "leaves convert light", "page": None, "doc_name": None}
+    ]
+    # d1 is not duplicated; d2 is appended. The second event carries the
+    # FULL set (not just d2) so the FE's replace-on-event semantics work.
+    assert citation_events[1].data == [
+        {"doc_id": "d1", "text": "leaves convert light", "page": None, "doc_name": None},
+        {
+            "doc_id": "d2",
+            "text": "chlorophyll absorbs red and blue light",
+            "page": None,
+            "doc_name": None,
+        },
+    ]
+
+    msg = db_session.query(ChatMessage).filter(ChatMessage.session_id == "s_dedup").one()
+    persisted = json.loads(msg.citations_json)
+    assert [c["doc_id"] for c in persisted] == ["d1", "d2"]
 
 
 @pytest.mark.asyncio

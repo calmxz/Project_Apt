@@ -419,10 +419,26 @@ async def run_streaming(
                         )
                         for ch in raw_chunks
                     ]
-                    citations.extend(new_cites)
-                    if new_cites:
+                    # F-56: dedup against citations already present (a server
+                    # prefetch, or an earlier retrieve_chunks call this turn)
+                    # by (doc_id, text) identity, so overlapping chunks don't
+                    # duplicate in citations_json. Yield the FULL merged list:
+                    # the FE's citations handler (session.js setCitations)
+                    # REPLACES its list on each "citations" event, so a
+                    # partial (new-only) yield would drop earlier entries from
+                    # the live view -- they'd only reappear on reload.
+                    seen = {(c.doc_id, c.text) for c in citations}
+                    added_any = False
+                    for c in new_cites:
+                        key = (c.doc_id, c.text)
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        citations.append(c)
+                        added_any = True
+                    if added_any:
                         yield StreamEvent(
-                            "citations", [c.model_dump() for c in new_cites]
+                            "citations", [c.model_dump() for c in citations]
                         )
                     wrapped_chunks = [
                         {**ch, "text": wrap_chunk(ch)}

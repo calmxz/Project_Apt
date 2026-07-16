@@ -233,6 +233,31 @@ def test_build_prompt_state_rolling_summary_defaults_none():
     assert state["rolling_summary"] is None
 
 
+def test_build_prompt_state_prefetched_chunks_wraps_excerpts():
+    """F-56: prefetched_chunks (server force-retrieve, Task 11) is wrapped
+    via agent.excerpt.wrap_chunk into prefetched_excerpts on the prompt
+    state, which prompts.build_dynamic_context renders as PROVIDED."""
+    state = _build_prompt_state(
+        session=_fake_session(),
+        profile=_fake_profile(),
+        ingestion_status="ready",
+        retrieval_required=True,
+        review_gaps=False,
+        pending_check=None,
+        quiz_cooldown=None,
+        prefetched_chunks=[{"doc_id": "d1", "text": "leaves convert light"}],
+    )
+    assert len(state["prefetched_excerpts"]) == 1
+    excerpt = state["prefetched_excerpts"][0]
+    assert "leaves convert light" in excerpt
+    assert "document_excerpt" in excerpt
+
+
+def test_build_prompt_state_no_prefetched_chunks_omits_key():
+    state = _call_build_prompt_state(_fake_profile(), review_gaps=False)
+    assert "prefetched_excerpts" not in state
+
+
 def test_review_gap_mastered_target_accepted():
     profile = _fake_profile(
         confirmed_gaps=["gap-a"], mastered_concepts=["photosynthesis"]

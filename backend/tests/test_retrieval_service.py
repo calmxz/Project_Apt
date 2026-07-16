@@ -426,6 +426,84 @@ def test_embedding_calls_pass_timeout(session, ctx, db_session, monkeypatch):
     assert captured["timeout"] == settings.embedding_timeout_s
 
 
+# --- F-56: server force-retrieve prefetch ---------------------------------
+
+
+def test_prefetch_for_prompt_returns_chunks_and_meters(session, db_session, monkeypatch):
+    """Success path: chunk dict shape matches retrieve()'s, and the embedding
+    spend is metered (F-19), mirroring test_retrieve_meters_embedding_spend."""
+    doc = _seed_ready_doc(db_session)
+    _stub_query(
+        monkeypatch,
+        [
+            pgvector_store.RetrievedChunk(
+                doc_id=doc.id,
+                chunk_text="Inner joins return matching rows.",
+                page=2,
+                score=0.09,
+                doc_name=doc.filename,
+            )
+        ],
+    )
+
+    async def fake_aembedding(**kw):
+        return _fake_embedding_resp([0.1] * 8)
+
+    monkeypatch.setattr(retrieval_service.litellm, "aembedding", fake_aembedding)
+    monkeypatch.setattr(
+        retrieval_service.cost_meter.litellm, "completion_cost", lambda **kw: 0.0005
+    )
+
+    result = asyncio.run(
+        retrieval_service.prefetch_for_prompt(db_session, SESSION_ID, USER_ID, "inner join")
+    )
+
+    assert result == [
+        {
+            "doc_id": str(doc.id),
+            "text": "Inner joins return matching rows.",
+            "page": 2,
+            "score": 0.09,
+            "doc_name": doc.filename,
+        }
+    ]
+    assert cost_meter.current_spend(db_session, USER_ID) == Decimal("0.0005")
+    row = db_session.execute(
+        select(LlmCallLog).where(LlmCallLog.user_id == USER_ID)
+    ).scalar_one()
+    assert row.purpose == "embedding"
+
+
+def test_prefetch_for_prompt_empty_hits_returns_none(session, db_session, monkeypatch):
+    _seed_ready_doc(db_session)
+    _stub_query(monkeypatch, [])
+
+    async def fake_aembedding(**kw):
+        return _fake_embedding_resp([0.1] * 8)
+
+    monkeypatch.setattr(retrieval_service.litellm, "aembedding", fake_aembedding)
+
+    result = asyncio.run(
+        retrieval_service.prefetch_for_prompt(db_session, SESSION_ID, USER_ID, "query")
+    )
+    assert result is None
+
+
+def test_prefetch_for_prompt_no_ready_document_returns_none(db_session, monkeypatch):
+    called = {"n": 0}
+
+    async def fake_aembedding(**kw):
+        called["n"] += 1
+        return _fake_embedding_resp([0.1] * 8)
+
+    monkeypatch.setattr(retrieval_service.litellm, "aembedding", fake_aembedding)
+    result = asyncio.run(
+        retrieval_service.prefetch_for_prompt(db_session, "no-doc-session", "u1", "query")
+    )
+    assert result is None
+    assert called["n"] == 0  # short-circuits before embedding when no ready doc
+
+
 def test_semantic_fallback_calls_pass_timeout(db_session, monkeypatch):
     from config import settings
 
