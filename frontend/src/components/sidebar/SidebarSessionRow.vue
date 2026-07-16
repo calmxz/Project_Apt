@@ -5,6 +5,7 @@ import { cardChips, railMeta } from '@/utils/sessionCard.js'
 import SessionChips from '../SessionChips.vue'
 import { useSidebar } from '@/composables/useSidebar.js'
 import { useSessionStore } from '@/stores/session.js'
+import { useToast } from '@/composables/useToast.js'
 import SidebarRowMenu from './SidebarRowMenu.vue'
 
 const props = defineProps({
@@ -17,6 +18,7 @@ const route = useRoute()
 const router = useRouter()
 const store = useSessionStore()
 const { mode, closeDrawer } = useSidebar()
+const { showSuccess } = useToast()
 
 const busy = ref(false)
 
@@ -55,6 +57,15 @@ async function onEnd() {
   busy.value = true
   try {
     await store.endSession(props.session.id)
+    // F-44: the summary dialog lives in SessionView; ending from anywhere
+    // else would silently drop the pending summary. Toast it instead.
+    const s = store.pendingSummary
+    const onThatSession =
+      route.name === 'session' && route.params.id === props.session.id
+    if (s && s.sessionId === props.session.id && !onThatSession) {
+      showSuccess(s.text)
+      store.consumePendingSummary()
+    }
   } catch {
     /* store.error populated */
   } finally {

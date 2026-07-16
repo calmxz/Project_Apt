@@ -27,6 +27,7 @@
             type="button"
             class="cta-primary"
             data-testid="home-quick-go"
+            :disabled="startBusy"
             @click="startQuick"
           >
             <span>Start</span><i class="pi pi-arrow-right" aria-hidden="true" />
@@ -49,6 +50,7 @@
                 type="button"
                 class="review-item"
                 data-testid="home-review-item"
+                :disabled="startBusy"
                 @click="startReview(item)"
               >
                 <span class="review-concept">{{ item.concept }}</span>
@@ -83,6 +85,7 @@ const store = useSessionStore()
 const quickTopic = ref('')
 const reviewQueue = ref({ items: [], total: 0 })
 const reviewExpanded = ref(false)
+const startBusy = ref(false)
 
 onMounted(() => {
   store.listSessions().catch(() => {})
@@ -91,7 +94,8 @@ onMounted(() => {
 
 async function startQuick() {
   const topic = quickTopic.value.trim()
-  if (!topic) return
+  if (!topic || startBusy.value) return
+  startBusy.value = true
   try {
     const created = await store.createSession({ topic, seedMode: 'fresh', priorSessionId: null })
     if (created) router.push({ name: 'session', params: { id: created.id } })
@@ -99,7 +103,9 @@ async function startQuick() {
     if (e?.status === 409 && e?.body?.detail?.code === 'duplicate_topic') {
       router.push({ name: 'session', params: { id: e.body.detail.session_id } })
     }
-    // other errors already surface via store.error / friendlyError
+    // other errors surface via store.error / friendlyError in the template
+  } finally {
+    startBusy.value = false
   }
 }
 
@@ -113,16 +119,25 @@ async function loadReviewQueue(limit = 3) {
 }
 
 async function startReview(item) {
-  const created = await store.continueTopic({
-    id: item.source_session_id,
-    topic: item.source_topic,
-  })
-  if (created) {
-    router.push({
-      name: 'session',
-      params: { id: created.id },
-      query: { review_gap: item.concept },
+  if (startBusy.value) return
+  startBusy.value = true
+  try {
+    const created = await store.continueTopic({
+      id: item.source_session_id,
+      topic: item.source_topic,
     })
+    if (created) {
+      router.push({
+        name: 'session',
+        params: { id: created.id },
+        query: { review_gap: item.concept },
+      })
+    }
+  } catch {
+    // F-45: store.continueTopic rethrows after _setError; without this catch
+    // the rejection is unhandled and the double-click window stays open.
+  } finally {
+    startBusy.value = false
   }
 }
 
