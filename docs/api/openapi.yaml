@@ -52,6 +52,44 @@ paths:
               schema:
                 $ref: "#/components/schemas/HealthResponse"
 
+  /api/chat/stream:
+    post:
+      tags: [chat]
+      summary: Streaming tutor turn (SSE over POST).
+      description: |
+        Emits text/event-stream events: assistant_delta, tool_call_start,
+        tool_call_done, citations, check_question, cost_warning, done,
+        error, cancelled. Terminal events are done | error | cancelled.
+        See the x-sse-events vendor extension below for per-event data shapes.
+      operationId: chatStream
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatRequest"
+      responses:
+        "200":
+          description: SSE stream of tutor events.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Session already ended (code session_ended).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Daily rate or cost cap reached.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/sessions:
     post:
       tags: [sessions]
@@ -72,6 +110,12 @@ paths:
                 $ref: "#/components/schemas/SessionResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "409":
+          description: An active session with this topic already exists (code duplicate_topic, session_id carries the existing id).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     get:
       tags: [sessions]
       summary: List sessions for the authenticated user.
@@ -260,6 +304,12 @@ paths:
                 $ref: "#/components/schemas/SessionResponse"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          description: An active session with this topic already exists (code duplicate_topic, session_id carries the existing id).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/sessions/{session_id}/ingestion:
     get:
@@ -277,6 +327,96 @@ paths:
                 $ref: "#/components/schemas/SessionIngestionStatus"
         "404":
           $ref: "#/components/responses/NotFound"
+
+  /api/sessions/{session_id}/check/answer:
+    post:
+      tags: [sessions]
+      summary: Answer the current item of the open check batch.
+      operationId: answerCheck
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckAnswerRequest"
+      responses:
+        "200":
+          description: Graded answer state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckAnswerResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Session already ended (code session_ended), or the batch is in a conflicting state -- no open batch, out-of-order index, already-resolved item, or an out-of-range selection (code check_conflict).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/sessions/{session_id}/check/skip:
+    post:
+      tags: [sessions]
+      summary: Skip the current item of the open check batch (no LearningEvent).
+      operationId: skipCheck
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckSkipRequest"
+      responses:
+        "200":
+          description: Batch progress state after the skip.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CheckSkipResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Session already ended (code session_ended), or the batch is in a conflicting state -- no open batch, out-of-order index, or already-resolved item (code check_conflict).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/sessions/{session_id}/check/complete:
+    post:
+      tags: [sessions]
+      summary: Hidden reactive follow-up after a check batch fully resolves (SSE over POST).
+      description: |
+        Builds a server-side results summary, injects it as a non-persisted
+        synthetic user turn, clears the batch, and streams the tutor's
+        reaction. Emits the same text/event-stream vocabulary as
+        POST /api/chat/stream (assistant_delta, tool_call_start,
+        tool_call_done, citations, check_question, cost_warning, done,
+        error, cancelled), plus a followup_skipped event when the daily
+        message cap blocks the reaction (data: {reason: "daily_cap"}).
+        Terminal events are done | error | cancelled | followup_skipped.
+      operationId: completeCheck
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          description: SSE stream of the tutor's follow-up reaction.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Session already ended (code session_ended), or there is no fully-resolved batch to react to (code no_resolved_batch).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/upload:
     post:

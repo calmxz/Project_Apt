@@ -453,7 +453,7 @@ def skip_check(
     try:
         prog = check_question_service.skip(db, session_id, req.index)
     except check_question_service.CheckStateError as e:
-        raise HTTPException(status_code=409, detail=str(e))
+        raise HTTPException(status_code=409, detail={"code": "check_conflict", "message": str(e)})
     check_question_service.write_check_batch(
         db, check_question_service.get_pending_check(db, session_id)
     )
@@ -479,7 +479,7 @@ def answer_check(
     try:
         result = check_question_service.answer(db, session_id, req.index, req.selected_index)
     except check_question_service.CheckStateError as e:
-        raise HTTPException(status_code=409, detail=str(e))
+        raise HTTPException(status_code=409, detail={"code": "check_conflict", "message": str(e)})
     check_question_service.write_check_batch(
         db, check_question_service.get_pending_check(db, session_id)
     )
@@ -520,7 +520,7 @@ async def complete_check(
 
     pc = check_question_service.get_pending_check(db, session_id)
     if pc is None or not check_question_service.is_done(pc):
-        raise HTTPException(status_code=409, detail="no resolved batch to complete")
+        raise HTTPException(status_code=409, detail={"code": "no_resolved_batch"})
 
     summary = check_question_service.build_results_summary(pc)
     cooldown = check_question_service.build_quiz_cooldown(pc)
