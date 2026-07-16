@@ -38,7 +38,8 @@ test.describe('auth gate', () => {
 
   test('unauthenticated visit to / is redirected to /login', async ({ page }) => {
     await page.goto('/')
-    await expect(page).toHaveURL(/\/login$/)
+    // F-49: the guard carries the intended path so a deep link survives login.
+    await expect(page).toHaveURL(/\/login\?redirect=/)
     await expect(page.getByTestId('login-form')).toBeVisible()
   })
 
