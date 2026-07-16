@@ -108,6 +108,7 @@ def seeded_session(db):
             (2, 3, "transactions group statements atomically", _vec(2)),
         ],
     )
+    db.commit()
 
     yield {"session_id": session_id, "doc_id": doc.id, "user_id": user_id}
 
@@ -191,6 +192,7 @@ def test_delete_document_chunks_removes_only_that_document(db, seeded_session):
         db, session_id=sid, document_id=other.id,
         rows=[(0, 1, "survivor chunk", _vec(4))],
     )
+    db.commit()
 
     # seeded_session inserts 3 chunks for doc_id.
     deleted = pgvector_store.delete_document_chunks(db, document_id=doc_id)

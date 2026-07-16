@@ -34,7 +34,9 @@ def insert_chunks(
     rows: Sequence[tuple[int, int | None, str, list[float]]],
 ) -> int:
     """Bulk insert chunk embeddings. `rows` is `(chunk_index, page, text, embedding)`.
-    Returns the number of rows inserted."""
+    Returns the number of rows inserted. Does NOT commit — the caller owns the
+    transaction (F-27: ingestion commits chunks, keyword index, and status
+    together, atomically)."""
     objs = [
         ChunkEmbedding(
             session_id=session_id,
@@ -47,7 +49,7 @@ def insert_chunks(
         for (chunk_index, page, text, embedding) in rows
     ]
     db.add_all(objs)
-    db.commit()
+    db.flush()
     return len(objs)
 
 

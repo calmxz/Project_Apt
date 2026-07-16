@@ -17,7 +17,11 @@ Pipeline:
   6. lib.keyword_index.merge_into_session(stems).
   7. Document.status = ready, page_count populated (None for plaintext).
 
-On exception at any step: status=failed, error=str(exc)[:1000]. Always commit.
+Steps 5-7 share one transaction: insert_chunks and merge_into_session only
+flush, and the single db.commit() after step 7 covers all three atomically
+(F-27). On exception at any step: db.rollback() first (discards any
+unflushed/uncommitted work from this run), then status=failed,
+error=str(exc)[:1000], committed alone.
 """
 
 import io
@@ -167,13 +171,16 @@ def run(document_id: int) -> None:
             doc.error = None
             db.commit()
         except Exception as e:
+            db.rollback()
             log.error(
                 "ingestion failed",
                 extra={"err_type": type(e).__name__, "doc_id": document_id},
                 exc_info=settings.env != "prod",
             )
-            doc.status = "failed"
-            doc.error = str(e)[:1000]
-            db.commit()
+            doc = db.get(Document, document_id)
+            if doc is not None:
+                doc.status = "failed"
+                doc.error = str(e)[:1000]
+                db.commit()
     finally:
         db.close()

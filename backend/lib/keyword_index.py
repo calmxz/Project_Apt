@@ -55,7 +55,6 @@ def merge_into_session(db: Session, session_id: str, new_stems: set[str]) -> Non
     current = set(json.loads(row.kw_index_json or "[]"))
     merged = current | set(new_stems)
     row.kw_index_json = json.dumps(sorted(merged))
-    db.commit()
 
 
 def match_required(query: str, kw_index) -> bool:

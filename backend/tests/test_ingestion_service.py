@@ -226,6 +226,65 @@ def test_pgvector_insert_failure_marks_failed(
     assert "pgvector" in (doc.error or "")
 
 
+def test_merge_failure_leaves_no_chunks_and_marks_failed(db_session, monkeypatch, tmp_path):
+    """F-27: insert_chunks and merge_into_session no longer commit -- the
+    caller (ingestion_service.run) owns the transaction. A failure in the
+    keyword-merge step (after chunks are inserted but before the single
+    end-of-run commit) must roll back the whole unit of work, so no
+    ChunkEmbedding rows are left committed for a document marked failed."""
+    from sqlalchemy.orm import sessionmaker
+
+    from config import settings
+    from db.models import ChunkEmbedding
+    from services import ingestion_service
+
+    db_session.add(User(id="u_merge_boom"))
+    db_session.flush()
+    db_session.add(
+        SessionModel(
+            id="s_merge_boom",
+            user_id="u_merge_boom",
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.flush()
+    doc = Document(session_id="s_merge_boom", filename="ref.txt", status="pending")
+    db_session.add(doc)
+    db_session.commit()
+    db_session.refresh(doc)
+
+    monkeypatch.setattr("services.ingestion_service.settings.uploads_path", str(tmp_path))
+    (tmp_path / f"{doc.id}_ref.txt").write_text(
+        "Indexes accelerate database queries. " * 20, encoding="utf-8"
+    )
+    monkeypatch.setattr(
+        "services.ingestion_service.SessionLocal",
+        sessionmaker(autocommit=False, autoflush=False, bind=db_session.get_bind()),
+    )
+
+    def fake_embedding(model, input, **_):
+        if isinstance(input, str):
+            input = [input]
+        return SimpleNamespace(
+            data=[{"embedding": [0.1] * settings.embedding_dim} for _ in input]
+        )
+
+    monkeypatch.setattr("services.ingestion_service.litellm.embedding", fake_embedding)
+
+    def boom(db, session_id, stems):
+        raise RuntimeError("kw merge exploded")
+
+    monkeypatch.setattr("services.ingestion_service.keyword_index.merge_into_session", boom)
+
+    ingestion_service.run(doc.id)
+    db_session.expire_all()
+    doc = db_session.get(Document, doc.id)
+    assert doc.status == "failed"
+    assert "kw merge exploded" in doc.error
+    assert db_session.query(ChunkEmbedding).filter_by(document_id=doc.id).count() == 0
+
+
 def test_extract_plaintext_txt_and_md():
     from services import ingestion_service
 
