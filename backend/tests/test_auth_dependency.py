@@ -19,12 +19,12 @@ import jwt as pyjwt
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
 
 from services import auth
 from services import auth as auth_module
-from services.auth import current_user_id
+from services.auth import accepted_terms_from_request, current_user_id
 
 TEST_SUPABASE_URL = "https://test-project.supabase.co"
 
@@ -111,6 +111,46 @@ def test_valid_token_returns_sub(client, rsa_keys):
     r = client.get("/whoami", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 200
     assert r.json() == {"user_id": "user-abc"}
+
+
+@pytest.fixture
+def consent_app() -> FastAPI:
+    """F-52: a route mirroring the real chat.py/sessions.py wiring -- the
+    real `current_user_id` dependency stashes `request.state.jwt_claims`,
+    and the handler reads it back through `accepted_terms_from_request`.
+    Proves the stash-to-helper wiring end-to-end at the FastAPI DI level,
+    not just the SimpleNamespace unit tests in test_auth_config_batch6.py."""
+    app = FastAPI()
+
+    @app.get("/consent")
+    def consent(request: Request, user_id: str = Depends(current_user_id)) -> dict:
+        return {"user_id": user_id, "accepted_terms": accepted_terms_from_request(request)}
+
+    return app
+
+
+@pytest.fixture
+def consent_client(consent_app: FastAPI) -> TestClient:
+    return TestClient(consent_app)
+
+
+def test_current_user_id_stash_reaches_accepted_terms_from_request_true(consent_client, rsa_keys):
+    """A token whose user_metadata carries accepted_terms=true -> the claim
+    stashed by current_user_id is visible to accepted_terms_from_request."""
+    token = _sign(rsa_keys, extra={"user_metadata": {"accepted_terms": True}})
+    r = consent_client.get("/consent", headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 200
+    assert r.json() == {"user_id": "user-123", "accepted_terms": True}
+
+
+def test_current_user_id_stash_reaches_accepted_terms_from_request_false(consent_client, rsa_keys):
+    """A token with no accepted_terms claim (direct-API signup bypassing the
+    register checkbox) -> accepted_terms_from_request reads False, not a
+    default that masks the missing claim."""
+    token = _sign(rsa_keys)  # no user_metadata claim at all
+    r = consent_client.get("/consent", headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 200
+    assert r.json() == {"user_id": "user-123", "accepted_terms": False}
 
 
 def test_missing_authorization_header_returns_401(client):
