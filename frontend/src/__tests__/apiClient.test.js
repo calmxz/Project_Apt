@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { ApiError, apiGet, apiPost } from '../services/apiClient.js'
 import { errorBus } from '../services/errorBus.js'
+import { useAuthStore } from '../stores/auth.js'
 
 vi.mock('../router/index.js', () => ({ default: { push: vi.fn() } }))
 
@@ -112,9 +113,13 @@ describe('apiClient', () => {
   })
 
   it('retries once with a refreshed token on 401 (F-09)', async () => {
-    globalThis.__supabaseAuthStub.getSession.mockResolvedValueOnce({
-      data: { session: { access_token: 'fresh-token', user: { id: 'u1' } } },
-    })
+    // First call is the pre-request getFreshAccessToken() lookup (F-47);
+    // second is _refreshAccessToken() on the 401 retry.
+    globalThis.__supabaseAuthStub.getSession
+      .mockResolvedValueOnce({ data: { session: null } })
+      .mockResolvedValueOnce({
+        data: { session: { access_token: 'fresh-token', user: { id: 'u1' } } },
+      })
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(new Response('{"detail":"invalid_token"}', { status: 401 }))
@@ -125,6 +130,28 @@ describe('apiClient', () => {
     expect(result).toEqual({ ok: true })
     expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(fetchMock.mock.calls[1][1].headers.authorization).toBe('Bearer fresh-token')
+  })
+
+  it('sends the getSession token, not the stale store token', async () => {
+    const store = useAuthStore()
+    store.session = { access_token: 'store-tok', user: { id: 'u1' } }
+    globalThis.__supabaseAuthStub.getSession.mockResolvedValueOnce({
+      data: { session: { access_token: 'fresh-tok', user: { id: 'u1' } } },
+    })
+    fetchMock.mockResolvedValue(new Response('{}', { status: 200 }))
+    await apiGet('/ping')
+    const [, init] = fetchMock.mock.calls[0]
+    expect(init.headers['authorization']).toBe('Bearer fresh-tok')
+  })
+
+  it('falls back to the store token when getSession fails', async () => {
+    const store = useAuthStore()
+    store.session = { access_token: 'store-tok', user: { id: 'u1' } }
+    globalThis.__supabaseAuthStub.getSession.mockRejectedValueOnce(new Error('offline'))
+    fetchMock.mockResolvedValue(new Response('{}', { status: 200 }))
+    await apiGet('/ping')
+    const [, init] = fetchMock.mock.calls[0]
+    expect(init.headers['authorization']).toBe('Bearer store-tok')
   })
 
   it('signs out and redirects to login after a second 401', async () => {

@@ -20,11 +20,19 @@ export class ApiError extends Error {
   }
 }
 
-// Try to read the current Supabase access token from the auth store. Wrapped
-// in a no-throw because some tests exercise apiClient without an active Pinia
-// instance — in those cases useStore() throws and we just send no
-// Authorization header.
-function _getAccessToken() {
+// F-47: read the token from the SDK, not the Pinia snapshot. getSession()
+// refreshes an expired access token; after wake-from-sleep the store can
+// hold a stale one and would burn the single F-09 retry on a guaranteed 401.
+// Falls back to the store token (tests without a supabase env), then null.
+export async function getFreshAccessToken() {
+  try {
+    const { getSupabase } = await import('./supabase.js')
+    const { data } = await getSupabase().auth.getSession()
+    const tok = data?.session?.access_token
+    if (tok) return tok
+  } catch {
+    // fall through to the store snapshot
+  }
   try {
     const store = useAuthStore()
     return store.accessToken ?? null
@@ -84,7 +92,7 @@ async function request(method, path, { body, params, silent = false, headers } =
     init.signal = AbortSignal.timeout(REQUEST_TIMEOUT_MS)
   }
 
-  const token = _retried ? await _refreshAccessToken() : _getAccessToken()
+  const token = _retried ? await _refreshAccessToken() : await getFreshAccessToken()
   if (token) init.headers['authorization'] = `Bearer ${token}`
 
   let resp

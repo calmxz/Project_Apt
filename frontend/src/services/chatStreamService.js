@@ -1,6 +1,5 @@
 import { parseSSEStream } from '@/lib/sseParser.js'
-import { useAuthStore } from '@/stores/auth.js'
-import { ApiError, _onAuthExpired, _refreshAccessToken } from './apiClient.js'
+import { ApiError, _onAuthExpired, _refreshAccessToken, getFreshAccessToken } from './apiClient.js'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
 
@@ -10,17 +9,13 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api
 export const SSE_HEADER_TIMEOUT_MS = 30000
 export const SSE_IDLE_TIMEOUT_MS = 60000
 
-function _authToken() {
-  try { return useAuthStore().accessToken ?? null } catch { return null }
-}
-
 function _timeoutError() {
   return new DOMException('timed out', 'TimeoutError')
 }
 
 async function _fetchSse(url, payload, { onEvent, signal, path }, _retried = false) {
   const headers = { 'content-type': 'application/json' }
-  const token = _retried ? await _refreshAccessToken() : _authToken()
+  const token = _retried ? await _refreshAccessToken() : await getFreshAccessToken()
   if (token) headers['authorization'] = `Bearer ${token}`
 
   // Internal controller: layers the header/idle timeouts on top of whatever

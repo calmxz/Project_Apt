@@ -1,5 +1,4 @@
-import { useAuthStore } from '../stores/auth.js'
-import { ApiError, apiGet, apiDelete } from './apiClient.js'
+import { ApiError, apiGet, apiDelete, getFreshAccessToken } from './apiClient.js'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
 
@@ -31,14 +30,9 @@ export function validateFile(file) {
   return { ok: true }
 }
 
-function _authHeaders() {
-  try {
-    const store = useAuthStore()
-    const token = store.accessToken
-    return token ? { authorization: `Bearer ${token}` } : {}
-  } catch {
-    return {}
-  }
+async function _authHeaders() {
+  const token = await getFreshAccessToken()
+  return token ? { authorization: `Bearer ${token}` } : {}
 }
 
 export async function uploadDocument({ sessionId, file }) {
@@ -51,7 +45,7 @@ export async function uploadDocument({ sessionId, file }) {
     resp = await fetch(`${BASE_URL}/upload`, {
       method: 'POST',
       body: fd,
-      headers: _authHeaders(),
+      headers: await _authHeaders(),
     })
   } catch (e) {
     throw new ApiError(0, { detail: e.message }, '/upload')
