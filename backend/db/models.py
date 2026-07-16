@@ -56,7 +56,7 @@ class ChatMessage(Base):
     __tablename__ = "chat_messages"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('complete', 'cancelled', 'error')",
+            "status IN ('complete', 'cancelled', 'error', 'partial')",
             name="chat_messages_status_check",
         ),
         Index("ix_chat_messages_session_created", "session_id", "created_at"),

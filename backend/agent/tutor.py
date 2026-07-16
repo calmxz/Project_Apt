@@ -51,6 +51,26 @@ def _persist_assistant_message(
     return m.id
 
 
+def _persist_partial_on_abort(ctx, accumulated_text, tool_calls, citations, asked_check):
+    """F-14: an aborted turn (max_iters, mid-turn cap) must not vanish text
+    the learner watched stream. Persist it as 'partial'; if a check batch was
+    registered this turn, attach it so it renders with its asking message
+    instead of dangling."""
+    if not accumulated_text and not asked_check:
+        return None
+    try:
+        msg_id = _persist_assistant_message(
+            ctx, accumulated_text, "partial",
+            tool_calls=tool_calls, citations=citations,
+        )
+        if asked_check:
+            check_question_service.attach_message_id(ctx.db, ctx.session_id, msg_id)
+        return msg_id
+    except Exception:
+        log.exception("failed to persist partial assistant message on abort")
+        return None
+
+
 def _summarize(name: str, result) -> str:
     if name == "retrieve_chunks":
         return f"Found {len((result.data or {}).get('chunks', []))} passages"
@@ -149,6 +169,9 @@ async def run_streaming(
                 log.warning(
                     "hard cost cap reached mid-turn (stream) for user_id=%s used=%s",
                     ctx.user_id, cap.used,
+                )
+                _persist_partial_on_abort(
+                    ctx, accumulated_text, tool_calls_record, citations, asked_check
                 )
                 yield StreamEvent(
                     "error",
@@ -440,6 +463,9 @@ async def run_streaming(
                 return
 
         # max_iters exhausted without a final answer.
+        _persist_partial_on_abort(
+            ctx, accumulated_text, tool_calls_record, citations, asked_check
+        )
         yield StreamEvent("error", {"code": "max_iters_reached"})
         return
 
@@ -498,13 +524,15 @@ async def run_streaming(
             "followup" if getattr(ctx, "suppress_check", False) else "chat",
         )
         try:
-            _persist_assistant_message(
+            msg_id = _persist_assistant_message(
                 ctx,
                 accumulated_text,
                 "error",
                 tool_calls=tool_calls_record,
                 citations=citations,
             )
+            if asked_check:
+                check_question_service.attach_message_id(ctx.db, ctx.session_id, msg_id)
         except Exception:
             log.exception("failed to persist assistant message after agent-loop failure")
         yield StreamEvent(
