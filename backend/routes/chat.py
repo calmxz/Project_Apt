@@ -259,6 +259,7 @@ async def _prepare_turn(
         session_id=req.session_id,
         user_id=user_id,
         turn_started_at=datetime.now(timezone.utc),
+        diagnostic_required=bool(prompt_state.get("diagnostic_required", False)),
     )
 
     return messages, system_prompt, ctx

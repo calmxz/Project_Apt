@@ -35,16 +35,6 @@ def parse_asked_at(pc: dict) -> datetime:
     return datetime.fromisoformat(pc["asked_at_turn"])
 
 
-def is_gradable(db: Session, session_id: str, gap: str, current_turn: datetime) -> bool:
-    """Legacy turn-barrier guard, no longer called from the record path (that path
-    was record_learning_event, removed when it stopped being an LLM tool). Kept
-    for its own direct test coverage; batch gap stays top-level so it still resolves."""
-    pc = get_pending_check(db, session_id)
-    if pc is None or pc.get("gap") != gap:
-        return False
-    return parse_asked_at(pc) < current_turn
-
-
 def _save(db: Session, session_id: str, pc: dict, commit: bool = True) -> None:
     row = db.get(SessionModel, session_id)
     if row is None:

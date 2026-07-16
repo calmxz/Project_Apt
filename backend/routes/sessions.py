@@ -569,6 +569,7 @@ async def complete_check(
         user_id=user_id,
         turn_started_at=datetime.now(timezone.utc),
         suppress_check=True,
+        diagnostic_required=(profile.knowledge_level is None),
     )
 
     async def event_stream():

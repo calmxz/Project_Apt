@@ -69,7 +69,8 @@ def diagnostic_batch_session(db_session):
     )
     db_session.add(row)
     db_session.commit()
-    ctx = ToolContext(db=db_session, session_id=row.id, user_id=USER_ID, turn_started_at=_T0)
+    ctx = ToolContext(db=db_session, session_id=row.id, user_id=USER_ID, turn_started_at=_T0,
+                      diagnostic_required=True)
     check_question_service.register(db_session, ctx, AskCheckQuestionsArgs(
         session_id=row.id, gap="warmup",
         items=[{"question": "Q1?", "options": ["a", "b"],

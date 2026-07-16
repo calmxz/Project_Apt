@@ -47,7 +47,8 @@ def fresh_session_with_diagnostic_batch(db_session):
     db_session.commit()
 
     ctx = ToolContext(
-        db=db_session, session_id=row.id, user_id=USER_ID, turn_started_at=_T0
+        db=db_session, session_id=row.id, user_id=USER_ID, turn_started_at=_T0,
+        diagnostic_required=True,
     )
     correct_indices = [0, 1, 0]
     check_question_service.register(
