@@ -22,6 +22,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from agent.types import ToolContext
+from config import settings
 from contracts import (
     AggregateConceptCount,
     AggregateProfileResponse,
@@ -158,9 +159,33 @@ def load_profile(db: Session, session_id: str) -> TopicProfile:
     return profile_from_row(db.get(SessionModel, session_id))
 
 
+def _enforce_list_caps(profile: TopicProfile) -> None:
+    """F-35: profiles copy forward across resumes forever; without a cap the
+    lists (and therefore the per-turn prompt) grow monotonically. Evict oldest
+    (front-of-list) entries past settings.max_profile_list. The focused gap is
+    never evicted -- dropping it would dangle focus_target_gap (F-22)."""
+    cap = settings.max_profile_list
+    focus_key = canon(profile.focus_target_gap) if profile.focus_target_gap else None
+    for attr in ("confirmed_gaps", "mastered_concepts"):
+        entries = list(getattr(profile, attr) or [])
+        if len(entries) <= cap:
+            continue
+        keep: list = []
+        overflow = len(entries) - cap
+        for e in entries:
+            if overflow > 0 and not (
+                attr == "confirmed_gaps" and focus_key and canon(e.name) == focus_key
+            ):
+                overflow -= 1
+                continue
+            keep.append(e)
+        setattr(profile, attr, keep)
+
+
 def save_profile(
     db: Session, session_id: str, profile: TopicProfile, commit: bool = True
 ) -> None:
+    _enforce_list_caps(profile)
     row = db.get(SessionModel, session_id)
     if row is None:
         raise ValueError(f"session not found: {session_id}")

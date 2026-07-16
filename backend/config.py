@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     summary_timeout_s: float = 20.0
     embedding_timeout_s: float = 15.0
 
+    # F-35: hard cap per profile concept list (confirmed_gaps,
+    # mastered_concepts); oldest entries evicted at write time.
+    max_profile_list: int = 40
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

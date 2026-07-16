@@ -176,6 +176,8 @@ def _normalize_missed(missed) -> list[dict]:
 _GAP_ACCURACY_MAX_GAPS = 8
 _GAP_ACCURACY_CHAR_CAP = 600
 
+PROMPT_LIST_MAX = 20  # F-35: newest entries per concept list in the prompt
+
 
 def _gap_accuracy_label(profile_dict: dict, gap_accuracy: dict) -> str:
     confirmed = [
@@ -197,6 +199,13 @@ def _gap_accuracy_label(profile_dict: dict, gap_accuracy: dict) -> str:
 def build_dynamic_context(state: dict) -> str:
     topic = state.get("topic", "") or ""
     profile_dict = _profile_to_dict(state.get("profile"))
+    # F-35: render only the newest PROMPT_LIST_MAX entries per concept list;
+    # an *_older_count key tells the model truncation happened.
+    for _key in ("confirmed_gaps", "mastered_concepts"):
+        _items = profile_dict.get(_key)
+        if isinstance(_items, list) and len(_items) > PROMPT_LIST_MAX:
+            profile_dict[f"{_key}_older_count"] = len(_items) - PROMPT_LIST_MAX
+            profile_dict[_key] = _items[-PROMPT_LIST_MAX:]
     ingestion_status = state.get("ingestion_status") or "none"
     retrieval_required = bool(state.get("retrieval_required", False))
     seed_mode = state.get("seed_mode") or "none"
