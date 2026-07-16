@@ -473,6 +473,24 @@ class SessionIngestionStatus(BaseModel):
     documents: list[DocumentStatus]
 
 
+class MeResponse(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    display_name: constr(max_length=120) | None = None
+    feedback_pref: constr(max_length=40) | None = None
+    onboarding_complete: bool
+
+
+class MePatchRequest(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    display_name: constr(max_length=120) | None = None
+    feedback_pref: constr(max_length=40) | None = None
+    onboarding_complete: bool | None = None
+
+
 class ProfileResponse(BaseModel):
     model_config = ConfigDict(
         extra="forbid",

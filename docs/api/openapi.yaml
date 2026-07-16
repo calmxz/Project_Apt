@@ -35,6 +35,8 @@ tags:
     description: Spaced-repetition review queue (Phase 5).
   - name: usage
     description: LLM cost transparency (Phase 7+).
+  - name: me
+    description: Account-level user state -- onboarding + preferences (F-46).
 
 paths:
   /health:
@@ -152,6 +154,38 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/UsageSummaryResponse"
+
+  /api/me:
+    get:
+      tags: [me]
+      summary: Current user's account-level preferences and onboarding state.
+      operationId: getMe
+      responses:
+        "200":
+          description: Current user state (row auto-created on first call).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeResponse"
+    patch:
+      tags: [me]
+      summary: Update display name, feedback preference, or onboarding state.
+      operationId: patchMe
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MePatchRequest"
+      responses:
+        "200":
+          description: Updated user state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
 
   /api/sessions/{session_id}:
     get:
@@ -1044,6 +1078,24 @@ components:
         documents:
           type: array
           items: { $ref: "#/components/schemas/DocumentStatus" }
+
+    MeResponse:
+      type: object
+      additionalProperties: false
+      required: [onboarding_complete]
+      properties:
+        display_name:        { type: [string, "null"], default: null, maxLength: 120 }
+        feedback_pref:       { type: [string, "null"], default: null, maxLength: 40 }
+        onboarding_complete: { type: boolean, default: false }
+
+    MePatchRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        display_name:        { type: string, maxLength: 120 }
+        feedback_pref:       { type: string, maxLength: 40 }
+        onboarding_complete: { type: boolean }
 
     ProfileResponse:
       type: object

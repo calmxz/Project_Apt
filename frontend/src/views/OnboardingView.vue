@@ -73,9 +73,9 @@ const feedback = ref(userStore.interactionPreferences?.feedback || 'hints')
 
 const canSubmit = computed(() => Boolean(feedback.value))
 
-function submit() {
+async function submit() {
   if (!canSubmit.value) return
-  userStore.completeOnboarding({
+  await userStore.completeOnboarding({
     name: displayName.value,
     feedback: feedback.value,
   })

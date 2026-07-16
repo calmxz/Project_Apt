@@ -103,6 +103,12 @@ router.beforeEach(async (to) => {
   }
 
   const user = useUserStore()
+  if (auth.isAuthenticated && !user.hydrated) {
+    // F-46: onboarding truth lives on the server; the localStorage snapshot
+    // is only a warm cache. Await one hydrate so a new device does not
+    // force-route an existing user to onboarding.
+    await user.hydrateFromServer()
+  }
   if (
     auth.isAuthenticated &&
     !user.onboardingComplete &&
