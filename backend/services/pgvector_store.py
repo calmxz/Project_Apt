@@ -55,14 +55,12 @@ def insert_chunks(
 
 def delete_document_chunks(db: Session, document_id: int) -> int:
     """Delete all chunk embeddings for a document. Returns rows deleted.
-
-    chunk_embeddings.document_id has no ON DELETE CASCADE, so callers deleting a
-    Document must call this first to avoid orphaned vectors.
-    """
+    Does NOT commit — the caller owns the transaction (F-28: chunk delete and
+    document-row delete must land atomically). The FK also carries
+    ON DELETE CASCADE (migration 0018) as a schema-level backstop."""
     result = db.execute(
         _delete(ChunkEmbedding).where(ChunkEmbedding.document_id == document_id)
     )
-    db.commit()
     return result.rowcount or 0
 
 

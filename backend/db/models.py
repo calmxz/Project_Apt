@@ -129,7 +129,9 @@ class ChunkEmbedding(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
     session_id: Mapped[str] = mapped_column(ForeignKey("sessions.id"), nullable=False, index=True)
-    document_id: Mapped[int] = mapped_column(ForeignKey("documents.id"), nullable=False, index=True)
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     page: Mapped[int | None] = mapped_column(Integer, nullable=True)
     chunk_text: Mapped[str] = mapped_column(Text, nullable=False)

@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from config import settings
 from db.models import Document, Session as SessionModel
-from services import pgvector_store
+from services import object_store, pgvector_store
 
 logger = logging.getLogger(__name__)
 
@@ -103,23 +103,22 @@ def delete_document(db: Session, document_id: int, user_id: str) -> None:
     if owner_id != user_id:
         raise DocumentNotFound(str(document_id))
 
-    pgvector_store.delete_document_chunks(db, document_id)
-
     # Capture identity before the row is expired by commit.
     doc_id = doc.id
     filename = doc.filename
 
+    # F-28: chunk delete + row delete in ONE transaction, so a crash between
+    # them can no longer leave a "ready" doc with zero chunks or orphaned
+    # vectors. (Migration 0018 also adds ON DELETE CASCADE as a backstop.)
+    pgvector_store.delete_document_chunks(db, document_id)
     db.delete(doc)
     db.commit()
 
-    # Best-effort on-disk cleanup AFTER the DB + vector rows are committed, so a
-    # locked/undeletable file (e.g. Windows WinError 32 while ingestion still
-    # holds the PDF) cannot leave the request 500ing with chunks already gone.
-    # Strip directory components and verify containment first (path traversal).
-    uploads_root = Path(settings.uploads_path).resolve()
-    candidate = (uploads_root / f"{doc_id}_{Path(filename).name}").resolve()
-    if candidate.parent == uploads_root:
-        try:
-            candidate.unlink(missing_ok=True)
-        except OSError:
-            logger.warning("could not unlink file for document %s", doc_id)
+    # Best-effort blob cleanup AFTER the DB commit, so an undeletable object
+    # (e.g. Windows file lock on LocalDiskStore) cannot 500 the request with
+    # the DB rows already gone. Store implementations swallow absent keys;
+    # guard everything else.
+    try:
+        object_store.get_store().delete(object_store.key_for(doc_id, Path(filename).name))
+    except Exception:
+        logger.warning("could not delete stored object for document %s", doc_id)
