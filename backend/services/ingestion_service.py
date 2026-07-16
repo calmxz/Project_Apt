@@ -5,8 +5,9 @@ SessionLocal because the request-scoped DB session is gone by the time the
 background task fires.
 
 Pipeline:
-  1. Load Document; resolve file path from settings.uploads_path.
-  2. _extract(path, filename) -> [(page_num | None, text), ...] by extension.
+  1. Load Document; load the blob via services.object_store (R2 in prod,
+     local disk in dev), not settings.uploads_path directly.
+  2. _extract(blob, filename) -> [(page_num | None, text), ...] by extension.
      - .pdf  : pypdf -> [(page_num, text), ...]
      - .pptx : python-pptx -> [(slide_num, text), ...]
      - .txt / .md / .markdown : [(None, full_text)]
@@ -19,6 +20,7 @@ Pipeline:
 On exception at any step: status=failed, error=str(exc)[:1000]. Always commit.
 """
 
+import io
 import logging
 import os
 
@@ -32,7 +34,7 @@ from db.database import SessionLocal
 from db.models import Document
 from db.models import Session as SessionModel
 from lib import chunking, keyword_index
-from services import cost_meter, pgvector_store
+from services import cost_meter, object_store, pgvector_store
 
 
 log = logging.getLogger(__name__)
@@ -40,23 +42,26 @@ log = logging.getLogger(__name__)
 EMBED_BATCH = 100
 
 
-def _resolve_path(doc: Document) -> str:
-    candidate = os.path.join(settings.uploads_path, f"{doc.id}_{doc.filename}")
-    if os.path.exists(candidate):
-        return candidate
-    fallback = doc.filename
-    if "/" in fallback or "\\" in fallback or ".." in fallback:
-        raise ValueError(f"refusing unsafe filename in fallback: {fallback!r}")
-    return os.path.join(settings.uploads_path, fallback)
+def _load_blob(store: "object_store.ObjectStore", doc: Document) -> bytes:
+    try:
+        return store.get(object_store.key_for(doc.id, doc.filename))
+    except object_store.ObjectNotFound:
+        pass
+    # Legacy fallback: pre-F-15 uploads were stored under the bare filename.
+    # LocalDiskStore path-containment rejects traversal in doc.filename.
+    try:
+        return store.get(doc.filename)
+    except object_store.ObjectNotFound:
+        raise RuntimeError(f"uploaded file not found in object store: {doc.filename}") from None
 
 
-def _extract_pages(path: str) -> list[tuple[int, str]]:
-    reader = PdfReader(path)
+def _extract_pages(blob: bytes) -> list[tuple[int, str]]:
+    reader = PdfReader(io.BytesIO(blob))
     return [(i + 1, (page.extract_text() or "")) for i, page in enumerate(reader.pages)]
 
 
-def _extract_slides(path: str) -> list[tuple[int, str]]:
-    prs = Presentation(path)
+def _extract_slides(blob: bytes) -> list[tuple[int, str]]:
+    prs = Presentation(io.BytesIO(blob))
     out: list[tuple[int, str]] = []
     for i, slide in enumerate(prs.slides, start=1):
         parts: list[str] = []
@@ -70,19 +75,18 @@ def _extract_slides(path: str) -> list[tuple[int, str]]:
     return out
 
 
-def _extract_plaintext(path: str) -> list[tuple[None, str]]:
-    with open(path, "r", encoding="utf-8", errors="replace") as fh:
-        return [(None, fh.read())]
+def _extract_plaintext(blob: bytes) -> list[tuple[None, str]]:
+    return [(None, blob.decode("utf-8", errors="replace"))]
 
 
-def _extract(path: str, filename: str) -> list[tuple[int | None, str]]:
+def _extract(blob: bytes, filename: str) -> list[tuple[int | None, str]]:
     ext = os.path.splitext(filename)[1].lower()
     if ext == ".pdf":
-        return _extract_pages(path)
+        return _extract_pages(blob)
     if ext == ".pptx":
-        return _extract_slides(path)
+        return _extract_slides(blob)
     if ext in (".txt", ".md", ".markdown"):
-        return _extract_plaintext(path)
+        return _extract_plaintext(blob)
     raise ValueError(f"unsupported file type: {ext!r}")
 
 
@@ -123,8 +127,8 @@ def run(document_id: int) -> None:
             return
 
         try:
-            path = _resolve_path(doc)
-            pages = _extract(path, doc.filename)
+            blob = _load_blob(object_store.get_store(), doc)
+            pages = _extract(blob, doc.filename)
             # Count only pages/slides that carry a page number; plaintext yields
             # (None, text) so its sum is 0, which we collapse to None (no page
             # concept). Degenerate inputs (0-slide pptx) likewise store None.

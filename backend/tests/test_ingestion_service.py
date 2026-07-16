@@ -105,8 +105,12 @@ def mock_embed(monkeypatch):
     )
 
 
-def _path_exists_stub(monkeypatch):
-    monkeypatch.setattr("services.ingestion_service.os.path.exists", lambda p: True)
+def _write_blob_stub(monkeypatch, tmp_path, doc_id, filename, content=b"stub blob bytes"):
+    """Point uploads_path at tmp_path and write a dummy blob under the store's
+    doc-id-prefixed key. Extractors in these tests are separately mocked, so
+    the content doesn't matter -- _load_blob just needs the key to exist."""
+    monkeypatch.setattr("services.ingestion_service.settings.uploads_path", str(tmp_path))
+    (tmp_path / f"{doc_id}_{filename}").write_bytes(content)
 
 
 def test_embed_all_requests_configured_dimension(db_session, monkeypatch):
@@ -137,8 +141,10 @@ def test_embed_all_requests_configured_dimension(db_session, monkeypatch):
     assert captured["dimensions"] == expected_dim
 
 
-def test_success_path(setup_doc, insert_capture, mock_pdf, mock_embed, db_session, monkeypatch):
-    _path_exists_stub(monkeypatch)
+def test_success_path(
+    setup_doc, insert_capture, mock_pdf, mock_embed, db_session, monkeypatch, tmp_path
+):
+    _write_blob_stub(monkeypatch, tmp_path, setup_doc, "x.pdf")
     from services import ingestion_service
 
     ingestion_service.run(setup_doc)
@@ -164,8 +170,10 @@ def test_success_path(setup_doc, insert_capture, mock_pdf, mock_embed, db_sessio
     assert len(stems) > 0
 
 
-def test_pypdf_failure_marks_failed(setup_doc, insert_capture, mock_embed, db_session, monkeypatch):
-    _path_exists_stub(monkeypatch)
+def test_pypdf_failure_marks_failed(
+    setup_doc, insert_capture, mock_embed, db_session, monkeypatch, tmp_path
+):
+    _write_blob_stub(monkeypatch, tmp_path, setup_doc, "x.pdf")
 
     def boom(_path):
         raise RuntimeError("corrupt pdf")
@@ -182,9 +190,9 @@ def test_pypdf_failure_marks_failed(setup_doc, insert_capture, mock_embed, db_se
 
 
 def test_embedding_failure_marks_failed(
-    setup_doc, insert_capture, mock_pdf, db_session, monkeypatch
+    setup_doc, insert_capture, mock_pdf, db_session, monkeypatch, tmp_path
 ):
-    _path_exists_stub(monkeypatch)
+    _write_blob_stub(monkeypatch, tmp_path, setup_doc, "x.pdf")
 
     def boom(model, input, **_):
         raise RuntimeError("embedding api down")
@@ -201,9 +209,9 @@ def test_embedding_failure_marks_failed(
 
 
 def test_pgvector_insert_failure_marks_failed(
-    setup_doc, mock_pdf, mock_embed, db_session, monkeypatch
+    setup_doc, mock_pdf, mock_embed, db_session, monkeypatch, tmp_path
 ):
-    _path_exists_stub(monkeypatch)
+    _write_blob_stub(monkeypatch, tmp_path, setup_doc, "x.pdf")
 
     def boom(*a, **k):
         raise RuntimeError("pgvector insert failed")
@@ -218,35 +226,27 @@ def test_pgvector_insert_failure_marks_failed(
     assert "pgvector" in (doc.error or "")
 
 
-def test_extract_plaintext_txt_and_md(tmp_path):
+def test_extract_plaintext_txt_and_md():
     from services import ingestion_service
 
-    txt = tmp_path / "notes.txt"
-    txt.write_text("Plain text reference content.", encoding="utf-8")
-    assert ingestion_service._extract(str(txt), "notes.txt") == [
-        (None, "Plain text reference content.")
-    ]
+    assert ingestion_service._extract(
+        b"Plain text reference content.", "notes.txt"
+    ) == [(None, "Plain text reference content.")]
 
-    md = tmp_path / "notes.md"
-    md.write_text("# Heading\n\nBody.", encoding="utf-8")
-    assert ingestion_service._extract(str(md), "notes.md") == [
+    assert ingestion_service._extract(b"# Heading\n\nBody.", "notes.md") == [
         (None, "# Heading\n\nBody.")
     ]
 
-    markdown = tmp_path / "notes.markdown"
-    markdown.write_text("Long-form note.", encoding="utf-8")
-    assert ingestion_service._extract(str(markdown), "notes.markdown") == [
+    assert ingestion_service._extract(b"Long-form note.", "notes.markdown") == [
         (None, "Long-form note.")
     ]
 
 
-def test_extract_unknown_extension_raises(tmp_path):
+def test_extract_unknown_extension_raises():
     from services import ingestion_service
 
-    f = tmp_path / "data.bin"
-    f.write_bytes(b"\x00\x01")
     with pytest.raises(ValueError):
-        ingestion_service._extract(str(f), "data.bin")
+        ingestion_service._extract(b"\x00\x01", "data.bin")
 
 
 def test_extract_slides_uses_python_pptx(monkeypatch):
@@ -274,7 +274,7 @@ def test_extract_slides_uses_python_pptx(monkeypatch):
             ]
 
     monkeypatch.setattr("services.ingestion_service.Presentation", FakePresentation)
-    pages = ingestion_service._extract("x.pptx", "x.pptx")
+    pages = ingestion_service._extract(b"stub pptx bytes", "x.pptx")
     assert pages[0][0] == 1 and "Title one" in pages[0][1] and "Bullet a" in pages[0][1]
     assert pages[1][0] == 2 and "Title two" in pages[1][1]
 
@@ -311,7 +311,7 @@ def test_extract_slides_includes_table_cell_text(monkeypatch):
             ]
 
     monkeypatch.setattr("services.ingestion_service.Presentation", FakePresentation)
-    pages = ingestion_service._extract("x.pptx", "x.pptx")
+    pages = ingestion_service._extract(b"stub pptx bytes", "x.pptx")
     assert pages[0][0] == 1
     assert "r1c1 r1c2" in pages[0][1]
     assert "r2c1 r2c2" in pages[0][1]
@@ -364,6 +364,61 @@ def test_ingestion_meters_embedding_spend(
         select(SessionModel.user_id).where(SessionModel.id == doc.session_id)
     ).scalar_one()
     assert cost_meter.current_spend(db_session, user_id) == Decimal("0.0040")
+
+
+def test_missing_blob_marks_failed(setup_doc, db_session, monkeypatch, tmp_path):
+    """F-15: if the blob isn't in the object store (and no legacy bare-filename
+    fallback exists either), ingestion must fail the document, not crash."""
+    monkeypatch.setattr("services.ingestion_service.settings.uploads_path", str(tmp_path))
+    from services import ingestion_service
+
+    ingestion_service.run(setup_doc)
+    db_session.expire_all()
+    doc = db_session.get(Document, setup_doc)
+    assert doc.status == "failed"
+    assert doc.error
+
+
+def test_extract_plaintext_from_bytes():
+    from services import ingestion_service
+
+    assert ingestion_service._extract(b"hello world", "notes.txt") == [(None, "hello world")]
+
+
+def test_legacy_bare_filename_fallback(db_session, insert_capture, mock_embed, monkeypatch, tmp_path):
+    """Pre-F-15 files were stored under the bare filename (no doc-id prefix).
+    _load_blob must fall back to that layout so old uploads keep ingesting."""
+    from sqlalchemy.orm import sessionmaker
+
+    from services import ingestion_service
+
+    db_session.add(User(id="u_legacy"))
+    db_session.flush()
+    db_session.add(
+        SessionModel(
+            id="s_legacy",
+            user_id="u_legacy",
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.flush()
+    doc = Document(session_id="s_legacy", filename="ref.txt", status="pending")
+    db_session.add(doc)
+    db_session.commit()
+    db_session.refresh(doc)
+
+    monkeypatch.setattr("services.ingestion_service.settings.uploads_path", str(tmp_path))
+    (tmp_path / doc.filename).write_bytes(b"legacy content")
+    monkeypatch.setattr(
+        "services.ingestion_service.SessionLocal",
+        sessionmaker(autocommit=False, autoflush=False, bind=db_session.get_bind()),
+    )
+
+    ingestion_service.run(doc.id)
+    db_session.expire_all()
+    refreshed = db_session.get(Document, doc.id)
+    assert refreshed.status == "ready"
 
 
 def test_run_txt_success(db_session, insert_capture, mock_embed, monkeypatch, tmp_path):
