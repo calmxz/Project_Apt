@@ -350,7 +350,7 @@ async def run_streaming(
                     {"id": call_id, "name": name, "args": args},
                 )
 
-                result = tools.dispatch(name, args, ctx)
+                result = await asyncio.to_thread(tools.dispatch, name, args, ctx)
                 tool_calls_record.append(
                     ToolCallRecord(
                         name=name, args=args, status=result.status, error=result.error

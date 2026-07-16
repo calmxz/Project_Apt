@@ -108,7 +108,7 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
     return dot / (norm_a * norm_b)
 
 
-def semantic_fallback_required(
+async def semantic_fallback_required(
     db: Session, session_id: str, query: str, *, user_id: str | None = None
 ) -> bool:
     """D2.2: escalate the OPTIONAL lexical gate when the query is semantically
@@ -119,6 +119,8 @@ def semantic_fallback_required(
     F-19: when `user_id` is supplied, the embedding call's spend is metered
     onto the cost ledger. Callers that cannot attribute the call to a user
     (or don't have one handy) may omit it and simply skip metering.
+
+    F-18: async embedding; this runs directly on the event loop in _prepare_turn.
     """
     if settings.llm_stub_enabled:
         return False
@@ -128,7 +130,7 @@ def semantic_fallback_required(
         centroid = _session_centroid(db, session_id)
         if centroid is None:
             return False
-        resp = litellm.embedding(
+        resp = await litellm.aembedding(
             model=settings.embedding_model,
             input=[query],
             dimensions=settings.embedding_dim,

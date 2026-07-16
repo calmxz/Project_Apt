@@ -225,7 +225,7 @@ async def _prepare_turn(
             req.message, json.loads(session.kw_index_json or "[]")
         )
         if not retrieval_required:
-            retrieval_required = retrieval_service.semantic_fallback_required(
+            retrieval_required = await retrieval_service.semantic_fallback_required(
                 db, req.session_id, req.message, user_id=user_id
             )
 
