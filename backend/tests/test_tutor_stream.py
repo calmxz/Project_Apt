@@ -18,6 +18,7 @@ Streaming mock shape (mirrors litellm streaming objects):
 import asyncio
 import copy
 import json
+import threading
 from datetime import datetime, timezone
 from decimal import Decimal
 from types import SimpleNamespace
@@ -1143,3 +1144,98 @@ def test_summarize_labels_ignored_profile_patch():
     from agent.tutor import _summarize
     result = ToolResult(ok=True, status="ignored", data={"notes": ["inferred mastery ignored"]})
     assert "ignored" in _summarize("update_topic_profile", result).lower()
+
+
+@pytest.mark.asyncio
+async def test_cancel_mid_dispatch_drains_inflight_thread_before_persisting(
+    db_session, monkeypatch
+):
+    """Final-review fix: asyncio.to_thread cannot be interrupted. Cancelling
+    the streaming task while a tool dispatch is running in its worker thread
+    must NOT let the cancel arm touch ctx.db (persist the cancelled message)
+    until that worker thread has actually finished -- otherwise the main
+    thread and the still-running dispatch thread would both use the same
+    (non-thread-safe) SQLAlchemy Session concurrently.
+
+    Simulated with a real blocking dispatch (threading.Event) so the
+    dispatch genuinely runs on a separate OS thread via asyncio.to_thread,
+    not just a mocked coroutine -- an ordering list recorded from both the
+    dispatch thread and the main-thread cancel arm proves the drain happens
+    first.
+    """
+    _disable_stub(monkeypatch)
+    _allow_cap(monkeypatch)
+
+    from agent import tutor
+
+    turn1 = _make_stream(
+        _tool_chunk(
+            _tool_fragment(
+                0,
+                id="tc_1",
+                name="update_topic_profile",
+                arguments='{"session_id": "s1"}',
+            )
+        ),
+    )
+    monkeypatch.setattr("agent.tutor.litellm.acompletion", AsyncMock(side_effect=[turn1]))
+    monkeypatch.setattr(
+        "agent.tutor.litellm.stream_chunk_builder", MagicMock(return_value=SimpleNamespace())
+    )
+    monkeypatch.setattr("agent.tutor.litellm.completion_cost", MagicMock(return_value=0.0))
+
+    started = threading.Event()
+    release = threading.Event()
+    order: list[str] = []
+
+    def _slow_dispatch(name, args, ctx):
+        started.set()
+        release.wait(timeout=5)
+        order.append("dispatch_done")
+        return ToolResult(ok=True, status="ok", error=None, data={})
+
+    monkeypatch.setattr("agent.tutor.tools.dispatch", _slow_dispatch)
+
+    orig_persist = tutor._persist_assistant_message
+
+    def _spy_persist(*a, **k):
+        order.append("persist_called")
+        return orig_persist(*a, **k)
+
+    monkeypatch.setattr("agent.tutor._persist_assistant_message", _spy_persist)
+
+    ctx = _ctx(db_session, session_id="s1")
+
+    received = []
+
+    async def _consume():
+        async for ev in tutor.run_streaming(
+            [{"role": "user", "content": "go"}], "sys", ctx
+        ):
+            received.append(ev)
+
+    task = asyncio.create_task(_consume())
+
+    # Wait (off the event loop thread) until the dispatch thread has actually
+    # started, so cancellation lands mid-dispatch, not before it.
+    await asyncio.to_thread(started.wait, 5)
+    assert started.is_set(), "dispatch never started"
+
+    task.cancel()
+    # Give the cancel a moment to be delivered to the shielded await before
+    # releasing the blocked thread, so the drain genuinely has to wait.
+    await asyncio.sleep(0.05)
+    assert order == [], "cancel arm must not run ahead of the in-flight dispatch"
+    release.set()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    # The dispatch thread must have fully finished BEFORE the cancel arm
+    # persisted the cancelled message -- proving the synchronization point
+    # (draining the shielded dispatch_task) exists and is ordered correctly.
+    assert order == ["dispatch_done", "persist_called"]
+    assert any(e.type == "cancelled" for e in received)
+
+    msg = db_session.query(ChatMessage).filter(ChatMessage.session_id == "s1").one()
+    assert msg.status == "cancelled"

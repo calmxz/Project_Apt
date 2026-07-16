@@ -161,6 +161,7 @@ async def run_streaming(
     tool_calls_record: list[ToolCallRecord] = []
     citations: list[Citation] = list(ctx.prefetched_citations or [])
     asked_check = False  # hoisted so the except asyncio.CancelledError: branch can read it
+    dispatch_task: asyncio.Task | None = None  # in-flight tools.dispatch thread (see cancel arm)
 
     if citations:
         # F-56: server-prefetched excerpts -- emit their citations up front so
@@ -378,7 +379,18 @@ async def run_streaming(
                     {"id": call_id, "name": name, "args": args},
                 )
 
-                result = await asyncio.to_thread(tools.dispatch, name, args, ctx)
+                # asyncio.to_thread cannot be interrupted: cancelling the task
+                # while it awaits the thread would leave tools.dispatch running
+                # detached, still writing/committing on ctx.db (profile
+                # patches, check registration, retrieval embeddings).
+                # asyncio.shield keeps dispatch_task running to completion even
+                # if this await is cancelled, so the cancel arm below can drain
+                # it before touching ctx.db from the main thread (SQLAlchemy
+                # Session is not thread-safe).
+                dispatch_task = asyncio.ensure_future(
+                    asyncio.to_thread(tools.dispatch, name, args, ctx)
+                )
+                result = await asyncio.shield(dispatch_task)
                 tool_calls_record.append(
                     ToolCallRecord(
                         name=name, args=args, status=result.status, error=result.error
@@ -491,6 +503,20 @@ async def run_streaming(
         return
 
     except asyncio.CancelledError:
+        # The shielded dispatch (see above) keeps running after this arm is
+        # entered. Drain it FIRST, before any ctx.db use below: the worker
+        # thread may still be mid-commit (profile_service.apply_patch,
+        # check_question_service.register, retrieval_service.retrieve), and
+        # SQLAlchemy's Session is not thread-safe.
+        if dispatch_task is not None and not dispatch_task.done():
+            try:
+                await dispatch_task
+            except Exception:
+                log.warning(
+                    "in-flight tool dispatch raised while draining on cancel",
+                    exc_info=True,
+                )
+
         # Bill only iterations not yet metered: completed iterations already
         # recorded real cost above (previously this arm re-billed all of them).
         cost = _record_partial_cost(
@@ -500,20 +526,27 @@ async def run_streaming(
             "followup" if getattr(ctx, "suppress_check", False) else "chat",
         )
 
-        msg_id = _persist_assistant_message(
-            ctx,
-            accumulated_text,
-            "cancelled",
-            cancelled_at=datetime.now(timezone.utc),
-            tool_calls=tool_calls_record,
-            citations=citations,
-        )
-        if asked_check:
-            check_question_service.attach_message_id(ctx.db, ctx.session_id, msg_id)
+        # F-01-style guard: a persistence failure here must not replace the
+        # CancelledError being propagated below.
+        msg_id = None
+        try:
+            msg_id = _persist_assistant_message(
+                ctx,
+                accumulated_text,
+                "cancelled",
+                cancelled_at=datetime.now(timezone.utc),
+                tool_calls=tool_calls_record,
+                citations=citations,
+            )
+            if asked_check:
+                check_question_service.attach_message_id(ctx.db, ctx.session_id, msg_id)
+        except Exception:
+            log.exception("failed to persist assistant message on cancel")
+
         yield StreamEvent(
             "cancelled",
             {
-                "message_id": str(msg_id),
+                "message_id": str(msg_id) if msg_id is not None else None,
                 "partial_content_chars": len(accumulated_text),
                 "estimated_cost_usd": str(cost),
             },

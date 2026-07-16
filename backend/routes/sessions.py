@@ -135,6 +135,27 @@ async def create_session(
 
     ensure_user(db, user_id, accepted_terms=accepted_terms_from_request(request))
 
+    # Final-review fix: this check must run BEFORE the resume block below.
+    # The resume block has irreversible side effects (claim-end the prior,
+    # consume a rate-limit slot, fire a summary LLM call) -- if a
+    # pre-existing second active session on this topic exists, we must 409
+    # before any of that runs, not after. exclude_id=req.prior_session_id
+    # keeps a legitimate resume self-exclusive: the prior being resumed is
+    # still active (ended_at IS NULL) at this point and must not conflict
+    # with itself. Consolidated from the two checks this used to be (pre-
+    # resume didn't exist; the sole check ran post-resume) -- a single
+    # pre-check fully covers both the resume and fresh-create paths, since by
+    # the time the fresh-create path would have hit the old post-check there
+    # are no intervening side effects to protect against.
+    existing = _active_session_on_topic(
+        db, user_id, req.topic, exclude_id=req.prior_session_id
+    )
+    if existing is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "duplicate_topic", "session_id": existing},
+        )
+
     new_id = uuid.uuid4().hex
     profile_json = TopicProfile().model_dump_json()
 
@@ -151,13 +172,6 @@ async def create_session(
             await summary_service.generate_and_persist(db, prior, allow_llm=allow_llm)
         db.refresh(prior)
         profile_json = prior.topic_profile_json
-
-    existing = _active_session_on_topic(db, user_id, req.topic)
-    if existing is not None:
-        raise HTTPException(
-            status_code=409,
-            detail={"code": "duplicate_topic", "session_id": existing},
-        )
 
     new_session = SessionModel(
         id=new_id,
