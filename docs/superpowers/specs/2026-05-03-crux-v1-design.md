@@ -79,7 +79,7 @@ backend/
     profile.py               # GET /api/profile/{session_id}
   services/
     profile_service.py       # update_topic_profile mid-rules
-    retrieval_service.py     # ChromaDB query
+    retrieval_service.py     # pgvector query
     ingestion_service.py     # PDF chunk + embed + index
     summary_service.py       # end_session_now LLM call
     rate_limit.py            # Per-user daily cap
@@ -120,7 +120,7 @@ frontend/src/
 Three tools registered on the tutor agent:
 
 1. **`update_topic_profile(session_id, knowledge_level?, add_confirmed_gap?, add_mastered_concept?, focus_target_gap?, focus_clear_reason?, evidence_type)`** — Pydantic-validated patch. `focus_clear_reason` required when clearing focus (server-side guard rail, see §4.4).
-2. **`retrieve_chunks(session_id, query, k=5)`** — ChromaDB vector search.
+2. **`retrieve_chunks(session_id, query, k=5)`** — pgvector vector search.
 3. **`record_learning_event(session_id, gap_tested, question, correct)`** — log check-question. Side-effect: if `correct=false` and `gap_tested` is in `mastered_concepts`, server-side demote (remove from list).
 
 ### 3.4 Mid-profile (simplified vs original spec)
@@ -168,7 +168,7 @@ ChatWindow → POST /api/chat → routes/chat.py:
 ```
 Upload → save file → ingestion_status="pending" → BackgroundTasks.add()
 Background:
-  pypdf extract → tiktoken chunk → Gemini embed → ChromaDB add
+  pypdf extract → tiktoken chunk → Gemini embed → pgvector insert
   build keyword_index, merge into Session
   ingestion_status="ready" (or "failed")
 
@@ -240,12 +240,12 @@ Effect: agent cannot silently clear focus. Either it must log a correct check qu
 | Failure | Response |
 |---|---|
 | Daily cap hit | 429 → toast, disable input until midnight UTC |
-| LiteLLM timeout (>30s) | Retry once shorter context → 503 + Retry toast |
+| LiteLLM timeout | Per-call timeouts (20-30s, config.py); chat surfaces an error SSE + persisted error/partial message; summary falls back to the mechanical [auto] summary. No retry, no 503 (shipped behavior; F-06/F-01/F-14). |
 | Gemini free-tier rate limit | 429 + countdown toast |
 | Tool schema invalid | Agent retry once, then log `tool_calls[].status="failed"`, inline muted notice |
 | Retrieval pending/down | Tool returns `{status: "no_results", reason}`, agent continues |
 | PDF ingestion failure | `ingestion_status="failed"`, banner shows error |
-| `end_session_now` LLM failure | Return `{ok: false}`, fallback to last-5-messages summary |
+| Session-end LLM failure | Mechanical [auto] fallback summary; end always succeeds |
 | SQLite locked | SQLAlchemy WAL retry; persistent fail → 503 |
 | Frontend network drop | axios retry once + reload toast |
 
@@ -268,7 +268,7 @@ Full pyramid: unit + integration + e2e + CI. Tests written per-phase as units co
 
 **Backend integration (FastAPI TestClient + pytest)**
 - POST `/api/chat` — mocked LiteLLM, asserts ChatMessage persisted, tool dispatch fires, daily cap returns 429
-- POST `/api/upload` — small fixture PDF, asserts ChromaDB collection populated (against in-process Chroma)
+- POST `/api/upload` — small fixture PDF, asserts ChromaDB collection populated (against in-process Chroma) [historical: ChromaDB was replaced by pgvector in Phase 7]
 - `/api/sessions` CRUD — Resume seeding copies profile, end_session_now sets session_ended
 - Tool handler dispatch — invalid schema returns error to agent loop
 
@@ -333,19 +333,19 @@ Standalone Python script using LiteLLM + Gemini. Three profile pairs (knowledge,
 **Knowledge-only pass:** drop interaction_preferences, profile-only.
 **Fail:** stop. Pivot or abandon.
 
-Also during Week 1: docker-compose smoke test, ChromaDB integration smoke test, Gemini tool-calling smoke test (verify ≥85% reliability on `update_topic_profile` shape).
+Also during Week 1: docker-compose smoke test, ChromaDB integration smoke test, Gemini tool-calling smoke test (verify ≥85% reliability on `update_topic_profile` shape). [historical: ChromaDB was replaced by pgvector in Phase 7]
 
 ### Phase 1 — Scaffold + chat loop + CI baseline (Week 2)
 
 **Code:**
-- `docker-compose up` boots Vue + FastAPI + ChromaDB
+- `docker-compose up` boots Vue + FastAPI + ChromaDB [historical: ChromaDB was replaced by pgvector in Phase 7]
 - SQLAlchemy models, Pydantic schemas, FastAPI routes stubbed
 - Tutor agent with LiteLLM, no tools yet
 - Single chat round-trip works
 - Daily cap enforced
 
 **CI scaffolding (~2 days, Playwright deferred):**
-- Backend: pytest + pytest-asyncio + FastAPI TestClient + httpx, conftest fixtures (in-memory SQLite, mocked LiteLLM, fake ChromaDB)
+- Backend: pytest + pytest-asyncio + FastAPI TestClient + httpx, conftest fixtures (in-memory SQLite, mocked LiteLLM, fake ChromaDB) [historical: ChromaDB was replaced by pgvector in Phase 7]
 - Frontend: Vitest + @vue/test-utils + jsdom, basic component test
 - `.github/workflows/ci.yml` with backend + frontend jobs only (e2e job added Phase 3)
 - Playwright NOT installed yet — added in Phase 3 once views stabilize
@@ -368,9 +368,9 @@ Also during Week 1: docker-compose smoke test, ChromaDB integration smoke test, 
 
 ### Phase 4 — PDF + RAG (Week 5)
 
-**Code:** PDF upload, background ingestion, ChromaDB collection per session, keyword index, retrieve_chunks tool, citation rendering, ingestion banner with polling.
+**Code:** PDF upload, background ingestion, ChromaDB collection per session, keyword index, retrieve_chunks tool, citation rendering, ingestion banner with polling. [historical: ChromaDB was replaced by pgvector in Phase 7]
 
-**Tests:** chunking unit (token boundaries, overlap, page mapping), keyword_index unit (Porter stem, frequency threshold, build/match), upload route integration with fixture PDF + in-process Chroma, retrieve_chunks tool returns no_results during pending, ChatWindow renders citations, e2e "upload PDF → wait ready → ask note-related question → see citation".
+**Tests:** chunking unit (token boundaries, overlap, page mapping), keyword_index unit (Porter stem, frequency threshold, build/match), upload route integration with fixture PDF + in-process Chroma, retrieve_chunks tool returns no_results during pending, ChatWindow renders citations, e2e "upload PDF → wait ready → ask note-related question → see citation". [historical: ChromaDB was replaced by pgvector in Phase 7]
 
 ### Phase 5 — Profile view + polish + deploy + record (Weeks 6–7)
 
@@ -388,7 +388,7 @@ Also during Week 1: docker-compose smoke test, ChromaDB integration smoke test, 
 |---|---|---|
 | ADK + LiteLLM | LiteLLM only | Avoid framework risk |
 | Firebase Cloud Functions | FastAPI in docker | User said no Firebase |
-| Firestore vector | ChromaDB | Local-first, no cloud lock-in |
+| Firestore vector | pgvector (v1 shipped ChromaDB, reconciled to pgvector in Phase 7) | Local-first, no cloud lock-in |
 | OpenAI embeddings | Gemini embeddings | Free tier |
 | Asymmetric promotion + tightened gate | Direct promotion + retest demotion | LLM-driven complexity risk |
 | mastered_candidates, evidence_count, tested_positive_count | None | Same |
@@ -411,7 +411,7 @@ Also during Week 1: docker-compose smoke test, ChromaDB integration smoke test, 
 | Gemini tool-call reliability <85% | Verify in Phase 0 smoke test. Fallback: paid Claude Sonnet (~$10-20 across 6 weeks). |
 | Gemini free-tier rate limits during dogfooding | $5-20 paid spend at Phase 4-5 if hitting walls. |
 | `focus_target_gap` clearing unreliable | v1 Phase 3 check; 3 prompt iterations then swap model. |
-| ChromaDB integration unfamiliar | Smoke test in Week 1 (3 hours). |
+| ChromaDB integration unfamiliar | Smoke test in Week 1 (3 hours). [historical: ChromaDB was replaced by pgvector in Phase 7] |
 | Vue 3 + Pinia + PrimeVue learning curve | Time-box: if Phase 1 not running by end of Week 2, drop PrimeVue, plain HTML. |
 | Stall risk (no exam) | Public 7-week deadline + weekly progress posts on X/LinkedIn. |
 | Scope creep | This doc is the contract. Anything not in §7 phase plan = v2. |
@@ -478,7 +478,7 @@ Cost estimate at swap: $10–30 across remaining phases.
 **Swap triggers:**
 - Phase 4 retrieval: top-k results don't include obviously relevant chunks across 5 hand-picked queries.
 
-**Swap path:** change `EMBEDDING_MODEL` env var. All chunks must be re-embedded; `embedding_model` field on ChromaDB metadata allows partial re-embedding without full reset. Vector index dimension may need to change (drop and recreate collection).
+**Swap path:** change `EMBEDDING_MODEL` env var. All chunks must be re-embedded; `embedding_model` field on the pgvector `chunk_embeddings` table allows partial re-embedding without full reset. Vector index dimension may need to change (migration + re-embed).
 
 Candidates: `voyage/voyage-3` (technical content), `openai/text-embedding-3-small` (768-dim drop-in), `cohere/embed-english-v3`.
 
@@ -492,11 +492,11 @@ Candidates: `voyage/voyage-3` (technical content), `openai/text-embedding-3-smal
 
 ### Vector store
 
-**Default:** ChromaDB server mode in docker-compose.
+**Default:** pgvector on Supabase-managed Postgres (v1 shipped ChromaDB server mode in docker-compose; reconciled to pgvector in Phase 7 — see reconciliation note at top of doc).
 
-**Swap triggers:** ChromaDB perf degrades past ~10k chunks (unlikely in v1 dogfooding scope), or operability issues (data corruption, restart loops).
+**Swap triggers:** pgvector perf degrades past scale (index tuning exhausted), or operability issues (data corruption, restart loops).
 
-**Swap path:** swap to pgvector (Postgres) — bigger lift, ~2 days. Avoid in v1 unless forced.
+**Swap path:** different pgvector index/managed vector service, not Chroma server mode.
 
 ### Frontend framework
 
