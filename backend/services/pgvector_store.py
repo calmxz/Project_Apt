@@ -77,7 +77,13 @@ def query_chunks(
     stmt = (
         select(ChunkEmbedding, distance.label("score"), Document.filename)
         .join(Document, ChunkEmbedding.document_id == Document.id)
-        .where(ChunkEmbedding.session_id == session_id)
+        .where(
+            ChunkEmbedding.session_id == session_id,
+            # F-27: never serve chunks from a doc that is not fully ingested.
+            # A failed merge can leave committed chunks on a "failed" doc
+            # (pre-F-27 data), and a mid-ingestion doc must not leak partials.
+            Document.status == "ready",
+        )
         .order_by(distance)
         .limit(k)
     )
