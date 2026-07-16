@@ -5,6 +5,7 @@ Tests mock the embed + storage layers so they run against in-memory SQLite.
 """
 
 import json
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -518,3 +519,61 @@ def test_run_txt_success(db_session, insert_capture, mock_embed, monkeypatch, tm
     assert refreshed.page_count is None
     assert len(insert_capture) == 1
     assert len(insert_capture[0]["rows"]) >= 1
+
+
+# --- F-26: startup reaper for stale pending documents ---------------------
+
+
+@pytest.fixture
+def seeded_session(db_session):
+    """Seed a user + session for reaper tests, returning the Session row
+    (so callers can use seeded_session.id)."""
+    db_session.add(User(id="u_reap"))
+    db_session.flush()
+    session = SessionModel(
+        id="s_reap",
+        user_id="u_reap",
+        topic="sql",
+        topic_profile_json=TopicProfile().model_dump_json(),
+    )
+    db_session.add(session)
+    db_session.commit()
+    db_session.refresh(session)
+    return session
+
+
+def _doc(db, session_id, status, age_minutes):
+    doc = Document(
+        session_id=session_id,
+        filename="f.txt",
+        status=status,
+        created_at=datetime.now(timezone.utc) - timedelta(minutes=age_minutes),
+    )
+    db.add(doc)
+    db.commit()
+    db.refresh(doc)
+    return doc
+
+
+def test_reaper_fails_stale_pending_only(db_session, seeded_session):
+    from services import ingestion_service
+
+    stale = _doc(db_session, seeded_session.id, "pending", age_minutes=60)
+    fresh = _doc(db_session, seeded_session.id, "pending", age_minutes=1)
+    ready = _doc(db_session, seeded_session.id, "ready", age_minutes=60)
+
+    count = ingestion_service.reap_stale_pending(db_session)
+
+    assert count == 1
+    db_session.expire_all()
+    assert db_session.get(Document, stale.id).status == "failed"
+    assert "restart" in db_session.get(Document, stale.id).error
+    assert db_session.get(Document, fresh.id).status == "pending"
+    assert db_session.get(Document, ready.id).status == "ready"
+
+
+def test_reaper_returns_zero_when_nothing_stale(db_session, seeded_session):
+    from services import ingestion_service
+
+    _doc(db_session, seeded_session.id, "pending", age_minutes=1)
+    assert ingestion_service.reap_stale_pending(db_session) == 0

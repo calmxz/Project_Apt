@@ -4,8 +4,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import assert_prod_database, settings
-from db.database import create_tables
+from db.database import SessionLocal, create_tables
 from routes import chat, documents, health, profile, review, sessions, upload, usage
+from services import ingestion_service
 from services.auth import validate_jwks_startup
 
 
@@ -16,6 +17,11 @@ async def lifespan(app: FastAPI):
         raise RuntimeError("SUPABASE_URL is required when ENV=prod")
     validate_jwks_startup()
     create_tables()
+    db = SessionLocal()
+    try:
+        ingestion_service.reap_stale_pending(db)
+    finally:
+        db.close()
     yield
 
 
