@@ -38,6 +38,7 @@ def test_merge_into_session_persists_union(db_session):
     db_session.commit()
 
     keyword_index.merge_into_session(db_session, "s1", {"new_stem", "existing"})
+    db_session.commit()
     row = db_session.get(SessionModel, "s1")
     stored = set(json.loads(row.kw_index_json))
     assert stored == {"existing", "new_stem"}

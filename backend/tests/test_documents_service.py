@@ -2,6 +2,7 @@
 
 import pytest
 
+from config import settings
 from contracts import TopicProfile
 from db.models import Document, Session as SessionModel, User
 from services import documents_service
@@ -121,6 +122,68 @@ def _seed_doc(db, *, user_id="u1", session_id="s1", filename="notes.pdf"):
     db.commit()
     db.refresh(doc)
     return doc
+
+
+USER_ID = "u1"
+
+
+@pytest.fixture
+def seeded_doc_with_chunks(db_session):
+    """doc + real ChunkEmbedding rows. sqlite tolerates the pgvector column via
+    its generic UserDefinedType bind/result processors, but pgvector's own
+    Vector._to_db still enforces the declared dimension client-side, so the
+    embedding must be settings.embedding_dim long even here."""
+    from db.models import ChunkEmbedding
+
+    doc = _seed_doc(db_session)
+    for i in range(3):
+        db_session.add(
+            ChunkEmbedding(
+                session_id=doc.session_id,
+                document_id=doc.id,
+                chunk_index=i,
+                page=1,
+                chunk_text=f"chunk {i}",
+                embedding=[0.0] * settings.embedding_dim,
+            )
+        )
+    db_session.commit()
+    db_session.refresh(doc)
+    return doc
+
+
+def test_delete_is_atomic_rollback_keeps_chunks(db_session, monkeypatch, seeded_doc_with_chunks):
+    # seeded_doc_with_chunks: doc + real ChunkEmbedding rows.
+    from db.models import ChunkEmbedding
+
+    def boom(obj):
+        raise RuntimeError("crash between chunk and row delete")
+
+    monkeypatch.setattr(db_session, "delete", boom)
+    with pytest.raises(RuntimeError):
+        documents_service.delete_document(db_session, seeded_doc_with_chunks.id, USER_ID)
+    db_session.rollback()
+    # F-28: the chunk delete must not have been committed on its own.
+    assert (
+        db_session.query(ChunkEmbedding)
+        .filter_by(document_id=seeded_doc_with_chunks.id)
+        .count()
+        > 0
+    )
+
+
+def test_delete_removes_blob_from_store(db_session, monkeypatch, seeded_doc_with_chunks):
+    deleted_keys = []
+
+    class RecordingStore:
+        def delete(self, key):
+            deleted_keys.append(key)
+
+    monkeypatch.setattr(
+        "services.documents_service.object_store.get_store", lambda: RecordingStore()
+    )
+    documents_service.delete_document(db_session, seeded_doc_with_chunks.id, USER_ID)
+    assert deleted_keys == [f"{seeded_doc_with_chunks.id}_{seeded_doc_with_chunks.filename}"]
 
 
 def test_delete_document_removes_row_chunks_and_file(db_session, monkeypatch, tmp_path):

@@ -3,9 +3,11 @@
 import io
 
 import pytest
+from fastapi import HTTPException
 
 from contracts import TopicProfile
 from db.models import Document, Session as SessionModel, User
+from routes.upload import _read_bounded
 
 
 SESSION_ID = "sess_up"
@@ -211,3 +213,119 @@ def test_background_task_scheduled(client, seeded, monkeypatch):
     assert r.status_code == 202
     assert len(seen) == 1
     assert seen[0] == r.json()["document_id"]
+
+
+def test_read_bounded_returns_all_bytes_under_cap():
+    assert _read_bounded(io.BytesIO(b"x" * 10), max_bytes=10) == b"x" * 10
+
+
+def test_read_bounded_aborts_over_cap_without_full_read():
+    class CountingStream:
+        def __init__(self, total):
+            self.remaining = total
+            self.reads = 0
+
+        def read(self, n):
+            self.reads += 1
+            take = min(n, self.remaining)
+            self.remaining -= take
+            return b"x" * take
+
+    stream = CountingStream(total=300 * 1024 * 1024)  # pretend 300 MB body
+    with pytest.raises(HTTPException) as exc:
+        _read_bounded(stream, max_bytes=2 * 1024 * 1024)
+    assert exc.value.status_code == 413
+    # Aborted after ~3 x 1 MiB reads, not after draining 300 MB.
+    assert stream.reads <= 4
+
+
+def test_oversized_body_413_leaves_no_document_row(client, seeded, db_session, monkeypatch):
+    monkeypatch.setattr("routes.upload.MAX_UPLOAD_BYTES", 8)
+    files = {"file": ("big.pdf", io.BytesIO(b"0123456789ABCDEF"), "application/pdf")}
+    r = client.post("/api/upload", data={"user_id": USER_ID, "session_id": SESSION_ID}, files=files)
+    assert r.status_code == 413
+    assert db_session.query(Document).count() == 0
+
+
+def test_storage_write_failure_marks_failed_and_507(client, seeded, db_session, monkeypatch):
+    class FailingStore:
+        def put(self, key, data):
+            raise OSError("disk full")
+
+    monkeypatch.setattr("routes.upload.object_store.get_store", lambda: FailingStore())
+    files = {"file": ("notes.pdf", io.BytesIO(b"%PDF-fake"), "application/pdf")}
+    r = client.post("/api/upload", data={"user_id": USER_ID, "session_id": SESSION_ID}, files=files)
+    assert r.status_code == 507
+    assert r.json()["detail"]["code"] == "STORAGE_WRITE_FAILED"
+    doc = db_session.query(Document).one()
+    assert doc.status == "failed"
+    assert doc.error is not None
+
+
+def test_storage_write_failure_507_holds_even_if_mark_failed_commit_raises(
+    client, seeded, db_session, monkeypatch
+):
+    """F-29 hardening: if the mark-failed commit itself raises (e.g. dropped
+    connection), the 507 contract must still hold instead of leaking a 500
+    and leaving the row stuck 'pending'."""
+
+    class FailingStore:
+        def put(self, key, data):
+            raise OSError("disk full")
+
+    monkeypatch.setattr("routes.upload.object_store.get_store", lambda: FailingStore())
+
+    real_commit = db_session.commit
+    calls = {"n": 0}
+
+    def flaky_commit():
+        calls["n"] += 1
+        if calls["n"] <= 2:
+            # let the rate-limit-usage commit and the initial "pending" row
+            # creation commit succeed; only the mark-failed commit fails.
+            return real_commit()
+        raise OSError("connection dropped")
+
+    monkeypatch.setattr(db_session, "commit", flaky_commit)
+
+    files = {"file": ("notes.pdf", io.BytesIO(b"%PDF-fake"), "application/pdf")}
+    r = client.post("/api/upload", data={"user_id": USER_ID, "session_id": SESSION_ID}, files=files)
+    assert r.status_code == 507
+    assert r.json()["detail"]["code"] == "STORAGE_WRITE_FAILED"
+
+
+def test_store_construction_failure_marks_failed_and_507(client, seeded, db_session, monkeypatch):
+    """Final-review fix wave, Finding 2: object_store.get_store() itself
+    (not just store.put) can raise -- e.g. bad R2 config. Before the fix it
+    sat outside the try/except around store.put, so a construction failure
+    stranded the pending row and surfaced a bare 500 instead of the F-29
+    507-plus-marked-failed contract."""
+
+    def boom_get_store():
+        raise RuntimeError("bad R2 config")
+
+    monkeypatch.setattr("routes.upload.object_store.get_store", boom_get_store)
+    files = {"file": ("notes.pdf", io.BytesIO(b"%PDF-fake"), "application/pdf")}
+    r = client.post("/api/upload", data={"user_id": USER_ID, "session_id": SESSION_ID}, files=files)
+    assert r.status_code == 507
+    assert r.json()["detail"]["code"] == "STORAGE_WRITE_FAILED"
+    doc = db_session.query(Document).one()
+    assert doc.status == "failed"
+    assert doc.error is not None
+
+
+def test_upload_writes_through_object_store(client, seeded, db_session, monkeypatch):
+    class RecordingStore:
+        def __init__(self):
+            self.puts = []
+
+        def put(self, key, data):
+            self.puts.append((key, data))
+
+    store = RecordingStore()
+    monkeypatch.setattr("routes.upload.object_store.get_store", lambda: store)
+    files = {"file": ("notes.pdf", io.BytesIO(b"%PDF-fake"), "application/pdf")}
+    r = client.post("/api/upload", data={"user_id": USER_ID, "session_id": SESSION_ID}, files=files)
+    assert r.status_code == 202
+    doc_id = r.json()["document_id"]
+    assert store.puts == [(f"{doc_id}_notes.pdf", b"%PDF-fake")]

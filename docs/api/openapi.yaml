@@ -281,6 +281,8 @@ paths:
           $ref: "#/components/responses/PayloadTooLarge"
         "429":
           $ref: "#/components/responses/RateLimited"
+        "507":
+          description: Storage write failed; the document row is marked failed.
 
   /api/upload/{document_id}:
     get:
