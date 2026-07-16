@@ -29,6 +29,13 @@ router = APIRouter(prefix="/api")
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB
 ALLOWED_EXTENSIONS = {".pdf", ".pptx", ".txt", ".md", ".markdown"}
 
+# F-55: content sniff for container formats. Extensions with no reliable
+# magic bytes (.txt, .md) are exempt -- the extension check already ran.
+_MAGIC_BYTES = {
+    ".pdf": (b"%PDF",),
+    ".pptx": (b"PK\x03\x04",),
+}
+
 log = logging.getLogger(__name__)
 
 READ_CHUNK = 1024 * 1024  # 1 MiB
@@ -107,6 +114,16 @@ def upload_file(
         raise HTTPException(status_code=400, detail={"code": "INVALID_FILENAME"})
 
     data = _read_bounded(file.file, MAX_UPLOAD_BYTES)
+
+    expected = _MAGIC_BYTES.get(ext)
+    if expected and not any(data.startswith(m) for m in expected):
+        raise HTTPException(
+            status_code=415,
+            detail={
+                "code": "CONTENT_TYPE_MISMATCH",
+                "message": "file content does not match its extension",
+            },
+        )
 
     doc = Document(session_id=session_id, filename=safe_name, status="pending")
     db.add(doc)

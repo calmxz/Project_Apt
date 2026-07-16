@@ -67,16 +67,20 @@ def test_extensionless_filename_400(client, seeded):
 
 
 @pytest.mark.parametrize(
-    "name,ctype",
+    "name,ctype,content",
     [
-        ("slides.pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"),
-        ("notes.txt", "text/plain"),
-        ("notes.md", "text/markdown"),
-        ("notes.markdown", "application/octet-stream"),
+        (
+            "slides.pptx",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            b"PK\x03\x04data-bytes",
+        ),
+        ("notes.txt", "text/plain", b"data-bytes"),
+        ("notes.md", "text/markdown", b"data-bytes"),
+        ("notes.markdown", "application/octet-stream", b"data-bytes"),
     ],
 )
-def test_allowed_non_pdf_types_202(client, seeded, name, ctype):
-    files = {"file": (name, io.BytesIO(b"data-bytes"), ctype)}
+def test_allowed_non_pdf_types_202(client, seeded, name, ctype, content):
+    files = {"file": (name, io.BytesIO(content), ctype)}
     r = client.post(
         "/api/upload", data={"user_id": USER_ID, "session_id": SESSION_ID}, files=files
     )
@@ -312,6 +316,53 @@ def test_store_construction_failure_marks_failed_and_507(client, seeded, db_sess
     doc = db_session.query(Document).one()
     assert doc.status == "failed"
     assert doc.error is not None
+
+
+def test_upload_rejects_fake_pdf(client, seeded, db_session):
+    """F-55: extension says .pdf but bytes are not %PDF -> 415, no row."""
+    files = {"file": ("notes.pdf", io.BytesIO(b"MZ\x90\x00 not a pdf"), "application/pdf")}
+    r = client.post(
+        "/api/upload",
+        data={"user_id": USER_ID, "session_id": SESSION_ID},
+        files=files,
+    )
+    assert r.status_code == 415
+    assert r.json()["detail"]["code"] == "CONTENT_TYPE_MISMATCH"
+    assert db_session.query(Document).count() == 0
+
+
+def test_upload_rejects_fake_pptx(client, seeded):
+    files = {
+        "file": ("deck.pptx", io.BytesIO(b"%PDF-1.7 wrong container"), "application/octet-stream")
+    }
+    r = client.post(
+        "/api/upload",
+        data={"user_id": USER_ID, "session_id": SESSION_ID},
+        files=files,
+    )
+    assert r.status_code == 415
+    assert r.json()["detail"]["code"] == "CONTENT_TYPE_MISMATCH"
+
+
+def test_upload_accepts_real_pdf_magic(client, seeded):
+    files = {"file": ("real.pdf", io.BytesIO(b"%PDF-1.7\n..."), "application/pdf")}
+    r = client.post(
+        "/api/upload",
+        data={"user_id": USER_ID, "session_id": SESSION_ID},
+        files=files,
+    )
+    assert r.status_code == 202, r.text
+
+
+def test_upload_txt_skips_sniff(client, seeded):
+    """txt/md have no magic bytes; the sniff must not block them."""
+    files = {"file": ("notes.txt", io.BytesIO(b"plain text"), "text/plain")}
+    r = client.post(
+        "/api/upload",
+        data={"user_id": USER_ID, "session_id": SESSION_ID},
+        files=files,
+    )
+    assert r.status_code == 202, r.text
 
 
 def test_upload_writes_through_object_store(client, seeded, db_session, monkeypatch):
