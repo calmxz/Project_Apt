@@ -17,6 +17,9 @@ call; do not cache a store across requests.
 from pathlib import Path
 from typing import Protocol
 
+import boto3
+import botocore.exceptions
+
 from config import settings
 
 
@@ -69,7 +72,56 @@ class LocalDiskStore:
             pass
 
 
+class R2ObjectStore:
+    """Cloudflare R2 via boto3's S3-compatible API (same client shape WS-D's
+    scripts/backup.py proved for Postgres dumps). Keys live under uploads/."""
+
+    PREFIX = "uploads/"
+
+    def __init__(
+        self,
+        *,
+        endpoint_url: str,
+        access_key_id: str,
+        secret_access_key: str,
+        bucket: str,
+        client=None,
+    ) -> None:
+        self._bucket = bucket
+        self._client = client or boto3.client(
+            "s3",
+            endpoint_url=endpoint_url,
+            aws_access_key_id=access_key_id,
+            aws_secret_access_key=secret_access_key,
+        )
+
+    def _key(self, key: str) -> str:
+        return f"{self.PREFIX}{key}"
+
+    def put(self, key: str, data: bytes) -> None:
+        self._client.put_object(Bucket=self._bucket, Key=self._key(key), Body=data)
+
+    def get(self, key: str) -> bytes:
+        try:
+            resp = self._client.get_object(Bucket=self._bucket, Key=self._key(key))
+        except botocore.exceptions.ClientError as e:
+            code = e.response.get("Error", {}).get("Code", "")
+            if code in ("NoSuchKey", "404"):
+                raise ObjectNotFound(key) from None
+            raise
+        return resp["Body"].read()
+
+    def delete(self, key: str) -> None:
+        # S3 DeleteObject is idempotent: deleting an absent key succeeds.
+        self._client.delete_object(Bucket=self._bucket, Key=self._key(key))
+
+
 def get_store() -> ObjectStore:
     if settings.uploads_store == "r2":
-        raise RuntimeError("R2ObjectStore lands in the next task")
+        return R2ObjectStore(
+            endpoint_url=settings.r2_endpoint,
+            access_key_id=settings.r2_access_key_id,
+            secret_access_key=settings.r2_secret_access_key,
+            bucket=settings.r2_bucket,
+        )
     return LocalDiskStore(settings.uploads_path)
