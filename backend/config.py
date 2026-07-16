@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     debug_timing: bool = False
     cors_origins: str = "http://localhost:5173"
     env: str = "dev"
+    # F-61: allow booting without Supabase auth config (local hacking, CI
+    # subsets). Default False: a deploy missing SUPABASE_URL dies at startup
+    # instead of 500ing "auth_not_configured" on every authenticated request.
+    auth_optional: bool = False
 
     supabase_url: str = ""
     supabase_publishable_key: str = ""

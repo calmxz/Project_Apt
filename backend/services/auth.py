@@ -24,6 +24,13 @@ _JWKS_TTL_SECONDS = 60 * 60  # refresh hourly
 JWT_LEEWAY_SECONDS = 30  # F-41: absorb small backend-vs-Supabase clock skew
 
 
+def expected_issuer() -> str:
+    """F-50: issuer must come from the same normalized (rstripped) base the
+    JWKS URL uses -- a trailing slash in SUPABASE_URL otherwise 401s every
+    token with an issuer mismatch."""
+    return settings.supabase_url.rstrip("/") + "/auth/v1"
+
+
 def _get_jwks_client() -> PyJWKClient:
     now = time.time()
     if (
@@ -49,7 +56,13 @@ def validate_jwks_startup() -> None:
     fetched client warms the per-process cache.
     """
     if not settings.supabase_jwks_url:
-        return
+        if settings.auth_optional:
+            return
+        raise RuntimeError(
+            "auth is not configured (SUPABASE_URL is empty) and AUTH_OPTIONAL "
+            "is not set; refusing to boot a deploy where every authenticated "
+            "request would fail (F-61)"
+        )
     client = PyJWKClient(settings.supabase_jwks_url)
     try:
         client.get_jwk_set()
@@ -75,7 +88,7 @@ def verify_supabase_jwt(token: str) -> str:
             signing_key,
             algorithms=["RS256", "ES256"],
             audience="authenticated",
-            issuer=f"{settings.supabase_url}/auth/v1",
+            issuer=expected_issuer(),
             leeway=JWT_LEEWAY_SECONDS,
             options={"verify_aud": True, "verify_exp": True, "verify_iss": True},
         )

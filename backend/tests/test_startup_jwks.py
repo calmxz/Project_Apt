@@ -19,7 +19,10 @@ def _reset_jwks_cache():
 
 def test_startup_boots_when_auth_disabled(monkeypatch):
     # Disable auth by clearing supabase_url -> supabase_jwks_url becomes "".
+    # F-61: startup now fail-fasts on unconfigured auth unless AUTH_OPTIONAL
+    # is explicitly set -- this test is exercising the opt-out path.
     monkeypatch.setattr(settings, "supabase_url", "")
+    monkeypatch.setattr(settings, "auth_optional", True)
     assert settings.supabase_jwks_url == ""
     with TestClient(main.app) as client:
         assert client.get("/health").status_code == 200
