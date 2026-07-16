@@ -11,6 +11,11 @@ def test_semantic_fallback_is_async():
 
 
 def test_fallback_uses_aembedding(monkeypatch, db_session):
+    """Drives the fallback all the way to the embedding call (mirrors the
+    has_ready_document / _session_centroid monkeypatch pattern used by the
+    fallback tests in test_retrieval_service.py) so `called["hit"]` actually
+    proves `aembedding` was invoked, not just that the early-return path
+    short-circuited before reaching it."""
     called = {}
 
     async def fake_aembedding(**kwargs):
@@ -24,9 +29,18 @@ def test_fallback_uses_aembedding(monkeypatch, db_session):
     monkeypatch.setattr(
         "services.retrieval_service.litellm.aembedding", fake_aembedding
     )
-    # No ready document -> early False BEFORE the embedding; force the check
-    # to still assert the symbol exists by verifying the attribute is used.
-    result = asyncio.get_event_loop().run_until_complete(
+    monkeypatch.setattr(
+        "services.retrieval_service.documents_service.has_ready_document",
+        lambda db, sid: True,
+    )
+    monkeypatch.setattr(
+        "services.retrieval_service._session_centroid",
+        lambda db, sid: [0.0] * 768,
+    )
+    result = asyncio.run(
         retrieval_service.semantic_fallback_required(db_session, "nosuch", "q")
     )
+    assert called.get("hit") is True
+    # Zero query vector vs zero centroid -> cosine similarity is 0.0 (the
+    # zero-norm guard), which is below the fallback threshold -> False.
     assert result is False
