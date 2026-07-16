@@ -74,8 +74,8 @@ def validate_jwks_startup() -> None:
     _JWKS_CACHE["fetched_at"] = time.time()
 
 
-def verify_supabase_jwt(token: str) -> str:
-    """Return the Supabase user id (`sub`) for a valid JWT, else raise 401.
+def _decode_token(token: str) -> dict:
+    """Verify a Supabase JWT and return the decoded payload, else raise 401.
 
     JWKS connectivity failures raise 503 (upstream outage, retryable);
     an unknown `kid` or any invalid token raises 401 (F-07).
@@ -105,13 +105,27 @@ def verify_supabase_jwt(token: str) -> str:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="invalid_token",
         ) from e
+    return payload
+
+
+def verify_supabase_jwt(token: str) -> str:
+    """Return the Supabase user id (`sub`) for a valid JWT, else raise."""
+    payload = _decode_token(token)
     sub = payload.get("sub")
     if not sub:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="invalid_token",
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid_token"
         )
     return sub
+
+
+def accepted_terms_from_request(request: Request) -> bool:
+    """F-52: True iff the verified JWT carries the accepted_terms metadata
+    claim the register form sets via signUp options.data. Direct-API signups
+    that never saw the checkbox get no claim -> no consent stamp."""
+    claims = getattr(request.state, "jwt_claims", None) or {}
+    meta = claims.get("user_metadata") or {}
+    return meta.get("accepted_terms") is True
 
 
 def current_user_id(request: Request) -> str:
@@ -136,4 +150,14 @@ def current_user_id(request: Request) -> str:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="missing_token",
         )
-    return verify_supabase_jwt(token)
+    payload = _decode_token(token)
+    sub = payload.get("sub")
+    if not sub:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="invalid_token",
+        )
+    # F-52: routes that create the users row read consent from the verified
+    # claim, not from row-existence folklore.
+    request.state.jwt_claims = payload
+    return sub

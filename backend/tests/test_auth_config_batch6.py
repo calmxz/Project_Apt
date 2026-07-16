@@ -36,3 +36,19 @@ def test_cors_disallows_credentials():
         m for m in app.user_middleware if m.cls.__name__ == "CORSMiddleware"
     )
     assert cors.kwargs.get("allow_credentials") is False
+
+
+def test_accepted_terms_from_request_reads_user_metadata():
+    from types import SimpleNamespace
+    from services import auth as auth_service
+
+    req = SimpleNamespace(state=SimpleNamespace(
+        jwt_claims={"user_metadata": {"accepted_terms": True}}
+    ))
+    assert auth_service.accepted_terms_from_request(req) is True
+
+    req2 = SimpleNamespace(state=SimpleNamespace(jwt_claims={}))
+    assert auth_service.accepted_terms_from_request(req2) is False
+
+    req3 = SimpleNamespace(state=SimpleNamespace())  # no claims attr
+    assert auth_service.accepted_terms_from_request(req3) is False

@@ -1,10 +1,10 @@
 """User-row lifecycle helper.
 
-User rows are created lazily on the first authenticated backend call (Supabase
-signUp is client-side; the backend never sees registration). Centralizing the
-create here lets us stamp terms acceptance exactly once, at row creation. A row
-can only exist after the user signed in, which required passing the
-registration consent checkbox, so row-existence corroborates the consent act.
+User rows are created lazily on the first authenticated backend call. Terms
+consent is stamped ONLY when the verified JWT carries the accepted_terms
+metadata claim set by the register form (F-52): Supabase signUp is callable
+directly, bypassing the client-side checkbox, so row-existence alone does
+not evidence consent.
 """
 
 from datetime import datetime, timezone
@@ -18,11 +18,13 @@ from lib.terms import CURRENT_TERMS_VERSION
 from services.sql_dialect import dialect_insert
 
 
-def ensure_user(db: Session, user_id: str) -> User:
+def ensure_user(db: Session, user_id: str, *, accepted_terms: bool = False) -> User:
     """Return the users row for user_id, creating it if absent.
 
     On create, stamp accepted_terms_at (server-owned, tz-aware) and
-    terms_version. Existing rows are returned unchanged (no re-stamp).
+    terms_version ONLY when accepted_terms is True (F-52: the caller derives
+    this from the verified JWT's accepted_terms metadata claim, not from
+    row-existence). Existing rows are returned unchanged (no re-stamp).
     Race-safe (F-37): INSERT ... ON CONFLICT DO NOTHING so two concurrent
     first-requests cannot IntegrityError; the loser re-selects the winner's
     row. Writes stay pending until the caller's commit, same as the old
@@ -44,17 +46,18 @@ def ensure_user(db: Session, user_id: str) -> User:
     if user is not None:
         return user
     now = datetime.now(timezone.utc)
+    stamp = now if accepted_terms else None
     insert = dialect_insert(db)
     result = db.execute(
         insert(User)
         .values(
             id=user_id,
-            accepted_terms_at=now,
-            terms_version=CURRENT_TERMS_VERSION,
+            accepted_terms_at=stamp,
+            terms_version=CURRENT_TERMS_VERSION if accepted_terms else None,
         )
         .on_conflict_do_nothing(index_elements=["id"])
     )
     created = db.execute(select(User).where(User.id == user_id)).scalar_one()
-    if result.rowcount == 1:
+    if result.rowcount == 1 and accepted_terms:
         set_committed_value(created, "accepted_terms_at", now)
     return created

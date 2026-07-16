@@ -46,7 +46,7 @@ from services import (
     rate_limit,
     summary_service,
 )
-from services.auth import current_user_id
+from services.auth import accepted_terms_from_request, current_user_id
 from services.session_enrichment import aware_utc as _aware_utc, compute_enrichment
 from services.user_service import ensure_user
 
@@ -120,6 +120,7 @@ def _active_session_on_topic(
 )
 async def create_session(
     req: SessionCreateRequest,
+    request: Request,
     user_id: str = Depends(current_user_id),
     db: Session = Depends(get_db),
 ):
@@ -132,7 +133,7 @@ async def create_session(
             status_code=400, detail="prior_session_id forbidden when seed_mode=fresh"
         )
 
-    ensure_user(db, user_id)
+    ensure_user(db, user_id, accepted_terms=accepted_terms_from_request(request))
 
     new_id = uuid.uuid4().hex
     profile_json = TopicProfile().model_dump_json()

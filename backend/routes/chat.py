@@ -31,7 +31,7 @@ from services import (
     retrieval_service,
     summary_service,
 )
-from services.auth import current_user_id
+from services.auth import accepted_terms_from_request, current_user_id
 from services.user_service import ensure_user
 
 
@@ -114,6 +114,7 @@ async def _prepare_turn(
     req: ChatRequest,
     user_id: str,
     db: Session,
+    accepted_terms: bool = False,
 ) -> tuple[list[dict], str, ToolContext]:
     """Pre-flight for /chat/stream.
 
@@ -180,7 +181,7 @@ async def _prepare_turn(
     # insert whose FK references it (F-36). check_and_increment's internal
     # commit persists both together.
     if not user_exists:
-        ensure_user(db, user_id)
+        ensure_user(db, user_id, accepted_terms=accepted_terms)
 
     # 4-5) Rate limit: 2 statements on the allowed path (Task 3).
     allowed, used = rate_limit.check_and_increment(db, user_id)
@@ -306,7 +307,9 @@ async def chat_stream(
     completion and cancellation.
     """
     t0 = time.perf_counter()
-    messages, system_prompt, ctx = await _prepare_turn(req, user_id, db)
+    messages, system_prompt, ctx = await _prepare_turn(
+        req, user_id, db, accepted_terms=accepted_terms_from_request(request)
+    )
     prepare_ms = (time.perf_counter() - t0) * 1000.0
 
     async def event_stream():

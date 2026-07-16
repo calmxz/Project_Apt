@@ -74,6 +74,18 @@ describe('auth store', () => {
     )
   })
 
+  it('register sets the accepted_terms metadata claim on signUp (F-52)', async () => {
+    const auth = useAuthStore()
+    await auth.register('me@example.com', 'hunter2pw')
+    expect(globalThis.__supabaseAuthStub.signUp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          data: { accepted_terms: true },
+        }),
+      }),
+    )
+  })
+
   it('register returns Supabase data on success', async () => {
     const auth = useAuthStore()
     const result = await auth.register('me@example.com', 'hunter2pw')
