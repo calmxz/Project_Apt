@@ -124,9 +124,13 @@ def upload_file(
             extra={"doc_id": doc.id},
             exc_info=settings.env != "prod",
         )
-        doc.status = "failed"
-        doc.error = "storage write failed"
-        db.commit()
+        try:
+            doc.status = "failed"
+            doc.error = "storage write failed"
+            db.commit()
+        except Exception:
+            db.rollback()
+            log.error("could not mark upload row failed", extra={"doc_id": doc.id})
         raise HTTPException(
             status_code=507,
             detail={"code": "STORAGE_WRITE_FAILED"},

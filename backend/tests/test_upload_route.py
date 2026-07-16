@@ -262,6 +262,38 @@ def test_storage_write_failure_marks_failed_and_507(client, seeded, db_session, 
     assert doc.error is not None
 
 
+def test_storage_write_failure_507_holds_even_if_mark_failed_commit_raises(
+    client, seeded, db_session, monkeypatch
+):
+    """F-29 hardening: if the mark-failed commit itself raises (e.g. dropped
+    connection), the 507 contract must still hold instead of leaking a 500
+    and leaving the row stuck 'pending'."""
+
+    class FailingStore:
+        def put(self, key, data):
+            raise OSError("disk full")
+
+    monkeypatch.setattr("routes.upload.object_store.get_store", lambda: FailingStore())
+
+    real_commit = db_session.commit
+    calls = {"n": 0}
+
+    def flaky_commit():
+        calls["n"] += 1
+        if calls["n"] <= 2:
+            # let the rate-limit-usage commit and the initial "pending" row
+            # creation commit succeed; only the mark-failed commit fails.
+            return real_commit()
+        raise OSError("connection dropped")
+
+    monkeypatch.setattr(db_session, "commit", flaky_commit)
+
+    files = {"file": ("notes.pdf", io.BytesIO(b"%PDF-fake"), "application/pdf")}
+    r = client.post("/api/upload", data={"user_id": USER_ID, "session_id": SESSION_ID}, files=files)
+    assert r.status_code == 507
+    assert r.json()["detail"]["code"] == "STORAGE_WRITE_FAILED"
+
+
 def test_upload_writes_through_object_store(client, seeded, db_session, monkeypatch):
     class RecordingStore:
         def __init__(self):
