@@ -1,4 +1,4 @@
-import os
+import logging
 import re
 from pathlib import Path
 
@@ -20,7 +20,7 @@ from contracts import UploadResponse, UploadStatus
 from db.database import get_db
 from db.models import Document, Session as SessionModel
 from lib.error_codes import DAILY_CAP_REACHED
-from services import ingestion_service, rate_limit
+from services import ingestion_service, object_store, rate_limit
 from services.auth import current_user_id
 
 
@@ -28,6 +28,27 @@ router = APIRouter(prefix="/api")
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB
 ALLOWED_EXTENSIONS = {".pdf", ".pptx", ".txt", ".md", ".markdown"}
+
+log = logging.getLogger(__name__)
+
+READ_CHUNK = 1024 * 1024  # 1 MiB
+
+
+def _read_bounded(fh, max_bytes: int) -> bytes:
+    """Read fh incrementally, aborting with 413 as soon as the running total
+    exceeds max_bytes (F-40: the Content-Length header is client-controlled,
+    so the pre-gate above is advisory only)."""
+    data = bytearray()
+    while True:
+        chunk = fh.read(READ_CHUNK)
+        if not chunk:
+            return bytes(data)
+        data.extend(chunk)
+        if len(data) > max_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail={"code": "FILE_TOO_LARGE", "max_bytes": max_bytes},
+            )
 
 
 @router.post(
@@ -85,24 +106,31 @@ def upload_file(
     if not safe_name or safe_name in {".", ".."}:
         raise HTTPException(status_code=400, detail={"code": "INVALID_FILENAME"})
 
+    data = _read_bounded(file.file, MAX_UPLOAD_BYTES)
+
     doc = Document(session_id=session_id, filename=safe_name, status="pending")
     db.add(doc)
     db.commit()
     db.refresh(doc)
 
-    data = file.file.read()
-    if len(data) > MAX_UPLOAD_BYTES:
-        db.delete(doc)
+    # F-29: a failed blob write must not strand a permanent "pending" row.
+    # Mark the row failed (visible in the UI banner) and report 507.
+    store = object_store.get_store()
+    try:
+        store.put(object_store.key_for(doc.id, doc.filename), data)
+    except Exception:
+        log.error(
+            "upload storage write failed",
+            extra={"doc_id": doc.id},
+            exc_info=settings.env != "prod",
+        )
+        doc.status = "failed"
+        doc.error = "storage write failed"
         db.commit()
         raise HTTPException(
-            status_code=413,
-            detail={"code": "FILE_TOO_LARGE", "max_bytes": MAX_UPLOAD_BYTES},
+            status_code=507,
+            detail={"code": "STORAGE_WRITE_FAILED"},
         )
-
-    os.makedirs(settings.uploads_path, exist_ok=True)
-    dest = os.path.join(settings.uploads_path, f"{doc.id}_{doc.filename}")
-    with open(dest, "wb") as fh:
-        fh.write(data)
 
     background_tasks.add_task(ingestion_service.run, doc.id)
 
