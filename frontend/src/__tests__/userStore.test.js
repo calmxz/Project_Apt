@@ -17,15 +17,6 @@ function ok(body) {
   })
 }
 
-function fail(status, body = { detail: 'error' }) {
-  return Promise.resolve({
-    ok: false,
-    status,
-    headers: { get: () => null },
-    text: () => Promise.resolve(JSON.stringify(body)),
-  })
-}
-
 describe('user store', () => {
   let fetchMock
 

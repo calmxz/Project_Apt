@@ -82,7 +82,7 @@ async function request(method, path, { body, params, silent = false, headers } =
     if (qs) url += `?${qs}`
   }
 
-  const init = { method, headers: { ...(headers || {}) } }
+  const init = { method, headers: { ...headers } }
   if (body !== undefined) {
     init.headers['content-type'] = 'application/json'
     init.body = JSON.stringify(body)
