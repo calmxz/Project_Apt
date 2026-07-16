@@ -329,6 +329,10 @@ class Message(BaseModel):
     citations: list[Citation] | None = []
     tool_calls: list[ToolCallRecord] | None = []
     check_batch: PendingCheck | None = None
+    status: str | None = None
+    """
+    Persistence status for assistant turns: complete, cancelled, error, or partial (streamed text kept after a mid-turn abort). Null for rows persisted before this field existed.
+    """
 
 
 class SessionDetail(BaseModel):

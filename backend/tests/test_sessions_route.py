@@ -288,6 +288,32 @@ def test_get_session_returns_messages_array(client, db_session, seeded_user):
     ]
 
 
+def test_get_session_messages_round_trip_status(client, db_session, seeded_user):
+    """F-14 follow-up: GET-session messages must carry `status` through so the
+    FE can render the '(interrupted)' marker for partial rows on reload."""
+    from db.models import ChatMessage
+
+    db_session.add(
+        SessionModel(
+            id="s_msg_status",
+            user_id=USER_ID,
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.add(ChatMessage(session_id="s_msg_status", role="user", content="hi"))
+    db_session.add(
+        ChatMessage(session_id="s_msg_status", role="assistant", content="draft", status="partial")
+    )
+    db_session.commit()
+
+    r = client.get(f"/api/sessions/s_msg_status?user_id={USER_ID}")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    statuses = [m["status"] for m in body["messages"]]
+    assert statuses == ["complete", "partial"]
+
+
 def test_reopen_flips_ended_at_to_null(client, db_session, seeded_user):
     db_session.add(
         SessionModel(

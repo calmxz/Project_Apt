@@ -198,6 +198,7 @@ def _load_messages(db: Session, session_id: str, open_message_id: int | None = N
                 citations=citations,
                 tool_calls=tool_calls,
                 check_batch=check_batch,
+                status=m.status,
             )
         )
     return out

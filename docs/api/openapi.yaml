@@ -898,6 +898,13 @@ components:
             - $ref: "#/components/schemas/PendingCheck"
             - type: "null"
           default: null
+        status:
+          type: [string, "null"]
+          default: null
+          description: >-
+            Persistence status for assistant turns: complete, cancelled,
+            error, or partial (streamed text kept after a mid-turn abort).
+            Null for rows persisted before this field existed.
 
     SessionDetail:
       type: object
