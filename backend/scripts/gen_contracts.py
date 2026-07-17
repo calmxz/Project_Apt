@@ -66,6 +66,9 @@ def main() -> int:
         "--use-field-description",
         "--collapse-root-models",
         "--disable-timestamp",
+        # datamodel-code-generator >=0.30 defaults date-time fields to AwareDatetime,
+        # which rejects the naive datetimes our services and sqlite tests produce.
+        "--output-datetime-class", "datetime",
     ]
     print("running:", " ".join(cmd))
     result = subprocess.run(cmd, cwd=REPO_ROOT)
