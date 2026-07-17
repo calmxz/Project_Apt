@@ -139,6 +139,14 @@ describe('chatStreamService', () => {
   it('a caller abort propagates as an abort, not an ApiError', async () => {
     const ctrl = new AbortController()
     fetchMock.mockImplementationOnce((url, init) => new Promise((_, reject) => {
+      // F-47 made the pre-fetch token lookup async, so by the time fetch()
+      // is invoked the caller's abort may already have propagated to
+      // init.signal -- mirror real fetch's synchronous-check-then-reject
+      // behavior instead of relying solely on a future 'abort' event.
+      if (init.signal.aborted) {
+        reject(init.signal.reason ?? new DOMException('aborted', 'AbortError'))
+        return
+      }
       init.signal.addEventListener('abort', () => reject(init.signal.reason ?? new DOMException('aborted', 'AbortError')))
     }))
     const p = streamChat({ sessionId: 's1', message: 'hi', onEvent: vi.fn(), signal: ctrl.signal })
@@ -212,9 +220,13 @@ describe('chatStreamService', () => {
   })
 
   it('retries the SSE POST once with a refreshed token on 401 (F-09)', async () => {
-    globalThis.__supabaseAuthStub.getSession.mockResolvedValueOnce({
-      data: { session: { access_token: 'fresh-token', user: { id: 'u1' } } },
-    })
+    // First call is the pre-request getFreshAccessToken() lookup (F-47);
+    // second is _refreshAccessToken() on the 401 retry.
+    globalThis.__supabaseAuthStub.getSession
+      .mockResolvedValueOnce({ data: { session: null } })
+      .mockResolvedValueOnce({
+        data: { session: { access_token: 'fresh-token', user: { id: 'u1' } } },
+      })
     const events = []
     fetchMock
       .mockResolvedValueOnce(mock401Response())

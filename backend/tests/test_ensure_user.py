@@ -6,7 +6,7 @@ from services.user_service import ensure_user
 
 
 def test_ensure_user_creates_and_stamps_acceptance(db_session):
-    user = ensure_user(db_session, "new-user")
+    user = ensure_user(db_session, "new-user", accepted_terms=True)
     db_session.flush()
 
     assert user.id == "new-user"
@@ -39,6 +39,18 @@ def test_ensure_user_returns_existing_unstamped_row_untouched(db_session):
 
     assert user.accepted_terms_at is None
     assert user.terms_version is None
+
+
+def test_ensure_user_without_consent_claim_leaves_stamp_null(db_session):
+    user = ensure_user(db_session, "no-claim-user")
+    assert user.accepted_terms_at is None
+    assert user.terms_version is None
+
+
+def test_ensure_user_with_consent_claim_stamps(db_session):
+    user = ensure_user(db_session, "claimed-user", accepted_terms=True)
+    assert user.accepted_terms_at is not None
+    assert user.terms_version is not None
 
 
 def test_ensure_user_lost_insert_race_returns_existing_row(db_session, monkeypatch):

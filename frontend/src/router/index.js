@@ -96,13 +96,20 @@ router.beforeEach(async (to) => {
 
   const isPublic = to.meta?.public === true
   if (!auth.isAuthenticated && !isPublic) {
-    return { name: 'login' }
+    // F-49: carry the intended path through login so a deep link survives.
+    return { name: 'login', query: { redirect: to.fullPath } }
   }
   if (auth.isAuthenticated && (to.name === 'login' || to.name === 'register')) {
     return { name: 'home' }
   }
 
   const user = useUserStore()
+  if (auth.isAuthenticated && !user.hydrated) {
+    // F-46: onboarding truth lives on the server; the localStorage snapshot
+    // is only a warm cache. Await one hydrate so a new device does not
+    // force-route an existing user to onboarding.
+    await user.hydrateFromServer()
+  }
   if (
     auth.isAuthenticated &&
     !user.onboardingComplete &&

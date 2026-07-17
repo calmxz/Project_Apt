@@ -126,6 +126,7 @@ export const useSessionStore = defineStore('session', () => {
           message_id: m.id,
           citations: m.citations || [],
           created_at: m.created_at,
+          status: m.status,
           check_batch: m.check_batch
             ? {
                 gap: m.check_batch.gap,
@@ -194,9 +195,13 @@ export const useSessionStore = defineStore('session', () => {
       const summaryText = resp?.summary?.text ?? ''
       if (currentSession.value && currentSession.value.id === id) {
         currentSession.value.ended_at = resp.ended_at
-        currentSession.value.topic_profile = {
-          ...currentSession.value.topic_profile,
-          last_session_summary: summaryText,
+        if (resp?.summary?.kind === 'summary') {
+          // F-54: only a real summary belongs in the profile; the
+          // no_exchanges display sentence is UI copy, not profile state.
+          currentSession.value.topic_profile = {
+            ...currentSession.value.topic_profile,
+            last_session_summary: summaryText,
+          }
         }
       }
       const idx = sessions.value.findIndex((s) => s.id === id)
@@ -421,9 +426,7 @@ export const useSessionStore = defineStore('session', () => {
               sawTerminal = true
               _applyCapError(data)
               error.value = data.message || data.code
-              streamingMessage.value = null
-              streamState.value = 'idle'
-              abortController.value = null
+              handleAbortError(data.code)
               break
           }
         },
@@ -498,6 +501,24 @@ export const useSessionStore = defineStore('session', () => {
     abortController.value = null
   }
 
+  // F-14: the backend persists already-streamed text on a mid-turn cost-cap
+  // or max_iters abort (status 'partial'); a generic agent-loop failure
+  // still persists it too, but as status 'error'. Mirror that split here so
+  // the live view matches what a reload of the same session will show
+  // instead of discarding the text the learner already watched stream.
+  const PARTIAL_ABORT_CODES = new Set(['daily_cost_cap_reached', 'max_iters_reached'])
+
+  function handleAbortError(code) {
+    if (!streamingMessage.value) return
+    if (streamingMessage.value.content) {
+      const status = PARTIAL_ABORT_CODES.has(code) ? 'partial' : 'error'
+      messages.value.push({ ...streamingMessage.value, status })
+    }
+    streamingMessage.value = null
+    streamState.value = 'idle'
+    abortController.value = null
+  }
+
   function stopStream() {
     if (abortController.value) { abortController.value.abort(); streamState.value = 'stopping' }
   }
@@ -537,9 +558,7 @@ export const useSessionStore = defineStore('session', () => {
               sawTerminal = true
               _applyCapError(data)
               error.value = data.message || data.code
-              streamingMessage.value = null
-              streamState.value = 'idle'
-              abortController.value = null
+              handleAbortError(data.code)
               break
           }
         },
@@ -631,6 +650,7 @@ export const useSessionStore = defineStore('session', () => {
     setCitations,
     finalizeMessage,
     handleCancelled,
+    handleAbortError,
     stopStream,
     sendMessageStreaming,
     reset,

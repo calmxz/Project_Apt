@@ -11,7 +11,7 @@ last 5 messages.
 import logging
 
 import litellm
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from config import settings
@@ -137,6 +137,7 @@ async def generate_and_persist(
 ROLLING_WINDOW = 20
 ROLLING_DEBOUNCE = 10
 ROLLING_SUMMARY_MAX_CHARS = 1200
+ROLLING_TRANSCRIPT_MAX = 30  # F-58: newest dropped messages fed to the LLM
 
 ROLLING_SYSTEM = (
     "Summarize the earlier part of this tutoring conversation in 3-5 sentences."
@@ -166,15 +167,27 @@ async def update_rolling_summary(db: Session, session_id: str) -> str | None:
         session = db.get(SessionModel, session_id)
         if session is None:
             return None
-        messages = db.execute(
-            select(ChatMessage)
+        # F-58: COUNT first; the common turn is "not due" and must not load
+        # the session's whole message history just to count it.
+        total = db.execute(
+            select(func.count())
+            .select_from(ChatMessage)
             .where(ChatMessage.session_id == session_id)
-            .order_by(ChatMessage.id.asc())
-        ).scalars().all()
-        total = len(messages)
+        ).scalar_one()
         if not rolling_summary_due(total, session.rolling_summary_count):
             return None
-        dropped = messages[: total - ROLLING_WINDOW]
+        # Load only the newest ROLLING_TRANSCRIPT_MAX of the dropped range:
+        # rows strictly older than the last-ROLLING_WINDOW prompt window.
+        n_dropped = total - ROLLING_WINDOW
+        fetch = min(n_dropped, ROLLING_TRANSCRIPT_MAX)
+        dropped = db.execute(
+            select(ChatMessage)
+            .where(ChatMessage.session_id == session_id)
+            .order_by(ChatMessage.id.desc())
+            .offset(ROLLING_WINDOW)
+            .limit(fetch)
+        ).scalars().all()
+        dropped = list(reversed(dropped))  # chronological
 
         if settings.llm_stub_enabled:
             summary = _mechanical_rolling(dropped)
@@ -224,7 +237,7 @@ async def update_rolling_summary(db: Session, session_id: str) -> str | None:
             summary = content[:ROLLING_SUMMARY_MAX_CHARS]
 
         session.rolling_summary = summary
-        session.rolling_summary_count = total - ROLLING_WINDOW
+        session.rolling_summary_count = n_dropped
         db.commit()
         return summary
     except Exception as e:  # noqa: BLE001 - must never break the caller

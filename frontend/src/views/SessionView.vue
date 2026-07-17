@@ -438,6 +438,7 @@ watch(
     summaryDialog.value = true
     store.consumePendingSummary()
   },
+  { immediate: true },
 )
 
 async function onAttachFile(file) {

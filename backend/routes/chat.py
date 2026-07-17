@@ -12,9 +12,10 @@ from sqlalchemy.orm import Session
 from starlette.background import BackgroundTask
 
 from agent import context_budget, prompts, tutor
+from agent.excerpt import wrap_chunk
 from agent.types import ToolContext
 from config import settings
-from contracts import ChatRequest
+from contracts import ChatRequest, Citation
 from db.database import SessionLocal, get_db
 from db.models import ChatMessage, Document, Session as SessionModel, User
 from lib import keyword_index
@@ -30,7 +31,7 @@ from services import (
     retrieval_service,
     summary_service,
 )
-from services.auth import current_user_id
+from services.auth import accepted_terms_from_request, current_user_id
 from services.user_service import ensure_user
 
 
@@ -63,6 +64,7 @@ def _build_prompt_state(
     pending_check,
     quiz_cooldown,
     gap_accuracy: dict | None = None,
+    prefetched_chunks=None,
 ) -> dict:
     """Build the prompt_state dict consumed by prompts.build_system_prompt.
 
@@ -101,6 +103,10 @@ def _build_prompt_state(
             prompt_state["review_gaps_target"] = target
             prompt_state["review_gaps_retention"] = target in mastered
             prompt_state["diagnostic_required"] = False
+    if prefetched_chunks:
+        prompt_state["prefetched_excerpts"] = [
+            wrap_chunk(ch) for ch in prefetched_chunks
+        ]
     return prompt_state
 
 
@@ -108,6 +114,7 @@ async def _prepare_turn(
     req: ChatRequest,
     user_id: str,
     db: Session,
+    accepted_terms: bool = False,
 ) -> tuple[list[dict], str, ToolContext]:
     """Pre-flight for /chat/stream.
 
@@ -174,7 +181,7 @@ async def _prepare_turn(
     # insert whose FK references it (F-36). check_and_increment's internal
     # commit persists both together.
     if not user_exists:
-        ensure_user(db, user_id)
+        ensure_user(db, user_id, accepted_terms=accepted_terms)
 
     # 4-5) Rate limit: 2 statements on the allowed path (Task 3).
     allowed, used = rate_limit.check_and_increment(db, user_id)
@@ -225,8 +232,14 @@ async def _prepare_turn(
             req.message, json.loads(session.kw_index_json or "[]")
         )
         if not retrieval_required:
-            retrieval_required = retrieval_service.semantic_fallback_required(
+            retrieval_required = await retrieval_service.semantic_fallback_required(
                 db, req.session_id, req.message, user_id=user_id
+            )
+
+        prefetched_chunks = None
+        if retrieval_required:
+            prefetched_chunks = await retrieval_service.prefetch_for_prompt(
+                db, req.session_id, user_id, req.message
             )
 
         prompt_state = _build_prompt_state(
@@ -239,6 +252,7 @@ async def _prepare_turn(
             pending_check=pending_check_store.get_pending_check_from_row(session),
             quiz_cooldown=check_question_service.get_quiz_cooldown_from_row(session),
             gap_accuracy=gap_accuracy,
+            prefetched_chunks=prefetched_chunks,
         )
         system_prompt = prompts.build_system_prompt(prompt_state)
     except Exception:
@@ -259,6 +273,20 @@ async def _prepare_turn(
         session_id=req.session_id,
         user_id=user_id,
         turn_started_at=datetime.now(timezone.utc),
+        diagnostic_required=bool(prompt_state.get("diagnostic_required", False)),
+        prefetched_citations=(
+            [
+                Citation(
+                    doc_id=str(ch.get("doc_id", "")),
+                    text=ch.get("text", ""),
+                    page=ch.get("page"),
+                    doc_name=ch.get("doc_name"),
+                )
+                for ch in prefetched_chunks
+            ]
+            if prefetched_chunks
+            else None
+        ),
     )
 
     return messages, system_prompt, ctx
@@ -279,7 +307,9 @@ async def chat_stream(
     completion and cancellation.
     """
     t0 = time.perf_counter()
-    messages, system_prompt, ctx = await _prepare_turn(req, user_id, db)
+    messages, system_prompt, ctx = await _prepare_turn(
+        req, user_id, db, accepted_terms=accepted_terms_from_request(request)
+    )
     prepare_ms = (time.perf_counter() - t0) * 1000.0
 
     async def event_stream():

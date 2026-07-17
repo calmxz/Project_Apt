@@ -51,6 +51,26 @@ def _persist_assistant_message(
     return m.id
 
 
+def _persist_partial_on_abort(ctx, accumulated_text, tool_calls, citations, asked_check):
+    """F-14: an aborted turn (max_iters, mid-turn cap) must not vanish text
+    the learner watched stream. Persist it as 'partial'; if a check batch was
+    registered this turn, attach it so it renders with its asking message
+    instead of dangling."""
+    if not accumulated_text and not asked_check:
+        return None
+    try:
+        msg_id = _persist_assistant_message(
+            ctx, accumulated_text, "partial",
+            tool_calls=tool_calls, citations=citations,
+        )
+        if asked_check:
+            check_question_service.attach_message_id(ctx.db, ctx.session_id, msg_id)
+        return msg_id
+    except Exception:
+        log.exception("failed to persist partial assistant message on abort")
+        return None
+
+
 def _summarize(name: str, result) -> str:
     if name == "retrieve_chunks":
         return f"Found {len((result.data or {}).get('chunks', []))} passages"
@@ -139,8 +159,14 @@ async def run_streaming(
     billed_iters = 0  # iterations whose cost was metered (real or fallback)
     billed_chars = 0  # accumulated_text length at the last metering point
     tool_calls_record: list[ToolCallRecord] = []
-    citations: list[Citation] = []
+    citations: list[Citation] = list(ctx.prefetched_citations or [])
     asked_check = False  # hoisted so the except asyncio.CancelledError: branch can read it
+    dispatch_task: asyncio.Task | None = None  # in-flight tools.dispatch thread (see cancel arm)
+
+    if citations:
+        # F-56: server-prefetched excerpts -- emit their citations up front so
+        # the FE renders sources even though no retrieve_chunks call happens.
+        yield StreamEvent("citations", [c.model_dump() for c in citations])
 
     try:
         for _i in range(max_iters):
@@ -149,6 +175,9 @@ async def run_streaming(
                 log.warning(
                     "hard cost cap reached mid-turn (stream) for user_id=%s used=%s",
                     ctx.user_id, cap.used,
+                )
+                _persist_partial_on_abort(
+                    ctx, accumulated_text, tool_calls_record, citations, asked_check
                 )
                 yield StreamEvent(
                     "error",
@@ -350,7 +379,18 @@ async def run_streaming(
                     {"id": call_id, "name": name, "args": args},
                 )
 
-                result = tools.dispatch(name, args, ctx)
+                # asyncio.to_thread cannot be interrupted: cancelling the task
+                # while it awaits the thread would leave tools.dispatch running
+                # detached, still writing/committing on ctx.db (profile
+                # patches, check registration, retrieval embeddings).
+                # asyncio.shield keeps dispatch_task running to completion even
+                # if this await is cancelled, so the cancel arm below can drain
+                # it before touching ctx.db from the main thread (SQLAlchemy
+                # Session is not thread-safe).
+                dispatch_task = asyncio.ensure_future(
+                    asyncio.to_thread(tools.dispatch, name, args, ctx)
+                )
+                result = await asyncio.shield(dispatch_task)
                 tool_calls_record.append(
                     ToolCallRecord(
                         name=name, args=args, status=result.status, error=result.error
@@ -391,10 +431,26 @@ async def run_streaming(
                         )
                         for ch in raw_chunks
                     ]
-                    citations.extend(new_cites)
-                    if new_cites:
+                    # F-56: dedup against citations already present (a server
+                    # prefetch, or an earlier retrieve_chunks call this turn)
+                    # by (doc_id, text) identity, so overlapping chunks don't
+                    # duplicate in citations_json. Yield the FULL merged list:
+                    # the FE's citations handler (session.js setCitations)
+                    # REPLACES its list on each "citations" event, so a
+                    # partial (new-only) yield would drop earlier entries from
+                    # the live view -- they'd only reappear on reload.
+                    seen = {(c.doc_id, c.text) for c in citations}
+                    added_any = False
+                    for c in new_cites:
+                        key = (c.doc_id, c.text)
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        citations.append(c)
+                        added_any = True
+                    if added_any:
                         yield StreamEvent(
-                            "citations", [c.model_dump() for c in new_cites]
+                            "citations", [c.model_dump() for c in citations]
                         )
                     wrapped_chunks = [
                         {**ch, "text": wrap_chunk(ch)}
@@ -440,10 +496,27 @@ async def run_streaming(
                 return
 
         # max_iters exhausted without a final answer.
+        _persist_partial_on_abort(
+            ctx, accumulated_text, tool_calls_record, citations, asked_check
+        )
         yield StreamEvent("error", {"code": "max_iters_reached"})
         return
 
     except asyncio.CancelledError:
+        # The shielded dispatch (see above) keeps running after this arm is
+        # entered. Drain it FIRST, before any ctx.db use below: the worker
+        # thread may still be mid-commit (profile_service.apply_patch,
+        # check_question_service.register, retrieval_service.retrieve), and
+        # SQLAlchemy's Session is not thread-safe.
+        if dispatch_task is not None and not dispatch_task.done():
+            try:
+                await dispatch_task
+            except Exception:
+                log.warning(
+                    "in-flight tool dispatch raised while draining on cancel",
+                    exc_info=True,
+                )
+
         # Bill only iterations not yet metered: completed iterations already
         # recorded real cost above (previously this arm re-billed all of them).
         cost = _record_partial_cost(
@@ -453,20 +526,27 @@ async def run_streaming(
             "followup" if getattr(ctx, "suppress_check", False) else "chat",
         )
 
-        msg_id = _persist_assistant_message(
-            ctx,
-            accumulated_text,
-            "cancelled",
-            cancelled_at=datetime.now(timezone.utc),
-            tool_calls=tool_calls_record,
-            citations=citations,
-        )
-        if asked_check:
-            check_question_service.attach_message_id(ctx.db, ctx.session_id, msg_id)
+        # F-01-style guard: a persistence failure here must not replace the
+        # CancelledError being propagated below.
+        msg_id = None
+        try:
+            msg_id = _persist_assistant_message(
+                ctx,
+                accumulated_text,
+                "cancelled",
+                cancelled_at=datetime.now(timezone.utc),
+                tool_calls=tool_calls_record,
+                citations=citations,
+            )
+            if asked_check:
+                check_question_service.attach_message_id(ctx.db, ctx.session_id, msg_id)
+        except Exception:
+            log.exception("failed to persist assistant message on cancel")
+
         yield StreamEvent(
             "cancelled",
             {
-                "message_id": str(msg_id),
+                "message_id": str(msg_id) if msg_id is not None else None,
                 "partial_content_chars": len(accumulated_text),
                 "estimated_cost_usd": str(cost),
             },
@@ -498,13 +578,15 @@ async def run_streaming(
             "followup" if getattr(ctx, "suppress_check", False) else "chat",
         )
         try:
-            _persist_assistant_message(
+            msg_id = _persist_assistant_message(
                 ctx,
                 accumulated_text,
                 "error",
                 tool_calls=tool_calls_record,
                 citations=citations,
             )
+            if asked_check:
+                check_question_service.attach_message_id(ctx.db, ctx.session_id, msg_id)
         except Exception:
             log.exception("failed to persist assistant message after agent-loop failure")
         yield StreamEvent(

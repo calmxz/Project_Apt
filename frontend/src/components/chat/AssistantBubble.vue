@@ -45,6 +45,7 @@ defineProps({
         <MarkdownContent class="content" :text="message.content || ''" :streaming="streaming" />
       </template>
       <span v-if="message.status === 'cancelled'" class="cancelled-marker">(stopped)</span>
+      <span v-else-if="message.status === 'partial'" class="cancelled-marker">(interrupted)</span>
       <CitationsList :citations="message.citations || []" />
     </div>
   </article>

@@ -28,12 +28,24 @@ const stubs = {
   },
 }
 
+// F-46: updateProfile writes through to PATCH /me via the real apiClient
+// (dynamic import) -- mock global fetch, same pattern as userStore.test.js.
+function ok(body) {
+  return Promise.resolve({
+    ok: true,
+    status: 200,
+    headers: { get: () => null },
+    text: () => Promise.resolve(JSON.stringify(body)),
+  })
+}
+
 describe('SettingsView', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     showSuccess.mockClear()
     showError.mockClear()
     routerPush.mockClear()
+    globalThis.fetch = vi.fn().mockReturnValue(ok({}))
     useTheme().setTheme('light')
     const user = useUserStore()
     user.userId = 'u_test'
@@ -56,7 +68,10 @@ describe('SettingsView', () => {
     await wrapper.get('[data-testid="settings-name"]').setValue('Edward')
     await wrapper.get('[data-testid="feedback-style-direct_answers"]').setValue(true)
     await wrapper.find('form').trigger('submit.prevent')
-    await flushPromises()
+    // updateProfile's write-through chains on-demand dynamic imports before
+    // resolving; flushPromises' single setImmediate tick isn't enough to
+    // drain that in this environment, so wait a real macrotask instead.
+    await new Promise((resolve) => setTimeout(resolve, 50))
 
     const user = useUserStore()
     expect(user.name).toBe('Edward')

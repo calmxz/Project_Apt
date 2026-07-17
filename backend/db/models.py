@@ -23,6 +23,13 @@ class User(Base):
         DateTime(timezone=True), nullable=True, default=None
     )
     terms_version: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
+    # F-46: onboarding is account state, not per-browser localStorage. NULLs
+    # mean "never onboarded on the server" (pre-0020 rows hydrate FE defaults).
+    display_name: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
+    feedback_pref: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
+    onboarding_complete: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false", default=False
+    )
 
     sessions: Mapped[list["Session"]] = relationship("Session", back_populates="user")
     usage_counters: Mapped[list["UsageCounter"]] = relationship("UsageCounter", back_populates="user")
@@ -56,7 +63,7 @@ class ChatMessage(Base):
     __tablename__ = "chat_messages"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('complete', 'cancelled', 'error')",
+            "status IN ('complete', 'cancelled', 'error', 'partial')",
             name="chat_messages_status_check",
         ),
         Index("ix_chat_messages_session_created", "session_id", "created_at"),

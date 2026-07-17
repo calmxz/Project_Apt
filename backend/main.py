@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import assert_prod_database, settings
 from db.database import SessionLocal, create_tables
-from routes import chat, documents, health, profile, review, sessions, upload, usage
+from routes import chat, documents, health, me, profile, review, sessions, upload, usage
 from services import ingestion_service
 from services.auth import validate_jwks_startup
 
@@ -40,7 +40,7 @@ app = FastAPI(title="Crux", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Content-Type", "Accept", "Authorization", "If-Match"],
 )
@@ -53,3 +53,4 @@ app.include_router(upload.router)
 app.include_router(documents.router)
 app.include_router(review.router)
 app.include_router(usage.router)
+app.include_router(me.router)

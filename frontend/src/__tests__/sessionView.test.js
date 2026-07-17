@@ -391,6 +391,26 @@ describe('SessionView', () => {
     expect(store.pendingSummary).toBe(null)
   })
 
+  it('opens the summary dialog immediately when pendingSummary is already set before mount', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession()
+    })
+    // Set BEFORE mount to exercise the { immediate: true } watcher path — without
+    // immediate, a pendingSummary set prior to this view mounting would be missed.
+    store.pendingSummary = {
+      sessionId: 's1',
+      kind: 'summary',
+      text: 'Pre-set summary from an off-view end.',
+    }
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.get('[data-testid="session-summary-summary"]').text()).toContain(
+      'Pre-set summary from an off-view end.',
+    )
+    expect(store.pendingSummary).toBe(null)
+  })
+
   it('ignores pendingSummary targeting a different session', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'loadSession').mockImplementation(async () => {

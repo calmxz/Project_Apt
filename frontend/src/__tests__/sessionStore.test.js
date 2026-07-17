@@ -70,6 +70,21 @@ describe('session store', () => {
     expect(s.messages[1].citations).toEqual([])
   })
 
+  // F-14 follow-up: reload must carry `status` through so a 'partial' row
+  // renders its "(interrupted)" marker after a page refresh, not just live.
+  it('loadSession maps status through so partial rows render on reload', async () => {
+    sessionsApi.getSession.mockResolvedValueOnce({
+      id: 's1',
+      messages: [
+        { id: 'm1', role: 'user', content: 'hi', citations: [], created_at: '2026-01-01', status: 'complete' },
+        { id: 'm2', role: 'assistant', content: 'draft', created_at: '2026-01-02', status: 'partial' },
+      ],
+    })
+    const s = useSessionStore()
+    await s.loadSession('s1')
+    expect(s.messages[1]).toMatchObject({ content: 'draft', status: 'partial' })
+  })
+
   it('endSession updates currentSession ended_at', async () => {
     sessionsApi.createSession.mockResolvedValueOnce({ id: 's1', topic: 't' })
     sessionsApi.endSession.mockResolvedValueOnce({
@@ -81,6 +96,36 @@ describe('session store', () => {
     const resp = await s.endSession()
     expect(resp.summary.text).toBe('recap')
     expect(s.currentSession.ended_at).toBe('2026-01-01')
+  })
+
+  // F-54: 'no_exchanges' summary.text is UI display copy for the closing
+  // dialog, not a real recap -- it must not be written into topic_profile.
+  it('endSession writes the profile summary when kind is summary', async () => {
+    sessionsApi.createSession.mockResolvedValueOnce({
+      id: 's1', topic: 't', topic_profile: { last_session_summary: 'old' },
+    })
+    sessionsApi.endSession.mockResolvedValueOnce({
+      ended_at: '2026-01-01',
+      summary: { kind: 'summary', text: 'display copy' },
+    })
+    const s = useSessionStore()
+    await s.createSession({ userId: 'u', topic: 't' })
+    await s.endSession()
+    expect(s.currentSession.topic_profile.last_session_summary).toBe('display copy')
+  })
+
+  it('endSession does NOT write the profile summary when kind is no_exchanges', async () => {
+    sessionsApi.createSession.mockResolvedValueOnce({
+      id: 's1', topic: 't', topic_profile: { last_session_summary: 'old' },
+    })
+    sessionsApi.endSession.mockResolvedValueOnce({
+      ended_at: '2026-01-01',
+      summary: { kind: 'no_exchanges', text: 'display copy' },
+    })
+    const s = useSessionStore()
+    await s.createSession({ userId: 'u', topic: 't' })
+    await s.endSession()
+    expect(s.currentSession.topic_profile.last_session_summary).toBe('old')
   })
 
   it('reopenSession clears ended_at when ids match', async () => {
@@ -286,6 +331,47 @@ describe('session store — streaming', () => {
     expect(s.messages.at(-1)).toMatchObject({ status: 'cancelled', content: 'partial' })
   })
 
+  // F-14 follow-up: the max_iters / mid-turn cost-cap abort arms persist
+  // 'partial' on the backend; a generic agent-loop failure persists 'error'.
+  // The live handler must match so reload doesn't show something different
+  // from what was on screen mid-stream.
+  it('handleAbortError pushes streamed text as status=partial for a cost-cap abort', () => {
+    const s = useSessionStore()
+    s.streamingMessage = { role: 'assistant', content: 'draft', tool_calls: [], citations: [] }
+    s.streamState = 'streaming'
+    s.handleAbortError('daily_cost_cap_reached')
+    expect(s.streamingMessage).toBeNull()
+    expect(s.streamState).toBe('idle')
+    expect(s.messages.at(-1)).toMatchObject({ status: 'partial', content: 'draft' })
+  })
+
+  it('handleAbortError pushes streamed text as status=partial for max_iters_reached', () => {
+    const s = useSessionStore()
+    s.streamingMessage = { role: 'assistant', content: 'draft', tool_calls: [], citations: [] }
+    s.streamState = 'streaming'
+    s.handleAbortError('max_iters_reached')
+    expect(s.messages.at(-1)).toMatchObject({ status: 'partial', content: 'draft' })
+  })
+
+  it('handleAbortError pushes streamed text as status=error for a generic llm failure', () => {
+    const s = useSessionStore()
+    s.streamingMessage = { role: 'assistant', content: 'draft', tool_calls: [], citations: [] }
+    s.streamState = 'streaming'
+    s.handleAbortError('llm_failed')
+    expect(s.messages.at(-1)).toMatchObject({ status: 'error', content: 'draft' })
+  })
+
+  it('handleAbortError does not push an empty bubble when nothing streamed yet', () => {
+    const s = useSessionStore()
+    s.streamingMessage = { role: 'assistant', content: '', tool_calls: [], citations: [] }
+    s.streamState = 'streaming'
+    const before = s.messages.length
+    s.handleAbortError('daily_cost_cap_reached')
+    expect(s.messages.length).toBe(before)
+    expect(s.streamingMessage).toBeNull()
+    expect(s.streamState).toBe('idle')
+  })
+
   it('sendMessageStreaming wires through streamChat and dispatches events', async () => {
     const s = useSessionStore()
     s.currentSessionId = 's1'
@@ -411,6 +497,9 @@ describe('session store — streaming', () => {
     })
     expect(s.costCapReached).toBe(true)
     expect(s.streamState).toBe('idle')
+    // F-14 follow-up: the streamed text must survive onto the transcript,
+    // not just clear the cap banner state.
+    expect(s.messages.at(-1)).toMatchObject({ status: 'partial', content: 'partial' })
   })
 
   it('resets stream state when the stream ends without a terminal event', async () => {

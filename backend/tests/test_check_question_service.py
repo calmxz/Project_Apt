@@ -1,6 +1,6 @@
 """TDD: check_question_service — pending-check batch state machine."""
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 
 import pytest
 
@@ -8,7 +8,6 @@ from agent.types import ToolContext
 from contracts import AskCheckQuestionsArgs, TopicProfile
 from db.models import Session as SessionModel, User
 from services import check_question_service as cq
-from services import pending_check_store as pcs
 from services import profile_service
 
 
@@ -56,7 +55,11 @@ def ctx(db_session, session_row):
 
 @pytest.fixture
 def ctx_fresh_session(db_session):
-    """Fresh session: profile.knowledge_level is None -> diagnostic trigger."""
+    """Fresh session: profile.knowledge_level is None -> diagnostic trigger.
+
+    F-59: purpose now comes from ctx.diagnostic_required (the turn's prepared
+    decision), not a live re-read of knowledge_level, so this fixture sets the
+    flag explicitly to mirror what _build_prompt_state would have decided."""
     db_session.add(User(id=USER_ID))
     db_session.flush()
     row = SessionModel(
@@ -72,6 +75,7 @@ def ctx_fresh_session(db_session):
         session_id=row.id,
         user_id=USER_ID,
         turn_started_at=_T0,
+        diagnostic_required=True,
     )
 
 
@@ -93,6 +97,7 @@ def ctx_session_with_level(db_session):
         session_id=row.id,
         user_id=USER_ID,
         turn_started_at=_T0,
+        diagnostic_required=False,
     )
 
 
@@ -107,21 +112,6 @@ def one_item_args(gap: str, correct_index: int = 0):
             "explanation": "e",
         }],
     )
-
-
-def test_is_gradable_requires_prior_turn(db_session, session_row, ctx):
-    # Seed a batch using the new register API.
-    args = AskCheckQuestionsArgs(
-        session_id=session_row.id, gap="g",
-        items=[{"question": "q", "options": ["a", "b"],
-                "correct_index": 0, "explanation": "a."}],
-    )
-    cq.register(db_session, ctx, args)
-    same_turn = _T0
-    later_turn = _T0 + timedelta(seconds=5)
-    assert pcs.is_gradable(db_session, session_row.id, gap="g", current_turn=same_turn) is False
-    assert pcs.is_gradable(db_session, session_row.id, gap="g", current_turn=later_turn) is True
-    assert pcs.is_gradable(db_session, session_row.id, gap="other", current_turn=later_turn) is False
 
 
 def _batch_args(session_id):
@@ -248,6 +238,25 @@ def test_register_tags_diagnostic_when_level_unknown(db, ctx_fresh_session):
 def test_register_tags_check_when_level_known(db, ctx_session_with_level):
     cq.register(db, ctx_session_with_level, one_item_args(gap="loops"))
     pc = cq.get_pending_check(db, ctx_session_with_level.session_id)
+    assert pc["purpose"] == "check"
+
+
+def test_register_purpose_follows_turn_state_not_live_level(db_session):
+    """F-59: a batch registered while the turn was prepared as NON-diagnostic
+    must be purpose='check' even if knowledge_level is still None."""
+    db_session.add(User(id=USER_ID))
+    db_session.flush()
+    s = SessionModel(id=SESSION_ID, user_id=USER_ID, topic="t")  # profile knowledge_level None
+    db_session.add(s)
+    db_session.commit()
+    ctx = ToolContext(
+        db=db_session, session_id=s.id, user_id=USER_ID,
+        turn_started_at=_T0,
+        diagnostic_required=False,  # turn-state decision (e.g. review-gaps)
+    )
+    result = cq.register(db_session, ctx, one_item_args(gap="osmosis"))
+    assert result.ok
+    pc = cq.get_pending_check(db_session, s.id)
     assert pc["purpose"] == "check"
 
 

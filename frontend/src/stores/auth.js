@@ -46,6 +46,10 @@ export const useAuthStore = defineStore('auth', () => {
       options: {
         emailRedirectTo:
           typeof window !== 'undefined' ? `${window.location.origin}/` : undefined,
+        // F-52: consent travels as a verified JWT metadata claim; the backend
+        // stamps accepted_terms_at only when it is present. The register form
+        // cannot submit without the checkbox, so this is set iff consent.
+        data: { accepted_terms: true },
       },
     })
     if (error) throw error

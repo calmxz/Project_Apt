@@ -224,8 +224,8 @@ watch([displayName, feedback], () => {
   savedFlash.value = false
 })
 
-function save() {
-  user.updateProfile({ name: displayName.value, feedback: feedback.value })
+async function save() {
+  await user.updateProfile({ name: displayName.value, feedback: feedback.value })
   savedFlash.value = true
   showSuccess('Preferences saved.')
 }

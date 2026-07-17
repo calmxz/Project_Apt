@@ -50,6 +50,15 @@ describe('router', () => {
     expect(router.currentRoute.value.name).toBe('login')
   })
 
+  it('login redirect preserves the intended path', async () => {
+    setAuth(false)
+    const user = useUserStore()
+    user.onboardingComplete = true
+    await router.push('/session/abc')
+    expect(router.currentRoute.value.name).toBe('login')
+    expect(router.currentRoute.value.query.redirect).toBe('/session/abc')
+  })
+
   it('redirects authenticated user away from /login to home', async () => {
     setAuth(true)
     const user = useUserStore()

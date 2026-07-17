@@ -104,6 +104,16 @@
       <p v-if="error" class="error" data-testid="new-error">{{ error }}</p>
 
       <button
+        v-if="existingSessionId"
+        type="button"
+        class="open-existing"
+        data-testid="open-existing-session"
+        @click="router.push({ name: 'session', params: { id: existingSessionId } })"
+      >
+        Open existing session
+      </button>
+
+      <button
         type="button"
         class="cta-primary"
         data-testid="new-submit"
@@ -130,6 +140,7 @@ const store = useSessionStore()
 
 const topic = ref('')
 const error = ref(null)
+const existingSessionId = ref(null)
 
 const files = ref([])
 const fileErrors = ref([])
@@ -199,6 +210,7 @@ function removeFile(i) {
 
 async function submit() {
   error.value = null
+  existingSessionId.value = null
   if (dupeBlocked.value) {
     error.value = 'An active session for this topic already exists.'
     return
@@ -211,6 +223,11 @@ async function submit() {
       priorSessionId: null,
     })
   } catch (e) {
+    if (e?.status === 409 && e?.body?.detail?.code === 'duplicate_topic') {
+      existingSessionId.value = e.body.detail.session_id
+      error.value = 'An active session for this topic already exists.'
+      return
+    }
     error.value = e?.message || 'Failed to create session.'
     return
   }
@@ -520,6 +537,28 @@ async function submit() {
   margin: 0;
   color: var(--color-error-text);
   font-size: 0.9375rem;
+}
+
+.open-existing {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.4rem 0.875rem;
+  border-radius: var(--radius-pill);
+  background: var(--signal-info);
+  color: #FFFFFF;
+  border: 0;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: filter var(--motion-fast) ease, transform var(--motion-fast) var(--motion-bounce);
+}
+
+.open-existing:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
 }
 
 .cta-primary {

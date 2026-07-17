@@ -18,6 +18,7 @@ Streaming mock shape (mirrors litellm streaming objects):
 import asyncio
 import copy
 import json
+import threading
 from datetime import datetime, timezone
 from decimal import Decimal
 from types import SimpleNamespace
@@ -27,7 +28,7 @@ import pytest
 
 from agent.types import ToolContext
 from config import settings
-from contracts import ToolResult
+from contracts import Citation, ToolResult
 from db.models import ChatMessage, LlmCallLog, User
 from services import cost_meter
 from services.cost_meter import CapStatus
@@ -181,6 +182,125 @@ async def test_run_streaming_yields_tool_then_delta_then_done(db_session, monkey
     assert len(persisted_tcs) == 1
     assert persisted_tcs[0]["name"] == "retrieve_chunks"
     assert persisted_tcs[0]["status"] == "ok"
+
+
+@pytest.mark.asyncio
+async def test_prefetched_citations_yielded_up_front(db_session, monkeypatch):
+    """F-56: ctx.prefetched_citations (server force-retrieve, Task 11) must be
+    yielded as a citations event BEFORE the LLM loop runs, so the FE renders
+    sources even when the model answers directly without calling
+    retrieve_chunks this turn -- and the persisted message carries them too."""
+    _disable_stub(monkeypatch)
+    _allow_cap(monkeypatch)
+
+    from agent import tutor
+
+    turn = _make_stream(_content_chunk("answer"))
+    monkeypatch.setattr("agent.tutor.litellm.acompletion", AsyncMock(side_effect=[turn]))
+    monkeypatch.setattr(
+        "agent.tutor.litellm.stream_chunk_builder", MagicMock(return_value=SimpleNamespace())
+    )
+    monkeypatch.setattr("agent.tutor.litellm.completion_cost", MagicMock(return_value=0.0))
+
+    ctx = ToolContext(
+        db=db_session,
+        session_id="s_prefetch",
+        user_id="u1",
+        turn_started_at=datetime.now(timezone.utc),
+        prefetched_citations=[
+            Citation(doc_id="d1", text="prefetched excerpt", page=3, doc_name="notes.pdf")
+        ],
+    )
+
+    events = await _drain(
+        tutor.run_streaming([{"role": "user", "content": "explain"}], "sys", ctx)
+    )
+
+    # The citations event fires up front -- before the first assistant_delta.
+    first_relevant = next(e for e in events if e.type in ("citations", "assistant_delta"))
+    assert first_relevant.type == "citations"
+    assert first_relevant.data == [
+        {"doc_id": "d1", "text": "prefetched excerpt", "page": 3, "doc_name": "notes.pdf"}
+    ]
+    assert [e.type for e in events].count("citations") == 1
+
+    msg = db_session.query(ChatMessage).filter(ChatMessage.session_id == "s_prefetch").one()
+    assert json.loads(msg.citations_json) == [
+        {"doc_id": "d1", "text": "prefetched excerpt", "page": 3, "doc_name": "notes.pdf"}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_retrieve_chunks_dedupes_against_prefetched_citations(db_session, monkeypatch):
+    """F-56 fix: a same-turn retrieve_chunks call that overlaps with the
+    server-prefetched citations must not duplicate the persisted/streamed
+    citation list (identity: doc_id + text), and the citations event it
+    emits must carry the FULL merged set -- the FE's setCitations REPLACES
+    its list on each "citations" event (session.js), so a partial (new-only)
+    yield would drop the prefetched entry from the live view."""
+    _disable_stub(monkeypatch)
+    _allow_cap(monkeypatch)
+
+    from agent import tutor
+
+    turn1 = _make_stream(
+        _tool_chunk(_tool_fragment(0, id="tc_1", name="retrieve_chunks", arguments='{"query":"x"}')),
+    )
+    turn2 = _make_stream(_content_chunk("final"))
+    monkeypatch.setattr(
+        "agent.tutor.litellm.acompletion", AsyncMock(side_effect=[turn1, turn2])
+    )
+    monkeypatch.setattr(
+        "agent.tutor.litellm.stream_chunk_builder", MagicMock(return_value=SimpleNamespace())
+    )
+    monkeypatch.setattr("agent.tutor.litellm.completion_cost", MagicMock(return_value=0.0))
+
+    result = ToolResult(
+        ok=True,
+        status="ok",
+        error=None,
+        data={
+            "chunks": [
+                {"doc_id": "d1", "text": "leaves convert light"},  # overlaps the prefetch
+                {"doc_id": "d2", "text": "chlorophyll absorbs red and blue light"},
+            ]
+        },
+    )
+    monkeypatch.setattr("agent.tutor.tools.dispatch", MagicMock(return_value=result))
+
+    ctx = ToolContext(
+        db=db_session,
+        session_id="s_dedup",
+        user_id="u1",
+        turn_started_at=datetime.now(timezone.utc),
+        prefetched_citations=[Citation(doc_id="d1", text="leaves convert light")],
+    )
+
+    events = await _drain(
+        tutor.run_streaming([{"role": "user", "content": "explain"}], "sys", ctx)
+    )
+
+    citation_events = [e for e in events if e.type == "citations"]
+    # One up-front (prefetch seed) + one from the tool-path merge.
+    assert len(citation_events) == 2
+    assert citation_events[0].data == [
+        {"doc_id": "d1", "text": "leaves convert light", "page": None, "doc_name": None}
+    ]
+    # d1 is not duplicated; d2 is appended. The second event carries the
+    # FULL set (not just d2) so the FE's replace-on-event semantics work.
+    assert citation_events[1].data == [
+        {"doc_id": "d1", "text": "leaves convert light", "page": None, "doc_name": None},
+        {
+            "doc_id": "d2",
+            "text": "chlorophyll absorbs red and blue light",
+            "page": None,
+            "doc_name": None,
+        },
+    ]
+
+    msg = db_session.query(ChatMessage).filter(ChatMessage.session_id == "s_dedup").one()
+    persisted = json.loads(msg.citations_json)
+    assert [c["doc_id"] for c in persisted] == ["d1", "d2"]
 
 
 @pytest.mark.asyncio
@@ -1024,3 +1144,98 @@ def test_summarize_labels_ignored_profile_patch():
     from agent.tutor import _summarize
     result = ToolResult(ok=True, status="ignored", data={"notes": ["inferred mastery ignored"]})
     assert "ignored" in _summarize("update_topic_profile", result).lower()
+
+
+@pytest.mark.asyncio
+async def test_cancel_mid_dispatch_drains_inflight_thread_before_persisting(
+    db_session, monkeypatch
+):
+    """Final-review fix: asyncio.to_thread cannot be interrupted. Cancelling
+    the streaming task while a tool dispatch is running in its worker thread
+    must NOT let the cancel arm touch ctx.db (persist the cancelled message)
+    until that worker thread has actually finished -- otherwise the main
+    thread and the still-running dispatch thread would both use the same
+    (non-thread-safe) SQLAlchemy Session concurrently.
+
+    Simulated with a real blocking dispatch (threading.Event) so the
+    dispatch genuinely runs on a separate OS thread via asyncio.to_thread,
+    not just a mocked coroutine -- an ordering list recorded from both the
+    dispatch thread and the main-thread cancel arm proves the drain happens
+    first.
+    """
+    _disable_stub(monkeypatch)
+    _allow_cap(monkeypatch)
+
+    from agent import tutor
+
+    turn1 = _make_stream(
+        _tool_chunk(
+            _tool_fragment(
+                0,
+                id="tc_1",
+                name="update_topic_profile",
+                arguments='{"session_id": "s1"}',
+            )
+        ),
+    )
+    monkeypatch.setattr("agent.tutor.litellm.acompletion", AsyncMock(side_effect=[turn1]))
+    monkeypatch.setattr(
+        "agent.tutor.litellm.stream_chunk_builder", MagicMock(return_value=SimpleNamespace())
+    )
+    monkeypatch.setattr("agent.tutor.litellm.completion_cost", MagicMock(return_value=0.0))
+
+    started = threading.Event()
+    release = threading.Event()
+    order: list[str] = []
+
+    def _slow_dispatch(name, args, ctx):
+        started.set()
+        release.wait(timeout=5)
+        order.append("dispatch_done")
+        return ToolResult(ok=True, status="ok", error=None, data={})
+
+    monkeypatch.setattr("agent.tutor.tools.dispatch", _slow_dispatch)
+
+    orig_persist = tutor._persist_assistant_message
+
+    def _spy_persist(*a, **k):
+        order.append("persist_called")
+        return orig_persist(*a, **k)
+
+    monkeypatch.setattr("agent.tutor._persist_assistant_message", _spy_persist)
+
+    ctx = _ctx(db_session, session_id="s1")
+
+    received = []
+
+    async def _consume():
+        async for ev in tutor.run_streaming(
+            [{"role": "user", "content": "go"}], "sys", ctx
+        ):
+            received.append(ev)
+
+    task = asyncio.create_task(_consume())
+
+    # Wait (off the event loop thread) until the dispatch thread has actually
+    # started, so cancellation lands mid-dispatch, not before it.
+    await asyncio.to_thread(started.wait, 5)
+    assert started.is_set(), "dispatch never started"
+
+    task.cancel()
+    # Give the cancel a moment to be delivered to the shielded await before
+    # releasing the blocked thread, so the drain genuinely has to wait.
+    await asyncio.sleep(0.05)
+    assert order == [], "cancel arm must not run ahead of the in-flight dispatch"
+    release.set()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    # The dispatch thread must have fully finished BEFORE the cancel arm
+    # persisted the cancelled message -- proving the synchronization point
+    # (draining the shielded dispatch_task) exists and is ordered correctly.
+    assert order == ["dispatch_done", "persist_called"]
+    assert any(e.type == "cancelled" for e in received)
+
+    msg = db_session.query(ChatMessage).filter(ChatMessage.session_id == "s1").one()
+    assert msg.status == "cancelled"

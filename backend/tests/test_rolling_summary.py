@@ -147,6 +147,70 @@ async def test_update_rolling_summary_success_records_ledger_and_timeout(
     assert cost_meter.current_spend(db_session, s.user_id) == Decimal("0.0010")
 
 
+def test_rolling_summary_counts_before_loading(db_session, monkeypatch):
+    """F-58: when not due, no ChatMessage rows are materialized -- only a
+    COUNT query runs."""
+    import asyncio
+    from services import summary_service
+    from db.models import ChatMessage, Session as SessionModel
+
+    s = SessionModel(id="s_f58_count", user_id="u1", topic="t")
+    db_session.add(s)
+    db_session.commit()
+    for i in range(5):  # far below ROLLING_WINDOW + ROLLING_DEBOUNCE
+        db_session.add(ChatMessage(session_id=s.id, role="user", content=f"m{i}"))
+    db_session.commit()
+
+    # Resolve the id (and un-expire `s` in the identity map) BEFORE the spy
+    # goes on: expire_on_commit means a bare `s.id` attribute access after a
+    # commit would otherwise issue its own refresh SELECT, which is a test
+    # artifact, not a call made by update_rolling_summary under test.
+    sid = s.id
+
+    loaded = []
+    orig_execute = db_session.execute
+
+    def spy(stmt, *a, **kw):
+        loaded.append(str(stmt))
+        return orig_execute(stmt, *a, **kw)
+
+    monkeypatch.setattr(db_session, "execute", spy)
+    result = asyncio.run(summary_service.update_rolling_summary(db_session, sid))
+    assert result is None
+    # The single statement issued must be an aggregate count, not a row load.
+    assert len(loaded) == 1 and "count" in loaded[0].lower()
+
+
+def test_rolling_transcript_capped_to_newest(db_session, monkeypatch):
+    """F-58: the dropped-transcript sent to the LLM contains at most
+    ROLLING_TRANSCRIPT_MAX messages, the newest ones."""
+    import asyncio
+    from services import summary_service
+    from db.models import ChatMessage, Session as SessionModel
+
+    s = SessionModel(id="s_f58_cap", user_id="u1", topic="t")
+    db_session.add(s)
+    db_session.commit()
+    total = summary_service.ROLLING_WINDOW + summary_service.ROLLING_TRANSCRIPT_MAX + 15
+    for i in range(total):
+        db_session.add(ChatMessage(session_id=s.id, role="user", content=f"mark-{i}"))
+    db_session.commit()
+
+    seen = {}
+
+    def fake_mechanical(dropped):
+        seen["dropped"] = list(dropped)
+        return "[auto-rolling] x"
+
+    monkeypatch.setattr(summary_service.settings, "llm_stub", True)
+    monkeypatch.setattr(summary_service, "_mechanical_rolling", fake_mechanical)
+    asyncio.run(summary_service.update_rolling_summary(db_session, s.id))
+    dropped = seen["dropped"]
+    assert len(dropped) == summary_service.ROLLING_TRANSCRIPT_MAX
+    # Newest dropped message is index total - ROLLING_WINDOW - 1.
+    assert dropped[-1].content == f"mark-{total - summary_service.ROLLING_WINDOW - 1}"
+
+
 async def test_update_rolling_summary_empty_content_still_meters_before_returning_none(
     db_session, session_with_messages, monkeypatch
 ):

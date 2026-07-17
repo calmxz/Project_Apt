@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     debug_timing: bool = False
     cors_origins: str = "http://localhost:5173"
     env: str = "dev"
+    # F-61: allow booting without Supabase auth config (local hacking, CI
+    # subsets). Default False: a deploy missing SUPABASE_URL dies at startup
+    # instead of 500ing "auth_not_configured" on every authenticated request.
+    auth_optional: bool = False
 
     supabase_url: str = ""
     supabase_publishable_key: str = ""
@@ -50,6 +54,10 @@ class Settings(BaseSettings):
     llm_timeout_s: float = 30.0
     summary_timeout_s: float = 20.0
     embedding_timeout_s: float = 15.0
+
+    # F-35: hard cap per profile concept list (confirmed_gaps,
+    # mastered_concepts); oldest entries evicted at write time.
+    max_profile_list: int = 40
 
     @property
     def cors_origin_list(self) -> list[str]:

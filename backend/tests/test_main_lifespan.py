@@ -50,6 +50,10 @@ async def test_prod_without_supabase_url_raises(monkeypatch, isolated_db):
 async def test_dev_without_supabase_url_does_not_raise(monkeypatch, isolated_db):
     monkeypatch.setattr(settings, "env", "dev")
     monkeypatch.setattr(settings, "supabase_url", "")
+    # F-61: validate_jwks_startup now fail-fasts on unconfigured auth unless
+    # AUTH_OPTIONAL is set -- this test is exercising the dev/prod boot guard,
+    # not the auth guard, so opt out of it.
+    monkeypatch.setattr(settings, "auth_optional", True)
 
     async with main_module.lifespan(main_module.app):
         pass
@@ -73,6 +77,9 @@ async def test_reaper_failure_does_not_abort_startup(monkeypatch, isolated_db):
     the reap UPDATE must not prevent the app from finishing startup."""
     monkeypatch.setattr(settings, "env", "dev")
     monkeypatch.setattr(settings, "supabase_url", "")
+    # F-61: opt out of the auth-configured guard -- this test targets the
+    # reaper-failure-is-non-fatal behavior, not auth config.
+    monkeypatch.setattr(settings, "auth_optional", True)
 
     def boom(db):
         raise RuntimeError("reap query failed")

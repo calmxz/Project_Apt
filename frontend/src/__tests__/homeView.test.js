@@ -118,6 +118,41 @@ describe('HomeView', () => {
     expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'sess1' } })
   })
 
+  it('New lesson navigates to the existing session on server-side 409 duplicate_topic', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'listSessions').mockResolvedValue([])
+    vi.spyOn(store, 'createSession').mockRejectedValue({
+      status: 409,
+      body: { detail: { code: 'duplicate_topic', session_id: 'sess-existing' } },
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-testid="home-quick-topic"]').setValue('Recursion')
+    await wrapper.get('[data-testid="home-quick-go"]').trigger('click')
+    await flushPromises()
+    expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'sess-existing' } })
+  })
+
+  it('double-invoking startQuick while createSession is pending only calls the store once (F-45)', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'listSessions').mockResolvedValue([])
+    let resolveCreate
+    const createSpy = vi.spyOn(store, 'createSession').mockReturnValue(
+      new Promise((resolve) => {
+        resolveCreate = resolve
+      }),
+    )
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-testid="home-quick-topic"]').setValue('Recursion')
+    await wrapper.get('[data-testid="home-quick-go"]').trigger('click')
+    await wrapper.get('[data-testid="home-quick-go"]').trigger('click')
+    expect(createSpy).toHaveBeenCalledTimes(1)
+    resolveCreate({ id: 'sess1' })
+    await flushPromises()
+    expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'sess1' } })
+  })
+
   it('does not render the dupe banner or recent feed (relocated)', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'listSessions').mockResolvedValue([])
@@ -203,6 +238,29 @@ describe('HomeView review card', () => {
     await wrapper.get('[data-testid="home-review-item"]').trigger('click')
     await flushPromises()
     expect(push).not.toHaveBeenCalled()
+  })
+
+  it('startReview swallows a rejecting continueTopic and resets busy (F-45)', async () => {
+    apiReviewQueue.mockResolvedValue({
+      items: [makeReviewItem('mitosis')], total: 1, limit: 3, offset: 0,
+    })
+    const store = useSessionStore()
+    // vi.spyOn on a store action already spied by an earlier test in this
+    // describe block (pinia isn't reset here) reuses the same mock and its
+    // call history — clear it so the count below reflects only this test.
+    const continueSpy = vi.spyOn(store, 'continueTopic').mockRejectedValue(new Error('boom'))
+    continueSpy.mockClear()
+    const wrapper = mountView()
+    await flushPromises()
+    // Rejecting inside the click handler must not surface as an unhandled
+    // rejection, and busy must reset so a retry can go through.
+    await wrapper.get('[data-testid="home-review-item"]').trigger('click')
+    await flushPromises()
+    expect(push).not.toHaveBeenCalled()
+    expect(wrapper.get('[data-testid="home-review-item"]').attributes('disabled')).toBeUndefined()
+    await wrapper.get('[data-testid="home-review-item"]').trigger('click')
+    await flushPromises()
+    expect(continueSpy).toHaveBeenCalledTimes(2)
   })
 
   it('View all refetches with a large limit and hides itself', async () => {

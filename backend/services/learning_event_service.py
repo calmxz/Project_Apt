@@ -4,8 +4,7 @@ Demotion rule (Spec §3.3, §3.4): if correct=False AND gap_tested is currently
 in mastered_concepts, remove it from mastered_concepts.
 
 record_learning_event is no longer an LLM tool; recording happens server-side
-via record_from_answer when the learner clicks a check-question answer. The
-is_gradable turn-barrier (pending_check_store) is therefore not consulted here.
+via record_from_answer when the learner clicks a check-question answer.
 """
 
 import json
@@ -38,7 +37,7 @@ def record_from_answer(
     clear_pending=False / commit=False let the batch caller (check_question_service.
     answer) keep the rest of the batch open and fold this into one commit.
 
-    This bypasses the is_gradable turn-barrier: a human click is not the LLM,
+    No turn-barrier applies here: a human click is not the LLM,
     and record_learning_event is no longer a tool, so the ask-and-self-grade
     exploit the barrier guarded against is impossible.
 

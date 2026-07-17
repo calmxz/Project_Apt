@@ -46,7 +46,7 @@ from services import (
     rate_limit,
     summary_service,
 )
-from services.auth import current_user_id
+from services.auth import accepted_terms_from_request, current_user_id
 from services.session_enrichment import aware_utc as _aware_utc, compute_enrichment
 from services.user_service import ensure_user
 
@@ -93,6 +93,26 @@ def _enrich_list_items(db: Session, rows: list[SessionModel]) -> list[SessionLis
     ]
 
 
+def _active_session_on_topic(
+    db: Session, user_id: str, topic: str, *, exclude_id: str | None = None
+) -> str | None:
+    """F-34: id of this user's active (ended_at IS NULL) session with the
+    same casefolded topic, else None. The FE guard self-disables on list
+    failure and covers only one tab; this is the authoritative check."""
+    stmt = (
+        select(SessionModel.id)
+        .where(
+            SessionModel.user_id == user_id,
+            SessionModel.ended_at.is_(None),
+            func.lower(SessionModel.topic) == (topic or "").strip().lower(),
+        )
+        .limit(1)
+    )
+    if exclude_id is not None:
+        stmt = stmt.where(SessionModel.id != exclude_id)
+    return db.execute(stmt).scalar_one_or_none()
+
+
 @router.post(
     "/sessions",
     response_model=SessionResponse,
@@ -100,6 +120,7 @@ def _enrich_list_items(db: Session, rows: list[SessionModel]) -> list[SessionLis
 )
 async def create_session(
     req: SessionCreateRequest,
+    request: Request,
     user_id: str = Depends(current_user_id),
     db: Session = Depends(get_db),
 ):
@@ -112,7 +133,28 @@ async def create_session(
             status_code=400, detail="prior_session_id forbidden when seed_mode=fresh"
         )
 
-    ensure_user(db, user_id)
+    ensure_user(db, user_id, accepted_terms=accepted_terms_from_request(request))
+
+    # Final-review fix: this check must run BEFORE the resume block below.
+    # The resume block has irreversible side effects (claim-end the prior,
+    # consume a rate-limit slot, fire a summary LLM call) -- if a
+    # pre-existing second active session on this topic exists, we must 409
+    # before any of that runs, not after. exclude_id=req.prior_session_id
+    # keeps a legitimate resume self-exclusive: the prior being resumed is
+    # still active (ended_at IS NULL) at this point and must not conflict
+    # with itself. Consolidated from the two checks this used to be (pre-
+    # resume didn't exist; the sole check ran post-resume) -- a single
+    # pre-check fully covers both the resume and fresh-create paths, since by
+    # the time the fresh-create path would have hit the old post-check there
+    # are no intervening side effects to protect against.
+    existing = _active_session_on_topic(
+        db, user_id, req.topic, exclude_id=req.prior_session_id
+    )
+    if existing is not None:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "duplicate_topic", "session_id": existing},
+        )
 
     new_id = uuid.uuid4().hex
     profile_json = TopicProfile().model_dump_json()
@@ -198,6 +240,7 @@ def _load_messages(db: Session, session_id: str, open_message_id: int | None = N
                 citations=citations,
                 tool_calls=tool_calls,
                 check_batch=check_batch,
+                status=m.status,
             )
         )
     return out
@@ -353,6 +396,14 @@ def reopen_session(
     if row is None or row.user_id != user_id:
         raise HTTPException(status_code=404, detail="session not found")
     if row.ended_at is not None:
+        existing = _active_session_on_topic(
+            db, user_id, row.topic, exclude_id=row.id
+        )
+        if existing is not None:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "duplicate_topic", "session_id": existing},
+            )
         row.ended_at = None
         db.commit()
         db.refresh(row)
@@ -416,7 +467,7 @@ def skip_check(
     try:
         prog = check_question_service.skip(db, session_id, req.index)
     except check_question_service.CheckStateError as e:
-        raise HTTPException(status_code=409, detail=str(e))
+        raise HTTPException(status_code=409, detail={"code": "check_conflict", "message": str(e)})
     check_question_service.write_check_batch(
         db, check_question_service.get_pending_check(db, session_id)
     )
@@ -442,7 +493,7 @@ def answer_check(
     try:
         result = check_question_service.answer(db, session_id, req.index, req.selected_index)
     except check_question_service.CheckStateError as e:
-        raise HTTPException(status_code=409, detail=str(e))
+        raise HTTPException(status_code=409, detail={"code": "check_conflict", "message": str(e)})
     check_question_service.write_check_batch(
         db, check_question_service.get_pending_check(db, session_id)
     )
@@ -483,7 +534,7 @@ async def complete_check(
 
     pc = check_question_service.get_pending_check(db, session_id)
     if pc is None or not check_question_service.is_done(pc):
-        raise HTTPException(status_code=409, detail="no resolved batch to complete")
+        raise HTTPException(status_code=409, detail={"code": "no_resolved_batch"})
 
     summary = check_question_service.build_results_summary(pc)
     cooldown = check_question_service.build_quiz_cooldown(pc)
@@ -533,6 +584,7 @@ async def complete_check(
         user_id=user_id,
         turn_started_at=datetime.now(timezone.utc),
         suppress_check=True,
+        diagnostic_required=(profile.knowledge_level is None),
     )
 
     async def event_stream():

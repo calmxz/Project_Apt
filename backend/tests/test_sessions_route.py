@@ -112,6 +112,59 @@ def test_post_resume_with_unended_prior_generates_summary(
     assert body["topic_profile"]["last_session_summary"] == "auto summary about joins"
 
 
+def test_resume_409_when_second_active_session_exists_leaves_prior_untouched(
+    client, db_session, seeded_user, mock_litellm, llm_text, monkeypatch
+):
+    """Final-review fix: the duplicate-topic check must run BEFORE the
+    resume block's irreversible side effects (claim-end + summary LLM call).
+    A pre-existing second active session on the same topic must 409 without
+    ending or summarizing the session being resumed."""
+    called = {"summary": False}
+
+    async def fake_acompletion(**kwargs):
+        called["summary"] = True
+        return llm_text("should not be generated")
+
+    monkeypatch.setattr("services.summary_service.litellm.acompletion", fake_acompletion)
+
+    active_other = SessionModel(
+        id="active_other",
+        user_id=USER_ID,
+        topic="sql",
+        topic_profile_json=TopicProfile().model_dump_json(),
+    )
+    prior = SessionModel(
+        id="prior_dup",
+        user_id=USER_ID,
+        topic="sql",
+        topic_profile_json=TopicProfile(mastered_concepts=[{"name": "select"}]).model_dump_json(),
+    )
+    db_session.add_all([active_other, prior])
+    db_session.flush()
+    db_session.add(ChatMessage(session_id="prior_dup", role="user", content="hi"))
+    db_session.commit()
+
+    r = client.post(
+        "/api/sessions",
+        json={
+            "user_id": USER_ID,
+            "topic": "sql",
+            "seed_mode": "resume",
+            "prior_session_id": "prior_dup",
+        },
+    )
+    assert r.status_code == 409, r.text
+    assert r.json()["detail"]["code"] == "duplicate_topic"
+    assert r.json()["detail"]["session_id"] == "active_other"
+
+    db_session.expire_all()
+    refreshed_prior = db_session.get(SessionModel, "prior_dup")
+    refreshed_active = db_session.get(SessionModel, "active_other")
+    assert refreshed_prior.ended_at is None, "aborted resume must not claim-end the prior"
+    assert refreshed_active.ended_at is None, "pre-existing active session must be untouched"
+    assert called["summary"] is False, "no summary LLM call must fire before the 409"
+
+
 def test_get_list_filters_by_user_desc(client, db_session, seeded_user):
     older = SessionModel(
         id="s_old",
@@ -286,6 +339,32 @@ def test_get_session_returns_messages_array(client, db_session, seeded_user):
         ("user", "hi"),
         ("assistant", "hello back"),
     ]
+
+
+def test_get_session_messages_round_trip_status(client, db_session, seeded_user):
+    """F-14 follow-up: GET-session messages must carry `status` through so the
+    FE can render the '(interrupted)' marker for partial rows on reload."""
+    from db.models import ChatMessage
+
+    db_session.add(
+        SessionModel(
+            id="s_msg_status",
+            user_id=USER_ID,
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.add(ChatMessage(session_id="s_msg_status", role="user", content="hi"))
+    db_session.add(
+        ChatMessage(session_id="s_msg_status", role="assistant", content="draft", status="partial")
+    )
+    db_session.commit()
+
+    r = client.get(f"/api/sessions/s_msg_status?user_id={USER_ID}")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    statuses = [m["status"] for m in body["messages"]]
+    assert statuses == ["complete", "partial"]
 
 
 def test_reopen_flips_ended_at_to_null(client, db_session, seeded_user):

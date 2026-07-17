@@ -9,8 +9,9 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ push: routerPush }),
   useRoute: () => routeRef,
 }))
+const showSuccess = vi.fn()
 vi.mock('@/composables/useToast.js', () => ({
-  useToast: () => ({ showError: vi.fn(), showWarn: vi.fn(), showSuccess: vi.fn() }),
+  useToast: () => ({ showError: vi.fn(), showWarn: vi.fn(), showSuccess }),
 }))
 
 import Sidebar from '@/components/sidebar/Sidebar.vue'
@@ -333,11 +334,13 @@ describe('Sidebar.vue — row interactions', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     routerPush.mockClear()
+    showSuccess.mockClear()
     localStorage.clear()
     setViewport(1400)
     sidebarTest._setExpanded(true)
     routeRef.params = {}
     routeRef.fullPath = '/'
+    routeRef.name = undefined
   })
   afterEach(() => wrapper?.unmount())
 
@@ -377,6 +380,47 @@ describe('Sidebar.vue — row interactions', () => {
     await wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]').trigger('click')
     await wrapper.find('[data-testid="sidebar-row-menu-end"]').trigger('click')
     expect(endSpy).toHaveBeenCalledWith('a1')
+  })
+
+  it('End session toasts the pending summary when ending from off that session\'s view (F-44)', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'a1', topic: 'Big-O', created_at: '2026-05-20T10:00:00Z', ended_at: null },
+    ]
+    vi.spyOn(store, 'endSession').mockImplementation(async (id) => {
+      store.pendingSummary = { sessionId: id, kind: 'summary', text: 'Great progress on Big-O.' }
+      return {}
+    })
+    // Not on that session's own view — SessionView isn't mounted to consume it.
+    routeRef.name = 'home'
+    routeRef.params = {}
+    wrapper = mount(Sidebar, { attachTo: document.body })
+    await flushPromises()
+    await wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]').trigger('click')
+    await wrapper.find('[data-testid="sidebar-row-menu-end"]').trigger('click')
+    await flushPromises()
+    expect(showSuccess).toHaveBeenCalledWith('Great progress on Big-O.')
+    expect(store.pendingSummary).toBe(null)
+  })
+
+  it('End session does not toast when this session\'s own view is active', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'a1', topic: 'Big-O', created_at: '2026-05-20T10:00:00Z', ended_at: null },
+    ]
+    vi.spyOn(store, 'endSession').mockImplementation(async (id) => {
+      store.pendingSummary = { sessionId: id, kind: 'summary', text: 'Great progress on Big-O.' }
+      return {}
+    })
+    routeRef.name = 'session'
+    routeRef.params = { id: 'a1' }
+    wrapper = mount(Sidebar, { attachTo: document.body })
+    await flushPromises()
+    await wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]').trigger('click')
+    await wrapper.find('[data-testid="sidebar-row-menu-end"]').trigger('click')
+    await flushPromises()
+    expect(showSuccess).not.toHaveBeenCalled()
+    expect(store.pendingSummary).not.toBe(null)
   })
 
   it('Resume menu item calls store.reopenSession and navigates', async () => {

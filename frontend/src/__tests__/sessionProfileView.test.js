@@ -70,6 +70,31 @@ describe('SessionProfileView (per-session)', () => {
     expect(wrapper.find('[data-testid="sprof-events"]').text()).toContain('Inner vs outer')
   })
 
+  // F-53: last_session_summary may carry the "[auto] " fallback prefix from
+  // an auto-generated (no-LLM) recap; strip it before display.
+  it('strips the [auto] prefix from the session summary', async () => {
+    vi.spyOn(profileApi, 'getSessionProfile').mockResolvedValue({
+      profile: {
+        knowledge_level: 'beginner',
+        confirmed_gaps: [],
+        mastered_concepts: [],
+        subtopic_levels: {},
+        last_session_summary: '[auto] recap text',
+      },
+      recent_learning_events: [],
+    })
+
+    const wrapper = mount(ProfileView, {
+      props: { id: 's1' },
+      global: { stubs },
+    })
+    await flushPromises()
+
+    const summary = wrapper.find('[data-testid="sprof-summary"]')
+    expect(summary.text()).toContain('recap text')
+    expect(summary.text()).not.toContain('[auto]')
+  })
+
   it('renders concept names with evidence badges', async () => {
     vi.spyOn(profileApi, 'getSessionProfile').mockResolvedValue({
       profile: {

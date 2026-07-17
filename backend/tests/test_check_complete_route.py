@@ -66,7 +66,8 @@ def resolved_diagnostic_batch_session(db_session):
     db_session.add(row)
     db_session.commit()
     ctx = ToolContext(db=db_session, session_id=row.id, user_id=USER_ID,
-                      turn_started_at=datetime(2026, 1, 1, tzinfo=timezone.utc))
+                      turn_started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                      diagnostic_required=True)
     check_question_service.register(db_session, ctx, AskCheckQuestionsArgs(
         session_id=row.id, gap="atp",
         items=[{"question": "Q1?", "options": ["a", "b"],

@@ -38,7 +38,7 @@ services:
       UPLOADS_PATH: /data/uploads
       # Same-origin via nginx — no browser-side CORS preflight needed.
       # Keep the localhost dev origin too in case you reverse-proxy directly.
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost,http://localhost:5173}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost}
       LLM_STUB: ${LLM_STUB:-0}
     volumes:
       - ./data:/data

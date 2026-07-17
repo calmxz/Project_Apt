@@ -48,6 +48,15 @@ describe('AssistantBubble', () => {
     expect(w.find('.cancelled-marker').exists()).toBe(true)
   })
 
+  it('shows an interrupted marker for partial messages', () => {
+    const w = mount(AssistantBubble, {
+      props: {
+        message: { content: 'partial text', tool_calls: [], citations: [], status: 'partial' },
+      },
+    })
+    expect(w.text()).toContain('(interrupted)')
+  })
+
   it('does not show cancelled marker when status is complete', () => {
     const w = mount(AssistantBubble, {
       props: {

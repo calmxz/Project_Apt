@@ -6,6 +6,7 @@ import ConfirmDialog from 'primevue/confirmdialog'
 import { useToast } from './composables/useToast.js'
 import { useSidebar } from './composables/useSidebar.js'
 import { errorBus } from './services/errorBus.js'
+import { friendlyError } from './lib/errors.js'
 import Sidebar from './components/sidebar/Sidebar.vue'
 import SidebarMobileTopStrip from './components/sidebar/SidebarMobileTopStrip.vue'
 
@@ -35,11 +36,12 @@ onBeforeUnmount(() => {
 
 // Skip 429 (daily-cap has dedicated banner+toast in SessionView) and 404
 // (consumers typically render "not found" inline; double-surfacing is noisy).
+// F-51: route through friendlyError() so raw backend detail (internal error
+// codes, stack fragments) never lands in the toast.
 const onApiError = (e) => {
   const err = e.detail
   if (!err || err.status === 429 || err.status === 404) return
-  const msg = err?.body?.detail || err?.message || 'Request failed'
-  showError(typeof msg === 'string' ? msg : JSON.stringify(msg))
+  showError(friendlyError(err))
 }
 onMounted(() => errorBus.addEventListener('api-error', onApiError))
 onBeforeUnmount(() => errorBus.removeEventListener('api-error', onApiError))

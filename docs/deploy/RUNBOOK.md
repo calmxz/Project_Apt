@@ -83,3 +83,10 @@ start (~15 min idle). DB data on Supabase is safe. WS-D (R2) is the real fix.
 
 - Render: Deploys tab → pick a previous successful deploy → Rollback.
 - Vercel: Deployments → previous deployment → Promote to Production.
+
+## Local development — docker compose with nginx
+
+Rate limiting: nginx throttles `/api/` at 10 requests/second per IP (burst 20,
+HTTP 429 beyond). This applies to nginx-fronted deploys only; the Render
+backend has no per-request throttle -- its spend guard is the daily LLM
+cost cap and rate counter.

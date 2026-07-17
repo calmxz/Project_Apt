@@ -239,7 +239,7 @@ The backend reads `.env` at the repo root. For the production stack, the same `.
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `VITE_API_BASE_URL` | Backend base URL the SPA calls. | `http://localhost:8000` |
+| `VITE_API_BASE_URL` | Backend base URL the SPA calls. | `http://localhost:8000/api` (nginx-served docker builds bake the relative '/api' — see frontend/Dockerfile) |
 
 > **Security.** `.env` and `.env.local` are gitignored. **Never commit your `GEMINI_API_KEY`** — if you do, rotate it immediately at [Google AI Studio](https://aistudio.google.com/apikey).
 
@@ -557,7 +557,7 @@ Ingestion runs in a background task. Check the backend (`uvicorn`) output for em
 <details>
 <summary><b>Frontend shows <code>Network Error</code></b></summary>
 
-`VITE_API_BASE_URL` in `frontend/.env.local` doesn't match where the backend is listening. Default is `http://localhost:8000` — fix accordingly if you changed the backend port.
+`VITE_API_BASE_URL` in `frontend/.env.local` doesn't match where the backend is listening. Default is `http://localhost:8000/api` — fix accordingly if you changed the backend port.
 </details>
 
 <details>

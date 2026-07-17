@@ -14,6 +14,11 @@ export const useUserStore = defineStore('user', () => {
   const onboardingComplete = ref(false)
   // Supabase uid the in-memory state belongs to; null = signed out.
   const activeUserId = ref(null)
+  // F-46: whether hydrateFromServer has completed (success or failure) for
+  // the current active user. The router guard awaits one hydrate before
+  // trusting onboardingComplete, so a new device doesn't get force-routed
+  // through onboarding off a stale/absent localStorage snapshot.
+  const hydrated = ref(false)
 
   function _storageKey() {
     return `${STORAGE_PREFIX}:${activeUserId.value}`
@@ -23,6 +28,7 @@ export const useUserStore = defineStore('user', () => {
     name.value = null
     interactionPreferences.value = null
     onboardingComplete.value = false
+    hydrated.value = false
   }
 
   function setActiveUser(uid) {
@@ -59,8 +65,41 @@ export const useUserStore = defineStore('user', () => {
     )
   }
 
-  function completeOnboarding({ name: displayName, feedback }) {
-    name.value = displayName?.trim() || 'Learner'
+  // F-46: server is authoritative for onboarding state; localStorage is a
+  // warm cache only. A failed hydrate (offline / API down) keeps whatever
+  // localStorage already loaded rather than blocking the app.
+  async function hydrateFromServer() {
+    if (!activeUserId.value) return
+    try {
+      const { apiGet } = await import('../services/apiClient.js')
+      const me = await apiGet('/me', undefined, { silent: true })
+      if (me) {
+        if (me.display_name != null) name.value = me.display_name
+        if (me.feedback_pref != null) {
+          interactionPreferences.value = {
+            ...interactionPreferences.value,
+            feedback: me.feedback_pref,
+          }
+        }
+        onboardingComplete.value = Boolean(me.onboarding_complete)
+        persist()
+      }
+    } catch {
+      // Offline / API down: keep the localStorage snapshot already loaded.
+    } finally {
+      hydrated.value = true
+    }
+  }
+
+  async function completeOnboarding({ name: displayName, feedback }) {
+    const finalName = displayName?.trim() || 'Learner'
+    const { apiPatch } = await import('../services/apiClient.js')
+    await apiPatch('/me', {
+      display_name: finalName,
+      feedback_pref: feedback,
+      onboarding_complete: true,
+    })
+    name.value = finalName
     interactionPreferences.value = { feedback }
     onboardingComplete.value = true
     persist()
@@ -73,13 +112,17 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
-  function updateProfile({ name: displayName, feedback }) {
+  async function updateProfile({ name: displayName, feedback }) {
+    const body = {}
+    if (displayName != null) body.display_name = displayName.trim() || 'Learner'
+    if (feedback != null) body.feedback_pref = feedback
+    if (Object.keys(body).length) {
+      const { apiPatch } = await import('../services/apiClient.js')
+      await apiPatch('/me', body)
+    }
     if (displayName != null) name.value = displayName.trim() || 'Learner'
     if (feedback != null) {
-      interactionPreferences.value = {
-        ...interactionPreferences.value,
-        feedback,
-      }
+      interactionPreferences.value = { ...interactionPreferences.value, feedback }
     }
     persist()
   }
@@ -89,8 +132,10 @@ export const useUserStore = defineStore('user', () => {
     interactionPreferences,
     onboardingComplete,
     activeUserId,
+    hydrated,
     setActiveUser,
     loadFromLocalStorage,
+    hydrateFromServer,
     completeOnboarding,
     resetOnboarding,
     updateProfile,

@@ -4,6 +4,7 @@ import { createPinia, setActivePinia } from 'pinia'
 
 import LoginView from '@/views/LoginView.vue'
 import { useAuthStore } from '@/stores/auth.js'
+import { safeRedirect } from '@/utils/safeRedirect.js'
 
 const { mockQuery, push } = vi.hoisted(() => ({ mockQuery: { value: {} }, push: vi.fn() }))
 vi.mock('vue-router', () => ({
@@ -120,5 +121,47 @@ describe('LoginView', () => {
   it('hides the reset-done banner without ?reset=1', () => {
     const wrapper = mountView()
     expect(wrapper.find('[data-testid="login-reset-done"]').exists()).toBe(false)
+  })
+
+  it('navigates to the redirect target after sign-in when present', async () => {
+    mockQuery.value = { redirect: '/session/abc' }
+    const auth = useAuthStore()
+    vi.spyOn(auth, 'signIn').mockResolvedValue()
+    const wrapper = mountView()
+    await wrapper.get('[data-testid="login-email"]').setValue('me@example.com')
+    await wrapper.get('[data-testid="login-password"]').setValue('hunter2pw')
+    await wrapper.get('[data-testid="login-form"]').trigger('submit.prevent')
+    await flushPromises()
+    expect(push).toHaveBeenCalledWith('/session/abc')
+  })
+
+  it('ignores an unsafe redirect target and falls back to home', async () => {
+    mockQuery.value = { redirect: '//evil.com' }
+    const auth = useAuthStore()
+    vi.spyOn(auth, 'signIn').mockResolvedValue()
+    const wrapper = mountView()
+    await wrapper.get('[data-testid="login-email"]').setValue('me@example.com')
+    await wrapper.get('[data-testid="login-password"]').setValue('hunter2pw')
+    await wrapper.get('[data-testid="login-form"]').trigger('submit.prevent')
+    await flushPromises()
+    expect(push).toHaveBeenCalledWith({ name: 'home' })
+  })
+})
+
+describe('safeRedirect', () => {
+  it('accepts a relative path', () => {
+    expect(safeRedirect('/session/abc')).toBe('/session/abc')
+  })
+
+  it('rejects a protocol-relative path', () => {
+    expect(safeRedirect('//evil.com')).toBe(null)
+  })
+
+  it('rejects an absolute URL', () => {
+    expect(safeRedirect('https://evil.com')).toBe(null)
+  })
+
+  it('rejects non-string values', () => {
+    expect(safeRedirect(undefined)).toBe(null)
   })
 })

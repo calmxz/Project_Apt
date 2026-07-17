@@ -108,7 +108,52 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
     return dot / (norm_a * norm_b)
 
 
-def semantic_fallback_required(
+async def prefetch_for_prompt(
+    db: Session, session_id: str, user_id: str, query: str, k: int = 5
+) -> list[dict] | None:
+    """F-56: server-side retrieval for REQUIRED turns. The REQUIRED flag was
+    advisory -- the model could answer ungrounded without calling
+    retrieve_chunks. Fetch the chunks ourselves and inject them into the
+    prompt instead. Returns chunk dicts (same shape retrieve() produces) or
+    None on any failure/no-results -- the caller then falls back to the
+    advisory flag. Embedding spend is metered like every other call (F-19)."""
+    try:
+        if not documents_service.has_ready_document(db, session_id):
+            return None
+        resp = await litellm.aembedding(
+            model=settings.embedding_model,
+            input=[query],
+            dimensions=settings.embedding_dim,
+            timeout=settings.embedding_timeout_s,
+        )
+        query_vec = (
+            resp.data[0]["embedding"]
+            if isinstance(resp.data[0], dict)
+            else resp.data[0].embedding
+        )
+        cost_meter.meter_embedding_response(
+            db, resp, user_id=user_id, session_id=session_id, texts=[query],
+        )
+        hits = pgvector_store.query_chunks(
+            db, session_id=session_id, query_embedding=query_vec, k=k
+        )
+    except Exception as e:
+        log.warning("prefetch_for_prompt failed; falling back to advisory flag: %s", e)
+        return None
+    chunks = [
+        {
+            "doc_id": str(h.doc_id),
+            "text": h.chunk_text,
+            "page": h.page,
+            "score": h.score,
+            "doc_name": h.doc_name,
+        }
+        for h in hits
+    ]
+    return chunks or None
+
+
+async def semantic_fallback_required(
     db: Session, session_id: str, query: str, *, user_id: str | None = None
 ) -> bool:
     """D2.2: escalate the OPTIONAL lexical gate when the query is semantically
@@ -119,6 +164,8 @@ def semantic_fallback_required(
     F-19: when `user_id` is supplied, the embedding call's spend is metered
     onto the cost ledger. Callers that cannot attribute the call to a user
     (or don't have one handy) may omit it and simply skip metering.
+
+    F-18: async embedding; this runs directly on the event loop in _prepare_turn.
     """
     if settings.llm_stub_enabled:
         return False
@@ -128,7 +175,7 @@ def semantic_fallback_required(
         centroid = _session_centroid(db, session_id)
         if centroid is None:
             return False
-        resp = litellm.embedding(
+        resp = await litellm.aembedding(
             model=settings.embedding_model,
             input=[query],
             dimensions=settings.embedding_dim,

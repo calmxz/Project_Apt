@@ -52,9 +52,12 @@ def _stub_semantic_fallback(monkeypatch):
     # one has_ready_document SELECT (lexical gate is False by default here,
     # since seeded_session has no kw_index_json entries). Pin it off so this
     # test measures _prepare_turn regardless of ambient LLM-stub config.
+    async def _fake_fallback(*a, **kw):
+        return False
+
     monkeypatch.setattr(
         "routes.chat.retrieval_service.semantic_fallback_required",
-        lambda *a, **kw: False,
+        _fake_fallback,
     )
 
 

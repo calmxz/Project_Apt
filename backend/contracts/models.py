@@ -329,6 +329,10 @@ class Message(BaseModel):
     citations: list[Citation] | None = []
     tool_calls: list[ToolCallRecord] | None = []
     check_batch: PendingCheck | None = None
+    status: str | None = None
+    """
+    Persistence status for assistant turns: complete, cancelled, error, or partial (streamed text kept after a mid-turn abort). Null for rows persisted before this field existed.
+    """
 
 
 class SessionDetail(BaseModel):
@@ -467,6 +471,24 @@ class SessionIngestionStatus(BaseModel):
     )
     status: Literal["pending", "ready", "failed"] | None = None
     documents: list[DocumentStatus]
+
+
+class MeResponse(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    display_name: constr(max_length=120) | None = None
+    feedback_pref: constr(max_length=40) | None = None
+    onboarding_complete: bool
+
+
+class MePatchRequest(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    display_name: constr(max_length=120) | None = None
+    feedback_pref: constr(max_length=40) | None = None
+    onboarding_complete: bool | None = None
 
 
 class ProfileResponse(BaseModel):
