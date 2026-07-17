@@ -15,14 +15,18 @@ from __future__ import annotations
 import time
 
 import jwt
+import jwt as pyjwt
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
 
+from services import auth
 from services import auth as auth_module
-from services.auth import current_user_id
+from services.auth import accepted_terms_from_request, current_user_id
+
+TEST_SUPABASE_URL = "https://test-project.supabase.co"
 
 
 @pytest.fixture(scope="module")
@@ -42,10 +46,13 @@ def rsa_keys() -> dict:
 def patch_jwks_client(monkeypatch, rsa_keys):
     """Stub _get_jwks_client so signing-key lookup returns our test public key.
 
-    Also resets the module-level cache so a prior test's stub doesn't leak.
+    Also resets the module-level cache so a prior test's stub doesn't leak,
+    and pins settings.supabase_url so the iss check has a stable value to
+    validate against.
     """
     auth_module._JWKS_CACHE["client"] = None
     auth_module._JWKS_CACHE["fetched_at"] = 0.0
+    monkeypatch.setattr(auth_module.settings, "supabase_url", TEST_SUPABASE_URL)
 
     class _FakeSigningKey:
         def __init__(self, key):
@@ -66,11 +73,13 @@ def patch_jwks_client(monkeypatch, rsa_keys):
 
 
 def _sign(rsa_keys: dict, *, sub: str = "user-123", aud: str = "authenticated",
-          exp_offset: int = 3600, extra: dict | None = None) -> str:
+          exp_offset: int = 3600, iss: str | None = None,
+          extra: dict | None = None) -> str:
     now = int(time.time())
     payload = {
         "sub": sub,
         "aud": aud,
+        "iss": iss if iss is not None else f"{TEST_SUPABASE_URL}/auth/v1",
         "iat": now,
         "exp": now + exp_offset,
     }
@@ -104,6 +113,46 @@ def test_valid_token_returns_sub(client, rsa_keys):
     assert r.json() == {"user_id": "user-abc"}
 
 
+@pytest.fixture
+def consent_app() -> FastAPI:
+    """F-52: a route mirroring the real chat.py/sessions.py wiring -- the
+    real `current_user_id` dependency stashes `request.state.jwt_claims`,
+    and the handler reads it back through `accepted_terms_from_request`.
+    Proves the stash-to-helper wiring end-to-end at the FastAPI DI level,
+    not just the SimpleNamespace unit tests in test_auth_config_batch6.py."""
+    app = FastAPI()
+
+    @app.get("/consent")
+    def consent(request: Request, user_id: str = Depends(current_user_id)) -> dict:
+        return {"user_id": user_id, "accepted_terms": accepted_terms_from_request(request)}
+
+    return app
+
+
+@pytest.fixture
+def consent_client(consent_app: FastAPI) -> TestClient:
+    return TestClient(consent_app)
+
+
+def test_current_user_id_stash_reaches_accepted_terms_from_request_true(consent_client, rsa_keys):
+    """A token whose user_metadata carries accepted_terms=true -> the claim
+    stashed by current_user_id is visible to accepted_terms_from_request."""
+    token = _sign(rsa_keys, extra={"user_metadata": {"accepted_terms": True}})
+    r = consent_client.get("/consent", headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 200
+    assert r.json() == {"user_id": "user-123", "accepted_terms": True}
+
+
+def test_current_user_id_stash_reaches_accepted_terms_from_request_false(consent_client, rsa_keys):
+    """A token with no accepted_terms claim (direct-API signup bypassing the
+    register checkbox) -> accepted_terms_from_request reads False, not a
+    default that masks the missing claim."""
+    token = _sign(rsa_keys)  # no user_metadata claim at all
+    r = consent_client.get("/consent", headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 200
+    assert r.json() == {"user_id": "user-123", "accepted_terms": False}
+
+
 def test_missing_authorization_header_returns_401(client):
     r = client.get("/whoami")
     assert r.status_code == 401
@@ -133,6 +182,13 @@ def test_expired_token_returns_401(client, rsa_keys):
 
 def test_wrong_audience_returns_401(client, rsa_keys):
     token = _sign(rsa_keys, aud="some-other-service")
+    r = client.get("/whoami", headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 401
+    assert r.json()["detail"] == "invalid_token"
+
+
+def test_wrong_issuer_returns_401(client, rsa_keys):
+    token = _sign(rsa_keys, iss="https://attacker.example.com/auth/v1")
     r = client.get("/whoami", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 401
     assert r.json()["detail"] == "invalid_token"
@@ -183,10 +239,6 @@ def test_auth_not_configured_when_jwks_url_missing(monkeypatch, app, rsa_keys):
     must raise 500 `auth_not_configured` rather than crash with a None."""
     auth_module._JWKS_CACHE["client"] = None
 
-    real_get = auth_module._get_jwks_client.__wrapped__ if hasattr(
-        auth_module._get_jwks_client, "__wrapped__"
-    ) else None
-
     # Re-import the original function (the autouse fixture patched it; undo here).
     import importlib
     fresh = importlib.reload(auth_module)
@@ -210,3 +262,59 @@ def test_auth_not_configured_when_jwks_url_missing(monkeypatch, app, rsa_keys):
 
     # Restore module state for any later tests in the session.
     importlib.reload(auth_module)
+
+
+class _RaisingJwksClient:
+    def __init__(self, exc):
+        self._exc = exc
+
+    def get_signing_key_from_jwt(self, token):
+        raise self._exc
+
+
+def test_unknown_kid_returns_401_not_500(monkeypatch):
+    """F-07: a spoofed/unknown kid is a bad token (401), not a server error."""
+    monkeypatch.setattr(
+        auth,
+        "_get_jwks_client",
+        lambda: _RaisingJwksClient(pyjwt.PyJWKClientError('Unable to find a signing key')),
+    )
+    with pytest.raises(HTTPException) as exc:
+        auth.verify_supabase_jwt("h.p.s")
+    assert exc.value.status_code == 401
+    assert exc.value.detail == "invalid_token"
+
+
+def test_jwks_connection_failure_returns_503(monkeypatch):
+    """F-07: JWKS unreachable is an upstream outage (503), not invalid auth."""
+    monkeypatch.setattr(
+        auth,
+        "_get_jwks_client",
+        lambda: _RaisingJwksClient(pyjwt.PyJWKClientConnectionError("fetch failed")),
+    )
+    with pytest.raises(HTTPException) as exc:
+        auth.verify_supabase_jwt("h.p.s")
+    assert exc.value.status_code == 503
+    assert exc.value.detail == "auth_unavailable"
+
+
+def test_decode_called_with_leeway(monkeypatch):
+    """F-41: 30s leeway absorbs backend-vs-Supabase clock skew at exp boundary."""
+
+    class _Key:
+        key = "test-key"
+
+    class _Client:
+        def get_signing_key_from_jwt(self, token):
+            return _Key()
+
+    captured = {}
+
+    def _fake_decode(token, key, **kwargs):
+        captured.update(kwargs)
+        return {"sub": "user-1"}
+
+    monkeypatch.setattr(auth, "_get_jwks_client", lambda: _Client())
+    monkeypatch.setattr(auth.jwt, "decode", _fake_decode)
+    assert auth.verify_supabase_jwt("h.p.s") == "user-1"
+    assert captured["leeway"] == auth.JWT_LEEWAY_SECONDS == 30

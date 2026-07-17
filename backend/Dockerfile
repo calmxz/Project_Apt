@@ -18,6 +18,7 @@ COPY . ./
 
 RUN adduser --system --no-create-home --group --uid 1000 app \
     && mkdir -p /app/data/uploads \
+    && chmod +x /app/entrypoint.sh \
     && chown -R app:app /app
 
 USER app
@@ -25,6 +26,6 @@ USER app
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD curl -fsS http://127.0.0.1:8000/health || exit 1
+    CMD curl -fsS "http://127.0.0.1:${PORT:-8000}/health" || exit 1
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["/app/entrypoint.sh"]

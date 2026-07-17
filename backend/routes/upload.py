@@ -1,4 +1,4 @@
-import os
+import logging
 import re
 from pathlib import Path
 
@@ -20,13 +20,42 @@ from contracts import UploadResponse, UploadStatus
 from db.database import get_db
 from db.models import Document, Session as SessionModel
 from lib.error_codes import DAILY_CAP_REACHED
-from services import ingestion_service, rate_limit
+from services import ingestion_service, object_store, rate_limit
 from services.auth import current_user_id
 
 
 router = APIRouter(prefix="/api")
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB
+ALLOWED_EXTENSIONS = {".pdf", ".pptx", ".txt", ".md", ".markdown"}
+
+# F-55: content sniff for container formats. Extensions with no reliable
+# magic bytes (.txt, .md) are exempt -- the extension check already ran.
+_MAGIC_BYTES = {
+    ".pdf": (b"%PDF",),
+    ".pptx": (b"PK\x03\x04",),
+}
+
+log = logging.getLogger(__name__)
+
+READ_CHUNK = 1024 * 1024  # 1 MiB
+
+
+def _read_bounded(fh, max_bytes: int) -> bytes:
+    """Read fh incrementally, aborting with 413 as soon as the running total
+    exceeds max_bytes (F-40: the Content-Length header is client-controlled,
+    so the pre-gate above is advisory only)."""
+    data = bytearray()
+    while True:
+        chunk = fh.read(READ_CHUNK)
+        if not chunk:
+            return bytes(data)
+        data.extend(chunk)
+        if len(data) > max_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail={"code": "FILE_TOO_LARGE", "max_bytes": max_bytes},
+            )
 
 
 @router.post(
@@ -34,7 +63,7 @@ MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB
     response_model=UploadResponse,
     status_code=status.HTTP_202_ACCEPTED,
 )
-def upload_pdf(
+def upload_file(
     request: Request,
     background_tasks: BackgroundTasks,
     session_id: str = Form(...),
@@ -65,8 +94,15 @@ def upload_pdf(
         except ValueError:
             pass
 
-    if (file.content_type or "").split(";")[0].strip() != "application/pdf":
-        raise HTTPException(status_code=400, detail="file must be application/pdf")
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "UNSUPPORTED_FILE_TYPE",
+                "message": "file type not supported; use PDF, PPTX, TXT, or MD",
+            },
+        )
 
     sess = db.get(SessionModel, session_id)
     if sess is None or sess.user_id != user_id:
@@ -77,24 +113,48 @@ def upload_pdf(
     if not safe_name or safe_name in {".", ".."}:
         raise HTTPException(status_code=400, detail={"code": "INVALID_FILENAME"})
 
+    data = _read_bounded(file.file, MAX_UPLOAD_BYTES)
+
+    expected = _MAGIC_BYTES.get(ext)
+    if expected and not any(data.startswith(m) for m in expected):
+        raise HTTPException(
+            status_code=415,
+            detail={
+                "code": "CONTENT_TYPE_MISMATCH",
+                "message": "file content does not match its extension",
+            },
+        )
+
     doc = Document(session_id=session_id, filename=safe_name, status="pending")
     db.add(doc)
     db.commit()
     db.refresh(doc)
 
-    data = file.file.read()
-    if len(data) > MAX_UPLOAD_BYTES:
-        db.delete(doc)
-        db.commit()
-        raise HTTPException(
-            status_code=413,
-            detail={"code": "FILE_TOO_LARGE", "max_bytes": MAX_UPLOAD_BYTES},
+    # F-29: a failed blob write must not strand a permanent "pending" row.
+    # Mark the row failed (visible in the UI banner) and report 507.
+    # get_store() itself is inside the try (final-review fix wave, Finding
+    # 2): a bad R2 config can raise on construction, before put() is ever
+    # called, and that must route through the same mark-failed + 507 path.
+    try:
+        store = object_store.get_store()
+        store.put(object_store.key_for(doc.id, doc.filename), data)
+    except Exception:
+        log.error(
+            "upload storage write failed",
+            extra={"doc_id": doc.id},
+            exc_info=settings.env != "prod",
         )
-
-    os.makedirs(settings.uploads_path, exist_ok=True)
-    dest = os.path.join(settings.uploads_path, f"{doc.id}_{doc.filename}")
-    with open(dest, "wb") as fh:
-        fh.write(data)
+        try:
+            doc.status = "failed"
+            doc.error = "storage write failed"
+            db.commit()
+        except Exception:
+            db.rollback()
+            log.error("could not mark upload row failed", extra={"doc_id": doc.id})
+        raise HTTPException(
+            status_code=507,
+            detail={"code": "STORAGE_WRITE_FAILED"},
+        )
 
     background_tasks.add_task(ingestion_service.run, doc.id)
 

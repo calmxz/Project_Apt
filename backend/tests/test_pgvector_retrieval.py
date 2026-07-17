@@ -22,7 +22,7 @@ from sqlalchemy.orm import sessionmaker
 
 from config import settings
 from db.database import _normalized_url
-from db.models import ChunkEmbedding, Document, Session as SessionModel, User
+from db.models import Document, Session as SessionModel, User
 from services import pgvector_store
 
 
@@ -108,6 +108,7 @@ def seeded_session(db):
             (2, 3, "transactions group statements atomically", _vec(2)),
         ],
     )
+    db.commit()
 
     yield {"session_id": session_id, "doc_id": doc.id, "user_id": user_id}
 
@@ -174,3 +175,38 @@ def test_insert_then_count_matches(db, seeded_session):
         {"sid": seeded_session["session_id"]},
     ).scalar()
     assert n == 3
+
+
+def test_delete_document_chunks_removes_only_that_document(db, seeded_session):
+    """delete_document_chunks deletes the target doc's chunks (returns count) and
+    leaves a second document's chunks in the same session intact."""
+    sid = seeded_session["session_id"]
+    doc_id = seeded_session["doc_id"]
+
+    # Add a second document with one chunk in the SAME session.
+    other = Document(session_id=sid, filename="keep.pdf", status="ready")
+    db.add(other)
+    db.commit()
+    db.refresh(other)
+    pgvector_store.insert_chunks(
+        db, session_id=sid, document_id=other.id,
+        rows=[(0, 1, "survivor chunk", _vec(4))],
+    )
+    db.commit()
+
+    # seeded_session inserts 3 chunks for doc_id.
+    deleted = pgvector_store.delete_document_chunks(db, document_id=doc_id)
+    assert deleted == 3
+
+    # Target's chunks gone; the other document's chunk survives.
+    survivors = pgvector_store.query_chunks(
+        db, session_id=sid, query_embedding=_vec(4), k=10
+    )
+    assert [c.doc_id for c in survivors] == [other.id]
+
+    # Teardown for the extra doc (seeded_session only cleans its own rows).
+    db.execute(
+        text("DELETE FROM chunk_embeddings WHERE document_id = :d"), {"d": other.id}
+    )
+    db.execute(text("DELETE FROM documents WHERE id = :d"), {"d": other.id})
+    db.commit()

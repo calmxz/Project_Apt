@@ -1,6 +1,7 @@
 <template>
   <div
     v-if="store.dailyCapReached"
+    id="cap-banner-daily"
     class="cap-banner"
     role="alert"
     data-testid="session-cap-banner"
@@ -14,6 +15,7 @@
 
   <div
     v-if="store.costCapReached"
+    id="cap-banner-cost"
     class="cap-banner"
     role="alert"
     data-testid="session-cost-cap-banner"
@@ -49,7 +51,7 @@ const store = useSessionStore()
 }
 
 .cap-banner strong {
-  color: var(--signal-error);
+  color: var(--color-error-text);
   font-weight: 700;
 }
 </style>

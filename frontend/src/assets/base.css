@@ -5,6 +5,7 @@
   --ink-200: #DDE2EE;
   --ink-300: #B7BFD2;
   --ink-400: #7E8AA3;
+  --ink-450: #66718A;
   --ink-500: #58637A;
   --ink-700: #2A3142;
   --ink-900: #141826;
@@ -71,8 +72,10 @@
   /* Shadows — chunky press-down */
   --shadow-paper:       0 1px 0 rgba(20, 24, 38, 0.04), 0 2px 8px -2px rgba(20, 24, 38, 0.06);
   --shadow-lift:        0 4px 0 0 var(--ink-200), 0 10px 20px -8px rgba(20, 24, 38, 0.18);
-  --shadow-pop:         0 6px 0 0 var(--accent-coral-700), 0 12px 24px -10px rgba(255, 107, 92, 0.35);
-  --shadow-pop-pressed: 0 2px 0 0 var(--accent-coral-700);
+  /* Ledge is 2 steps darker than the button face so the chunky press-down depth
+     survives the AA change (filled CTAs are now coral-700 via --color-accent-strong). */
+  --shadow-pop:         0 6px 0 0 var(--accent-coral-900), 0 12px 24px -10px rgba(255, 107, 92, 0.35);
+  --shadow-pop-pressed: 0 2px 0 0 var(--accent-coral-900);
 
   /* Decorative gradients */
   --gradient-spark:   linear-gradient(135deg, #FF6B5C 0%, #FF8F7C 100%);
@@ -95,7 +98,7 @@
   --color-surface-raised: var(--paper-50);
   --color-text: var(--ink-900);
   --color-text-muted: var(--ink-500);
-  --color-text-faint: var(--ink-400);
+  --color-text-faint: var(--ink-450);
   --color-heading: var(--ink-900);
   --color-border: var(--ink-200);
   --color-border-strong: var(--ink-300);
@@ -103,11 +106,32 @@
   --color-accent-soft: var(--accent-coral-100);
   --color-accent-hover: var(--accent-coral-600);
   --color-accent-ring: rgba(255, 143, 124, 0.35);
+  /* AA-contrast variants. --color-accent (bright coral) stays for borders,
+     rings, hover, soft fills, and accent text on DARK surfaces. White text on
+     bright coral is only ~2.6:1, so filled buttons use --color-accent-strong,
+     and accent text on the light page background uses --color-accent-text
+     (both coral-700 -> >=4.5:1 white / >=5.2:1 as text). --color-accent-strong
+     is coral-700 in every theme (inherits); --color-accent-text stays bright on
+     dark, where coral-400 already clears 4.5:1, via the per-theme overrides. */
+  --color-accent-strong: var(--accent-coral-700);
+  --color-accent-text: var(--accent-coral-700);
   --color-wordmark: var(--ink-900);
   --color-stub-heading: var(--ink-700);
+  /* Foreground tokens that stay AA on LIGHT surfaces. Filled white-text CTAs use
+     --color-accent-strong (coral-700); --color-text-on-accent is that white.
+     Signal-as-text must use these darkened variants, NOT the raw --signal-* ramp
+     (tuned for fills/borders/dark surfaces; fails as light-bg text). */
+  --color-text-on-accent: #FFFFFF;
+  --color-success-text: #0E7A36;
+  --color-error-text:   #B91C1C;
+  --color-warning-text: #8A5A00;
 }
 
 :root[data-theme="dark"] {
+  /* On dark surfaces bright coral-400 already clears 4.5:1 as text, so keep it
+     (no change from before this token existed). --color-accent-strong inherits
+     coral-700 from :root for filled buttons. */
+  --color-accent-text: var(--accent-coral-400);
   --color-background: #0F1220;
   --color-surface: #161A2A;
   --color-surface-soft: #1E2236;
@@ -127,17 +151,23 @@
 
   --shadow-paper:       0 1px 0 rgba(0, 0, 0, 0.3), 0 2px 8px -2px rgba(0, 0, 0, 0.5);
   --shadow-lift:        0 4px 0 0 #2A3050, 0 16px 36px -16px rgba(0, 0, 0, 0.6);
-  --shadow-pop:         0 6px 0 0 var(--accent-coral-700), 0 14px 28px -10px rgba(255, 107, 92, 0.45);
-  --shadow-pop-pressed: 0 2px 0 0 var(--accent-coral-700);
+  --shadow-pop:         0 6px 0 0 var(--accent-coral-900), 0 14px 28px -10px rgba(255, 107, 92, 0.45);
+  --shadow-pop-pressed: 0 2px 0 0 var(--accent-coral-900);
 
   --signal-success: #34D77B;
   --signal-error:   #FF6B6B;
   --signal-warning: #FFC54D;
   --signal-info:    #7AA3F5;
+
+  /* Dark surfaces: the bright signal ramp already clears AA as text. */
+  --color-success-text: #34D77B;
+  --color-error-text:   #FF6B6B;
+  --color-warning-text: #FFC54D;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    --color-accent-text: var(--accent-coral-400);
     --color-background: #0F1220;
     --color-surface: #161A2A;
     --color-surface-soft: #1E2236;
@@ -157,13 +187,17 @@
 
     --shadow-paper:       0 1px 0 rgba(0, 0, 0, 0.3), 0 2px 8px -2px rgba(0, 0, 0, 0.5);
     --shadow-lift:        0 4px 0 0 #2A3050, 0 16px 36px -16px rgba(0, 0, 0, 0.6);
-    --shadow-pop:         0 6px 0 0 var(--accent-coral-700), 0 14px 28px -10px rgba(255, 107, 92, 0.45);
-    --shadow-pop-pressed: 0 2px 0 0 var(--accent-coral-700);
+    --shadow-pop:         0 6px 0 0 var(--accent-coral-900), 0 14px 28px -10px rgba(255, 107, 92, 0.45);
+    --shadow-pop-pressed: 0 2px 0 0 var(--accent-coral-900);
 
     --signal-success: #34D77B;
     --signal-error:   #FF6B6B;
     --signal-warning: #FFC54D;
     --signal-info:    #7AA3F5;
+
+    --color-success-text: #34D77B;
+    --color-error-text:   #FF6B6B;
+    --color-warning-text: #FFC54D;
   }
 }
 
@@ -203,7 +237,7 @@ h1, h2, h3, h4 {
 }
 
 a {
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   text-decoration: none;
   transition: color var(--motion-fast) ease;
 }
@@ -250,7 +284,7 @@ button {
   z-index: 100;
   padding: 0.5rem 0.875rem;
   border-radius: var(--radius-pill);
-  background: var(--color-accent);
+  background: var(--color-accent-strong);
   color: #fff;
   font-family: var(--font-sans);
   font-weight: 600;
@@ -281,4 +315,17 @@ body.sb-scroll-lock {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* Destructive confirm accept (delete-file dialog). A touch darker than the
+   default danger red so it reads as the heavier action. ConfirmDialog teleports
+   to <body>, so this must be global, not scoped to the banner. base.css sits
+   outside PrimeVue's cascade layer, so it wins without !important. */
+.p-button.confirm-delete-strong {
+  background: #dc2626;
+  border-color: #dc2626;
+}
+.p-button.confirm-delete-strong:hover {
+  background: #b91c1c;
+  border-color: #b91c1c;
 }

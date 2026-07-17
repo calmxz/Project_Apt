@@ -1,6 +1,6 @@
-# AdaptLearn screencast — 2 to 3 min walkthrough script
+# Crux screencast — 2 to 3 min walkthrough script
 
-Goal: show that AdaptLearn adapts. The hook is the profile view: at the end
+Goal: show that Crux adapts. The hook is the profile view: at the end
 the viewer sees concrete evidence the system learned something about the
 learner (mastered concepts, confirmed gaps, focus target).
 
@@ -10,7 +10,7 @@ Total target: **150-180 seconds**. Run a stopwatch.
 
 - `docker compose -f docker-compose.prod.yml --env-file .env up -d`
 - Set `DAILY_CAP=50` in `.env` (repo root, avoid hitting the cap mid-recording).
-- Clear `data/app.db` and `data/chroma/` so the demo starts clean.
+- Start from a clean account (no prior sessions) so the demo starts fresh.
 - Pre-stage a short PDF (e.g. a 2-page primer on SQL joins).
 - Browser at 1280x800. Hide bookmarks bar. Use light theme.
 - Recorder: OBS Studio (preferred) or Loom.
@@ -19,7 +19,7 @@ Total target: **150-180 seconds**. Run a stopwatch.
 
 ### 1 (~10s) — Title
 
-> "AdaptLearn is an AI study companion that remembers what you've learned
+> "Crux is an AI study companion that remembers what you've learned
 > across sessions. Here's a two-minute tour."
 
 Card on screen: project name + "Phase 5 v1 walkthrough".
@@ -69,7 +69,8 @@ Answer the quiz question correctly. Mention out loud:
 
 Click the paperclip / **Attach PDF**. Drop in the pre-staged primer.
 
-> "Documents are chunked, embedded, and stored locally in ChromaDB."
+> "Documents are chunked, embedded, and stored as vectors in pgvector on
+> Supabase Postgres."
 
 Wait for `is ready`. Ask:
 
@@ -110,13 +111,14 @@ back into its profile.
 
 ### 9 (~5s) — Close
 
-> "All local. Docker plus ngrok if you want to share it. Repo link below."
+> "App runs in Docker with Postgres and auth on Supabase. Docker plus ngrok
+> if you want to share it. Repo link below."
 
 Title card: GitHub URL + name.
 
 ## Output
 
-- File: `docs/screencast/adaptlearn-walkthrough.mp4`
+- File: `docs/screencast/crux-walkthrough.mp4`
 - Embed in `README.md` (or link to YouTube/Loom).
 - Keep raw OBS project file out of the repo (large).
 

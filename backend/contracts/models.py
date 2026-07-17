@@ -3,19 +3,43 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, RootModel, conint, constr
+from pydantic import BaseModel, ConfigDict, Field, RootModel, confloat, conint, constr
+
+
+class ConceptEntry(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    name: constr(min_length=1, max_length=200)
+    evidence_type: Literal["declared", "tested"] | None = None
+    last_event_at: datetime | None = None
 
 
 class TopicProfile(BaseModel):
+    """
+    v2 (slice 8, 2026-07-12): concept lists carry ConceptEntry objects
+    (previously plain strings) and subtopic_levels was added. Legacy
+    string-element blobs are upgraded on read by the backend's tolerant
+    parser; API consumers only ever see the v2 shape.
+
+    """
+
     model_config = ConfigDict(
         extra="forbid",
     )
     knowledge_level: Literal["beginner", "intermediate", "advanced"] | None = None
-    confirmed_gaps: list[str] | None = []
-    mastered_concepts: list[str] | None = []
+    subtopic_levels: (
+        dict[str, Literal["beginner", "intermediate", "advanced"]] | None
+    ) = {}
+    """
+    Per-subtopic knowledge levels keyed by canonicalized (strip+casefold) agent-named subtopic. knowledge_level is the session-wide default for subtopics without an entry.
+
+    """
+    confirmed_gaps: list[ConceptEntry] | None = []
+    mastered_concepts: list[ConceptEntry] | None = []
     focus_target_gap: str | None = None
     last_session_summary: str | None = None
 
@@ -36,7 +60,7 @@ class ToolCallRecord(BaseModel):
     )
     name: str
     args: dict[str, Any]
-    status: Literal["ok", "failed", "no_results"]
+    status: Literal["ok", "failed", "no_results", "ignored"]
     error: str | None = None
 
 
@@ -50,13 +74,20 @@ class LearningEventResponse(BaseModel):
     question: str
     correct: bool
     created_at: datetime
+    selected_index: int | None = None
+    correct_index: int | None = None
+    purpose: str | None = None
 
 
 class UpdateTopicProfileArgs(BaseModel):
     """
     Patch operation for a session's TopicProfile. Sending
-    `focus_target_gap: null` explicitly clears focus and requires
-    `focus_clear_reason` (server-side guard rail).
+    `focus_target_gap: null` together with `focus_clear_reason` clears
+    focus; omitting the field leaves focus unchanged.
+    `focus_clear_reason=tested_correct` is verified server-side against
+    the session's learning events. `evidence_type` is required only when
+    `add_mastered_concept` is present. `subtopic` and `subtopic_level`
+    must be provided together (service-enforced cross-field rule).
 
     """
 
@@ -71,7 +102,9 @@ class UpdateTopicProfileArgs(BaseModel):
     focus_clear_reason: (
         Literal["demonstrated", "tested_correct", "user_redirected"] | None
     ) = None
-    evidence_type: Literal["declared", "inferred", "tested"]
+    evidence_type: Literal["declared", "inferred", "tested"] | None = None
+    subtopic: constr(min_length=1, max_length=100) | None = None
+    subtopic_level: Literal["beginner", "intermediate", "advanced"] | None = None
 
 
 class RetrieveChunksArgs(BaseModel):
@@ -83,14 +116,116 @@ class RetrieveChunksArgs(BaseModel):
     k: conint(ge=1, le=20) | None = 5
 
 
-class RecordLearningEventArgs(BaseModel):
+class Item(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    question: constr(max_length=1000)
+    options: list[constr(max_length=200)] = Field(..., max_length=4, min_length=2)
+    correct_index: conint(ge=0)
+    explanation: constr(max_length=500)
+
+
+class AskCheckQuestionsArgs(BaseModel):
+    """
+    Register an ordered batch of 1..5 multiple-choice check-questions and end
+    the turn. The first question's text is also streamed as assistant text.
+    Per-item correct_index must be < len(options); that cross-field rule is
+    enforced in check_question_service, not here.
+
+    """
+
     model_config = ConfigDict(
         extra="forbid",
     )
     session_id: constr(max_length=64)
-    gap_tested: constr(max_length=200)
-    question: constr(max_length=1000)
+    gap: constr(max_length=200)
+    items: list[Item] = Field(..., max_length=5, min_length=1)
+
+
+class Item1(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    question: str
+    options: list[str]
+    status: Literal["pending", "answered", "skipped"]
+    selected_index: int | None = None
+    correct_index: int | None = None
+    correct: bool | None = None
+    explanation: str | None = None
+
+
+class PendingCheck(BaseModel):
+    """
+    An open check-question BATCH awaiting learner answers. PUBLIC projection.
+    Per item: question + options always present. correct_index, explanation,
+    selected_index, correct are present ONLY for already-answered or skipped
+    items - never leaked for pending ones.
+
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    gap: str
+    current_index: int
+    total: int
+    items: list[Item1]
+
+
+class CheckAnswerRequest(BaseModel):
+    """
+    A learner's clicked answer to item `index` of the open batch.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    index: conint(ge=0)
+    selected_index: conint(ge=0)
+
+
+class CheckAnswerResponse(BaseModel):
+    """
+    Deterministic grade of a clicked answer plus batch progress.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
     correct: bool
+    explanation: str
+    correct_index: int
+    current_index: int
+    total: int
+    has_next: bool
+    done: bool
+
+
+class CheckSkipRequest(BaseModel):
+    """
+    Skip item `index` of the open batch (no LearningEvent).
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    index: conint(ge=0)
+
+
+class CheckSkipResponse(BaseModel):
+    """
+    Batch progress state after a skipped item.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    current_index: int
+    total: int
+    has_next: bool
+    done: bool
 
 
 class ToolResult(BaseModel):
@@ -98,7 +233,7 @@ class ToolResult(BaseModel):
         extra="forbid",
     )
     ok: bool
-    status: Literal["ok", "failed", "no_results"]
+    status: Literal["ok", "failed", "no_results", "ignored"]
     error: str | None = None
     data: dict[str, Any] | None = None
 
@@ -116,16 +251,8 @@ class ChatRequest(BaseModel):
     )
     session_id: constr(max_length=64)
     message: constr(max_length=4000)
-
-
-class ChatResponse(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    assistant_message: str
-    message_id: int
-    tool_calls: list[ToolCallRecord] | None = []
-    citations: list[Citation] | None = []
+    review_gaps: bool | None = False
+    review_gap: constr(max_length=200) | None = None
 
 
 class SessionCreateRequest(BaseModel):
@@ -135,6 +262,14 @@ class SessionCreateRequest(BaseModel):
     topic: constr(max_length=200)
     seed_mode: Literal["fresh", "resume"]
     prior_session_id: constr(max_length=64) | None = None
+
+
+class SessionUpdateRequest(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    topic: constr(max_length=200) | None = None
+    pinned: bool | None = None
 
 
 class SessionResponse(BaseModel):
@@ -148,6 +283,19 @@ class SessionResponse(BaseModel):
     created_at: datetime
     ended_at: datetime | None = None
     ingestion_status: Literal["pending", "ready", "failed"] | None = None
+    pinned: bool | None = False
+
+
+class SessionProgress(BaseModel):
+    """
+    Lightweight learning-progress signal for a session card.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    focus_target_gap: str | None = None
+    mastered_count: int
 
 
 class SessionListItem(BaseModel):
@@ -158,6 +306,12 @@ class SessionListItem(BaseModel):
     topic: str
     created_at: datetime
     ended_at: datetime | None = None
+    pinned: bool | None = False
+    message_count: int | None = 0
+    last_activity_at: datetime | None = None
+    last_message_preview: str | None = None
+    last_session_summary: str | None = None
+    progress: SessionProgress | None = None
 
 
 class Message(BaseModel):
@@ -173,6 +327,12 @@ class Message(BaseModel):
     content: str
     created_at: datetime
     citations: list[Citation] | None = []
+    tool_calls: list[ToolCallRecord] | None = []
+    check_batch: PendingCheck | None = None
+    status: str | None = None
+    """
+    Persistence status for assistant turns: complete, cancelled, error, or partial (streamed text kept after a mid-turn abort). Null for rows persisted before this field existed.
+    """
 
 
 class SessionDetail(BaseModel):
@@ -190,7 +350,53 @@ class SessionDetail(BaseModel):
     created_at: datetime
     ended_at: datetime | None = None
     ingestion_status: Literal["pending", "ready", "failed"] | None = None
+    pinned: bool | None = False
+    pending_check: PendingCheck | None = None
     messages: list[Message]
+
+
+class SessionLibraryPage(BaseModel):
+    """
+    One page of the session library.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    items: list[SessionListItem]
+    total: int
+    limit: int
+    offset: int
+
+
+class ReviewQueueItem(BaseModel):
+    """
+    One concept due for spaced-repetition review.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    concept: str
+    source_session_id: str
+    source_topic: str
+    last_tested_at: datetime
+    streak: int
+    due_at: datetime
+
+
+class ReviewQueuePage(BaseModel):
+    """
+    One page of the review queue, most overdue first.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    items: list[ReviewQueueItem]
+    total: int
+    limit: int
+    offset: int
 
 
 class SessionEndSummary(BaseModel):
@@ -239,12 +445,90 @@ class UploadStatus(BaseModel):
     error: str | None = None
 
 
+class DocumentStatus(BaseModel):
+    """
+    Ingestion state for one uploaded document.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    id: int
+    filename: str
+    status: Literal["pending", "ready", "failed"]
+    error: str | None = None
+
+
+class SessionIngestionStatus(BaseModel):
+    """
+    Session-wide ingestion aggregate. `status` is `pending` if any document
+    is still ingesting, else `ready` if any document is ready, else `failed`,
+    else null when the session has no documents.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    status: Literal["pending", "ready", "failed"] | None = None
+    documents: list[DocumentStatus]
+
+
+class MeResponse(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    display_name: constr(max_length=120) | None = None
+    feedback_pref: constr(max_length=40) | None = None
+    onboarding_complete: bool
+
+
+class MePatchRequest(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    display_name: constr(max_length=120) | None = None
+    feedback_pref: constr(max_length=40) | None = None
+    onboarding_complete: bool | None = None
+
+
 class ProfileResponse(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
     profile: TopicProfile
     recent_learning_events: list[LearningEventResponse]
+    etag: str
+    """
+    sha256 hex of the serialized profile; send back as If-Match on writes.
+    """
+
+
+class ProfilePatchRequest(BaseModel):
+    """
+    Add one item to a list and/or set the knowledge level. At least one
+    field must be present. Adding an item to one list removes it from the
+    other (mutual exclusion). `subtopic` + `subtopic_level` (together)
+    update an EXISTING subtopic's level; unknown subtopics are rejected -
+    subtopics are created only by the tutor.
+
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    add_mastered: constr(min_length=1, max_length=200) | None = None
+    add_gap: constr(min_length=1, max_length=200) | None = None
+    knowledge_level: Literal["beginner", "intermediate", "advanced"] | None = None
+    subtopic: constr(min_length=1, max_length=100) | None = None
+    subtopic_level: Literal["beginner", "intermediate", "advanced"] | None = None
+
+
+class ProfileMutationResponse(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    profile: TopicProfile
+    etag: str
 
 
 class AggregateConceptCount(BaseModel):
@@ -290,6 +574,88 @@ class RecentSessionSummary(BaseModel):
     created_at: datetime
     ended_at: datetime | None = None
     last_session_summary: str | None = None
+    message_count: int | None = 0
+    last_activity_at: datetime | None = None
+    last_message_preview: str | None = None
+    progress: SessionProgress | None = None
+
+
+class ConceptAccuracy(BaseModel):
+    """
+    Per-concept check-question accuracy across all of a user's sessions.
+    Diagnostic events are excluded. last_results is oldest-to-newest, at
+    most 5 entries. first_seen_session_id is the session of the concept's
+    earliest learning event.
+
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    concept: str
+    correct_count: conint(ge=0)
+    total_count: conint(ge=1)
+    accuracy: confloat(ge=0.0, le=1.0)
+    last_results: list[bool] = Field(..., max_length=5)
+    first_seen_session_id: str
+
+
+class WeeklyMasteryPoint(BaseModel):
+    """
+    Number of concepts whose first correct non-diagnostic answer falls in
+    the ISO week starting at week_start (a Monday, UTC).
+
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    week_start: date
+    count: conint(ge=0)
+
+
+class DailySpend(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    date_utc: date
+    cost_usd: confloat(ge=0.0)
+
+
+class SessionSpend(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    session_id: str
+    topic: str
+    cost_usd: confloat(ge=0.0)
+
+
+class UsageSummaryResponse(BaseModel):
+    """
+    Spend transparency for the current user. daily covers the last 14 UTC
+    days, oldest first, zero-filled for missing ledger rows. Cap values
+    mirror the runtime cost meter; the urgent tier is derived (0.9 x
+    hard), never a duplicated literal.
+
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    daily: list[DailySpend]
+    today_spend_usd: confloat(ge=0.0)
+    soft_cap_usd: float
+    urgent_cap_usd: float
+    hard_cap_usd: float
+    top_sessions: list[SessionSpend] = Field(..., max_length=3)
+
+
+class ErrorResponse(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    detail: str
 
 
 class AggregateProfileResponse(BaseModel):
@@ -312,10 +678,5 @@ class AggregateProfileResponse(BaseModel):
     combined_confirmed_gaps: list[AggregateConceptCount]
     knowledge_level_distribution: KnowledgeLevelDistribution
     recent_topics: list[RecentSessionSummary]
-
-
-class ErrorResponse(BaseModel):
-    model_config = ConfigDict(
-        extra="forbid",
-    )
-    detail: str
+    concept_accuracy: list[ConceptAccuracy]
+    weekly_mastery: list[WeeklyMasteryPoint]

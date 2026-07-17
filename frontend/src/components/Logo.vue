@@ -33,7 +33,7 @@ defineProps({
         opacity="0.55"
       />
     </svg>
-    <span v-if="variant === 'full'" class="logo-name">AdaptLearn</span>
+    <span v-if="variant === 'full'" class="logo-name">Crux</span>
   </span>
 </template>
 
@@ -63,7 +63,7 @@ defineProps({
 
 .logo-mark {
   flex-shrink: 0;
-  color: var(--color-accent);
+  color: var(--color-accent-text);
 }
 
 .logo[data-size='sm'] .logo-mark {

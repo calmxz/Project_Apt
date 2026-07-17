@@ -26,10 +26,18 @@ cleanly after that event and does not hang. True network-disconnect cancellation
 a running server; it is not reliably testable under TestClient.
 """
 
+import asyncio
+from datetime import datetime, timezone
+
 import pytest
-from contracts import TopicProfile
-from db.models import Session as SessionModel, User
+from fastapi import HTTPException
+from sqlalchemy import delete, func, select
+
+from contracts import ChatRequest, TopicProfile
+from db.models import Session as SessionModel, UsageCounter, User
 from agent.stream_events import StreamEvent
+from routes.chat import _prepare_turn
+from services import rate_limit, summary_service
 
 
 SESSION_ID = "stream-s1"
@@ -138,6 +146,32 @@ def test_chat_stream_unknown_session_404(client, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# Test: ended session -> 409 session_ended (F-05)
+# ---------------------------------------------------------------------------
+
+
+def test_chat_stream_on_ended_session_returns_409(client, db_session, monkeypatch):
+    """_prepare_turn must reject chat turns on an ended session before any
+    tutor/LLM work happens."""
+    fake = _make_fake_run_streaming(
+        StreamEvent("done", {"message_id": "1"}),
+    )
+    monkeypatch.setattr("agent.tutor.run_streaming", fake)
+
+    session = db_session.get(SessionModel, SESSION_ID)
+    session.ended_at = datetime.now(timezone.utc)
+    db_session.commit()
+
+    r = client.post(
+        "/api/chat/stream",
+        json={"session_id": SESSION_ID, "message": "hi"},
+        headers=AUTH_HEADERS,
+    )
+    assert r.status_code == 409
+    assert r.json()["detail"]["code"] == "session_ended"
+
+
+# ---------------------------------------------------------------------------
 # Test: cancellation wiring - cancelled terminal event ends the stream cleanly
 # ---------------------------------------------------------------------------
 
@@ -176,3 +210,257 @@ def test_chat_stream_cancelled_event_terminates_stream(client, monkeypatch):
     body = "\n".join(lines)
     assert "event: cancelled" in body
     assert "should not appear" not in body
+
+
+def test_chat_stream_includes_quiz_readiness(client, db_session, monkeypatch):
+    from services import check_question_service
+    check_question_service.set_quiz_cooldown(
+        db_session, SESSION_ID, {"gap": "joins", "last_score": "0/1", "missed": ["q0"]}
+    )
+
+    captured = {}
+
+    async def fake(messages, system_prompt, ctx):
+        captured["system_prompt"] = system_prompt
+        yield StreamEvent("done", {"message_id": "1"})
+
+    monkeypatch.setattr("agent.tutor.run_streaming", fake)
+
+    with client.stream(
+        "POST", "/api/chat/stream",
+        json={"session_id": SESSION_ID, "message": "hello"},
+        headers=AUTH_HEADERS,
+    ) as resp:
+        assert resp.status_code == 200
+        for _ in resp.iter_lines():
+            pass
+
+    # Assert on the session-specific rendered QUIZ_READINESS line, not the bare
+    # word "cooling_down" (which also appears in the immutable POST-QUIZ PROTOCOL
+    # prose). "gap": "joins" can only come from threading this turn's cooldown.
+    sp = captured["system_prompt"]
+    assert '"gap": "joins"' in sp
+    assert '"status": "cooling_down"' in sp
+
+
+# ---------------------------------------------------------------------------
+# Test: post-stream rolling summary trigger (Task 5, P2 AC3)
+# ---------------------------------------------------------------------------
+
+
+def test_stream_schedules_rolling_summary(client, monkeypatch):
+    """The stream response attaches a BackgroundTask that calls
+    summary_service.update_rolling_summary(db, session_id) after the SSE
+    body is fully consumed. TestClient runs background tasks once the
+    response completes, so a synchronous .post() (which reads the full
+    body) is enough to observe the call."""
+    fake = _make_fake_run_streaming(
+        StreamEvent("assistant_delta", {"text": "Hi"}),
+        StreamEvent("done", {"message_id": "1"}),
+    )
+    monkeypatch.setattr("agent.tutor.run_streaming", fake)
+
+    calls = []
+
+    async def fake_update(db, session_id):
+        calls.append(session_id)
+        return None
+
+    monkeypatch.setattr(summary_service, "update_rolling_summary", fake_update)
+
+    resp = client.post(
+        "/api/chat/stream",
+        json={"session_id": SESSION_ID, "message": "hello"},
+        headers=AUTH_HEADERS,
+    )
+    assert resp.status_code == 200
+    _ = resp.text  # drain the SSE body; TestClient runs background tasks after
+
+    assert calls == [SESSION_ID]
+
+
+def test_semantic_fallback_escalates_gate(client, monkeypatch):
+    """D2.2: lexical gate is False (default empty kw_index_json), so the
+    semantic fallback runs and its True result escalates retrieval_required
+    all the way through to _build_prompt_state."""
+    message = "hello"
+    calls = {}
+
+    async def fake_fallback(db, session_id, query, *, user_id=None):
+        calls["args"] = (session_id, query)
+        calls["user_id"] = user_id
+        return True
+
+    monkeypatch.setattr(
+        "routes.chat.retrieval_service.semantic_fallback_required", fake_fallback
+    )
+
+    captured = {}
+    import routes.chat as chat_module
+
+    real_build = chat_module._build_prompt_state
+
+    def spy_build(**kwargs):
+        captured["retrieval_required"] = kwargs.get("retrieval_required")
+        return real_build(**kwargs)
+
+    monkeypatch.setattr(chat_module, "_build_prompt_state", spy_build)
+
+    fake = _make_fake_run_streaming(StreamEvent("done", {"message_id": "1"}))
+    monkeypatch.setattr("agent.tutor.run_streaming", fake)
+
+    with client.stream(
+        "POST",
+        "/api/chat/stream",
+        json={"session_id": SESSION_ID, "message": message},
+        headers=AUTH_HEADERS,
+    ) as resp:
+        assert resp.status_code == 200
+        for _ in resp.iter_lines():
+            pass
+
+    assert calls["args"] == (SESSION_ID, message)
+    assert calls["user_id"] == USER_ID  # F-19: caller must attribute the metered call
+    assert captured["retrieval_required"] is True
+
+
+def test_semantic_fallback_not_called_when_lexical_gate_true(client, db_session, monkeypatch):
+    """D2.2: when the lexical gate already matches, the semantic fallback
+    must never run. A raising stub proves the OPTIONAL-only escalation
+    path (the `if not retrieval_required:` guard) is respected."""
+    import json
+
+    from lib import keyword_index
+
+    message = "explain foreign keys"
+    stems = keyword_index.build_from_text(message)
+    session = db_session.get(SessionModel, SESSION_ID)
+    session.kw_index_json = json.dumps(sorted(stems))
+    db_session.commit()
+
+    def fail_if_called(db, session_id, query):
+        raise AssertionError("fallback must not run when lexical gate is True")
+
+    monkeypatch.setattr(
+        "routes.chat.retrieval_service.semantic_fallback_required", fail_if_called
+    )
+
+    fake = _make_fake_run_streaming(StreamEvent("done", {"message_id": "1"}))
+    monkeypatch.setattr("agent.tutor.run_streaming", fake)
+
+    with client.stream(
+        "POST",
+        "/api/chat/stream",
+        json={"session_id": SESSION_ID, "message": message},
+        headers=AUTH_HEADERS,
+    ) as resp:
+        assert resp.status_code == 200
+        for _ in resp.iter_lines():
+            pass
+
+
+def test_stream_rolling_summary_failure_does_not_break_turn(client, monkeypatch):
+    """A raising update_rolling_summary must not surface to the client: the
+    chat turn already completed and sent its response before the background
+    task runs. The helper's try/except/finally is what's under test here."""
+    fake = _make_fake_run_streaming(
+        StreamEvent("assistant_delta", {"text": "Hi"}),
+        StreamEvent("done", {"message_id": "1"}),
+    )
+    monkeypatch.setattr("agent.tutor.run_streaming", fake)
+
+    async def fake_update_raises(db, session_id):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(summary_service, "update_rolling_summary", fake_update_raises)
+
+    resp = client.post(
+        "/api/chat/stream",
+        json={"session_id": SESSION_ID, "message": "hello"},
+        headers=AUTH_HEADERS,
+    )
+    assert resp.status_code == 200
+    body = resp.text  # drain the SSE body; background task raises after this
+    assert "event: done" in body
+
+
+# ---------------------------------------------------------------------------
+# Task 3: _prepare_turn ordering - F-36 + Batch-1 deferred rate-limit slot
+#
+# Session.user_id has a FK to users.id (db/models.py), but the db_session
+# fixture's sqlite engine (tests/conftest.py) never issues `PRAGMA
+# foreign_keys=ON`, so sqlite does not enforce it here. That lets these tests
+# re-home a session onto a not-yet-created user id and then delete any
+# pre-existing row for that id, producing the "valid JWT, no users row" state
+# F-36 targets, without a delete-blocked-by-FK failure.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def seeded_session(db_session):
+    uid = "prep-guard-user"
+    db_session.add(User(id=uid))
+    sess = SessionModel(id="prep-guard-session", user_id=uid, topic="algebra")
+    db_session.add(sess)
+    db_session.commit()
+    return sess
+
+
+@pytest.fixture
+def seeded_ended_session(db_session):
+    uid = "prep-guard-ended-user"
+    db_session.add(User(id=uid))
+    sess = SessionModel(
+        id="prep-guard-ended-session",
+        user_id=uid,
+        topic="algebra",
+        ended_at=datetime.now(timezone.utc),
+    )
+    db_session.add(sess)
+    db_session.commit()
+    return sess
+
+
+def _today_counter_count(db):
+    return db.execute(select(func.count()).select_from(UsageCounter)).scalar_one()
+
+
+def test_ended_session_409_consumes_no_rate_slot(db_session, seeded_ended_session):
+    """Batch-1 deferral: a 409'd turn must not burn a daily rate-limit slot."""
+    req = ChatRequest(session_id=seeded_ended_session.id, message="hi")
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(_prepare_turn(req, seeded_ended_session.user_id, db_session))
+    assert exc.value.status_code == 409
+    assert _today_counter_count(db_session) == 0
+
+
+def test_foreign_session_404_consumes_no_rate_slot(db_session, seeded_session):
+    req = ChatRequest(session_id=seeded_session.id, message="hi")
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(_prepare_turn(req, "someone-else", db_session))
+    assert exc.value.status_code == 404
+    assert _today_counter_count(db_session) == 0
+
+
+def test_first_turn_creates_user_before_rate_limit_insert(db_session, seeded_session, monkeypatch):
+    """F-36: the users row must exist when check_and_increment INSERTs the
+    FK-bearing usage_counters row (sqlite doesn't enforce the FK; assert
+    ordering explicitly)."""
+    new_uid = "brand-new-user"
+    # Re-home the seeded session onto the new user so the session guard passes.
+    seeded_session.user_id = new_uid
+    db_session.commit()
+    db_session.execute(delete(User).where(User.id == new_uid))
+    db_session.commit()
+
+    real = rate_limit.check_and_increment
+
+    def spy(db, uid):
+        assert db.execute(select(User.id).where(User.id == uid)).scalar_one_or_none() is not None, (
+            "usage-counter insert would FK-violate: users row missing"
+        )
+        return real(db, uid)
+
+    monkeypatch.setattr(rate_limit, "check_and_increment", spy)
+    asyncio.run(_prepare_turn(ChatRequest(session_id=seeded_session.id, message="hi"), new_uid, db_session))
+    assert db_session.get(User, new_uid) is not None

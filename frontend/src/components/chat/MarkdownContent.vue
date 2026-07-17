@@ -1,18 +1,25 @@
 <script setup>
 import { computed } from 'vue'
 import { renderMarkdown } from '@/lib/markdownRenderer.js'
-import { splitSafePrefix } from '@/lib/markdownStreamBuffer.js'
+import {
+  splitSafePrefixIncremental,
+  createSplitState,
+} from '@/lib/markdownStreamBuffer.js'
 
 const props = defineProps({
   text: { type: String, required: true },
   streaming: { type: Boolean, default: false },
 })
 
+// Per-instance scan state; plain object on purpose (mutated by the split,
+// never read by the template).
+const splitState = createSplitState()
+
 const parts = computed(() => {
   if (!props.streaming) {
     return { safeHtml: renderMarkdown(props.text), deferred: '' }
   }
-  const { safe, deferred } = splitSafePrefix(props.text)
+  const { safe, deferred } = splitSafePrefixIncremental(props.text, splitState)
   return { safeHtml: renderMarkdown(safe), deferred }
 })
 </script>
@@ -73,7 +80,7 @@ const parts = computed(() => {
 }
 .md-rendered :deep(code:not(pre code)) {
   background: var(--color-accent-soft);
-  color: var(--color-accent-hover);
+  color: var(--color-accent-text);
   padding: 1px 5px;
   border-radius: 3px;
   font-family: 'Consolas', 'Monaco', monospace;

@@ -14,6 +14,11 @@ export const TOOL_LABELS = {
     done: 'Answer recorded',
     error: 'Recording failed',
   },
+  ask_check_questions: {
+    running: 'Preparing check questions…',
+    done: 'Check questions ready',
+    error: 'Could not ask questions',
+  },
 }
 
 export function labelFor(toolName, state) {

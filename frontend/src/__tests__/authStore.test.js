@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
 import { useAuthStore } from '@/stores/auth.js'
+import { useUserStore } from '@/stores/user.js'
 
 describe('auth store', () => {
   beforeEach(() => {
@@ -65,21 +66,77 @@ describe('auth store', () => {
     expect(globalThis.__supabaseAuthStub.getSession).toHaveBeenCalledTimes(1)
   })
 
-  it('signInWithMagicLink calls Supabase signInWithOtp with the email', async () => {
+  it('register calls Supabase signUp with email + password', async () => {
     const auth = useAuthStore()
-    await auth.signInWithMagicLink('me@example.com')
-    expect(globalThis.__supabaseAuthStub.signInWithOtp).toHaveBeenCalledWith(
-      expect.objectContaining({ email: 'me@example.com' }),
+    await auth.register('me@example.com', 'hunter2pw')
+    expect(globalThis.__supabaseAuthStub.signUp).toHaveBeenCalledWith(
+      expect.objectContaining({ email: 'me@example.com', password: 'hunter2pw' }),
     )
   })
 
-  it('signInWithMagicLink throws when Supabase returns an error', async () => {
-    globalThis.__supabaseAuthStub.signInWithOtp.mockResolvedValueOnce({
+  it('register sets the accepted_terms metadata claim on signUp (F-52)', async () => {
+    const auth = useAuthStore()
+    await auth.register('me@example.com', 'hunter2pw')
+    expect(globalThis.__supabaseAuthStub.signUp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          data: { accepted_terms: true },
+        }),
+      }),
+    )
+  })
+
+  it('register returns Supabase data on success', async () => {
+    const auth = useAuthStore()
+    const result = await auth.register('me@example.com', 'hunter2pw')
+    expect(result).toMatchObject({ user: { id: 'u-new' } })
+  })
+
+  it('register throws when Supabase returns an error', async () => {
+    globalThis.__supabaseAuthStub.signUp.mockResolvedValueOnce({
       data: null,
-      error: new Error('rate limited'),
+      error: new Error('User already registered'),
     })
     const auth = useAuthStore()
-    await expect(auth.signInWithMagicLink('x@y.z')).rejects.toThrow('rate limited')
+    await expect(auth.register('x@y.z', 'hunter2pw')).rejects.toThrow(
+      'User already registered',
+    )
+  })
+
+  it('signIn calls Supabase signInWithPassword with email + password', async () => {
+    const auth = useAuthStore()
+    await auth.signIn('me@example.com', 'hunter2pw')
+    expect(globalThis.__supabaseAuthStub.signInWithPassword).toHaveBeenCalledWith(
+      expect.objectContaining({ email: 'me@example.com', password: 'hunter2pw' }),
+    )
+  })
+
+  it('signIn throws when Supabase returns an error', async () => {
+    globalThis.__supabaseAuthStub.signInWithPassword.mockResolvedValueOnce({
+      data: null,
+      error: new Error('Invalid login credentials'),
+    })
+    const auth = useAuthStore()
+    await expect(auth.signIn('x@y.z', 'bad')).rejects.toThrow(
+      'Invalid login credentials',
+    )
+  })
+
+  it('resendConfirmation calls Supabase resend for signup type', async () => {
+    const auth = useAuthStore()
+    await auth.resendConfirmation('me@example.com')
+    expect(globalThis.__supabaseAuthStub.resend).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'signup', email: 'me@example.com' }),
+    )
+  })
+
+  it('resendConfirmation throws when Supabase returns an error', async () => {
+    globalThis.__supabaseAuthStub.resend.mockResolvedValueOnce({
+      data: null,
+      error: new Error('Email not found'),
+    })
+    const auth = useAuthStore()
+    await expect(auth.resendConfirmation('x@y.z')).rejects.toThrow('Email not found')
   })
 
   it('signOut clears session', async () => {
@@ -96,5 +153,64 @@ describe('auth store', () => {
     })
     const auth = useAuthStore()
     await expect(auth.signOut()).rejects.toThrow('network')
+  })
+
+  it('userEmail reflects the session user email', async () => {
+    globalThis.__supabaseAuthStub.getSession.mockResolvedValueOnce({
+      data: { session: { access_token: 't', user: { id: 'u-1', email: 'a@b.c' } } },
+      error: null,
+    })
+    const auth = useAuthStore()
+    await auth.init()
+    expect(auth.userEmail).toBe('a@b.c')
+  })
+
+  it('requestPasswordReset calls resetPasswordForEmail with a redirectTo', async () => {
+    const auth = useAuthStore()
+    await auth.requestPasswordReset('me@example.com')
+    expect(globalThis.__supabaseAuthStub.resetPasswordForEmail).toHaveBeenCalledWith(
+      'me@example.com',
+      expect.objectContaining({ redirectTo: expect.stringContaining('/reset-password') }),
+    )
+  })
+
+  it('requestPasswordReset throws when Supabase returns an error', async () => {
+    globalThis.__supabaseAuthStub.resetPasswordForEmail.mockResolvedValueOnce({
+      data: null,
+      error: new Error('rate limit'),
+    })
+    const auth = useAuthStore()
+    await expect(auth.requestPasswordReset('x@y.z')).rejects.toThrow('rate limit')
+  })
+
+  it('updatePassword calls updateUser with the new password', async () => {
+    const auth = useAuthStore()
+    await auth.updatePassword('newpass12')
+    expect(globalThis.__supabaseAuthStub.updateUser).toHaveBeenCalledWith({
+      password: 'newpass12',
+    })
+  })
+
+  it('updatePassword throws when Supabase returns an error', async () => {
+    globalThis.__supabaseAuthStub.updateUser.mockResolvedValueOnce({
+      data: null,
+      error: new Error('same password'),
+    })
+    const auth = useAuthStore()
+    await expect(auth.updatePassword('newpass12')).rejects.toThrow('same password')
+  })
+
+  it('auth state changes re-key the user store (F-08)', async () => {
+    const auth = useAuthStore()
+    const user = useUserStore()
+    await auth.init()
+    const fire = globalThis.__supabaseAuthStub.onAuthStateChange.mock.calls[0][0]
+
+    fire('SIGNED_IN', { user: { id: 'user-a' }, access_token: 't' })
+    expect(user.activeUserId).toBe('user-a')
+
+    fire('SIGNED_OUT', null)
+    expect(user.activeUserId).toBeNull()
+    expect(user.onboardingComplete).toBe(false)
   })
 })

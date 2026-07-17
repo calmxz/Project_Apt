@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
-const STORAGE_KEY = 'adaptlearn:theme:v1'
+const STORAGE_KEY = 'crux:theme:v1'
 
 describe('useTheme', () => {
   beforeEach(() => {
@@ -45,13 +45,38 @@ describe('useTheme', () => {
     expect(override.value).toBe('auto')
   })
 
-  it('setTheme to auto removes data-theme attribute', async () => {
+  it('setTheme to auto keeps data-theme in sync with the resolved value', async () => {
+    // Auto must NOT strip the attribute: PrimeVue overlays (ConfirmDialog,
+    // teleported to body) only go dark via the [data-theme="dark"] selector.
+    // Removing it desyncs the dialog from the app tokens. matchMedia is
+    // unstubbed here so the system resolves light.
     const { useTheme } = await import('@/composables/useTheme.js')
     const { setTheme } = useTheme()
     setTheme('dark')
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark')
     setTheme('auto')
-    expect(document.documentElement.getAttribute('data-theme')).toBeNull()
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light')
+  })
+
+  it('auto + system dark sets data-theme="dark" so PrimeVue overlays adapt', async () => {
+    const listeners = {}
+    window.matchMedia = vi.fn(() => ({
+      matches: true,
+      addEventListener: (ev, cb) => {
+        listeners[ev] = cb
+      },
+      removeEventListener: vi.fn(),
+    }))
+    const { useTheme } = await import('@/composables/useTheme.js')
+    const { init } = useTheme()
+    init()
+    // override stays 'auto' but the attribute must be present and "dark"
+    // so darkModeSelector '[data-theme="dark"]' matches the teleported dialog.
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark')
+
+    // Tracks live system changes too.
+    listeners.change?.({ matches: false })
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light')
   })
 
   it('toggle flips dark<->light', async () => {

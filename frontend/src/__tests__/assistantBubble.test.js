@@ -48,6 +48,15 @@ describe('AssistantBubble', () => {
     expect(w.find('.cancelled-marker').exists()).toBe(true)
   })
 
+  it('shows an interrupted marker for partial messages', () => {
+    const w = mount(AssistantBubble, {
+      props: {
+        message: { content: 'partial text', tool_calls: [], citations: [], status: 'partial' },
+      },
+    })
+    expect(w.text()).toContain('(interrupted)')
+  })
+
   it('does not show cancelled marker when status is complete', () => {
     const w = mount(AssistantBubble, {
       props: {
@@ -102,5 +111,45 @@ describe('AssistantBubble', () => {
     })
     expect(w.exists()).toBe(true)
     expect(w.text()).toContain('safe')
+  })
+})
+
+const recapBatch = {
+  gap: 'atp', total: 1,
+  items: [{ question: 'Q?', options: ['a', 'b'], status: 'answered',
+            selectedIndex: 0, correctIndex: 0, correct: true, explanation: 'a.' }],
+}
+
+describe('AssistantBubble check_batch', () => {
+  it('renders CheckRecap and suppresses tool-call chips when check_batch present', () => {
+    const w = mount(AssistantBubble, {
+      props: { message: { content: '', check_batch: recapBatch,
+                          tool_calls: [{ id: 't1', name: 'ask_check_questions', state: 'done' }] } },
+    })
+    expect(w.find('[data-testid="check-recap"]').exists()).toBe(true)
+    expect(w.find('.tool-call-row').exists()).toBe(false)
+  })
+
+  it('does not render the empty content pill when check_batch present and content empty', () => {
+    const w = mount(AssistantBubble, {
+      props: { message: { content: '', check_batch: recapBatch } },
+    })
+    expect(w.find('.content').exists()).toBe(false)
+  })
+
+  it('still renders non-empty content alongside the recap', () => {
+    const w = mount(AssistantBubble, {
+      props: { message: { content: 'Nice work!', check_batch: recapBatch } },
+    })
+    expect(w.find('[data-testid="check-recap"]').exists()).toBe(true)
+    expect(w.text()).toContain('Nice work!')
+  })
+
+  it('unchanged when check_batch absent', () => {
+    const w = mount(AssistantBubble, {
+      props: { message: { content: 'hello', tool_calls: [] } },
+    })
+    expect(w.find('[data-testid="check-recap"]').exists()).toBe(false)
+    expect(w.find('.content').exists()).toBe(true)
   })
 })

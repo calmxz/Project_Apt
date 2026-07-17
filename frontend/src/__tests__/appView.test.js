@@ -19,7 +19,6 @@ vi.mock('primevue/toast', () => ({
 
 import App from '@/App.vue'
 import { reportApiError } from '@/services/errorBus.js'
-import { useAuthStore } from '@/stores/auth.js'
 
 describe('App.vue error listener', () => {
   let wrapper
@@ -31,22 +30,30 @@ describe('App.vue error listener', () => {
   })
   afterEach(() => wrapper.unmount())
 
-  it('shows toast for generic API error', async () => {
-    reportApiError({ status: 500, body: { detail: 'boom' } })
+  // F-51: raw backend detail strings (internal error codes, stack fragments)
+  // must never reach the toast -- friendlyError() maps by status instead.
+  it('shows a friendly toast for a generic API error, not the raw detail', async () => {
+    reportApiError({ status: 500, body: { detail: 'raw_internal_code' } })
     await flushPromises()
-    expect(showError).toHaveBeenCalledWith('boom')
+    expect(showError).toHaveBeenCalledWith(
+      'Something went wrong on our side. Try again shortly.',
+    )
   })
 
-  it('falls back to error.message when no body.detail', async () => {
+  it('maps a 503 to the tutor-unavailable message regardless of err.message', async () => {
     reportApiError({ status: 503, message: 'gateway' })
     await flushPromises()
-    expect(showError).toHaveBeenCalledWith('gateway')
+    expect(showError).toHaveBeenCalledWith(
+      'The tutor is temporarily unavailable. Try again in a moment.',
+    )
   })
 
-  it('falls back to "Request failed" when body and message are empty', async () => {
+  it('maps a bare 500 (no body, no message) to the same friendly copy', async () => {
     reportApiError({ status: 500 })
     await flushPromises()
-    expect(showError).toHaveBeenCalledWith('Request failed')
+    expect(showError).toHaveBeenCalledWith(
+      'Something went wrong on our side. Try again shortly.',
+    )
   })
 
   it('skips 429 (daily-cap has dedicated UI)', async () => {
@@ -68,51 +75,11 @@ describe('App.vue error listener', () => {
     expect(showError).not.toHaveBeenCalled()
   })
 
-  it('stringifies non-string body.detail', async () => {
+  it('maps a non-string body.detail to friendly copy instead of stringifying it', async () => {
     reportApiError({ status: 500, body: { detail: { code: 'x' } } })
     await flushPromises()
-    expect(showError).toHaveBeenCalledWith(JSON.stringify({ code: 'x' }))
-  })
-})
-
-describe('App.vue sign-out button', () => {
-  let wrapper
-  beforeEach(() => {
-    setActivePinia(createPinia())
-    showError.mockClear()
-    routerPush.mockClear()
-  })
-  afterEach(() => wrapper?.unmount())
-
-  it('hidden when unauthenticated', () => {
-    wrapper = mount(App)
-    expect(wrapper.find('[data-testid="sidebar-sign-out"]').exists()).toBe(false)
-  })
-
-  it('visible when authenticated; click signs out and redirects to /login', async () => {
-    wrapper = mount(App)
-    const auth = useAuthStore()
-    auth.session = { user: { id: 'u-1' }, access_token: 't' }
-    await flushPromises()
-    const btn = wrapper.find('[data-testid="sidebar-sign-out"]')
-    expect(btn.exists()).toBe(true)
-    await btn.trigger('click')
-    await flushPromises()
-    expect(globalThis.__supabaseAuthStub.signOut).toHaveBeenCalled()
-    expect(routerPush).toHaveBeenCalledWith('/login')
-  })
-
-  it('surfaces error toast when signOut throws', async () => {
-    globalThis.__supabaseAuthStub.signOut.mockResolvedValueOnce({
-      error: new Error('network down'),
-    })
-    wrapper = mount(App)
-    const auth = useAuthStore()
-    auth.session = { user: { id: 'u-1' }, access_token: 't' }
-    await flushPromises()
-    await wrapper.find('[data-testid="sidebar-sign-out"]').trigger('click')
-    await flushPromises()
-    expect(showError).toHaveBeenCalledWith('network down')
-    expect(routerPush).not.toHaveBeenCalled()
+    expect(showError).toHaveBeenCalledWith(
+      'Something went wrong on our side. Try again shortly.',
+    )
   })
 })

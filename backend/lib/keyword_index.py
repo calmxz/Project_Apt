@@ -1,8 +1,8 @@
 """Per-session keyword index for retrieval arbitration (Spec §3.1, §4.1).
 
-Lowercase -> token boundary on non-letters -> drop stopwords + tokens shorter
-than 3 -> Snowball/Porter stem. Stored as a JSON-encoded list on
-Session.kw_index_json.
+Lowercase -> token boundary on non-alphanumerics -> drop pure-digit tokens,
+stopwords, and tokens shorter than 2 -> Snowball/Porter stem. Stored as a
+JSON-encoded list on Session.kw_index_json.
 
 The index is populated at ingestion time from each chunk's text and used at
 chat time to compute a boolean `retrieval_required` flag for prompt injection.
@@ -27,18 +27,25 @@ STOPWORDS = frozenset(
     such only also some more most than too very does done about over
     before after between under above below while because each both other
     same different something nothing anything every here come came went
+    of to in is it on at be as or an do if my up so no we he by am us me
     """.split()
 )
 
-_TOKEN_RE = re.compile(r"[a-z]{3,}")
+# P4.2: admit digit-bearing and 2-char tokens (ipv4, 3nf, ai, ml); pure-digit
+# tokens carry no topical signal and are dropped in build_from_text.
+_TOKEN_RE = re.compile(r"[a-z0-9]{2,}")
+_HAS_LETTER_RE = re.compile(r"[a-z]")
 
 
 def build_from_text(text: str) -> set[str]:
     if not text:
         return set()
-    tokens = _TOKEN_RE.findall(text.lower())
-    keep = [t for t in tokens if t not in STOPWORDS]
-    return set(STEMMER.stemWords(keep))
+    tokens = [
+        t
+        for t in _TOKEN_RE.findall(text.lower())
+        if _HAS_LETTER_RE.search(t) and t not in STOPWORDS
+    ]
+    return set(STEMMER.stemWords(tokens))
 
 
 def merge_into_session(db: Session, session_id: str, new_stems: set[str]) -> None:
@@ -48,7 +55,6 @@ def merge_into_session(db: Session, session_id: str, new_stems: set[str]) -> Non
     current = set(json.loads(row.kw_index_json or "[]"))
     merged = current | set(new_stems)
     row.kw_index_json = json.dumps(sorted(merged))
-    db.commit()
 
 
 def match_required(query: str, kw_index) -> bool:

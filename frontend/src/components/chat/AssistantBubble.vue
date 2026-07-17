@@ -2,6 +2,7 @@
 import MarkdownContent from './MarkdownContent.vue'
 import ToolCallChip from './ToolCallChip.vue'
 import CitationsList from './CitationsList.vue'
+import CheckRecap from './CheckRecap.vue'
 
 defineProps({
   message: { type: Object, required: true },
@@ -24,15 +25,27 @@ defineProps({
     </span>
     <div class="msg-body">
       <span class="role-tag">tutor</span>
-      <span
-        v-for="(tc, ti) in (message.tool_calls || [])"
-        :key="tc.id ?? ti"
-        class="tool-call-row"
-      >
-        <ToolCallChip :tool_call="tc" :state="tc.state || 'done'" />
-      </span>
-      <MarkdownContent class="content" :text="message.content || ''" :streaming="streaming" />
+      <template v-if="message.check_batch">
+        <CheckRecap :batch="message.check_batch" />
+        <MarkdownContent
+          v-if="message.content"
+          class="content"
+          :text="message.content"
+          :streaming="streaming"
+        />
+      </template>
+      <template v-else>
+        <span
+          v-for="(tc, ti) in (message.tool_calls || [])"
+          :key="tc.id ?? ti"
+          class="tool-call-row"
+        >
+          <ToolCallChip :tool_call="tc" :state="tc.state || 'done'" />
+        </span>
+        <MarkdownContent class="content" :text="message.content || ''" :streaming="streaming" />
+      </template>
       <span v-if="message.status === 'cancelled'" class="cancelled-marker">(stopped)</span>
+      <span v-else-if="message.status === 'partial'" class="cancelled-marker">(interrupted)</span>
       <CitationsList :citations="message.citations || []" />
     </div>
   </article>
@@ -55,7 +68,7 @@ defineProps({
   height: 2rem;
   border-radius: var(--radius-pill);
   background: var(--color-accent-soft);
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   margin-top: 0.125rem;
 }
 
@@ -64,6 +77,7 @@ defineProps({
   flex-direction: column;
   gap: 0.3rem;
   min-width: 0;
+  flex: 1 1 auto;
   max-width: calc(100% - 2.6rem);
 }
 
@@ -86,8 +100,9 @@ defineProps({
 }
 
 .msg.assistant {
-  align-self: flex-start;
-  max-width: 95%;
+  align-self: stretch;
+  width: 100%;
+  max-width: 100%;
 }
 
 .msg.assistant .content {

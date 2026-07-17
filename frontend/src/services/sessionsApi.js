@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from './apiClient.js'
+import { apiGet, apiPost, apiPatch } from './apiClient.js'
 
 // Paths are relative to VITE_API_BASE_URL which already includes the /api
 // prefix. user_id is no longer carried in any payload — the backend resolves
@@ -12,8 +12,27 @@ export const createSession = ({ topic, seedMode, priorSessionId }) =>
 
 export const listSessions = () => apiGet('/sessions')
 
+// params: { status?: 'all'|'active'|'ended', q?: string,
+//           sort?: 'last_activity'|'created'|'topic', limit?: number, offset?: number }
+export const getSessionLibrary = (params) => apiGet('/sessions/library', params)
+
 export const getSession = (sessionId) => apiGet(`/sessions/${sessionId}`)
 
 export const endSession = (sessionId) => apiPost(`/sessions/${sessionId}/end`, {})
 
 export const reopenSession = (sessionId) => apiPost(`/sessions/${sessionId}/reopen`, {})
+
+export const renameSession = (sessionId, topic) =>
+  apiPatch(`/sessions/${sessionId}`, { topic })
+
+export const setPinned = (sessionId, pinned) =>
+  apiPatch(`/sessions/${sessionId}`, { pinned })
+
+export const skipCheck = (sessionId, index) =>
+  apiPost(`/sessions/${sessionId}/check/skip`, { index })
+
+export const answerCheck = (sessionId, index, selectedIndex) =>
+  apiPost(`/sessions/${sessionId}/check/answer`, {
+    index,
+    selected_index: selectedIndex,
+  })

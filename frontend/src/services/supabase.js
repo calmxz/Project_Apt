@@ -15,7 +15,7 @@ export function getSupabase() {
   if (!url || !key) {
     // Construct a no-op client in dev when env vars are not provided yet.
     // The auth store will report unauthenticated state and the guard will
-    // redirect to /login. Magic-link send will fail loudly — which is what
+    // redirect to /login. Any auth attempt will fail loudly — which is what
     // we want during the env-not-configured window.
     _client = createClient('http://placeholder.invalid', 'placeholder-publishable-key')
     return _client

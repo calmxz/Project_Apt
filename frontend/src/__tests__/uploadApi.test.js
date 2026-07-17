@@ -1,8 +1,37 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
-import { uploadPdf, getUploadStatus } from '@/services/uploadApi.js'
+import { uploadPdf, getUploadStatus, validateFile, ACCEPT_ATTR, MAX_UPLOAD_BYTES, deleteDocument } from '@/services/uploadApi.js'
 import { ApiError } from '@/services/apiClient.js'
+
+function fakeFile(name, size) {
+  return { name, size }
+}
+
+describe('validateFile', () => {
+  it('accepts pdf, pptx, txt, md by extension', () => {
+    for (const ext of ['ref.pdf', 'deck.PPTX', 'notes.txt', 'readme.md', 'readme.markdown']) {
+      expect(validateFile(fakeFile(ext, 1000)).ok).toBe(true)
+    }
+  })
+
+  it('rejects unsupported extensions', () => {
+    const r = validateFile(fakeFile('paper.docx', 1000))
+    expect(r.ok).toBe(false)
+    expect(r.reason).toMatch(/supported/i)
+  })
+
+  it('rejects oversize files', () => {
+    const r = validateFile(fakeFile('big.pdf', MAX_UPLOAD_BYTES + 1))
+    expect(r.ok).toBe(false)
+    expect(r.reason).toMatch(/too large/i)
+  })
+
+  it('exposes an accept attribute string', () => {
+    expect(ACCEPT_ATTR).toContain('.pdf')
+    expect(ACCEPT_ATTR).toContain('.pptx')
+  })
+})
 
 describe('uploadApi', () => {
   let fetchMock
@@ -76,5 +105,22 @@ describe('uploadApi', () => {
     expect(out.status).toBe('ready')
     expect(fetchMock.mock.calls[0][0]).toContain('/upload/d1')
     expect(fetchMock.mock.calls[0][0]).not.toContain('user_id=')
+  })
+
+  it('issues DELETE to /documents/{id}', async () => {
+    fetchMock.mockResolvedValue(
+      Promise.resolve({ ok: true, status: 204, text: () => Promise.resolve('') }),
+    )
+    await deleteDocument(7)
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toMatch(/\/documents\/7$/)
+    expect(init.method).toBe('DELETE')
+  })
+
+  it('throws ApiError on non-ok response', async () => {
+    fetchMock.mockResolvedValue(
+      Promise.resolve({ ok: false, status: 404, text: () => Promise.resolve('') }),
+    )
+    await expect(deleteDocument(7)).rejects.toThrow(/404/)
   })
 })

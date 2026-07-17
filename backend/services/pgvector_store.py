@@ -12,7 +12,7 @@ module.
 from dataclasses import dataclass
 from typing import Sequence
 
-from sqlalchemy import select
+from sqlalchemy import delete as _delete, select
 from sqlalchemy.orm import Session
 
 from db.models import ChunkEmbedding, Document
@@ -34,7 +34,9 @@ def insert_chunks(
     rows: Sequence[tuple[int, int | None, str, list[float]]],
 ) -> int:
     """Bulk insert chunk embeddings. `rows` is `(chunk_index, page, text, embedding)`.
-    Returns the number of rows inserted."""
+    Returns the number of rows inserted. Does NOT commit — the caller owns the
+    transaction (F-27: ingestion commits chunks, keyword index, and status
+    together, atomically)."""
     objs = [
         ChunkEmbedding(
             session_id=session_id,
@@ -47,8 +49,19 @@ def insert_chunks(
         for (chunk_index, page, text, embedding) in rows
     ]
     db.add_all(objs)
-    db.commit()
+    db.flush()
     return len(objs)
+
+
+def delete_document_chunks(db: Session, document_id: int) -> int:
+    """Delete all chunk embeddings for a document. Returns rows deleted.
+    Does NOT commit — the caller owns the transaction (F-28: chunk delete and
+    document-row delete must land atomically). The FK also carries
+    ON DELETE CASCADE (migration 0018) as a schema-level backstop."""
+    result = db.execute(
+        _delete(ChunkEmbedding).where(ChunkEmbedding.document_id == document_id)
+    )
+    return result.rowcount or 0
 
 
 def query_chunks(
@@ -62,7 +75,13 @@ def query_chunks(
     stmt = (
         select(ChunkEmbedding, distance.label("score"), Document.filename)
         .join(Document, ChunkEmbedding.document_id == Document.id)
-        .where(ChunkEmbedding.session_id == session_id)
+        .where(
+            ChunkEmbedding.session_id == session_id,
+            # F-27: never serve chunks from a doc that is not fully ingested.
+            # A failed merge can leave committed chunks on a "failed" doc
+            # (pre-F-27 data), and a mid-ingestion doc must not leak partials.
+            Document.status == "ready",
+        )
         .order_by(distance)
         .limit(k)
     )

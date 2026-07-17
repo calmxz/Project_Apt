@@ -1,12 +1,7 @@
 """Verify deterministic LLM stub used by e2e."""
 
-import pytest
-
-from agent import tutor
 from agent._stub import stub_response
-from agent.types import ToolContext
 from config import settings
-from datetime import datetime, timezone
 
 
 def test_stub_fresh_marker_no_summary():
@@ -58,22 +53,3 @@ def test_settings_disabled_when_neither_set(monkeypatch):
     monkeypatch.setattr(settings, "gemini_api_key", "real-key")
     monkeypatch.setattr(settings, "llm_stub", False)
     assert settings.llm_stub_enabled is False
-
-
-@pytest.mark.asyncio
-async def test_tutor_run_uses_stub_when_enabled(monkeypatch):
-    monkeypatch.setattr(settings, "llm_stub", True)
-    ctx = ToolContext(
-        db=None,  # stub branch returns before touching db
-        session_id="s1",
-        user_id="u1",
-        turn_started_at=datetime.now(timezone.utc),
-    )
-    text, tool_calls, citations = await tutor.run(
-        messages=[{"role": "user", "content": "hello"}],
-        system_prompt="LAST_SESSION_SUMMARY: none",
-        ctx=ctx,
-    )
-    assert text.startswith("[STUB:fresh]")
-    assert tool_calls == []
-    assert citations == []

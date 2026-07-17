@@ -9,8 +9,13 @@ services:
   frontend:
     build:
       context: ./frontend
+      args:
+        # Baked into the Vite bundle at build time. Sourced from root .env.
+        VITE_SUPABASE_URL: ${SUPABASE_URL}
+        VITE_SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY}
+    # Container serves on 8080 (nginx runs unprivileged); expose it on host 80.
     ports:
-      - "80:80"
+      - "80:8080"
     depends_on:
       backend:
         condition: service_healthy
@@ -33,7 +38,7 @@ services:
       UPLOADS_PATH: /data/uploads
       # Same-origin via nginx — no browser-side CORS preflight needed.
       # Keep the localhost dev origin too in case you reverse-proxy directly.
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost,http://localhost:5173}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost}
       LLM_STUB: ${LLM_STUB:-0}
     volumes:
       - ./data:/data

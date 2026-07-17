@@ -2,15 +2,18 @@ import pytest
 from pydantic import ValidationError
 
 from contracts import (
+    AskCheckQuestionsArgs,
+    CheckAnswerRequest,
+    CheckAnswerResponse,
+    CheckSkipRequest,
+    CheckSkipResponse,
     ChatRequest,
-    ChatResponse,
     Citation,
     HealthResponse,
+    PendingCheck,
     ProfileResponse,
-    RecordLearningEventArgs,
     RetrieveChunksArgs,
     SessionCreateRequest,
-    ToolCallRecord,
     ToolResult,
     TopicProfile,
     UpdateTopicProfileArgs,
@@ -28,7 +31,7 @@ def test_topic_profile_defaults():
 
 
 def test_topic_profile_round_trip_json():
-    raw = '{"knowledge_level":"intermediate","confirmed_gaps":["g1"],"mastered_concepts":[],"focus_target_gap":"g1","last_session_summary":null}'
+    raw = '{"knowledge_level":"intermediate","confirmed_gaps":[{"name":"g1"}],"mastered_concepts":[],"focus_target_gap":"g1","last_session_summary":null}'
     p = TopicProfile.model_validate_json(raw)
     assert p.knowledge_level == "intermediate"
     assert p.focus_target_gap == "g1"
@@ -42,9 +45,12 @@ def test_update_topic_profile_args_minimal_ok():
     assert args.focus_clear_reason is None
 
 
-def test_update_topic_profile_args_missing_evidence_type_rejected():
-    with pytest.raises(ValidationError):
-        UpdateTopicProfileArgs(session_id="s1")
+def test_update_topic_profile_args_evidence_type_optional():
+    # evidence_type is now optional (required only when add_mastered_concept present
+    # — enforced at the service layer, not the schema layer)
+    args = UpdateTopicProfileArgs(session_id="s1")
+    assert args.session_id == "s1"
+    assert args.evidence_type is None
 
 
 def test_update_topic_profile_args_invalid_focus_clear_reason_rejected():
@@ -80,13 +86,62 @@ def test_retrieve_chunks_k_bounds():
         RetrieveChunksArgs(session_id="s1", query="q", k=21)
 
 
-def test_record_learning_event_args_required():
-    args = RecordLearningEventArgs(
-        session_id="s1", gap_tested="g1", question="?", correct=True
-    )
-    assert args.correct is True
+def _one_item():
+    return {
+        "question": "What nets per glucose?",
+        "options": ["2 ATP", "36 ATP"],
+        "correct_index": 0,
+        "explanation": "Net 2 ATP.",
+    }
+
+
+def test_ask_check_questions_args_required_fields():
+    args = AskCheckQuestionsArgs(session_id="s1", gap="atp", items=[_one_item()])
+    assert args.gap == "atp"
+    assert len(args.items) == 1
+
+
+def test_ask_check_questions_args_rejects_empty_items():
     with pytest.raises(ValidationError):
-        RecordLearningEventArgs(session_id="s1", gap_tested="g1", question="?")
+        AskCheckQuestionsArgs(session_id="s1", gap="atp", items=[])
+
+
+def test_ask_check_questions_args_rejects_over_five_items():
+    with pytest.raises(ValidationError):
+        AskCheckQuestionsArgs(session_id="s1", gap="atp", items=[_one_item()] * 6)
+
+
+def test_ask_check_questions_args_extra_fields_rejected():
+    with pytest.raises(ValidationError):
+        AskCheckQuestionsArgs(session_id="s1", gap="g", items=[_one_item()], surprise="x")
+
+
+def _one_pending_item():
+    return {
+        "question": "What is the base case?",
+        "options": ["A", "B"],
+        "status": "pending",
+    }
+
+
+def test_pending_check_required_fields():
+    pc = PendingCheck(
+        gap="recursion",
+        current_index=0,
+        total=1,
+        items=[_one_pending_item()],
+    )
+    assert pc.gap == "recursion"
+    assert pc.current_index == 0
+    assert pc.total == 1
+    assert len(pc.items) == 1
+
+
+def test_pending_check_missing_fields_rejected():
+    with pytest.raises(ValidationError):
+        PendingCheck(gap="recursion", current_index=0, total=1)  # missing items
+    with pytest.raises(ValidationError):
+        PendingCheck(current_index=0, total=1, items=[_one_pending_item()])  # missing gap
 
 
 def test_tool_result_minimal():
@@ -100,28 +155,26 @@ def test_tool_result_status_enum():
         ToolResult(ok=False, status="weird")
 
 
-def test_chat_response_defaults():
-    r = ChatResponse(assistant_message="hi", message_id=1)
-    assert r.tool_calls == []
-    assert r.citations == []
-
-
-def test_chat_response_with_tool_calls():
-    r = ChatResponse(
-        assistant_message="ok",
-        message_id=2,
-        tool_calls=[
-            ToolCallRecord(name="update_topic_profile", args={"x": 1}, status="ok"),
-            ToolCallRecord(name="retrieve_chunks", args={}, status="no_results"),
-        ],
-    )
-    assert len(r.tool_calls) == 2
-    assert r.tool_calls[1].status == "no_results"
-
-
 def test_chat_request_required_fields():
     with pytest.raises(ValidationError):
         ChatRequest(session_id="s")  # missing message
+
+
+def test_chat_request_has_review_gaps_default_false():
+    req = ChatRequest(session_id="s1", message="hi")
+    assert req.review_gaps is False
+    req2 = ChatRequest(session_id="s1", message="hi", review_gaps=True)
+    assert req2.review_gaps is True
+
+
+def test_chat_request_accepts_review_gap():
+    req = ChatRequest(session_id="s1", message="hi", review_gaps=True, review_gap="derivatives")
+    assert req.review_gap == "derivatives"
+
+
+def test_chat_request_review_gap_defaults_none():
+    req = ChatRequest(session_id="s1", message="hi")
+    assert req.review_gap is None
 
 
 def test_session_create_request_seed_mode_enum():
@@ -132,7 +185,7 @@ def test_session_create_request_seed_mode_enum():
 
 
 def test_profile_response_shape():
-    pr = ProfileResponse(profile=TopicProfile(), recent_learning_events=[])
+    pr = ProfileResponse(profile=TopicProfile(), recent_learning_events=[], etag="abc123")
     assert pr.profile.knowledge_level is None
     assert pr.recent_learning_events == []
 
@@ -171,6 +224,76 @@ def test_citation_extra_fields_rejected():
         Citation(doc_id="d", text="t", surprise="x")
 
 
+def test_check_answer_request_required_fields():
+    req = CheckAnswerRequest(index=0, selected_index=2)
+    assert req.index == 0
+    assert req.selected_index == 2
+
+
+def test_check_answer_request_missing_field_rejected():
+    with pytest.raises(ValidationError):
+        CheckAnswerRequest()
+    with pytest.raises(ValidationError):
+        CheckAnswerRequest(selected_index=2)  # missing index
+
+
+def test_check_answer_request_extra_fields_rejected():
+    with pytest.raises(ValidationError):
+        CheckAnswerRequest(index=0, selected_index=0, surprise="x")
+
+
+def test_check_answer_response_required_fields():
+    resp = CheckAnswerResponse(
+        correct=True,
+        explanation="Option A is the base case.",
+        correct_index=0,
+        current_index=0,
+        total=2,
+        has_next=True,
+        done=False,
+    )
+    assert resp.correct is True
+    assert resp.explanation == "Option A is the base case."
+    assert resp.correct_index == 0
+    assert resp.has_next is True
+    assert resp.done is False
+
+
+def test_check_answer_response_missing_field_rejected():
+    with pytest.raises(ValidationError):
+        CheckAnswerResponse(correct=True, explanation="ok", correct_index=0)  # missing current_index/total/has_next/done
+
+
+def test_check_answer_response_extra_fields_rejected():
+    with pytest.raises(ValidationError):
+        CheckAnswerResponse(
+            correct=False, explanation="no", correct_index=1,
+            current_index=0, total=1, has_next=False, done=True,
+            surprise="x",
+        )
+
+
+def test_check_skip_request_required_fields():
+    req = CheckSkipRequest(index=1)
+    assert req.index == 1
+
+
+def test_check_skip_request_missing_field_rejected():
+    with pytest.raises(ValidationError):
+        CheckSkipRequest()
+
+
+def test_check_skip_response_required_fields():
+    resp = CheckSkipResponse(current_index=1, total=3, has_next=True, done=False)
+    assert resp.current_index == 1
+    assert resp.has_next is True
+
+
+def test_check_skip_response_missing_field_rejected():
+    with pytest.raises(ValidationError):
+        CheckSkipResponse(current_index=1, total=3)  # missing has_next, done
+
+
 def test_array_fields_accept_none_quirk():
     """Codegen quirk: OpenAPI `default: []` produces `list[T] | None = []`.
 
@@ -181,6 +304,68 @@ def test_array_fields_accept_none_quirk():
     assert p.confirmed_gaps is None
     assert p.mastered_concepts is None
 
-    r = ChatResponse(assistant_message="x", message_id=1, tool_calls=None, citations=None)
-    assert r.tool_calls is None
-    assert r.citations is None
+
+def test_review_queue_contracts_exist():
+    from contracts import ReviewQueueItem, ReviewQueuePage
+
+    item = ReviewQueueItem(
+        concept="photosynthesis",
+        source_session_id="s1",
+        source_topic="biology",
+        last_tested_at="2026-07-01T00:00:00Z",
+        streak=2,
+        due_at="2026-07-03T00:00:00Z",
+    )
+    page = ReviewQueuePage(items=[item], total=1, limit=20, offset=0)
+    assert page.items[0].concept == "photosynthesis"
+    assert page.items[0].streak == 2
+    assert page.total == 1
+
+
+def test_concept_entry_defaults():
+    from contracts import ConceptEntry
+
+    e = ConceptEntry(name="limits")
+    assert e.name == "limits"
+    assert e.evidence_type is None
+    assert e.last_event_at is None
+
+
+def test_concept_entry_rejects_inferred():
+    import pytest
+    from pydantic import ValidationError
+    from contracts import ConceptEntry
+
+    with pytest.raises(ValidationError):
+        ConceptEntry(name="limits", evidence_type="inferred")
+
+
+def test_topic_profile_new_shape():
+    from contracts import ConceptEntry, TopicProfile
+
+    p = TopicProfile()
+    assert p.subtopic_levels == {}
+    p2 = TopicProfile(
+        mastered_concepts=[{"name": "limits", "evidence_type": "tested"}],
+        subtopic_levels={"integration by parts": "beginner"},
+    )
+    assert isinstance(p2.mastered_concepts[0], ConceptEntry)
+    assert p2.subtopic_levels["integration by parts"] == "beginner"
+
+
+def test_update_args_subtopic_fields():
+    from contracts import UpdateTopicProfileArgs
+
+    a = UpdateTopicProfileArgs(
+        session_id="s1", subtopic="chain rule", subtopic_level="intermediate"
+    )
+    assert a.subtopic == "chain rule"
+    assert a.subtopic_level == "intermediate"
+
+
+def test_profile_patch_request_subtopic_fields():
+    from contracts import ProfilePatchRequest
+
+    b = ProfilePatchRequest(subtopic="chain rule", subtopic_level="advanced")
+    assert b.subtopic == "chain rule"
+    assert b.subtopic_level == "advanced"

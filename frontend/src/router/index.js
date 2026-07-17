@@ -13,6 +13,36 @@ const router = createRouter({
       meta: { public: true, sidebar: false },
     },
     {
+      path: '/register',
+      name: 'register',
+      component: () => import('../views/RegisterView.vue'),
+      meta: { public: true, sidebar: false },
+    },
+    {
+      path: '/forgot',
+      name: 'forgot-password',
+      component: () => import('../views/ForgotPasswordView.vue'),
+      meta: { public: true, sidebar: false },
+    },
+    {
+      path: '/reset-password',
+      name: 'reset-password',
+      component: () => import('../views/ResetPasswordView.vue'),
+      meta: { public: true, sidebar: false },
+    },
+    {
+      path: '/tos',
+      name: 'tos',
+      component: () => import('../views/TosView.vue'),
+      meta: { public: true, sidebar: false },
+    },
+    {
+      path: '/privacy',
+      name: 'privacy',
+      component: () => import('../views/PrivacyView.vue'),
+      meta: { public: true, sidebar: false },
+    },
+    {
       path: '/',
       name: 'home',
       component: () => import('../views/HomeView.vue'),
@@ -39,6 +69,11 @@ const router = createRouter({
       component: () => import('../views/NewSessionView.vue'),
     },
     {
+      path: '/sessions',
+      name: 'sessions-library',
+      component: () => import('../views/SessionsLibraryView.vue'),
+    },
+    {
       path: '/session/:id',
       name: 'session',
       component: () => import('../views/SessionView.vue'),
@@ -59,15 +94,28 @@ router.beforeEach(async (to) => {
   // now so the guard has a deterministic answer.
   if (!auth.ready) await auth.init()
 
-  if (!auth.isAuthenticated && to.name !== 'login') {
-    return { name: 'login' }
+  const isPublic = to.meta?.public === true
+  if (!auth.isAuthenticated && !isPublic) {
+    // F-49: carry the intended path through login so a deep link survives.
+    return { name: 'login', query: { redirect: to.fullPath } }
   }
-  if (auth.isAuthenticated && to.name === 'login') {
+  if (auth.isAuthenticated && (to.name === 'login' || to.name === 'register')) {
     return { name: 'home' }
   }
 
   const user = useUserStore()
-  if (auth.isAuthenticated && !user.onboardingComplete && to.name !== 'onboarding') {
+  if (auth.isAuthenticated && !user.hydrated) {
+    // F-46: onboarding truth lives on the server; the localStorage snapshot
+    // is only a warm cache. Await one hydrate so a new device does not
+    // force-route an existing user to onboarding.
+    await user.hydrateFromServer()
+  }
+  if (
+    auth.isAuthenticated &&
+    !user.onboardingComplete &&
+    to.name !== 'onboarding' &&
+    to.name !== 'reset-password'
+  ) {
     return { name: 'onboarding' }
   }
   if (user.onboardingComplete && to.name === 'onboarding' && to.query.retake !== '1') {

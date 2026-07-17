@@ -1,7 +1,5 @@
 <template>
   <section class="new-session">
-    <BackButton />
-
     <div class="hero">
       <span class="folio">begin</span>
       <h1 class="hero-title">What do you want to learn?</h1>
@@ -23,7 +21,9 @@
           @keydown.enter="onEnter"
         />
         <p class="help">
-          To continue an ended topic, reopen it from the Ended tab on Home.
+          To continue an ended topic, use "Continue topic" on its card in the
+          Sessions library — the tutor keeps your profile. Reopening from the
+          sidebar picks up the same session instead.
         </p>
       </div>
 
@@ -37,6 +37,44 @@
         >
           {{ pick }}
         </button>
+      </div>
+
+      <div class="attach">
+        <input
+          ref="fileInputEl"
+          type="file"
+          :accept="ACCEPT_ATTR"
+          multiple
+          data-testid="new-file-input"
+          hidden
+          @change="onFilesPicked"
+        />
+        <button type="button" class="attach-btn" data-testid="new-file-add" @click="openFilePicker">
+          <i class="pi pi-paperclip" aria-hidden="true" />
+          <span>Add reference files (optional)</span>
+        </button>
+        <p class="attach-hint">PDF, PPTX, TXT, or MD. The tutor can cite these during the session.</p>
+
+        <ul v-if="files.length" class="chips" aria-label="Attached files">
+          <li v-for="(f, i) in files" :key="`${f.name}-${i}`" class="chip" data-testid="new-file-chip">
+            <i class="pi pi-file" aria-hidden="true" />
+            <span class="chip-name">{{ f.name }}</span>
+            <button
+              type="button"
+              class="chip-remove"
+              :aria-label="`Remove ${f.name}`"
+              @click="removeFile(i)"
+            >
+              <i class="pi pi-times" aria-hidden="true" />
+            </button>
+          </li>
+        </ul>
+
+        <div aria-live="polite" aria-atomic="true">
+          <p v-if="fileErrors.length" class="file-errors" data-testid="new-file-errors">
+            {{ fileErrors.join(' ') }}
+          </p>
+        </div>
       </div>
 
       <div
@@ -66,13 +104,23 @@
       <p v-if="error" class="error" data-testid="new-error">{{ error }}</p>
 
       <button
+        v-if="existingSessionId"
+        type="button"
+        class="open-existing"
+        data-testid="open-existing-session"
+        @click="router.push({ name: 'session', params: { id: existingSessionId } })"
+      >
+        Open existing session
+      </button>
+
+      <button
         type="button"
         class="cta-primary"
         data-testid="new-submit"
-        :disabled="!canSubmit || store.loading || dupeBlocked"
+        :disabled="!canSubmit || store.loading || uploadingFiles || dupeBlocked"
         @click="submit"
       >
-        <span>Create session</span>
+        <span>{{ submitLabel }}</span>
         <i class="pi pi-arrow-right" aria-hidden="true" />
       </button>
     </div>
@@ -83,7 +131,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
-import BackButton from '../components/BackButton.vue'
+import { ACCEPT_ATTR, uploadDocument, validateFile } from '../services/uploadApi.js'
 import { useSessionStore } from '../stores/session.js'
 import { findActiveSessionByTopic, formatRelative, shortId } from '../utils/formatDate.js'
 
@@ -92,6 +140,12 @@ const store = useSessionStore()
 
 const topic = ref('')
 const error = ref(null)
+const existingSessionId = ref(null)
+
+const files = ref([])
+const fileErrors = ref([])
+const uploadingFiles = ref(false)
+const fileInputEl = ref(null)
 
 const quickPicks = [
   'Recursion',
@@ -115,12 +169,20 @@ const activeOnTopic = computed(() =>
 const dupeBlocked = computed(() => Boolean(activeOnTopic.value))
 const canSubmit = computed(() => Boolean(topic.value.trim()))
 
+const submitLabel = computed(() => {
+  if (uploadingFiles.value) {
+    return `Uploading ${files.value.length} file${files.value.length === 1 ? '' : 's'}...`
+  }
+  if (store.loading) return 'Creating...'
+  return 'Create session'
+})
+
 function setTopic(value) {
   topic.value = value
 }
 
 function onEnter() {
-  if (canSubmit.value && !store.loading && !dupeBlocked.value) submit()
+  if (canSubmit.value && !store.loading && !uploadingFiles.value && !dupeBlocked.value) submit()
 }
 
 function openExisting() {
@@ -128,22 +190,59 @@ function openExisting() {
   router.push({ name: 'session', params: { id: activeOnTopic.value.id } })
 }
 
+function openFilePicker() {
+  fileInputEl.value?.click()
+}
+
+function onFilesPicked(event) {
+  fileErrors.value = []
+  for (const f of Array.from(event.target.files || [])) {
+    const v = validateFile(f)
+    if (v.ok) files.value.push(f)
+    else fileErrors.value.push(v.reason)
+  }
+  event.target.value = ''
+}
+
+function removeFile(i) {
+  files.value.splice(i, 1)
+}
+
 async function submit() {
   error.value = null
+  existingSessionId.value = null
   if (dupeBlocked.value) {
     error.value = 'An active session for this topic already exists.'
     return
   }
+  let created
   try {
-    const created = await store.createSession({
+    created = await store.createSession({
       topic: topic.value.trim(),
       seedMode: 'fresh',
       priorSessionId: null,
     })
-    router.push({ name: 'session', params: { id: created.id } })
   } catch (e) {
+    if (e?.status === 409 && e?.body?.detail?.code === 'duplicate_topic') {
+      existingSessionId.value = e.body.detail.session_id
+      error.value = 'An active session for this topic already exists.'
+      return
+    }
     error.value = e?.message || 'Failed to create session.'
+    return
   }
+  if (files.value.length) {
+    uploadingFiles.value = true
+    const results = await Promise.allSettled(
+      files.value.map((file) => uploadDocument({ sessionId: created.id, file })),
+    )
+    uploadingFiles.value = false
+    const failed = results.filter((r) => r.status === 'rejected').length
+    if (failed) {
+      fileErrors.value = [`${failed} file(s) failed to upload. You can retry from the session.`]
+    }
+  }
+  router.push({ name: 'session', params: { id: created.id } })
 }
 </script>
 
@@ -171,7 +270,7 @@ async function submit() {
   text-transform: uppercase;
   letter-spacing: var(--tracking-label);
   font-weight: 600;
-  color: var(--color-accent);
+  color: var(--color-accent-text);
 }
 
 .hero-title {
@@ -275,7 +374,7 @@ async function submit() {
 
 .quick-pick:hover {
   background: var(--color-accent-soft);
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   border-color: var(--color-accent-soft);
   transform: translateY(-1px);
 }
@@ -283,6 +382,97 @@ async function submit() {
 .quick-pick:focus-visible {
   outline: 2px solid var(--color-accent-ring);
   outline-offset: 2px;
+}
+
+.attach {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.attach-btn {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 1rem;
+  border-radius: var(--radius-pill);
+  background: var(--color-surface);
+  border: 1px dashed var(--color-border-strong);
+  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color var(--motion-fast) ease, color var(--motion-fast) ease;
+}
+
+.attach-btn:hover,
+.attach-btn:focus-visible {
+  border-color: var(--color-accent);
+  color: var(--color-accent-text);
+}
+
+.attach-btn:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+}
+
+.attach-hint {
+  margin: 0 0 0 0.25rem;
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+}
+
+.chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.4rem 0.35rem 0.7rem;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-soft);
+  color: var(--color-accent-text);
+  font-size: 0.8125rem;
+}
+
+.chip-name {
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-accent-text);
+  cursor: pointer;
+}
+
+.chip-remove:hover,
+.chip-remove:focus-visible {
+  background: var(--color-surface);
+}
+
+.file-errors {
+  margin: 0;
+  color: var(--color-error-text);
+  font-size: 0.8125rem;
 }
 
 .warn {
@@ -345,8 +535,30 @@ async function submit() {
 
 .error {
   margin: 0;
-  color: var(--signal-error);
+  color: var(--color-error-text);
   font-size: 0.9375rem;
+}
+
+.open-existing {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.4rem 0.875rem;
+  border-radius: var(--radius-pill);
+  background: var(--signal-info);
+  color: #FFFFFF;
+  border: 0;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: filter var(--motion-fast) ease, transform var(--motion-fast) var(--motion-bounce);
+}
+
+.open-existing:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
 }
 
 .cta-primary {
@@ -356,7 +568,7 @@ async function submit() {
   gap: 0.5rem;
   padding: 0.9rem 1.625rem;
   border-radius: var(--radius-pill);
-  background: var(--color-accent);
+  background: var(--color-accent-strong);
   color: #FFFFFF;
   border: 0;
   font-family: var(--font-sans);

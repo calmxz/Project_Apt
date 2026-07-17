@@ -60,7 +60,7 @@ defineProps({
 }
 
 .empty-illustration {
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   margin-bottom: 0.25rem;
   display: inline-flex;
   filter: drop-shadow(0 2px 8px rgba(255, 107, 92, 0.25));

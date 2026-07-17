@@ -1,7 +1,5 @@
 <template>
   <section class="settings" data-testid="settings">
-    <BackButton fallback="/" />
-
     <header class="head">
       <span class="folio">preferences</span>
       <h1 class="title">Settings</h1>
@@ -34,29 +32,7 @@
           <i class="pi pi-comments card-icon" aria-hidden="true" />
           Feedback style
         </h2>
-        <fieldset class="radio-group">
-          <legend class="sr-only">Feedback style</legend>
-          <label
-            v-for="opt in feedbackOptions"
-            :key="opt.value"
-            :class="['radio-row', { selected: feedback === opt.value }]"
-          >
-            <input
-              type="radio"
-              :value="opt.value"
-              v-model="feedback"
-              :data-testid="`settings-feedback-${opt.value}`"
-              class="radio-input"
-            />
-            <span class="radio-dot" aria-hidden="true">
-              <span class="radio-dot-inner" />
-            </span>
-            <span class="radio-body">
-              <span class="radio-label">{{ opt.label }}</span>
-              <span class="radio-sub">{{ opt.sub }}</span>
-            </span>
-          </label>
-        </fieldset>
+        <FeedbackStylePicker v-model="feedback" :options="feedbackOptions" />
       </section>
 
       <div class="actions">
@@ -80,6 +56,114 @@
       </div>
     </form>
 
+    <section class="card" data-testid="settings-appearance">
+      <h2 class="card-title">
+        <i class="pi pi-moon card-icon" aria-hidden="true" />
+        Appearance
+      </h2>
+      <div class="switch-row">
+        <span class="switch-body">
+          <span class="switch-label">Dark mode</span>
+          <span class="switch-sub">Use a dark theme across the app.</span>
+        </span>
+        <button
+          type="button"
+          class="switch"
+          :class="{ 'switch--on': isDark }"
+          role="switch"
+          :aria-checked="isDark"
+          aria-label="Dark mode"
+          data-testid="settings-theme-toggle"
+          @click="toggleTheme"
+        >
+          <span class="switch-knob" aria-hidden="true" />
+        </button>
+      </div>
+    </section>
+
+    <section
+      v-if="authStore.isAuthenticated"
+      class="card"
+      data-testid="settings-security"
+    >
+      <h2 class="card-title">
+        <i class="pi pi-lock card-icon" aria-hidden="true" />
+        Security
+      </h2>
+      <form class="pw-form" @submit.prevent="changePassword">
+        <div class="field">
+          <label class="lbl" for="pw-current">Current password</label>
+          <input
+            id="pw-current"
+            v-model="pwCurrent"
+            data-testid="settings-pw-current"
+            class="input"
+            type="password"
+            autocomplete="current-password"
+          />
+        </div>
+        <div class="field">
+          <label class="lbl" for="pw-new">New password</label>
+          <input
+            id="pw-new"
+            v-model="pwNew"
+            data-testid="settings-pw-new"
+            class="input"
+            type="password"
+            autocomplete="new-password"
+            placeholder="At least 8 characters"
+          />
+        </div>
+        <div class="field">
+          <label class="lbl" for="pw-confirm">Confirm new password</label>
+          <input
+            id="pw-confirm"
+            v-model="pwConfirm"
+            data-testid="settings-pw-confirm"
+            class="input"
+            type="password"
+            autocomplete="new-password"
+          />
+        </div>
+        <p v-if="pwMismatch" class="hint" data-testid="settings-pw-mismatch">
+          New passwords do not match.
+        </p>
+        <p v-if="pwError" class="pw-error" data-testid="settings-pw-error">{{ pwError }}</p>
+        <p v-if="pwSuccess" class="saved-flash" data-testid="settings-pw-success">
+          <i class="pi pi-check-circle" aria-hidden="true" />
+          Password updated.
+        </p>
+        <div class="actions">
+          <button
+            type="button"
+            class="save-btn"
+            data-testid="settings-pw-submit"
+            :disabled="!pwCanSubmit || pwSubmitting"
+            @click="changePassword"
+          >
+            <i class="pi pi-lock" aria-hidden="true" />
+            <span>{{ pwSubmitting ? 'Updating…' : 'Update password' }}</span>
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <section
+      v-if="authStore.isAuthenticated"
+      class="signout"
+      data-testid="settings-signout-section"
+    >
+      <button
+        type="button"
+        class="signout-btn"
+        data-testid="settings-sign-out"
+        @click="signOut"
+      >
+        <i class="pi pi-sign-out" aria-hidden="true" />
+        <span>Sign out</span>
+      </button>
+    </section>
+
     <section class="danger" data-testid="settings-danger">
       <h2 class="card-title danger-title">
         <i class="pi pi-exclamation-triangle card-icon" aria-hidden="true" />
@@ -102,13 +186,19 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 
-import BackButton from '../components/BackButton.vue'
+import FeedbackStylePicker from '../components/FeedbackStylePicker.vue'
 import { useUserStore } from '../stores/user.js'
+import { useAuthStore } from '../stores/auth.js'
+import { useTheme } from '../composables/useTheme.js'
 import { useToast } from '../composables/useToast.js'
 
 const user = useUserStore()
-const { showSuccess } = useToast()
+const authStore = useAuthStore()
+const router = useRouter()
+const { isDark, toggle: toggleTheme } = useTheme()
+const { showSuccess, showError } = useToast()
 
 const feedbackOptions = [
   { value: 'hints', label: 'Hints', sub: 'Nudge me toward the answer.' },
@@ -134,10 +224,63 @@ watch([displayName, feedback], () => {
   savedFlash.value = false
 })
 
-function save() {
-  user.updateProfile({ name: displayName.value, feedback: feedback.value })
+async function save() {
+  await user.updateProfile({ name: displayName.value, feedback: feedback.value })
   savedFlash.value = true
   showSuccess('Preferences saved.')
+}
+
+const pwCurrent = ref('')
+const pwNew = ref('')
+const pwConfirm = ref('')
+const pwError = ref('')
+const pwSuccess = ref(false)
+const pwSubmitting = ref(false)
+
+const pwMismatch = computed(
+  () => pwConfirm.value.length > 0 && pwConfirm.value !== pwNew.value,
+)
+const pwCanSubmit = computed(
+  () =>
+    pwCurrent.value.length > 0 &&
+    pwNew.value.length >= 8 &&
+    pwNew.value === pwConfirm.value,
+)
+
+async function changePassword() {
+  if (!pwCanSubmit.value) return
+  pwError.value = ''
+  pwSuccess.value = false
+  pwSubmitting.value = true
+  try {
+    await authStore.signIn(authStore.userEmail, pwCurrent.value)
+  } catch {
+    pwError.value = 'Current password is incorrect.'
+    pwSubmitting.value = false
+    return
+  }
+  try {
+    await authStore.updatePassword(pwNew.value)
+    pwCurrent.value = ''
+    pwNew.value = ''
+    pwConfirm.value = ''
+    pwSuccess.value = true
+    showSuccess('Password updated.')
+  } catch (e) {
+    pwError.value = e?.message || 'Could not update password. Try again.'
+  } finally {
+    pwSubmitting.value = false
+  }
+}
+
+async function signOut() {
+  try {
+    await authStore.signOut()
+  } catch (err) {
+    showError(err?.message || 'Sign out failed')
+    return
+  }
+  router.push('/login')
 }
 </script>
 
@@ -162,7 +305,7 @@ function save() {
   text-transform: uppercase;
   letter-spacing: var(--tracking-label);
   font-weight: 600;
-  color: var(--color-accent);
+  color: var(--color-accent-text);
 }
 
 .title {
@@ -213,7 +356,7 @@ function save() {
 
 .card-icon {
   font-size: 1rem;
-  color: var(--color-accent);
+  color: var(--color-accent-text);
 }
 
 .field {
@@ -229,18 +372,6 @@ function save() {
   text-transform: uppercase;
   letter-spacing: var(--tracking-label);
   color: var(--color-text-muted);
-}
-
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
 }
 
 .input {
@@ -272,97 +403,6 @@ function save() {
   color: var(--color-text-muted);
 }
 
-/* Radio cards */
-.radio-group {
-  border: 0;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.625rem;
-}
-
-.radio-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-  padding: 0.875rem 1rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  background: var(--color-surface-soft);
-  transition: border-color var(--motion-fast) ease, background var(--motion-fast) ease, transform var(--motion-fast) var(--motion-bounce);
-}
-
-.radio-row:hover {
-  border-color: var(--color-accent-soft);
-  transform: translateY(-1px);
-}
-
-.radio-row.selected {
-  border-color: var(--color-accent);
-  background: var(--color-accent-soft);
-}
-
-.radio-input {
-  position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.radio-dot {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.25rem;
-  height: 1.25rem;
-  border-radius: var(--radius-pill);
-  border: 2px solid var(--color-border-strong);
-  background: var(--color-surface);
-  margin-top: 0.125rem;
-  transition: border-color var(--motion-fast) ease;
-}
-
-.radio-row.selected .radio-dot {
-  border-color: var(--color-accent);
-}
-
-.radio-dot-inner {
-  width: 0.625rem;
-  height: 0.625rem;
-  border-radius: var(--radius-pill);
-  background: var(--color-accent);
-  transform: scale(0);
-  transition: transform var(--motion-fast) var(--motion-bounce);
-}
-
-.radio-row.selected .radio-dot-inner {
-  transform: scale(1);
-}
-
-.radio-body {
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
-  min-width: 0;
-}
-
-.radio-label {
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 1rem;
-  color: var(--color-heading);
-  letter-spacing: var(--tracking-tight);
-}
-
-.radio-sub {
-  font-family: var(--font-sans);
-  font-size: 0.8125rem;
-  color: var(--color-text-muted);
-}
-
 /* Actions */
 .actions {
   display: inline-flex;
@@ -377,7 +417,7 @@ function save() {
   gap: 0.5rem;
   padding: 0.75rem 1.5rem;
   border-radius: var(--radius-pill);
-  background: var(--color-accent);
+  background: var(--color-accent-strong);
   color: #FFFFFF;
   border: 0;
   font-family: var(--font-sans);
@@ -408,7 +448,7 @@ function save() {
   font-family: var(--font-sans);
   font-size: 0.875rem;
   font-weight: 600;
-  color: var(--signal-success);
+  color: var(--color-success-text);
 }
 
 /* Danger zone */
@@ -423,11 +463,11 @@ function save() {
 }
 
 .danger-title {
-  color: var(--signal-error);
+  color: var(--color-error-text);
 }
 
 .danger .card-icon {
-  color: var(--signal-error);
+  color: var(--color-error-text);
 }
 
 .danger-text {
@@ -444,7 +484,7 @@ function save() {
   padding: 0.5rem 1rem;
   border-radius: var(--radius-pill);
   background: transparent;
-  color: var(--signal-error);
+  color: var(--color-error-text);
   border: 1px solid var(--signal-error);
   font-family: var(--font-sans);
   font-weight: 600;
@@ -457,5 +497,117 @@ function save() {
   background: var(--signal-error);
   color: #FFFFFF;
   transform: translateY(-1px);
+}
+
+/* Appearance switch */
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.switch-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+
+.switch-label {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--color-heading);
+  letter-spacing: var(--tracking-tight);
+}
+
+.switch-sub {
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
+}
+
+.switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 2.75rem;
+  height: 1.5rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-border-strong);
+  cursor: pointer;
+  transition: background var(--motion-fast) ease, border-color var(--motion-fast) ease;
+}
+
+.switch--on {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.switch:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+}
+
+.switch-knob {
+  position: absolute;
+  top: 50%;
+  left: 0.1875rem;
+  width: 1.125rem;
+  height: 1.125rem;
+  transform: translateY(-50%);
+  border-radius: var(--radius-pill);
+  background: #FFFFFF;
+  box-shadow: var(--shadow-paper);
+  transition: left var(--motion-fast) var(--motion-bounce);
+}
+
+.switch--on .switch-knob {
+  left: calc(100% - 1.3125rem);
+}
+
+/* Sign out */
+.signout {
+  display: flex;
+}
+
+.signout-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border-strong);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition: background var(--motion-fast) ease, color var(--motion-fast) ease, border-color var(--motion-fast) ease, transform var(--motion-fast) var(--motion-bounce);
+}
+
+.signout-btn:hover {
+  color: var(--color-heading);
+  border-color: var(--color-text-muted);
+  transform: translateY(-1px);
+}
+
+.signout-btn:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+}
+
+.pw-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.pw-error {
+  margin: 0;
+  color: var(--color-error-text);
+  font-size: 0.875rem;
 }
 </style>

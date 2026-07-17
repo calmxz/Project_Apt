@@ -3,6 +3,7 @@ import {
   formatDate,
   formatShortDateTime,
   formatRelative,
+  formatRelativeShort,
   shortId,
   normalizeTopicKey,
   findActiveSessionByTopic,
@@ -77,5 +78,39 @@ describe('formatDate utils', () => {
     expect(findActiveSessionByTopic(sessions, 'algebra').id).toBe('s2')
     expect(findActiveSessionByTopic(sessions, 'missing')).toBeNull()
     expect(findActiveSessionByTopic(sessions, '')).toBeNull()
+  })
+})
+
+describe('formatRelativeShort', () => {
+  it('returns empty string for null/empty input', () => {
+    expect(formatRelativeShort(null)).toBe('')
+    expect(formatRelativeShort('')).toBe('')
+  })
+
+  it('returns "now" under a minute', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-15T12:00:00Z'))
+    expect(formatRelativeShort('2026-01-15T11:59:30Z')).toBe('now')
+  })
+
+  it('uses the minute bucket right at 60s', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-15T12:00:00Z'))
+    expect(formatRelativeShort('2026-01-15T11:59:00Z')).toBe('1m ago')
+  })
+
+  it('formats minutes, hours, days, weeks, months, years compactly', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-15T12:00:00Z'))
+    expect(formatRelativeShort('2026-01-15T11:55:00Z')).toBe('5m ago')
+    expect(formatRelativeShort('2026-01-15T10:00:00Z')).toBe('2h ago')
+    expect(formatRelativeShort('2026-01-12T12:00:00Z')).toBe('3d ago')
+    expect(formatRelativeShort('2026-01-01T12:00:00Z')).toBe('2w ago')
+    expect(formatRelativeShort('2025-11-15T12:00:00Z')).toBe('2mo ago')
+    expect(formatRelativeShort('2024-01-15T12:00:00Z')).toBe('2y ago')
+  })
+
+  it('returns empty string for an invalid date string', () => {
+    expect(formatRelativeShort('not-a-date')).toBe('')
   })
 })

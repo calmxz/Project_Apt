@@ -4,8 +4,11 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from contracts import TopicProfile
-from db.models import Document, Session as SessionModel, User
+from agent.types import ToolContext
+from config import settings
+from contracts import AskCheckQuestionsArgs, TopicProfile
+from db.models import ChatMessage, Document, Session as SessionModel, UsageCounter, User
+from services import check_question_service, summary_service
 
 
 USER_ID = "u1"
@@ -47,8 +50,8 @@ def test_post_resume_with_ended_prior_copies_profile(client, db_session, seeded_
         topic="sql",
         topic_profile_json=TopicProfile(
             knowledge_level="beginner",
-            confirmed_gaps=["joins"],
-            mastered_concepts=["select"],
+            confirmed_gaps=[{"name": "joins"}],
+            mastered_concepts=[{"name": "select"}],
             last_session_summary="covered selects",
         ).model_dump_json(),
         ended_at=datetime.now(timezone.utc),
@@ -67,8 +70,8 @@ def test_post_resume_with_ended_prior_copies_profile(client, db_session, seeded_
     )
     assert r.status_code == 201, r.text
     body = r.json()
-    assert body["topic_profile"]["confirmed_gaps"] == ["joins"]
-    assert body["topic_profile"]["mastered_concepts"] == ["select"]
+    assert [g["name"] for g in body["topic_profile"]["confirmed_gaps"]] == ["joins"]
+    assert [c["name"] for c in body["topic_profile"]["mastered_concepts"]] == ["select"]
     assert body["topic_profile"]["last_session_summary"] == "covered selects"
 
 
@@ -85,9 +88,14 @@ def test_post_resume_with_unended_prior_generates_summary(
         id="prior_2",
         user_id=USER_ID,
         topic="sql",
-        topic_profile_json=TopicProfile(mastered_concepts=["select"]).model_dump_json(),
+        topic_profile_json=TopicProfile(mastered_concepts=[{"name": "select"}]).model_dump_json(),
     )
     db_session.add(prior)
+    db_session.flush()
+    # F-32: generate_and_persist short-circuits zero-message sessions to the
+    # mechanical fallback and never calls the LLM, so a message is required
+    # here to exercise the LLM-summary path this test targets.
+    db_session.add(ChatMessage(session_id="prior_2", role="user", content="what is a join"))
     db_session.commit()
 
     r = client.post(
@@ -102,6 +110,59 @@ def test_post_resume_with_unended_prior_generates_summary(
     assert r.status_code == 201, r.text
     body = r.json()
     assert body["topic_profile"]["last_session_summary"] == "auto summary about joins"
+
+
+def test_resume_409_when_second_active_session_exists_leaves_prior_untouched(
+    client, db_session, seeded_user, mock_litellm, llm_text, monkeypatch
+):
+    """Final-review fix: the duplicate-topic check must run BEFORE the
+    resume block's irreversible side effects (claim-end + summary LLM call).
+    A pre-existing second active session on the same topic must 409 without
+    ending or summarizing the session being resumed."""
+    called = {"summary": False}
+
+    async def fake_acompletion(**kwargs):
+        called["summary"] = True
+        return llm_text("should not be generated")
+
+    monkeypatch.setattr("services.summary_service.litellm.acompletion", fake_acompletion)
+
+    active_other = SessionModel(
+        id="active_other",
+        user_id=USER_ID,
+        topic="sql",
+        topic_profile_json=TopicProfile().model_dump_json(),
+    )
+    prior = SessionModel(
+        id="prior_dup",
+        user_id=USER_ID,
+        topic="sql",
+        topic_profile_json=TopicProfile(mastered_concepts=[{"name": "select"}]).model_dump_json(),
+    )
+    db_session.add_all([active_other, prior])
+    db_session.flush()
+    db_session.add(ChatMessage(session_id="prior_dup", role="user", content="hi"))
+    db_session.commit()
+
+    r = client.post(
+        "/api/sessions",
+        json={
+            "user_id": USER_ID,
+            "topic": "sql",
+            "seed_mode": "resume",
+            "prior_session_id": "prior_dup",
+        },
+    )
+    assert r.status_code == 409, r.text
+    assert r.json()["detail"]["code"] == "duplicate_topic"
+    assert r.json()["detail"]["session_id"] == "active_other"
+
+    db_session.expire_all()
+    refreshed_prior = db_session.get(SessionModel, "prior_dup")
+    refreshed_active = db_session.get(SessionModel, "active_other")
+    assert refreshed_prior.ended_at is None, "aborted resume must not claim-end the prior"
+    assert refreshed_active.ended_at is None, "pre-existing active session must be untouched"
+    assert called["summary"] is False, "no summary LLM call must fire before the 409"
 
 
 def test_get_list_filters_by_user_desc(client, db_session, seeded_user):
@@ -280,6 +341,32 @@ def test_get_session_returns_messages_array(client, db_session, seeded_user):
     ]
 
 
+def test_get_session_messages_round_trip_status(client, db_session, seeded_user):
+    """F-14 follow-up: GET-session messages must carry `status` through so the
+    FE can render the '(interrupted)' marker for partial rows on reload."""
+    from db.models import ChatMessage
+
+    db_session.add(
+        SessionModel(
+            id="s_msg_status",
+            user_id=USER_ID,
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.add(ChatMessage(session_id="s_msg_status", role="user", content="hi"))
+    db_session.add(
+        ChatMessage(session_id="s_msg_status", role="assistant", content="draft", status="partial")
+    )
+    db_session.commit()
+
+    r = client.get(f"/api/sessions/s_msg_status?user_id={USER_ID}")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    statuses = [m["status"] for m in body["messages"]]
+    assert statuses == ["complete", "partial"]
+
+
 def test_reopen_flips_ended_at_to_null(client, db_session, seeded_user):
     db_session.add(
         SessionModel(
@@ -338,6 +425,11 @@ def test_post_end_generates_summary(
             topic_profile_json=TopicProfile().model_dump_json(),
         )
     )
+    db_session.flush()
+    # F-32: generate_and_persist short-circuits zero-message sessions to the
+    # mechanical fallback and never calls the LLM, so a message is required
+    # here to exercise the LLM-summary path this test targets.
+    db_session.add(ChatMessage(session_id="s1", role="user", content="what is a join"))
     db_session.commit()
 
     r = client.post(f"/api/sessions/s1/end?user_id={USER_ID}")
@@ -345,3 +437,299 @@ def test_post_end_generates_summary(
     body = r.json()
     assert body["summary"] == {"kind": "summary", "text": "learner covered joins"}
     assert body["ended_at"] is not None
+
+
+# ---------------------------------------------------------------------------
+# F-03: end/resume summary trigger consumes a daily rate-limit slot
+# ---------------------------------------------------------------------------
+
+
+def _create_active_session_with_messages(db_session, sid="s_rate"):
+    """Active (unended) session with a couple of exchanges, so the mechanical
+    fallback summary is non-empty and lands in the "summary" kind, not
+    "no_exchanges". Creates the owning user too."""
+    db_session.add(User(id=USER_ID))
+    db_session.add(
+        SessionModel(
+            id=sid,
+            user_id=USER_ID,
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.add(ChatMessage(session_id=sid, role="user", content="what are joins"))
+    db_session.add(ChatMessage(session_id=sid, role="assistant", content="joins combine tables"))
+    db_session.commit()
+    return sid
+
+
+def _usage_count(db_session, user_id=USER_ID):
+    row = db_session.query(UsageCounter).filter_by(user_id=user_id).one_or_none()
+    return row.count if row else 0
+
+
+def test_end_session_at_rate_cap_returns_mechanical_summary(client, db_session, monkeypatch):
+    # F-03: end must never 429, but a rate-capped user must not trigger LLM spend.
+    # Force the non-stub branch (mirrors Task 4's pattern) so a rate-gate bypass
+    # would actually reach litellm.acompletion instead of being masked by stub mode.
+    monkeypatch.setattr(settings, "llm_stub", False)
+    monkeypatch.setattr(settings, "gemini_api_key", "real")
+    monkeypatch.setattr(settings, "daily_cap", 0)
+
+    called = []
+
+    async def fake_acompletion(**kwargs):
+        called.append(1)
+
+    monkeypatch.setattr("services.summary_service.litellm.acompletion", fake_acompletion)
+
+    session_id = _create_active_session_with_messages(db_session)
+    resp = client.post(f"/api/sessions/{session_id}/end?user_id={USER_ID}")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert called == []  # rate cap must short-circuit before any LLM call
+    assert body["summary"]["kind"] == "summary"
+    assert "joins combine tables" in body["summary"]["text"]
+
+
+def test_end_session_consumes_rate_limit_slot(
+    client, db_session, monkeypatch, llm_text
+):
+    async def fake_acompletion(**kwargs):
+        return llm_text("a fresh summary")
+
+    monkeypatch.setattr("services.summary_service.litellm.acompletion", fake_acompletion)
+
+    session_id = _create_active_session_with_messages(db_session)
+    before = _usage_count(db_session)
+    resp = client.post(f"/api/sessions/{session_id}/end?user_id={USER_ID}")
+    assert resp.status_code == 200, resp.text
+    assert _usage_count(db_session) == before + 1
+
+
+# ---------------------------------------------------------------------------
+# PATCH /sessions/{session_id} — rename + pin (Task 8)
+# ---------------------------------------------------------------------------
+
+
+def _make_session(db_session, sid, pinned=False, ended=False):
+    s = SessionModel(
+        id=sid,
+        user_id=USER_ID,
+        topic="orig",
+        topic_profile_json=TopicProfile().model_dump_json(),
+        pinned=pinned,
+        ended_at=datetime.now(timezone.utc) if ended else None,
+    )
+    db_session.add(s)
+    db_session.commit()
+    return s
+
+
+def test_patch_renames_session(client, db_session, seeded_user):
+    _make_session(db_session, "s_rename")
+    r = client.patch(f"/api/sessions/s_rename?user_id={USER_ID}", json={"topic": "new name"})
+    assert r.status_code == 200, r.text
+    assert r.json()["topic"] == "new name"
+
+
+def test_patch_pins_active_session(client, db_session, seeded_user):
+    _make_session(db_session, "s_pin")
+    r = client.patch(f"/api/sessions/s_pin?user_id={USER_ID}", json={"pinned": True})
+    assert r.status_code == 200, r.text
+    assert r.json()["pinned"] is True
+
+
+def test_patch_pin_on_ended_session_400(client, db_session, seeded_user):
+    _make_session(db_session, "s_ended", ended=True)
+    r = client.patch(f"/api/sessions/s_ended?user_id={USER_ID}", json={"pinned": True})
+    assert r.status_code == 400
+
+
+def test_patch_rename_allowed_on_ended_session(client, db_session, seeded_user):
+    _make_session(db_session, "s_ended2", ended=True)
+    r = client.patch(f"/api/sessions/s_ended2?user_id={USER_ID}", json={"topic": "renamed ended"})
+    assert r.status_code == 200, r.text
+    assert r.json()["topic"] == "renamed ended"
+
+
+def test_patch_404_for_other_user(client, db_session, seeded_user):
+    other = SessionModel(
+        id="s_other_patch",
+        user_id="someone_else",
+        topic="x",
+        topic_profile_json=TopicProfile().model_dump_json(),
+    )
+    db_session.add(other)
+    db_session.commit()
+    r = client.patch(f"/api/sessions/s_other_patch?user_id={USER_ID}", json={"topic": "hijack"})
+    assert r.status_code == 404
+
+
+def test_list_and_detail_include_pinned(client, db_session, seeded_user):
+    _make_session(db_session, "s_list", pinned=True)
+    list_items = client.get(f"/api/sessions?user_id={USER_ID}").json()
+    s_list_item = next((item for item in list_items if item["id"] == "s_list"), None)
+    assert s_list_item is not None, "s_list not found in list response"
+    assert s_list_item["pinned"] is True
+    assert client.get(f"/api/sessions/s_list?user_id={USER_ID}").json()["pinned"] is True
+
+
+def test_patch_empty_body_400(client, db_session, seeded_user):
+    _make_session(db_session, "s_empty")
+    r = client.patch(f"/api/sessions/s_empty?user_id={USER_ID}", json={})
+    assert r.status_code == 400
+
+
+def test_get_session_ingestion_aggregates_documents(client, db_session, seeded_user):
+    db_session.add(
+        SessionModel(
+            id="s_ing",
+            user_id=USER_ID,
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.flush()
+    db_session.add(Document(session_id="s_ing", filename="a.pdf", status="ready"))
+    db_session.add(Document(session_id="s_ing", filename="b.pptx", status="pending"))
+    db_session.commit()
+
+    r = client.get(f"/api/sessions/s_ing/ingestion?user_id={USER_ID}")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["status"] == "pending"
+    assert len(body["documents"]) == 2
+    assert {d["filename"] for d in body["documents"]} == {"a.pdf", "b.pptx"}
+
+
+def test_get_session_ingestion_404_for_wrong_user(client, db_session, seeded_user):
+    db_session.add(User(id="other2"))
+    db_session.add(
+        SessionModel(
+            id="s_ing_owned",
+            user_id=USER_ID,
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.commit()
+    r = client.get("/api/sessions/s_ing_owned/ingestion?user_id=other2")
+    assert r.status_code == 404
+
+
+def test_get_session_ingestion_empty_when_no_documents(client, db_session, seeded_user):
+    db_session.add(
+        SessionModel(
+            id="s_ing_empty",
+            user_id=USER_ID,
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.commit()
+    r = client.get(f"/api/sessions/s_ing_empty/ingestion?user_id={USER_ID}")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] is None
+
+
+# ---------------------------------------------------------------------------
+# F-30/F-31/F-33: claim-first end + single-commit summary + resume abandon
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def seeded_session(db_session, seeded_user):
+    session = SessionModel(
+        id="s_claim_1",
+        user_id=USER_ID,
+        topic="sql",
+        topic_profile_json=TopicProfile().model_dump_json(),
+    )
+    db_session.add(session)
+    db_session.commit()
+    return session
+
+
+def _open_batch(db, session_id, user_id=USER_ID, n=2):
+    ctx = ToolContext(
+        db=db, session_id=session_id, user_id=user_id,
+        turn_started_at=datetime.now(timezone.utc),
+    )
+    return check_question_service.register(
+        db, ctx,
+        AskCheckQuestionsArgs(
+            session_id=session_id,
+            gap="g",
+            items=[
+                {"question": f"Q{i}?", "options": ["a", "b"], "correct_index": 0, "explanation": "a."}
+                for i in range(n)
+            ],
+        ),
+    )
+
+
+@pytest.fixture
+def session_with_open_batch(db_session, seeded_user):
+    session = SessionModel(
+        id="s_open_batch_1",
+        user_id=USER_ID,
+        topic="sql",
+        topic_profile_json=TopicProfile().model_dump_json(),
+    )
+    db_session.add(session)
+    db_session.commit()
+    _open_batch(db_session, session.id)
+    return session
+
+
+def test_double_end_pays_one_summary(client, db_session, seeded_session, monkeypatch):
+    """F-30: the second end takes the idempotent path -- generate_and_persist
+    runs exactly once."""
+    calls = {"n": 0}
+    real = summary_service.generate_and_persist
+
+    async def counting(db, session, *, allow_llm=True):
+        calls["n"] += 1
+        return await real(db, session, allow_llm=allow_llm)
+
+    monkeypatch.setattr(summary_service, "generate_and_persist", counting)
+    # Route module does `from services import summary_service` (the module, not
+    # the function), so patching the attribute on the module object above is
+    # visible through routes.sessions.summary_service.generate_and_persist too.
+
+    r1 = client.post(f"/api/sessions/{seeded_session.id}/end?user_id={USER_ID}")
+    r2 = client.post(f"/api/sessions/{seeded_session.id}/end?user_id={USER_ID}")
+    assert r1.status_code == 200 and r2.status_code == 200
+    assert calls["n"] == 1
+    assert r2.json()["summary"] is not None
+
+
+def test_claim_end_is_single_winner(db_session, seeded_session):
+    from routes.sessions import _claim_end
+
+    assert _claim_end(db_session, seeded_session.id) is True
+    assert _claim_end(db_session, seeded_session.id) is False
+    db_session.refresh(seeded_session)
+    assert seeded_session.ended_at is not None
+
+
+def test_resume_create_abandons_prior_open_batch(client, db_session, session_with_open_batch):
+    """F-31: continue-topic must force-skip the prior's open quiz so reopening
+    the prior doesn't render a zombie batch or deadlock new quizzes."""
+    prior = session_with_open_batch
+    resp = client.post(
+        "/api/sessions",
+        json={
+            "user_id": USER_ID,
+            "topic": prior.topic,
+            "seed_mode": "resume",
+            "prior_session_id": prior.id,
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    db_session.expire_all()
+    assert check_question_service.get_pending_check(db_session, prior.id) is None
+    db_session.refresh(prior)
+    assert prior.ended_at is not None

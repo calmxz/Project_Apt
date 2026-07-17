@@ -7,6 +7,8 @@ frontend/.env.local
 frontend/.env.*.local
 # .env.example files DO get committed (they're templates with no secrets).
 !**/.env.example
+# Debug account credentials — dev-only throwaway creds, never commit.
+docs/dev/debug-accounts.txt
 # Speculative — block common credential/cert file types (F4.2, SECURITY_REVIEW L-2).
 *.key
 *.pem
@@ -14,6 +16,8 @@ frontend/.env.*.local
 service-account*.json
 firebase-*.json
 .claude/
+# MCP server config (env-var refs only, no secrets) — local-only like .claude/.
+.mcp.json
 
 reports/
 
@@ -37,6 +41,7 @@ backend/venv/
 backend/.pytest_cache/
 backend/htmlcov/
 backend/.coverage
+.coverage
 backend/uv.lock
 
 # Data volumes (never commit SQLite, uploads, or ChromaDB).
@@ -54,7 +59,7 @@ frontend/playwright-report/
 frontend/.auth/
 
 # Orphaned old scaffold dir (node_modules lock prevents deletion while VS Code is open)
-adaptlearn/
+crux/
 
 # Editors / OS
 .vscode/*

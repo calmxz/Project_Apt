@@ -10,7 +10,6 @@ from pydantic import ValidationError
 
 from contracts import (
     ChatRequest,
-    RecordLearningEventArgs,
     RetrieveChunksArgs,
     SessionCreateRequest,
     UpdateTopicProfileArgs,
@@ -32,13 +31,6 @@ def _base(model):
         return {"session_id": "s", "query": "q"}
     if model is UpdateTopicProfileArgs:
         return {"session_id": "s", "evidence_type": "declared"}
-    if model is RecordLearningEventArgs:
-        return {
-            "session_id": "s",
-            "gap_tested": "g",
-            "question": "q",
-            "correct": True,
-        }
     raise AssertionError(f"no base kwargs for {model}")
 
 
@@ -54,9 +46,6 @@ MAX_LENGTH_CASES = [
     (UpdateTopicProfileArgs, "add_confirmed_gap", 200),
     (UpdateTopicProfileArgs, "add_mastered_concept", 200),
     (UpdateTopicProfileArgs, "focus_target_gap", 200),
-    (RecordLearningEventArgs, "session_id", 64),
-    (RecordLearningEventArgs, "gap_tested", 200),
-    (RecordLearningEventArgs, "question", 1000),
 ]
 
 

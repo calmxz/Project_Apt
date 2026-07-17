@@ -12,8 +12,21 @@ const authStub = {
   onAuthStateChange: vi.fn().mockReturnValue({
     data: { subscription: { unsubscribe: vi.fn() } },
   }),
-  signInWithOtp: vi.fn().mockResolvedValue({ data: {}, error: null }),
+  signUp: vi.fn().mockResolvedValue({
+    data: { user: { id: 'u-new', email: 'new@example.com' }, session: null },
+    error: null,
+  }),
+  signInWithPassword: vi.fn().mockResolvedValue({
+    data: { session: { access_token: 'tok', user: { id: 'u-1' } } },
+    error: null,
+  }),
+  resend: vi.fn().mockResolvedValue({ data: {}, error: null }),
   signOut: vi.fn().mockResolvedValue({ error: null }),
+  resetPasswordForEmail: vi.fn().mockResolvedValue({ data: {}, error: null }),
+  updateUser: vi.fn().mockResolvedValue({
+    data: { user: { id: 'u-1' } },
+    error: null,
+  }),
 }
 
 vi.mock('@supabase/supabase-js', () => ({
@@ -26,8 +39,22 @@ beforeEach(() => {
   authStub.getSession.mockClear()
   authStub.getSession.mockResolvedValue({ data: { session: null }, error: null })
   authStub.onAuthStateChange.mockClear()
-  authStub.signInWithOtp.mockClear()
-  authStub.signInWithOtp.mockResolvedValue({ data: {}, error: null })
+  authStub.signUp.mockClear()
+  authStub.signUp.mockResolvedValue({
+    data: { user: { id: 'u-new', email: 'new@example.com' }, session: null },
+    error: null,
+  })
+  authStub.signInWithPassword.mockClear()
+  authStub.signInWithPassword.mockResolvedValue({
+    data: { session: { access_token: 'tok', user: { id: 'u-1' } } },
+    error: null,
+  })
+  authStub.resend.mockClear()
+  authStub.resend.mockResolvedValue({ data: {}, error: null })
   authStub.signOut.mockClear()
   authStub.signOut.mockResolvedValue({ error: null })
+  authStub.resetPasswordForEmail.mockClear()
+  authStub.resetPasswordForEmail.mockResolvedValue({ data: {}, error: null })
+  authStub.updateUser.mockClear()
+  authStub.updateUser.mockResolvedValue({ data: { user: { id: 'u-1' } }, error: null })
 })

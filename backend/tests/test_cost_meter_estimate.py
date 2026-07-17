@@ -5,8 +5,6 @@ These tests must FAIL before the implementation is added to cost_meter.py.
 
 from decimal import Decimal
 
-import pytest
-
 from config import settings
 from services.cost_meter import estimate_cancelled_cost, MODEL_RATES
 
@@ -61,11 +59,86 @@ def test_estimate_zero_delta_only_charges_prompt():
     assert cost == expected
 
 
-def test_estimate_raises_for_unknown_model():
-    """A model not in MODEL_RATES must raise KeyError."""
-    with pytest.raises(KeyError):
-        estimate_cancelled_cost(
-            model="nonexistent/model",
-            delta_text="hello",
-            prompt_tokens=100,
-        )
+def test_unknown_model_falls_back_to_litellm_price_table(monkeypatch):
+    """P2 AC5: an unregistered model id must not raise mid-turn."""
+    monkeypatch.setattr(
+        "services.cost_meter.litellm.token_counter", lambda model, text: 10
+    )
+    monkeypatch.setattr(
+        "services.cost_meter.litellm.cost_per_token",
+        lambda model, prompt_tokens, completion_tokens: (0.001, 0.002),
+    )
+    cost = estimate_cancelled_cost("some/unknown-model", "partial reply", 100)
+    assert cost == Decimal("0.003")
+
+
+def test_unknown_model_double_failure_returns_zero(monkeypatch):
+    monkeypatch.setattr(
+        "services.cost_meter.litellm.token_counter", lambda model, text: 10
+    )
+    def _boom(**kwargs):
+        raise ValueError("model not mapped")
+    monkeypatch.setattr("services.cost_meter.litellm.cost_per_token", _boom)
+    cost = estimate_cancelled_cost("some/unknown-model", "partial reply", 100)
+    assert cost == Decimal("0")
+
+
+# Tests for embedding_cost and meter_embedding_response (F-19 groundwork)
+
+
+class _FakeUsage:
+    prompt_tokens = 1000
+    completion_tokens = None
+    prompt_tokens_details = None
+
+
+class _FakeEmbedResp:
+    usage = _FakeUsage()
+
+
+def test_embedding_cost_token_math_fallback(monkeypatch):
+    # completion_cost blows up on the fake object -> token-math fallback via
+    # usage.prompt_tokens against the MODEL_RATES embedding entry.
+    from services import cost_meter
+    monkeypatch.setattr(
+        cost_meter.litellm, "completion_cost",
+        lambda **kw: (_ for _ in ()).throw(ValueError("unknown model")),
+    )
+    cost = cost_meter.embedding_cost(
+        "gemini/gemini-embedding-2", _FakeEmbedResp(), ["some query"]
+    )
+    # 1000 tokens * 0.000150 / 1000 = 0.00015
+    assert cost == Decimal("0.00015")
+
+
+def test_embedding_cost_unknown_model_returns_zero(monkeypatch):
+    from services import cost_meter
+    monkeypatch.setattr(
+        cost_meter.litellm, "completion_cost",
+        lambda **kw: (_ for _ in ()).throw(ValueError("unknown model")),
+    )
+    assert cost_meter.embedding_cost("nope/nope", _FakeEmbedResp(), ["q"]) == Decimal("0")
+
+
+def test_meter_embedding_response_writes_ledger_and_log(db_session, monkeypatch):
+    from services import cost_meter
+    from db.models import LlmCallLog
+    from sqlalchemy import select
+
+    def _mk_user(db, uid):
+        from db.models import User
+        db.add(User(id=uid))
+        db.flush()
+
+    _mk_user(db_session, "uemb")
+    monkeypatch.setattr(
+        cost_meter.litellm, "completion_cost", lambda **kw: 0.002
+    )
+    cost_meter.meter_embedding_response(
+        db_session, _FakeEmbedResp(), user_id="uemb", session_id="s1", texts=["q"]
+    )
+    assert cost_meter.current_spend(db_session, "uemb") == Decimal("0.0020")
+    row = db_session.execute(
+        select(LlmCallLog).where(LlmCallLog.user_id == "uemb")
+    ).scalar_one()
+    assert row.purpose == "embedding"

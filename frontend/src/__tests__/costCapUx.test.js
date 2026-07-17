@@ -53,23 +53,32 @@ describe('apiClient cost-warning bus', () => {
     expect(listener).toHaveBeenCalledTimes(1)
     expect(listener.mock.calls[0][0].detail.header).toContain('soft_cap_breached')
   })
+
+  it('fires with detail.header containing level=urgent when the cap is urgent', async () => {
+    fetchMock.mockReturnValueOnce(
+      okWithHeader(
+        { ok: true },
+        'soft_cap_breached;level=urgent;used_usd=2.9;urgent_cap_usd=2.8;hard_cap_usd=3.0',
+      ),
+    )
+    await apiGet('/x')
+    expect(listener).toHaveBeenCalledTimes(1)
+    expect(listener.mock.calls[0][0].detail.header).toContain('level=urgent')
+  })
 })
 
-// ---------------------------------------------------------------------------
-// session store: captures the cost-cap 429 envelope into costCapInfo and
-// flips costCapReached.
-// ---------------------------------------------------------------------------
+// Slice 2: the streaming catch maps the 429 envelope into costCapInfo.
 
-describe('session store cost-cap envelope', () => {
+describe('session store cost-cap envelope (streaming)', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
   })
 
-  it('captures cost-cap 429 into costCapInfo', async () => {
-    // mock postChat to throw an ApiError-shaped object with the envelope
-    vi.doMock('@/services/chatApi.js', () => ({
-      postChat: vi.fn().mockRejectedValue(
+  it('maps a cost-cap 429 from streamChat into costCapInfo and store error', async () => {
+    // mock streamChat to throw an ApiError-shaped object with the envelope
+    vi.doMock('@/services/chatStreamService.js', () => ({
+      streamChat: vi.fn().mockRejectedValue(
         Object.assign(new Error('api'), {
           status: 429,
           body: {
@@ -83,6 +92,7 @@ describe('session store cost-cap envelope', () => {
           },
         }),
       ),
+      streamCheckComplete: vi.fn(),
     }))
     vi.doMock('@/services/sessionsApi.js', () => ({
       listSessions: vi.fn(),
@@ -96,12 +106,16 @@ describe('session store cost-cap envelope', () => {
     setActivePinia(createPinia())
     const s = useStore()
     await s.createSession({ topic: 't' })
-    await expect(s.sendMessage({ text: 'hi' })).rejects.toThrow('api')
+    await expect(s.sendMessageStreaming({ text: 'hi' })).rejects.toThrow('api')
     expect(s.costCapReached).toBe(true)
-    expect(s.costCapInfo.used_usd).toBe('3.5000')
-    expect(s.costCapInfo.hard_cap_usd).toBe('3.0')
-    s.clearCostCap()
-    expect(s.costCapReached).toBe(false)
+    expect(s.costCapInfo).toEqual({
+      used_usd: '3.5000',
+      soft_cap_usd: '2.0',
+      hard_cap_usd: '3.0',
+      resets_at: '2026-05-24T00:00:00Z',
+    })
+    expect(s.error).toBeTruthy()
+    expect(s.streamState).toBe('idle')
   })
 })
 
@@ -114,6 +128,7 @@ const stubs = {
   // ChatHeader teleports to the navbar slot; stub Teleport so it renders inline.
   teleport: true,
   BackButton: { template: '<button data-testid="back" />' },
+  ReferenceStatusBanner: { template: '<div />' },
   SessionEndedBanner: { template: '<div />' },
   Button: {
     props: ['disabled', 'loading', 'label'],
@@ -133,19 +148,22 @@ const stubs = {
 }
 
 vi.mock('vue-router', () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useRoute: () => ({ query: {} }),
   RouterLink: { template: '<a><slot /></a>' },
 }))
 
 vi.mock('@/services/uploadApi.js', () => ({
-  uploadPdf: vi.fn(),
-  getUploadStatus: vi.fn(),
+  uploadDocument: vi.fn().mockResolvedValue({ document_id: 1 }),
+  validateFile: vi.fn(() => ({ ok: true })),
+  getUploadStatus: vi.fn().mockResolvedValue({ id: 1, status: 'ready', error: null }),
+  MAX_UPLOAD_BYTES: 25 * 1024 * 1024,
 }))
 
 const showError = vi.fn()
-const showInfo = vi.fn()
+const showWarn = vi.fn()
 vi.mock('@/composables/useToast.js', () => ({
-  useToast: () => ({ showError, showInfo, showSuccess: vi.fn() }),
+  useToast: () => ({ showError, showWarn, showSuccess: vi.fn() }),
 }))
 
 describe('SessionView cost-cap UX', () => {
@@ -153,7 +171,7 @@ describe('SessionView cost-cap UX', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     showError.mockClear()
-    showInfo.mockClear()
+    showWarn.mockClear()
   })
   afterEach(() => {
     if (lastWrapper) {
@@ -198,6 +216,58 @@ describe('SessionView cost-cap UX', () => {
     costBus.dispatchEvent(new CustomEvent('cost-warning', { detail: { header: 'x' } }))
     costBus.dispatchEvent(new CustomEvent('cost-warning', { detail: { header: 'x' } }))
     await flushPromises()
-    expect(showInfo).toHaveBeenCalledTimes(1)
+    expect(showWarn).toHaveBeenCalledTimes(1)
+    expect(showError).not.toHaveBeenCalled()
+  })
+
+  it('surfaces an urgent cost warning distinctly from a soft one (stream shape)', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      seedActive(store)
+    })
+    lastWrapper = mount(SessionView, { props: { id: 's1' }, global: { stubs } })
+    await flushPromises()
+    costBus.dispatchEvent(
+      new CustomEvent('cost-warning', {
+        detail: { level: 'urgent', used_usd: 2.9, urgent_cap_usd: 2.8, hard_cap_usd: 3.0 },
+      }),
+    )
+    await flushPromises()
+    expect(showError).toHaveBeenCalledTimes(1)
+    expect(showWarn).not.toHaveBeenCalled()
+  })
+
+  it('surfaces an urgent cost warning distinctly from a soft one (header shape)', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      seedActive(store)
+    })
+    lastWrapper = mount(SessionView, { props: { id: 's1' }, global: { stubs } })
+    await flushPromises()
+    costBus.dispatchEvent(
+      new CustomEvent('cost-warning', {
+        detail: { header: 'soft_cap_breached;level=urgent;used_usd=2.9;urgent_cap_usd=2.8' },
+      }),
+    )
+    await flushPromises()
+    expect(showError).toHaveBeenCalledTimes(1)
+    expect(showWarn).not.toHaveBeenCalled()
+  })
+
+  it('still shows urgent warning even if a soft warning already fired this mount', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      seedActive(store)
+    })
+    lastWrapper = mount(SessionView, { props: { id: 's1' }, global: { stubs } })
+    await flushPromises()
+    costBus.dispatchEvent(new CustomEvent('cost-warning', { detail: { level: 'soft' } }))
+    await flushPromises()
+    expect(showWarn).toHaveBeenCalledTimes(1)
+    costBus.dispatchEvent(new CustomEvent('cost-warning', { detail: { level: 'urgent' } }))
+    await flushPromises()
+    expect(showError).toHaveBeenCalledTimes(1)
+    // soft does not fire again
+    expect(showWarn).toHaveBeenCalledTimes(1)
   })
 })

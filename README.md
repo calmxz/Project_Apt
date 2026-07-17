@@ -1,6 +1,6 @@
 <div align="center">
 
-# AdaptLearn
+# Crux
 
 **An adaptive AI study companion that learns how _you_ learn.**
 
@@ -11,11 +11,11 @@ Pick a topic, drop in your course PDFs, and chat with a tutor that builds a live
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
 [![Vue 3](https://img.shields.io/badge/vue-3-42b883.svg)](https://vuejs.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
-[![ChromaDB](https://img.shields.io/badge/ChromaDB-1.5.x-FF6B6B.svg)](https://www.trychroma.com/)
+[![pgvector](https://img.shields.io/badge/pgvector-0.8.x-336791.svg)](https://github.com/pgvector/pgvector)
 
-[**Screencast walkthrough**](docs/screencast/adaptlearn-walkthrough.mp4) · [**Design doc**](docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md) · [**API spec**](docs/api/openapi.yaml)
+[**Screencast walkthrough**](docs/screencast/crux-walkthrough.mp4) · [**Design doc**](docs/superpowers/specs/2026-05-03-crux-v1-design.md) · [**API spec**](docs/api/openapi.yaml)
 
-![AdaptLearn hero](docs/assets/hero.png)
+![Crux hero](docs/assets/hero.png)
 
 </div>
 
@@ -44,7 +44,7 @@ Pick a topic, drop in your course PDFs, and chat with a tutor that builds a live
 
 ## About
 
-Most "AI tutors" today are a chat box bolted onto a generic LLM. They ask the same opening question on turn 1 and turn 100, and they have no idea what you've already mastered. AdaptLearn is different.
+Most "AI tutors" today are a chat box bolted onto a generic LLM. They ask the same opening question on turn 1 and turn 100, and they have no idea what you've already mastered. Crux is different.
 
 **What it does.** You pick a topic ("Discrete Math", "Photosynthesis", "Vector Calculus") and have an ongoing conversation with a tutor agent. Every turn, the agent updates a structured profile of your knowledge — your current level, the gaps you've confirmed, the concepts you've demonstrated mastery of, and the one gap it's currently focused on. The next question is conditioned on that profile, not a blank slate.
 
@@ -53,7 +53,7 @@ Most "AI tutors" today are a chat box bolted onto a generic LLM. They ask the sa
 - **Self-learners** working through a textbook who want to be quizzed adaptively, not linearly.
 - **Educators / EdTech researchers** interested in tool-augmented LLM tutors with verifiable state.
 
-**Why it exists.** As a 7-week project, AdaptLearn is a demonstration of how structured tool calls and server-side guard rails can keep an LLM honest — no hallucinated mastery, no silent context loss, no fabricated citations.
+**Why it exists.** Crux is a demonstration of how structured tool calls and server-side guard rails can keep an LLM honest — no hallucinated mastery, no silent context loss, no fabricated citations.
 
 ## Features
 
@@ -65,7 +65,7 @@ Most "AI tutors" today are a chat box bolted onto a generic LLM. They ask the sa
 - **Multi-session, resumable.** Every topic is its own session. Close one with a summary; resume later with prior context restored.
 - **Read-only profile views.** Per-session profile (`/profile/:sessionId`) plus a cross-session aggregate dashboard (`/profile`) — see exactly what the model believes about you.
 - **Daily rate limit.** Built-in per-user cap (`DAILY_CAP`) so you can't accidentally burn your API quota.
-- **Dockerized.** One command brings up frontend, backend, and vector store.
+- **Runs natively.** Backend (`uvicorn`) and frontend (`npm run dev`) run locally; Postgres + pgvector and Auth are Supabase-managed. A production Docker stack (`docker-compose.prod.yml`) is provided for deploy.
 
 ## Tech Stack
 
@@ -75,7 +75,7 @@ Most "AI tutors" today are a chat box bolted onto a generic LLM. They ask the sa
 | Backend | FastAPI, Uvicorn, Python 3.12 | Typed routes, automatic OpenAPI, async-friendly |
 | ORM / DB | SQLAlchemy + Supabase Postgres 17 | Managed Postgres + Alembic migrations; pooled connection via Supabase pgbouncer |
 | Vector store | pgvector 0.8.x in Supabase Postgres | Co-located with app schema; `ivfflat` cosine index on `chunk_embeddings` |
-| Auth | Supabase Auth (magic-link) | JWT verified server-side against Supabase JWKS |
+| Auth | Supabase Auth (email/password) | JWT verified server-side against Supabase JWKS |
 | LLM gateway | LiteLLM direct | One client, swap providers via env var (Gemini default, Anthropic fallback) |
 | LLM | `gemini/gemini-3.1-flash-lite` (chat), `gemini/gemini-embedding-2` (embeddings) | Cheap, fast, large context |
 | Tests | pytest, vitest, Playwright | Backend unit/integration, frontend unit, e2e |
@@ -90,14 +90,12 @@ flowchart LR
     User[User browser]
     FE[Vue 3 + Vite<br/>:5173]
     BE[FastAPI + Uvicorn<br/>:8000]
-    DB[(SQLite<br/>sessions · profile<br/>learning events · messages)]
-    Chroma[(ChromaDB<br/>:8001)]
+    DB[(Supabase Postgres 17 + pgvector<br/>sessions · profile · learning events<br/>messages · chunk_embeddings)]
     LLM{{LiteLLM<br/>Gemini}}
 
     User <--> FE
     FE <-->|REST + JSON| BE
-    BE <--> DB
-    BE <-->|vector search| Chroma
+    BE <-->|SQL + vector search| DB
     BE <-->|chat + tool calls| LLM
 
     subgraph Tools["Agent tools (LiteLLM tool-call)"]
@@ -111,11 +109,11 @@ flowchart LR
 
 ### How a turn flows
 
-1. Frontend posts `{user_id, session_id, message}` to `POST /api/chat`.
+1. Frontend posts `{session_id, message}` to `POST /api/chat` with an `Authorization: Bearer <jwt>` header (the user id is read from the verified token's `sub` claim, not the body).
 2. Backend rebuilds the dynamic part of the system prompt from DB state (current `TopicProfile`, recent messages, ingestion status, server-computed `retrieval_required` flag from a keyword index).
 3. LiteLLM forwards the full prompt to Gemini. Gemini may emit tool calls.
 4. Backend executes each tool call:
-   - `retrieve_chunks` → ChromaDB query, returns top-_k_ chunks with citations.
+   - `retrieve_chunks` → pgvector cosine search, returns top-_k_ chunks with citations.
    - `update_topic_profile` → Pydantic-validated patch over the profile row.
    - `record_learning_event` → insert a LearningEvent row; trigger mastery demotion if applicable.
 5. Tool results go back to Gemini, which produces the final assistant message.
@@ -125,28 +123,23 @@ The agent has three tools, no more:
 
 | Tool | Purpose |
 |---|---|
-| `retrieve_chunks(session_id, query, k=5)` | ChromaDB vector search over the user's uploaded PDFs |
+| `retrieve_chunks(session_id, query, k=5)` | pgvector cosine search over the user's uploaded PDF chunks |
 | `update_topic_profile(...)` | Patch the learner's topic profile; clearing `focus_target_gap` requires `focus_clear_reason` |
 | `record_learning_event(session_id, gap_tested, question, correct)` | Logs check-question outcomes; incorrect retest on a mastered concept demotes it server-side |
 
-The system prompt is split: an immutable rules block (`backend/agent/prompts.py`) plus dynamic context rebuilt per turn. Splitting keeps the immutable half cache-friendly. Full detail in [the design doc §3.3](docs/superpowers/specs/2026-05-03-adaptlearn-v1-design.md).
+The system prompt is split: an immutable rules block (`backend/agent/prompts.py`) plus dynamic context rebuilt per turn. Splitting keeps the immutable half cache-friendly. Full detail in [the design doc §3.3](docs/superpowers/specs/2026-05-03-crux-v1-design.md).
 
 ## Prerequisites
 
-You need exactly **one** of these two setups:
-
-### Option A: Docker (easiest)
-
-- [Docker Desktop](https://www.docker.com/products/docker-desktop) 4.x+ (Windows / macOS) or Docker Engine 24.x+ (Linux)
-- ~2 GB free disk for images + data
-
-### Option B: Local toolchain (more setup, no Docker)
+Local development runs the app natively (Postgres + pgvector and Auth are Supabase-managed, so there is no local DB container):
 
 - Python 3.12 (`python --version`)
 - Node.js 20.x or newer + npm 10.x (`node --version`, `npm --version`)
-- A running ChromaDB instance — either `pip install chromadb` and run `chroma run --path ./data/chroma --port 8001`, or just use the Docker chromadb container alone
+- For RAG (PDF upload + retrieval): a Supabase Postgres connection string in `DATABASE_URL`. Without it the backend falls back to a local SQLite file (`sqlite:///./data/app.db`) — fine for a quick spin, but pgvector retrieval requires Postgres.
 
-### In both cases
+> Docker is only used for the production / public-demo stack (`docker-compose.prod.yml`). The root `docker-compose.yml` is a no-op anchor and runs nothing.
+
+### You also need
 
 - A **Gemini API key**. Free tier is fine for personal use. Get one here:
   1. Open [Google AI Studio](https://aistudio.google.com/apikey).
@@ -169,41 +162,18 @@ cd Project_Apt
 cp .env.example .env
 ```
 
-Open `.env` in your editor and set at minimum:
+Open `.env` in your editor. At minimum set your Gemini key; for real use (RAG + auth) also point at your Supabase project:
 
 ```ini
 GEMINI_API_KEY=AIza...your-key-here...
+# For RAG + Supabase Auth (omit DATABASE_URL to use the local SQLite fallback):
+DATABASE_URL=postgresql://...your-supabase-pooler-uri...
+SUPABASE_URL=https://your-project.supabase.co
 ```
 
 See the [Configuration](#configuration) section for the full variable reference.
 
-### 3a. Bring up the stack with Docker (recommended)
-
-From the repo root:
-
-```bash
-docker compose up
-```
-
-First boot pulls images and builds the backend — give it a few minutes. When you see `Uvicorn running on http://0.0.0.0:8000` in the logs, the stack is ready.
-
-Open http://localhost:5173 in your browser. You should see the AdaptLearn landing page.
-
-Useful variants:
-
-```bash
-docker compose up -d                       # detached (background)
-docker compose up backend                  # backend + chromadb only
-docker compose logs -f backend             # tail backend logs
-docker compose exec backend pytest -v      # run backend tests inside container
-docker compose down                        # stop everything; ./data persists
-docker compose down -v                     # also drop named volumes
-docker compose build backend               # rebuild after Dockerfile / deps changes
-```
-
-The bind mount `./data` ↔ `/data` is where your SQLite DB, uploaded PDFs, and Chroma data live. Everything survives container restarts. Full Docker reference: [`backend/README.md`](backend/README.md#docker).
-
-### 3b. Run locally without Docker
+### 3. Run the app locally
 
 **Backend** — from `backend/`:
 
@@ -219,14 +189,7 @@ pip install -e .[dev]
 uvicorn main:app --reload
 ```
 
-Or from the repo root: `uvicorn main:app --reload --app-dir backend`. `config.py` anchors `.env` and `data/` to the repo root, so cwd doesn't matter. `data/app.db`, `data/chroma/`, and `data/uploads/` auto-create on first boot.
-
-You also need ChromaDB running on port 8001:
-
-```bash
-pip install chromadb
-chroma run --path ./data/chroma --port 8001
-```
+Or from the repo root: `uvicorn main:app --reload --app-dir backend`. `config.py` anchors `.env` and `data/` to the repo root, so cwd doesn't matter. `data/uploads/` auto-creates on first boot (plus `data/app.db` if you're on the SQLite fallback). Postgres + pgvector live in Supabase — there's no local DB to start.
 
 **Frontend** — from `frontend/`:
 
@@ -237,6 +200,8 @@ npm run dev
 ```
 
 Visit http://localhost:5173.
+
+> **Deploying?** The production / public-demo stack (nginx-served frontend + uvicorn backend) lives in `docker-compose.prod.yml`. Run it from the repo root with `docker compose -f docker-compose.prod.yml --env-file .env up --build`, then expose port 80 (e.g. `ngrok http 80`).
 
 ### 4. Verify everything is healthy
 
@@ -249,7 +214,7 @@ If you get `connection refused`, the backend didn't come up. Check the logs.
 
 ## Configuration
 
-The backend reads `.env` at the repo root. With Docker, it's mounted into the container via `env_file`.
+The backend reads `.env` at the repo root. For the production stack, the same `.env` is passed via `--env-file` (see `docker-compose.prod.yml`).
 
 ### Required
 
@@ -263,7 +228,7 @@ The backend reads `.env` at the repo root. With Docker, it's mounted into the co
 |---|---|---|
 | `MODEL` | LiteLLM-prefixed chat model id. Swap to `anthropic/claude-sonnet-4-6` if reliability checkpoints fail. | `gemini/gemini-3.1-flash-lite` |
 | `EMBEDDING_MODEL` | Embedding model used by pgvector ingestion + retrieval. | `gemini/gemini-embedding-2` |
-| `DAILY_CAP` | Per-user daily request cap. | `100` |
+| `DAILY_CAP` | Per-user daily request cap. | `50` |
 | `DATABASE_URL` | SQLAlchemy connection string (Supabase pooler URI; bare `postgresql://` auto-converted to `postgresql+psycopg://`). | `sqlite:///./data/app.db` (legacy default; Phase 7+ requires Supabase Postgres URL) |
 | `EMBEDDING_DIM` | Vector dimension for `chunk_embeddings`. Must match the migration; changing requires re-embedding. | `768` |
 | `SUPABASE_URL` | Project URL — used to derive JWKS endpoint for JWT verification. | — |
@@ -274,7 +239,7 @@ The backend reads `.env` at the repo root. With Docker, it's mounted into the co
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `VITE_API_BASE_URL` | Backend base URL the SPA calls. | `http://localhost:8000` |
+| `VITE_API_BASE_URL` | Backend base URL the SPA calls. | `http://localhost:8000/api` (nginx-served docker builds bake the relative '/api' — see frontend/Dockerfile) |
 
 > **Security.** `.env` and `.env.local` are gitignored. **Never commit your `GEMINI_API_KEY`** — if you do, rotate it immediately at [Google AI Studio](https://aistudio.google.com/apikey).
 
@@ -282,11 +247,11 @@ The backend reads `.env` at the repo root. With Docker, it's mounted into the co
 
 With the stack running on http://localhost:5173, here's the end-to-end happy path. Screenshots are placeholders — replace with your own captures.
 
-### 1. Onboarding
+### 1. Register and onboarding
 
 ![Onboarding view](docs/assets/screens/01-onboarding.png)
 
-On first visit you'll see a short onboarding flow. Enter a display name (it doubles as your `user_id` for local single-user use). Click **Continue**.
+First visit: register with email/password (or log in if you already have an account). Once authenticated, a short onboarding flow asks for a display name and how you like to learn (hints vs. direct answers) so the tutor can tune its style. Click **Begin**.
 
 ### 2. The home dashboard
 
@@ -375,8 +340,8 @@ This is the dashboard for "what am I learning, overall?"
 
 ```jsonc
 // POST /api/chat
+// Header: Authorization: Bearer <supabase-jwt>   (the user id comes from the token)
 {
-  "user_id": "alex",
   "session_id": "s_42",
   "message": "I get how dot products work, but cross products confuse me."
 }
@@ -411,6 +376,8 @@ python backend/scripts/gen_contracts.py
 
 CI enforces zero drift between the YAML and the generated package.
 
+> **Authentication.** Every `/api/*` route requires a Supabase email/password JWT sent as `Authorization: Bearer <jwt>`. The backend verifies it against Supabase JWKS and reads the user id from the token's `sub` claim — `user_id` is never accepted from the request body or query string. Requests without a valid token get `401`.
+
 ### Endpoint summary
 
 #### Health
@@ -430,7 +397,7 @@ CI enforces zero drift between the YAML and the generated package.
 | Method | Path | Description |
 |---|---|---|
 | POST | `/api/sessions` | Create a fresh or resumed session. |
-| GET | `/api/sessions?user_id=...` | List sessions for a user. |
+| GET | `/api/sessions` | List sessions for the authenticated user (from the bearer token). |
 | GET | `/api/sessions/{session_id}` | Get session detail + full message transcript. |
 | POST | `/api/sessions/{session_id}/end` | End the session; generate summary. |
 | POST | `/api/sessions/{session_id}/reopen` | Reopen an ended session. |
@@ -447,13 +414,14 @@ CI enforces zero drift between the YAML and the generated package.
 | Method | Path | Description |
 |---|---|---|
 | GET | `/api/profile/{session_id}` | Get a session's TopicProfile + recent LearningEvents. |
-| GET | `/api/profile/aggregate?user_id=...` | Cross-session aggregate dashboard. Pure SQL/Python, no LLM calls. |
+| GET | `/api/profile/aggregate` | Cross-session aggregate dashboard for the authenticated user. Pure SQL/Python, no LLM calls. |
 
 ### Common error responses
 
 | Status | Meaning |
 |---|---|
 | 400 | Malformed request (validation failure). |
+| 401 | Missing or invalid bearer token. |
 | 404 | Resource not found. |
 | 429 | Daily rate limit (`DAILY_CAP`) reached. |
 | 503 | LLM provider unavailable / timeout. |
@@ -463,17 +431,23 @@ All errors return `{"detail": "<message>"}`.
 ### Example: curl a chat turn
 
 ```bash
+# All /api routes need a Supabase JWT. Capture yours from the SPA (it's the
+# Supabase session access token) and pass it as a bearer token.
+TOKEN="<your-supabase-jwt>"
+
 # Create a session
 curl -X POST http://localhost:8000/api/sessions \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"user_id":"alex","topic":"Eigenvalues","seed_mode":"fresh"}'
+  -d '{"topic":"Eigenvalues","seed_mode":"fresh"}'
 
-# → {"id":"s_42", "user_id":"alex", "topic":"Eigenvalues", "topic_profile":{...}, ...}
+# → {"id":"s_42", "user_id":"<token sub>", "topic":"Eigenvalues", "topic_profile":{...}, ...}
 
 # Send a message
 curl -X POST http://localhost:8000/api/chat \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"user_id":"alex","session_id":"s_42","message":"What is an eigenvalue?"}'
+  -d '{"session_id":"s_42","message":"What is an eigenvalue?"}'
 ```
 
 ### Interactive docs
@@ -489,12 +463,11 @@ With the backend running, FastAPI's interactive docs are available at:
 Project_Apt/
 ├── docs/
 │   ├── superpowers/specs/      Design doc (source of truth)
-│   ├── superpowers/plans/      Phase implementation plans
 │   ├── api/openapi.yaml        API contract (codegen source)
 │   ├── deploy/ngrok.md         Public demo deploy guide
 │   ├── screencast/             Walkthrough script + recorded video
-│   ├── AdaptLearn_Spec.md      Original spec (v2 reference)
-│   └── AdaptLearn_DevPlan.md   Original dev plan (v2 reference)
+│   ├── Crux_Spec.md      Original spec (v2 reference)
+│   └── Crux_DevPlan.md   Original dev plan (v2 reference)
 ├── spike/                      Phase 0 validation spike (preserved)
 ├── frontend/
 │   ├── src/
@@ -516,14 +489,14 @@ Project_Apt/
 │   │   ├── prompts.py          Immutable system prompt
 │   │   └── tools.py            Tool schemas + dispatch
 │   ├── routes/                 health, chat, sessions, upload, profile
-│   ├── services/               profile, retrieval, ingestion, summary, rate_limit
+│   ├── services/               auth, profile, retrieval, ingestion, summary, rate_limit, cost_meter
 │   ├── db/                     models.py (SQLAlchemy), database.py
 │   ├── contracts/              GENERATED Pydantic DTOs (do not edit)
 │   ├── scripts/gen_contracts.py  Codegen wrapper
 │   ├── lib/                    keyword_index, chunking
 │   └── tests/                  pytest
-├── data/                       Persisted volumes (sqlite, uploads, chroma)
-├── docker-compose.yml          Dev stack
+├── data/                       Local volume: uploads/ (PDFs). DB + vectors live in Supabase (app.db only on the SQLite fallback)
+├── docker-compose.yml          No-op anchor (Phase 7+: no local infra in Docker)
 ├── docker-compose.prod.yml     Prod / public demo stack
 ├── .github/workflows/ci.yml    pytest + vitest + playwright
 ├── .env.example
@@ -535,18 +508,14 @@ Project_Apt/
 
 | Task | Command |
 |---|---|
-| Start full stack | `docker compose up` |
-| Rebuild backend image | `docker compose build backend` |
-| Backend logs | `docker compose logs -f backend` |
-| Shell into backend container | `docker compose exec backend bash` |
-| Stop stack | `docker compose down` |
-| Backend tests (local) | from `backend/`: `pytest` |
-| Backend tests (container) | `docker compose exec backend pytest -v` |
+| Start backend (dev) | from `backend/`: `uvicorn main:app --reload` (or repo root: `uvicorn main:app --reload --app-dir backend`) |
+| Start frontend (dev) | from `frontend/`: `npm run dev` |
+| Build + run prod stack | from repo root: `docker compose -f docker-compose.prod.yml --env-file .env up --build` |
+| Backend tests | from `backend/`: `pytest` |
 | Single backend test | from `backend/`: `pytest tests/test_foo.py::test_bar` |
 | Regenerate API contracts | from repo root: `python backend/scripts/gen_contracts.py` |
-| Frontend dev server | from `frontend/`: `npm run dev` |
 | Frontend unit tests | from `frontend/`: `npm run test:unit -- --run` |
-| Frontend e2e (Playwright) | from `frontend/`: `npx playwright test` |
+| Frontend e2e (Playwright) | from `frontend/`: `npm run test:e2e` |
 | Lint / format frontend | from `frontend/`: `npm run lint` / `npm run format` |
 
 ## Troubleshooting
@@ -554,21 +523,17 @@ Project_Apt/
 <details>
 <summary><b><code>connection refused</code> on localhost:8000</b></summary>
 
-Backend isn't up. With Docker: `docker compose logs backend` and look for the error. Common causes: missing `GEMINI_API_KEY` in `.env`, port 8000 already in use.
+Backend isn't up. Check the `uvicorn` output for the error. Common causes: missing `GEMINI_API_KEY` in `.env`, port 8000 already in use.
 </details>
 
 <details>
-<summary><b>ChromaDB errors like <code>could not read sqlite file</code></b></summary>
+<summary><b>pgvector / Supabase connection errors on startup or upload</b></summary>
 
-You have stale ChromaDB data from an older Chroma version. Stop the stack and clear it:
+RAG retrieval needs a Supabase Postgres connection. Common causes:
 
-```bash
-docker compose down
-rm -rf data/chroma/*
-docker compose up
-```
-
-ChromaDB 1.5.x cannot read 0.5.x SQLite files.
+- `DATABASE_URL` not set (the backend silently falls back to local SQLite, which has no pgvector — uploads will fail to embed) or pointing at the wrong project/pooler URI.
+- Vector dimension mismatch: `EMBEDDING_DIM` (default `768`) must match the `chunk_embeddings` column created by the Alembic migration. Changing it requires re-running migrations and re-embedding.
+- pgvector extension not enabled on the Supabase project. See [`docs/db/postgres-pgvector-setup.md`](docs/db/postgres-pgvector-setup.md).
 </details>
 
 <details>
@@ -586,13 +551,13 @@ Gemini is timing out or your `GEMINI_API_KEY` is invalid. Check your key at [Goo
 <details>
 <summary><b>PDF stuck in <code>pending</code> forever</b></summary>
 
-Ingestion runs in a background task. Check `docker compose logs -f backend` for embedding errors. Common causes: scanned-image PDF (no extractable text), bad `EMBEDDING_MODEL` value, Gemini quota exhausted.
+Ingestion runs in a background task. Check the backend (`uvicorn`) output for embedding errors. Common causes: scanned-image PDF (no extractable text), bad `EMBEDDING_MODEL` value, Gemini quota exhausted.
 </details>
 
 <details>
 <summary><b>Frontend shows <code>Network Error</code></b></summary>
 
-`VITE_API_BASE_URL` in `frontend/.env.local` doesn't match where the backend is listening. Default is `http://localhost:8000` — fix accordingly if you changed the backend port.
+`VITE_API_BASE_URL` in `frontend/.env.local` doesn't match where the backend is listening. Default is `http://localhost:8000/api` — fix accordingly if you changed the backend port.
 </details>
 
 <details>
@@ -609,15 +574,20 @@ git commit
 
 ## Roadmap
 
-AdaptLearn v1 is feature-complete for its 7-week scope. Possible v2 directions:
+Crux v1 is feature-complete, and the post-v1 roadmap (slices 1-8, see `docs/planning/2026-07-06-10x-roadmap.md`) has shipped:
 
-- **Multi-user auth.** Real accounts (OAuth, magic-link) instead of single-user local mode.
+- **Spaced repetition.** SM-2-lite review queue over confirmed gaps, surfaced on the home dashboard.
+- **Learning insights dashboard.** Trends and usage transparency across sessions.
+- **Deeper adaptivity.** Per-subtopic knowledge levels with evidence provenance on every profile change.
+- **Deploy + backups.** Render/Vercel deploy configs, daily automated Postgres backups to R2 with retention pruning, ToS/privacy pages.
+
+Possible future directions:
+
+- **Practice exam mode.** Demand-gated — built only if real users ask for exam prep.
+- **OAuth / social login.** Add Google/GitHub sign-in alongside email/password.
 - **Mobile-friendly redesign.** The current SPA is desktop-first; an adaptive layout for phones is on the wishlist.
-- **Streaming chat.** Token-by-token responses via Server-Sent Events for snappier UX.
 - **Voice mode.** STT in, TTS out — quiz yourself while walking.
-- **Spaced repetition.** Surface previously confirmed gaps for review at SR intervals.
 - **Image / diagram support.** Let the tutor render or accept diagrams (graph theory, geometry, circuits).
-- **Cloud deploy template.** Terraform module for AWS / GCP / Fly.io.
 - **Provider matrix.** First-class support for Anthropic, OpenAI, and local models (Ollama) via LiteLLM.
 
 If you want to tackle one of these, see [Contributing](#contributing).
@@ -660,7 +630,7 @@ Open an issue with:
 6. Commit with [Conventional Commits](https://www.conventionalcommits.org/) style:
    - `feat(backend): add streaming chat endpoint`
    - `fix(frontend): handle 429 in session view`
-   - `docs: clarify chromadb reset step`
+   - `docs: clarify pgvector setup step`
 7. Push and open a PR. Describe **what** changed, **why**, and any caveats.
 
 ### Branch naming
@@ -688,16 +658,16 @@ Distributed under the **MIT License**. See [LICENSE](LICENSE) for the full text.
 
 ## Acknowledgements
 
-AdaptLearn stands on the shoulders of a lot of excellent open-source work:
+Crux stands on the shoulders of a lot of excellent open-source work:
 
 - [**FastAPI**](https://fastapi.tiangolo.com/) — backend framework.
 - [**Vue 3**](https://vuejs.org/) + [**Vite**](https://vitejs.dev/) + [**Pinia**](https://pinia.vuejs.org/) + [**PrimeVue**](https://primevue.org/) — frontend stack.
 - [**LiteLLM**](https://github.com/BerriAI/litellm) — provider-agnostic LLM client.
-- [**ChromaDB**](https://www.trychroma.com/) — embedded vector database.
+- [**pgvector**](https://github.com/pgvector/pgvector) on [**Supabase Postgres**](https://supabase.com/) — vector search co-located with the app schema.
 - [**SQLAlchemy**](https://www.sqlalchemy.org/) — ORM.
 - [**pytest**](https://docs.pytest.org/) + [**vitest**](https://vitest.dev/) + [**Playwright**](https://playwright.dev/) — test runners.
 - **Google Gemini** — chat + embedding model.
 
 Architecture inspiration: structured-state LLM tutors as discussed in recent EdTech-LLM research papers, and the broader "tool-augmented agent with verifiable state" pattern that's emerged through 2025.
 
-Built as a 7-week project. Phase plan and design rationale live in [`docs/superpowers/`](docs/superpowers/).
+Phase plan and design rationale live in [`docs/superpowers/`](docs/superpowers/).

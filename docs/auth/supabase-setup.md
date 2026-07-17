@@ -1,6 +1,6 @@
 # Supabase Auth Setup
 
-Phase 7 wires AdaptLearn to Supabase Auth (magic-link only). This doc is the
+Crux uses Supabase Auth with email + password sign-in. This doc is the
 end-to-end setup path for a fresh Supabase project, the env vars the app
 reads, and the JWT verification model.
 
@@ -13,29 +13,43 @@ reads, and the JWT verification model.
    you need it for direct `psql` access from `docs/db/postgres-pgvector-setup.md`.
 4. Wait for provisioning to finish (~1-2 min).
 
-## 2. Enable Email magic-link
+## 2. Enable Email + password
 
 `Authentication → Providers → Email`:
 
 - **Enable** Email provider.
-- **Confirm email**: ON (Supabase default — magic link doubles as confirmation).
+- **Enable** "Email + Password" sign-in (password provider ON).
+- **Confirm email**: ON — new self-service registrations must confirm via the
+  emailed link before first sign-in.
 - **Secure email change**: ON.
-- **Mailer OTP expiration**: default 3600s is fine.
-- All other Email provider toggles (password sign-in, signups): OFF for v1.
-  We only support magic-link.
+- Magic-link / OTP-only sign-in: not used by the app (the app calls
+  `signUp` / `signInWithPassword`). The OTP toggle can stay at its default.
 
 `Authentication → URL Configuration`:
 
 - **Site URL**: `http://localhost:5173` for dev. Switch to your Fly.io URL
   for Phase 8.
-- **Redirect URLs**: add `http://localhost:5173/**` for dev.
+- **Redirect URLs**: add `http://localhost:5173/**` for dev. The confirmation
+  link redirects back here and `supabase-js` (`detectSessionInUrl: true`)
+  completes the session.
 
-Disable every other provider (GitHub, Google, etc.) under `Providers` for v1.
-The Phase 7 plan locks magic-link only.
+Disable every other provider (GitHub, Google, etc.) under `Providers`.
+
+### Debug accounts (pre-confirmed)
+
+Real registrations require email confirmation. For local debugging, create
+pre-confirmed accounts that skip the inbox step:
+
+1. Copy `docs/dev/debug-accounts.example.txt` to `docs/dev/debug-accounts.txt`
+   (gitignored) and set throwaway dev credentials.
+2. From `backend/`, run `python scripts/seed_debug_accounts.py`. It calls the
+   GoTrue Admin API with `email_confirm: true` using `SUPABASE_SECRET_KEY`
+   (backend-only) and is idempotent. The seeded accounts log in via the normal
+   `/login` form.
 
 ## 3. Collect the four env vars
 
-AdaptLearn uses Supabase's **2025+ API key model** — `publishable` (frontend)
+Crux uses Supabase's **2025+ API key model** — `publishable` (frontend)
 + `secret` (backend). Legacy `anon` + `service_role` keys are not used.
 Enable the new keys at `Project Settings → API Keys` and rotate the legacy
 keys off after migration.
@@ -83,22 +97,23 @@ fill in real values locally, never commit.
 
 - Frontend: `frontend/src/services/supabase.js` exposes a lazy singleton
   `@supabase/supabase-js` client. `frontend/src/stores/auth.js` calls
-  `supabase.auth.signInWithOtp({ email })` from `LoginView.vue`. On magic-link
-  click, Supabase redirects back to the app with the access token in the URL
-  hash; `supabase-js` parses it and emits a `SIGNED_IN` event, which the auth
-  store consumes.
+  `supabase.auth.signUp` (registration) and `supabase.auth.signInWithPassword`
+  (login) from `RegisterView.vue` / `LoginView.vue`. On email confirmation the
+  link redirects back to the app; `supabase-js` parses the URL and emits a
+  `SIGNED_IN` event, which the auth store consumes.
 - Every API call carries `Authorization: Bearer <access_token>`, injected by
   `frontend/src/services/apiClient.js` and `uploadApi.js` from the auth store.
 - Backend: `backend/services/auth.py` fetches and caches the Supabase JWKS
-  (`{SUPABASE_URL}/auth/v1/keys`), then verifies the JWT signature, `exp`,
-  `aud`, and issuer on every request. Returns the `sub` claim as `user_id`.
+  (`{SUPABASE_URL}/auth/v1/.well-known/jwks.json`), then verifies the JWT
+  signature, `exp`, and `aud` on every request. Returns the `sub` claim as
+  `user_id`.
   FastAPI dependency `current_user_id` raises `401` on any failure mode.
 - All routes in `backend/routes/*` take `user_id: str = Depends(current_user_id)`.
   No route accepts a client-provided `user_id` any longer; H-4 closed.
 
 ## 6. RLS — not used
 
-Supabase Postgres ships with Row Level Security available. AdaptLearn does
+Supabase Postgres ships with Row Level Security available. Crux does
 **not** enable RLS. The backend uses `SUPABASE_SECRET_KEY` (or a direct
 `DATABASE_URL`) which bypasses RLS, and enforces ownership in application
 code via the `current_user_id` dependency + `session.user_id` checks already
@@ -120,3 +135,48 @@ For local dev you don't strictly need a Supabase project — the frontend's
 the backend test suite injects a fake `current_user_id` via dependency
 override (`backend/tests/conftest.py`). Live auth flows obviously need real
 values from §3.
+
+## Password reset + change password
+
+The forgot-password flow uses GoTrue's recovery email. For the emailed link to
+land correctly, allowlist the redirect target in the Supabase dashboard:
+
+- Dashboard -> Authentication -> URL Configuration -> Redirect URLs, add:
+  - `http://localhost:5173/reset-password` (dev)
+  - `https://<your-prod-host>/reset-password` (prod)
+
+Flows:
+- **Forgot password:** `/forgot` calls `resetPasswordForEmail(email, { redirectTo:
+  <origin>/reset-password })`. The email link lands on `/reset-password`, where
+  `detectSessionInUrl` establishes a short-lived recovery session. The user sets
+  a new password (`updateUser`), is signed out, and is redirected to
+  `/login?reset=1`.
+- **Change password (signed in):** Settings -> Security re-verifies the current
+  password (`signInWithPassword`) then calls `updateUser({ password })`. The
+  session is retained.
+
+No backend or database change is involved -- GoTrue handles email, token, and
+password update.
+
+## 8. Session lifetime (token expiry)
+
+The app uses short-lived access tokens (JWT, ~1hr default) backed by a
+long-lived refresh token. `persistSession: true` + `autoRefreshToken: true`
+(in `frontend/src/services/supabase.js`) keep the user logged in across app
+restarts and silently refresh the access token while a tab is open. Explicit
+sign-out clears the local session.
+
+To make a session eventually expire (low-sensitivity-app behavior) instead of
+living forever while it keeps refreshing, configure the Supabase dashboard:
+
+1. Supabase Dashboard -> Authentication -> Sessions.
+2. Set **Inactivity timeout** to **30 days**. A session not refreshed within
+   30 days expires. Adjust the value to taste.
+3. Leave **Time-box user sessions** (absolute max session duration) **unset**,
+   so an actively-used session is never force-logged-out mid-work.
+4. Keep **refresh token rotation** enabled (the Supabase default).
+5. Leave the **access token (JWT) expiry** at its default (~1hr).
+
+This is dashboard configuration only; there is no corresponding frontend code.
+The dashboard state is not version-controlled, so these steps are the
+reproducible record.

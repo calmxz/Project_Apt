@@ -7,11 +7,6 @@ export default mergeConfig(
   defineConfig({
     test: {
       environment: 'jsdom',
-      // Pin chat to the JSON (non-streaming) path under unit tests so the
-      // send-flow assertions stay deterministic. The app defaults to streaming
-      // (VITE_CHAT_STREAM unset -> on); the SSE path is covered by the
-      // chatStreamService / store tests and the msg-streaming render test.
-      env: { VITE_CHAT_STREAM: 'false' },
       exclude: [...configDefaults.exclude, 'e2e/**'],
       root: fileURLToPath(new URL('./', import.meta.url)),
       setupFiles: ['./src/__tests__/setup.js'],

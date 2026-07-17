@@ -18,12 +18,9 @@ describe('frontend smoke', () => {
         stubs: {
           RouterLink: { template: '<a><slot /></a>' },
           Button: { template: '<button><slot /></button>' },
-          DataTable: { template: '<div><slot /></div>' },
-          Column: { template: '<div><slot /></div>' },
-          Tag: { template: '<span><slot /></span>' },
         },
       },
     })
-    expect(wrapper.text()).toContain('Sessions')
+    expect(wrapper.text()).toContain('New lesson')
   })
 })

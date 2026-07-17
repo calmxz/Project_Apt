@@ -8,22 +8,23 @@ import { useUserStore } from '@/stores/user.js'
 const push = vi.fn()
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
 
+// F-46: completeOnboarding writes through to PATCH /me via the real
+// apiClient (dynamic import) -- mock global fetch, same pattern as
+// userStore.test.js / apiWrappers.test.js.
+function ok(body) {
+  return Promise.resolve({
+    ok: true,
+    status: 200,
+    headers: { get: () => null },
+    text: () => Promise.resolve(JSON.stringify(body)),
+  })
+}
+
 const stubs = {
   InputText: {
     props: ['modelValue'],
     template:
       '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
-  },
-  SelectButton: {
-    props: ['modelValue', 'options'],
-    template: `<div>
-      <button
-        v-for="o in options"
-        :key="o.value"
-        :data-testid="'sel-' + o.value"
-        @click="$emit('update:modelValue', o.value)"
-      >{{ o.label }}</button>
-    </div>`,
   },
   Button: {
     props: ['disabled', 'label'],
@@ -36,18 +37,24 @@ describe('OnboardingView', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     push.mockClear()
+    globalThis.fetch = vi.fn().mockReturnValue(ok({}))
   })
 
   it('renders the welcome heading', () => {
     const wrapper = mount(OnboardingView, { global: { stubs } })
     expect(wrapper.text()).toContain('Welcome to')
-    expect(wrapper.text()).toContain('AdaptLearn')
+    expect(wrapper.text()).toContain('Crux')
   })
 
   it('submit completes onboarding and routes home', async () => {
     const wrapper = mount(OnboardingView, { global: { stubs } })
     await wrapper.get('[data-testid="onboarding-name"]').setValue('Eddy')
     await wrapper.find('form').trigger('submit.prevent')
+    // completeOnboarding's write-through chains two on-demand dynamic
+    // imports (apiClient.js, then apiClient's internal supabase.js) before
+    // resolving; flushPromises' single setImmediate tick isn't enough to
+    // drain that in this environment, so wait a real macrotask instead.
+    await new Promise((resolve) => setTimeout(resolve, 50))
     const user = useUserStore()
     expect(user.name).toBe('Eddy')
     expect(user.onboardingComplete).toBe(true)
@@ -57,7 +64,7 @@ describe('OnboardingView', () => {
   it('feedback help copy switches with the selection', async () => {
     const wrapper = mount(OnboardingView, { global: { stubs } })
     expect(wrapper.text()).toContain('nudge')
-    await wrapper.get('[data-testid="sel-direct_answers"]').trigger('click')
+    await wrapper.get('[data-testid="feedback-style-direct_answers"]').setValue(true)
     expect(wrapper.text()).toContain('explain')
   })
 })

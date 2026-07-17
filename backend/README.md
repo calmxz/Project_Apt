@@ -1,6 +1,6 @@
-# AdaptLearn Backend
+# Crux Backend
 
-FastAPI + SQLite + ChromaDB. Python 3.12+.
+FastAPI + Supabase Postgres (pgvector). Python 3.12+.
 
 ## Setup
 
@@ -24,11 +24,11 @@ EMBEDDING_MODEL=gemini/gemini-embedding-2
 DAILY_CAP=50
 ```
 
-Optional overrides: `EMBEDDING_MODEL`, `DATABASE_URL`, `CHROMA_HOST`, `CHROMA_PORT`, `UPLOADS_PATH`.
+Optional overrides: `EMBEDDING_MODEL`, `DATABASE_URL`, `EMBEDDING_DIM` (768), `UPLOADS_PATH`, `CORS_ORIGINS`, `ENV`.
 
-Backend connects to ChromaDB via HTTP (`chromadb.HttpClient`). Default `CHROMA_HOST=localhost`, `CHROMA_PORT=8001` — matches the chromadb container exposed by `docker-compose.yml`.
+`DATABASE_URL` defaults to a local SQLite file (`sqlite:///.../data/app.db`) for local dev and tests. **Production requires a Supabase-managed Postgres URL** — pgvector needs Postgres. Supabase env vars: `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `SUPABASE_JWKS_URL_OVERRIDE`. LLM spend caps (per user, per UTC day): `LLM_SOFT_CAP_USD` (2.00, emits `X-Cost-Warning`), `LLM_HARD_CAP_USD` (3.00, returns 429).
 
-Paths in `config.py` are anchored to the repo root, so the server runs correctly from any working directory. `data/app.db`, `data/chroma/`, `data/uploads/` are auto-created on first boot.
+Paths in `config.py` are anchored to the repo root, so the server runs correctly from any working directory. `data/uploads/` is auto-created on first boot; `data/app.db` is created only when running the local SQLite default.
 
 ## Run
 
@@ -59,33 +59,11 @@ Tests use in-memory SQLite — no filesystem dependency.
 
 ## Docker
 
-Only ChromaDB runs in Docker. Frontend (`npm run dev`) and backend (`uvicorn`) run natively against it.
+Local dev does **not** use Docker for app infra. `docker-compose.yml` is a no-op anchor (`services: {}`) — `docker compose up` brings up nothing. Postgres + pgvector and Auth are Supabase-managed (external cloud), so there is no local DB or vector-store container.
 
-### Prerequisites
+### Local dev (native)
 
-- Docker Desktop running (Windows/macOS) or Docker Engine + compose plugin (Linux).
 - `.env` at repo root with `GEMINI_API_KEY` populated. Read directly by `config.py`.
-
-### Start ChromaDB
-
-From repo root:
-
-```bash
-docker compose up              # foreground
-docker compose up -d           # detached
-```
-
-| Service  | Host port | Container port | Notes |
-|----------|-----------|----------------|-------|
-| chromadb | 8001      | 8000           | HTTP API. Backend connects via `localhost:8001`. |
-
-Verify:
-
-```bash
-curl http://localhost:8001/api/v2/heartbeat
-```
-
-### Run backend + frontend natively
 
 Backend (from `backend/`):
 
@@ -101,23 +79,21 @@ npm run dev
 
 ### Volumes
 
-`./data/chroma` is bind-mounted into the chromadb container — vector data survives restarts. SQLite (`./data/app.db`) and uploaded PDFs (`./data/uploads/`) live on the host and are read directly by the native backend.
+`./data/uploads/` (uploaded PDFs) is the only real local volume. The database and vectors live in Supabase. `./data/app.db` exists only when running the local SQLite default.
 
-### Stop / reset
+### Deploy / public-demo stack
+
+`docker-compose.prod.yml` is the actual deploy stack (nginx-served frontend + uvicorn backend). From repo root:
 
 ```bash
-docker compose down              # stop chromadb (keeps ./data/chroma)
-rm -rf data/                     # nuke local data (PowerShell: Remove-Item -Recurse -Force data)
+docker compose -f docker-compose.prod.yml --env-file .env up --build
 ```
 
-### Troubleshooting
+Frontend is served on host port 80. Expose a public URL via:
 
-| Symptom | Cause | Fix |
-|---|---|---|
-| `chromadb` connection refused from backend | container not running | `docker compose up -d chromadb` |
-| Port 8001 already in use | host port collision | stop the process or remap in compose (e.g. `"8002:8000"`) |
-| Backend hits `data/app.db` permission error | `./data` missing or not writable | `mkdir data` at repo root |
-| `GEMINI_API_KEY` empty | `.env` missing at repo root | create `.env` next to `docker-compose.yml` |
+```bash
+ngrok http 80
+```
 
 ## Contracts
 

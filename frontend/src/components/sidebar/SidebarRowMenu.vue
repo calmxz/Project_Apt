@@ -6,9 +6,11 @@ const props = defineProps({
   state: { type: String, required: true },
   /** Disable while async store action in flight */
   busy: { type: Boolean, default: false },
+  /** Whether this session is currently pinned */
+  pinned: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['end', 'resume'])
+const emit = defineEmits(['end', 'resume', 'continue-topic', 'rename', 'pin', 'unpin'])
 
 const open = ref(false)
 const triggerEl = ref(null)
@@ -27,6 +29,10 @@ function onAction(kind) {
   if (props.busy) return
   if (kind === 'end') emit('end')
   else if (kind === 'resume') emit('resume')
+  else if (kind === 'continue-topic') emit('continue-topic')
+  else if (kind === 'rename') emit('rename')
+  else if (kind === 'pin') emit('pin')
+  else if (kind === 'unpin') emit('unpin')
   close()
   triggerEl.value?.focus()
 }
@@ -81,6 +87,28 @@ onBeforeUnmount(() => {
       data-testid="sidebar-row-menu-popover"
     >
       <button
+        type="button"
+        role="menuitem"
+        class="sb-row-menu-item"
+        data-testid="sidebar-row-menu-rename"
+        :disabled="busy"
+        @click="onAction('rename')"
+      >
+        <i class="pi pi-pencil" aria-hidden="true" /><span>Rename</span>
+      </button>
+      <button
+        v-if="state === 'active'"
+        type="button"
+        role="menuitem"
+        class="sb-row-menu-item"
+        data-testid="sidebar-row-menu-pin"
+        :disabled="busy"
+        @click="onAction(pinned ? 'unpin' : 'pin')"
+      >
+        <i :class="pinned ? 'pi pi-bookmark-fill' : 'pi pi-bookmark'" aria-hidden="true" />
+        <span>{{ pinned ? 'Unpin' : 'Pin' }}</span>
+      </button>
+      <button
         v-if="state === 'active'"
         type="button"
         role="menuitem"
@@ -93,7 +121,19 @@ onBeforeUnmount(() => {
         <span>End session</span>
       </button>
       <button
-        v-else-if="state === 'ended'"
+        v-if="state === 'ended'"
+        type="button"
+        role="menuitem"
+        class="sb-row-menu-item"
+        data-testid="sidebar-row-menu-continue-topic"
+        :disabled="busy"
+        @click="onAction('continue-topic')"
+      >
+        <i class="pi pi-play" aria-hidden="true" />
+        <span>Continue topic</span>
+      </button>
+      <button
+        v-if="state === 'ended'"
         type="button"
         role="menuitem"
         class="sb-row-menu-item"
@@ -136,6 +176,15 @@ onBeforeUnmount(() => {
   opacity: 1;
   background: var(--color-surface-soft);
   color: var(--color-text);
+}
+
+/* On touch / coarse-pointer devices there is no hover to reveal the trigger, so
+   keep it visible — otherwise Rename/Pin/End are unreachable (a row tap just
+   navigates). Fine pointers keep the opacity:0-until-hover behavior above. */
+@media (hover: none) {
+  .sb-row-menu-trigger {
+    opacity: 1;
+  }
 }
 
 .sb-row-menu-trigger:focus-visible {
@@ -195,11 +244,11 @@ onBeforeUnmount(() => {
 }
 
 .sb-row-menu-item--danger {
-  color: var(--signal-error);
+  color: var(--color-error-text);
 }
 
 .sb-row-menu-item--danger:hover:not(:disabled) {
   background: rgba(239, 68, 68, 0.1);
-  color: var(--signal-error);
+  color: var(--color-error-text);
 }
 </style>

@@ -23,9 +23,21 @@ class Settings(BaseSettings):
     database_url: str = f"sqlite:///{(_DATA_DIR / 'app.db').as_posix()}"
     embedding_dim: int = 768
     uploads_path: str = (_DATA_DIR / "uploads").as_posix()
+    # F-15 (owner decision Q4): where uploaded blobs live. "local" writes under
+    # uploads_path (dev / docker / tests); "r2" targets Cloudflare R2 (prod).
+    uploads_store: str = "local"
+    r2_endpoint: str = ""
+    r2_access_key_id: str = ""
+    r2_secret_access_key: str = ""
+    r2_bucket: str = ""
     llm_stub: bool = False
+    debug_timing: bool = False
     cors_origins: str = "http://localhost:5173"
     env: str = "dev"
+    # F-61: allow booting without Supabase auth config (local hacking, CI
+    # subsets). Default False: a deploy missing SUPABASE_URL dies at startup
+    # instead of 500ing "auth_not_configured" on every authenticated request.
+    auth_optional: bool = False
 
     supabase_url: str = ""
     supabase_publishable_key: str = ""
@@ -33,6 +45,19 @@ class Settings(BaseSettings):
     supabase_secret_key: str = ""
     llm_soft_cap_usd: float = 2.00
     llm_hard_cap_usd: float = 3.00
+    llm_temperature: float = 0.3
+    summary_temperature: float = 0.0
+    retrieval_fallback_threshold: float = 0.75
+
+    # F-06: explicit LiteLLM timeouts. Chat streams get the longest budget;
+    # summaries and embeddings are shorter single-shot calls.
+    llm_timeout_s: float = 30.0
+    summary_timeout_s: float = 20.0
+    embedding_timeout_s: float = 15.0
+
+    # F-35: hard cap per profile concept list (confirmed_gaps,
+    # mastered_concepts); oldest entries evicted at write time.
+    max_profile_list: int = 40
 
     @property
     def cors_origin_list(self) -> list[str]:
@@ -52,6 +77,15 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def assert_prod_database(env: str, database_url: str) -> None:
+    if env == "prod" and database_url.startswith("sqlite"):
+        raise RuntimeError(
+            "database_url must be a Postgres URL when env=prod (got sqlite). "
+            "Set DATABASE_URL to the Supabase Postgres connection string."
+        )
+
 
 # Ensure runtime directories exist (data/uploads/ and parent of the sqlite file).
 for _p in (

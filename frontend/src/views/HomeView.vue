@@ -1,19 +1,6 @@
 <template>
   <section class="home">
-    <header class="head">
-      <div class="head-text">
-        <span class="folio">your shelf</span>
-        <h1 class="title">Sessions</h1>
-        <p class="lede" data-testid="home-lede">
-          <template v-if="activeCount">
-            {{ activeCount }} active {{ activeCount === 1 ? 'session' : 'sessions' }}. Pick one from the sidebar, or start a new one.
-          </template>
-          <template v-else>
-            A study session is one conversation about one topic. Begin one.
-          </template>
-        </p>
-      </div>
-    </header>
+    <h1 class="title">What do you want to learn?</h1>
 
     <p v-if="store.loading" class="muted">Loading...</p>
     <p
@@ -25,209 +12,138 @@
     </p>
 
     <template v-else>
-      <div
-        v-if="duplicateCount > 0"
-        class="dupe-banner"
-        data-testid="home-dupe-banner"
-      >
-        <div class="dupe-text">
-          <i class="pi pi-exclamation-triangle dupe-icon" aria-hidden="true" />
-          <p class="dupe-line">
-            {{ duplicateCount }} duplicate active {{ duplicateCount === 1 ? 'session' : 'sessions' }} detected.
-            Keep the newest per topic, end the rest?
-          </p>
-        </div>
-        <button
-          type="button"
-          class="dupe-btn"
-          :disabled="cleaning"
-          data-testid="home-dupe-cleanup"
-          @click="cleanupDuplicates"
-        >
-          <span>{{ cleaning ? 'Cleaning…' : 'Clean up' }}</span>
-          <i class="pi pi-broom" aria-hidden="true" />
-        </button>
-      </div>
-
-      <section
-        v-if="sortedRecent.length"
-        class="recent"
-        data-testid="home-recent"
-      >
-        <h2 class="recent-label">Recent activity</h2>
-        <ul class="recent-list">
-          <li
-            v-for="s in sortedRecent"
-            :key="s.id"
-            class="recent-row"
-            :data-testid="`home-recent-${s.id}`"
-          >
-            <div
-              class="recent-link"
-              role="button"
-              tabindex="0"
-              @click="openSession(s.id)"
-              @keydown.enter="openSession(s.id)"
-            >
-              <span
-                class="recent-dot"
-                :class="{ 'recent-dot-active': !s.ended_at }"
-                aria-hidden="true"
-              />
-              <div class="recent-body">
-                <div class="recent-head">
-                  <span class="recent-topic">{{ s.topic || 'untitled' }}</span>
-                  <span class="recent-when">{{ formatRelative(s.created_at) }}</span>
-                  <button
-                    v-if="s.ended_at"
-                    type="button"
-                    class="recent-continue"
-                    :data-testid="`home-continue-${s.id}`"
-                    @click.stop="continueSession(s.id)"
-                    @keydown.enter.stop
-                  >
-                    Continue
-                  </button>
-                </div>
-                <p
-                  class="recent-snippet"
-                  :class="{ 'recent-snippet-muted': !s.last_session_summary }"
-                >
-                  {{ snippetText(s) }}
-                </p>
-              </div>
-              <i class="pi pi-arrow-right recent-arrow" aria-hidden="true" />
-            </div>
-          </li>
-        </ul>
-      </section>
-
-      <EmptyState
-        v-if="!store.sessions.length"
-        data-testid="home-empty-active"
-        tone="celebrate"
-        eyebrow="page 01"
-        headline="No sessions yet"
-        subtext="Start your first one — the tutor adapts as you go."
-      >
-        <template #cta>
+      <div class="modes">
+        <div class="mode-card" data-testid="home-mode-quick">
+          <h2 class="mode-title">New lesson</h2>
+          <p class="mode-sub">One topic. Type and go.</p>
+          <input
+            v-model="quickTopic"
+            class="quick-input"
+            data-testid="home-quick-topic"
+            placeholder="e.g. Recursion"
+            @keydown.enter="startQuick"
+          />
           <button
             type="button"
             class="cta-primary"
-            data-testid="home-new-session"
-            @click="goNew"
+            data-testid="home-quick-go"
+            :disabled="startBusy"
+            @click="startQuick"
           >
-            <span>Start your first session</span>
-            <i class="pi pi-arrow-right" aria-hidden="true" />
+            <span>Start</span><i class="pi pi-arrow-right" aria-hidden="true" />
           </button>
-        </template>
-      </EmptyState>
+          <RouterLink to="/new" class="quick-more">Add reference files</RouterLink>
+        </div>
 
-      <div v-if="store.sessions.length" class="cta-center">
-        <button
-          type="button"
-          class="cta-primary"
-          data-testid="home-new-session"
-          @click="goNew"
+        <div
+          v-if="reviewQueue.total > 0"
+          class="mode-card"
+          data-testid="home-mode-review"
         >
-          <span>New session</span>
-          <i class="pi pi-plus" aria-hidden="true" />
-        </button>
+          <h2 class="mode-title">Due for review</h2>
+          <p class="mode-sub" data-testid="home-review-count">
+            {{ reviewQueue.total }} concept{{ reviewQueue.total === 1 ? '' : 's' }} ready for a quick check.
+          </p>
+          <ul class="review-list">
+            <li v-for="item in reviewQueue.items" :key="item.concept">
+              <button
+                type="button"
+                class="review-item"
+                data-testid="home-review-item"
+                :disabled="startBusy"
+                @click="startReview(item)"
+              >
+                <span class="review-concept">{{ item.concept }}</span>
+                <span class="review-meta">{{ item.source_topic }} &middot; streak {{ item.streak }}</span>
+              </button>
+            </li>
+          </ul>
+          <button
+            v-if="!reviewExpanded && reviewQueue.total > reviewQueue.items.length"
+            type="button"
+            class="review-more"
+            data-testid="home-review-more"
+            @click="expandReview"
+          >
+            View all {{ reviewQueue.total }}
+          </button>
+        </div>
       </div>
     </template>
   </section>
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-
-import EmptyState from '../components/EmptyState.vue'
-
-import { friendlyError } from '../lib/errors.js'
-import * as sessionsApi from '../services/sessionsApi.js'
 import { useSessionStore } from '../stores/session.js'
-import { formatRelative, normalizeTopicKey } from '../utils/formatDate.js'
-import { getAggregateProfile } from '../services/profileApi.js'
+import { getReviewQueue } from '../services/reviewApi.js'
+import { friendlyError } from '../lib/errors.js'
 
 const router = useRouter()
 const store = useSessionStore()
+const quickTopic = ref('')
+const reviewQueue = ref({ items: [], total: 0 })
+const reviewExpanded = ref(false)
+const startBusy = ref(false)
 
-const cleaning = ref(false)
-const recentTopics = ref([])
-
-onMounted(async () => {
-  await store.listSessions().catch(() => {})
-  // Feed degrades to empty if the aggregate fetch fails; listSessions errors surface via store.error.
-  await getAggregateProfile()
-    .then((d) => {
-      recentTopics.value = d?.recent_topics || []
-    })
-    .catch(() => {})
+onMounted(() => {
+  store.listSessions().catch(() => {})
+  loadReviewQueue()
 })
 
-const activeSessions = computed(() =>
-  store.sessions.filter((s) => !s.ended_at),
-)
-const activeCount = computed(() => activeSessions.value.length)
-
-const duplicateActiveIds = computed(() => {
-  const byTopic = new Map()
-  for (const s of activeSessions.value) {
-    const key = normalizeTopicKey(s.topic)
-    const list = byTopic.get(key) || []
-    list.push(s)
-    byTopic.set(key, list)
-  }
-  const dupes = []
-  for (const list of byTopic.values()) {
-    if (list.length <= 1) continue
-    list.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-    for (let i = 1; i < list.length; i++) dupes.push(list[i].id)
-  }
-  return dupes
-})
-
-const duplicateCount = computed(() => duplicateActiveIds.value.length)
-
-const sortedRecent = computed(() =>
-  [...recentTopics.value].sort(
-    (a, b) =>
-      Number(a.ended_at != null) - Number(b.ended_at != null) ||
-      new Date(b.created_at) - new Date(a.created_at),
-  ),
-)
-
-function snippetText(s) {
-  const raw = (s.last_session_summary || '').replace(/^\[auto\]\s*/, '')
-  return raw || 'In progress — pick up where you left off.'
-}
-
-function openSession(id) {
-  router.push({ name: 'session', params: { id } })
-}
-
-async function continueSession(id) {
-  await store.reopenSession(id)
-  router.push({ name: 'session', params: { id } })
-}
-
-function goNew() {
-  router.push({ name: 'new-session' })
-}
-
-async function cleanupDuplicates() {
-  const ids = duplicateActiveIds.value
-  if (!ids.length) return
-  cleaning.value = true
+async function startQuick() {
+  const topic = quickTopic.value.trim()
+  if (!topic || startBusy.value) return
+  startBusy.value = true
   try {
-    await Promise.all(ids.map((id) => sessionsApi.endSession(id)))
-    await store.listSessions()
+    const created = await store.createSession({ topic, seedMode: 'fresh', priorSessionId: null })
+    if (created) router.push({ name: 'session', params: { id: created.id } })
   } catch (e) {
-    store.setError(e?.message || 'Cleanup failed.')
+    if (e?.status === 409 && e?.body?.detail?.code === 'duplicate_topic') {
+      router.push({ name: 'session', params: { id: e.body.detail.session_id } })
+    }
+    // other errors surface via store.error / friendlyError in the template
   } finally {
-    cleaning.value = false
+    startBusy.value = false
   }
+}
+
+async function loadReviewQueue(limit = 3) {
+  try {
+    reviewQueue.value = await getReviewQueue({ limit, offset: 0 })
+  } catch {
+    // The review card must never block Home; hide it on failure.
+    reviewQueue.value = { items: [], total: 0 }
+  }
+}
+
+async function startReview(item) {
+  if (startBusy.value) return
+  startBusy.value = true
+  try {
+    const created = await store.continueTopic({
+      id: item.source_session_id,
+      topic: item.source_topic,
+    })
+    if (created) {
+      router.push({
+        name: 'session',
+        params: { id: created.id },
+        query: { review_gap: item.concept },
+      })
+    }
+  } catch {
+    // F-45: store.continueTopic rethrows after _setError; without this catch
+    // the rejection is unhandled and the double-click window stays open.
+  } finally {
+    startBusy.value = false
+  }
+}
+
+async function expandReview() {
+  reviewExpanded.value = true
+  await loadReviewQueue(100)
 }
 </script>
 
@@ -240,29 +156,6 @@ async function cleanupDuplicates() {
   gap: 1.5rem;
 }
 
-.head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 2rem;
-  flex-wrap: wrap;
-}
-
-.head-text {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.folio {
-  font-family: var(--font-sans);
-  font-size: var(--fs-label);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  font-weight: 600;
-  color: var(--color-accent);
-}
-
 .title {
   font-family: var(--font-display);
   font-size: clamp(2.25rem, 4vw, 2.75rem);
@@ -273,11 +166,66 @@ async function cleanupDuplicates() {
   margin: 0;
 }
 
-.lede {
-  margin: 0;
+.muted {
   color: var(--color-text-muted);
-  max-width: 32rem;
-  font-size: 1.0625rem;
+}
+
+.error {
+  color: var(--color-error-text);
+}
+
+/* Mode cards */
+.modes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  gap: 1rem;
+}
+
+.mode-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 2rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-pop);
+}
+
+.mode-title {
+  font-family: var(--font-display);
+  font-size: 1.375rem;
+  font-weight: 600;
+  letter-spacing: var(--tracking-tight);
+  color: var(--color-heading);
+  margin: 0;
+}
+
+.mode-sub {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--color-text-muted);
+  line-height: 1.4;
+}
+
+.quick-input {
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  transition: border-color var(--motion-fast) ease;
+}
+
+.quick-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+.quick-input::placeholder {
+  color: var(--color-text-muted);
 }
 
 .cta-primary {
@@ -286,7 +234,7 @@ async function cleanupDuplicates() {
   gap: 0.5rem;
   padding: 0.75rem 1.375rem;
   border-radius: var(--radius-pill);
-  background: var(--color-accent);
+  background: var(--color-accent-strong);
   color: #FFFFFF;
   border: 0;
   font-family: var(--font-sans);
@@ -311,222 +259,87 @@ async function cleanupDuplicates() {
   outline-offset: 3px;
 }
 
-.muted {
-  color: var(--color-text-muted);
+.quick-more {
+  font-size: 0.9rem;
+  color: var(--color-accent);
+  text-decoration: none;
+  transition: text-decoration var(--motion-fast) ease;
 }
 
-.error {
-  color: var(--signal-error);
+.quick-more:hover {
+  text-decoration: underline;
 }
 
-/* Duplicate banner */
-.dupe-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.875rem 1rem 0.875rem 1.125rem;
-  background: rgba(255, 176, 32, 0.12);
-  border: 1px solid rgba(255, 176, 32, 0.35);
-  border-radius: var(--radius-lg);
-  flex-wrap: wrap;
+.quick-more:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
 }
 
-.dupe-text {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.625rem;
-  flex: 1;
-  min-width: 14rem;
-}
-
-.dupe-icon {
-  color: var(--signal-warning);
-  font-size: 1.125rem;
-}
-
-.dupe-line {
-  margin: 0;
-  color: var(--color-text);
-  font-size: 0.9375rem;
-  line-height: 1.4;
-}
-
-.dupe-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.5rem 1rem;
-  border-radius: var(--radius-pill);
-  background: var(--signal-warning);
-  color: #2A1F00;
-  border: 0;
-  font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: transform var(--motion-fast) var(--motion-bounce), filter var(--motion-fast) ease;
-}
-
-.dupe-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  filter: brightness(1.05);
-}
-
-.dupe-btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* Recent activity feed */
-.recent {
-  display: flex;
-  flex-direction: column;
-  gap: 0.875rem;
-}
-
-.recent-label {
-  font-family: var(--font-sans);
-  font-size: var(--fs-label);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  font-weight: 600;
-  color: var(--color-text-muted);
-  margin: 0;
-}
-
-.recent-list {
+.review-list {
   list-style: none;
-  padding: 0;
   margin: 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 }
 
-.recent-row {
+.review-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.125rem;
+  width: 100%;
+  padding: 0.625rem 0.875rem;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  transition: border-color var(--motion-fast) ease, transform var(--motion-fast) var(--motion-bounce);
-}
-
-.recent-row:hover {
-  border-color: var(--color-accent-soft);
-  transform: translateY(-1px);
-}
-
-.recent-link {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-  padding: 0.875rem 1.125rem;
-  color: inherit;
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  text-align: left;
   cursor: pointer;
+  transition: border-color var(--motion-fast) ease;
 }
 
-.recent-link:focus-visible {
+.review-item:hover {
+  border-color: var(--color-accent);
+}
+
+.review-item:focus-visible {
   outline: 2px solid var(--color-accent-ring);
   outline-offset: 2px;
 }
 
-.recent-dot {
-  margin-top: 0.4rem;
-  width: 0.6rem;
-  height: 0.6rem;
-  border-radius: 999px;
-  border: 1.5px solid var(--color-border-strong);
-  flex-shrink: 0;
-}
-
-.recent-dot-active {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-}
-
-.recent-body {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.recent-head {
-  display: flex;
-  align-items: center;
-  gap: 0.625rem;
-}
-
-.recent-topic {
-  font-family: var(--font-display);
+.review-concept {
   font-weight: 600;
-  font-size: 1rem;
   color: var(--color-heading);
-  letter-spacing: var(--tracking-tight);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-.recent-when {
-  font-family: var(--font-sans);
+.review-meta {
   font-size: 0.8125rem;
   color: var(--color-text-muted);
-  flex-shrink: 0;
 }
 
-.recent-continue {
-  margin-left: auto;
-  flex-shrink: 0;
-  padding: 0.3rem 0.75rem;
-  border-radius: var(--radius-pill);
-  background: transparent;
-  border: 1px solid var(--color-accent-soft);
-  color: var(--color-accent);
+.review-more {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
   font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 0.8125rem;
-  cursor: pointer;
-  transition: background var(--motion-fast) ease;
-}
-
-.recent-continue:hover {
-  background: var(--color-accent-soft);
-}
-
-.recent-snippet {
-  margin: 0;
-  font-size: 0.875rem;
-  color: var(--color-text);
-  line-height: 1.4;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.recent-snippet-muted {
-  color: var(--color-text-muted);
-  font-style: italic;
-}
-
-.recent-arrow {
-  margin-top: 0.25rem;
-  color: var(--color-text-faint);
   font-size: 0.9rem;
-  flex-shrink: 0;
-  transition: transform var(--motion-fast) var(--motion-bounce), color var(--motion-fast) ease;
-}
-
-.recent-row:hover .recent-arrow {
   color: var(--color-accent);
-  transform: translateX(3px);
+  cursor: pointer;
 }
 
-.cta-center {
-  display: flex;
-  justify-content: center;
-  padding-top: 0.5rem;
+.review-more:hover {
+  text-decoration: underline;
+}
+
+.review-more:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
 }
 </style>

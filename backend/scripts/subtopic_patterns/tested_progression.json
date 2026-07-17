@@ -1,0 +1,14 @@
+{
+  "name": "tested_progression",
+  "topic": "calculus integration techniques",
+  "turns": [
+    "Quiz me on u-substitution, I think I'm decent at it.",
+    "[simulate correct answers to the check batch]",
+    "Great, what's next?"
+  ],
+  "expected": {
+    "subtopic": "u-substitution",
+    "levels": ["intermediate", "advanced"],
+    "by_turn": 3
+  }
+}

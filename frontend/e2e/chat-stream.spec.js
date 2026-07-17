@@ -5,8 +5,8 @@ import { test, expect } from '@playwright/test'
 // seeded session; both need the auth-session seeding helper + Postgres service in
 // e2e.yml. Un-skip once that lands.
 //
-// Also assumes streaming is active (VITE_CHAT_STREAM defaults to true) and the
-// backend runs with LLM_STUB=1 so /chat/stream emits deterministic chunked deltas.
+// Also assumes the backend runs with LLM_STUB=1 so /chat/stream emits
+// deterministic chunked deltas.
 test.describe.skip('chat stream', () => {
   test.beforeEach(async ({ context }) => {
     await context.clearCookies()

@@ -1,11 +1,9 @@
-import json
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any
 from uuid import uuid4
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from config import settings
@@ -21,6 +19,17 @@ class User(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    accepted_terms_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+    terms_version: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
+    # F-46: onboarding is account state, not per-browser localStorage. NULLs
+    # mean "never onboarded on the server" (pre-0020 rows hydrate FE defaults).
+    display_name: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
+    feedback_pref: Mapped[str | None] = mapped_column(String, nullable=True, default=None)
+    onboarding_complete: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false", default=False
+    )
 
     sessions: Mapped[list["Session"]] = relationship("Session", back_populates="user")
     usage_counters: Mapped[list["UsageCounter"]] = relationship("UsageCounter", back_populates="user")
@@ -34,8 +43,15 @@ class Session(Base):
     topic: Mapped[str] = mapped_column(String, default="")
     topic_profile_json: Mapped[str] = mapped_column(Text, default="{}")
     kw_index_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+    pending_check_json: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+    quiz_cooldown_json: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    pinned: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false", default=False
+    )
+    rolling_summary: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+    rolling_summary_count: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
 
     user: Mapped["User"] = relationship("User", back_populates="sessions")
     messages: Mapped[list["ChatMessage"]] = relationship("ChatMessage", back_populates="session")
@@ -47,9 +63,10 @@ class ChatMessage(Base):
     __tablename__ = "chat_messages"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('complete', 'cancelled', 'error')",
+            "status IN ('complete', 'cancelled', 'error', 'partial')",
             name="chat_messages_status_check",
         ),
+        Index("ix_chat_messages_session_created", "session_id", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -61,12 +78,16 @@ class ChatMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="complete")
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    check_batch_json: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
 
     session: Mapped["Session"] = relationship("Session", back_populates="messages")
 
 
 class UsageCounter(Base):
     __tablename__ = "usage_counters"
+    __table_args__ = (
+        UniqueConstraint("user_id", "date_utc", name="uq_usage_counters_user_date"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
@@ -78,6 +99,9 @@ class UsageCounter(Base):
 
 class LearningEvent(Base):
     __tablename__ = "learning_events"
+    __table_args__ = (
+        Index("ix_learning_events_session", "session_id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     session_id: Mapped[str] = mapped_column(ForeignKey("sessions.id"), nullable=False)
@@ -85,6 +109,10 @@ class LearningEvent(Base):
     question: Mapped[str] = mapped_column(Text, nullable=False)
     correct: Mapped[bool] = mapped_column(nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    selected_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    correct_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    options_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    purpose: Mapped[str | None] = mapped_column(String, nullable=True)
 
     session: Mapped["Session"] = relationship("Session", back_populates="learning_events")
 
@@ -108,7 +136,9 @@ class ChunkEmbedding(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
     session_id: Mapped[str] = mapped_column(ForeignKey("sessions.id"), nullable=False, index=True)
-    document_id: Mapped[int] = mapped_column(ForeignKey("documents.id"), nullable=False, index=True)
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     page: Mapped[int | None] = mapped_column(Integer, nullable=True)
     chunk_text: Mapped[str] = mapped_column(Text, nullable=False)
@@ -125,3 +155,30 @@ class DailyCostLedger(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False
     )
+
+
+class LlmCallLog(Base):
+    """Per-call LLM cost attribution. Analytics-only (roadmap R3 consumes it);
+    additive to DailyCostLedger, never a substitute -- cap gating stays on the
+    daily ledger. No readers exist yet in this slice."""
+
+    __tablename__ = "llm_call_log"
+    __table_args__ = (
+        Index("ix_llm_call_log_user", "user_id"),
+        Index("ix_llm_call_log_session", "session_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    session_id: Mapped[str | None] = mapped_column(ForeignKey("sessions.id"), nullable=True)
+    purpose: Mapped[str] = mapped_column(String, nullable=False)  # chat | followup | summary
+    model: Mapped[str] = mapped_column(String, nullable=False)
+    cost_usd: Mapped[Decimal] = mapped_column(Numeric(10, 4), nullable=False)
+
+    # P1 instrumentation (slice 2): nullable per-call token counts.
+    # cached_tokens = Gemini implicit-prefix-cache hit portion of prompt_tokens.
+    prompt_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    completion_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cached_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)

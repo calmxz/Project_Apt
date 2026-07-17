@@ -3,7 +3,7 @@
     <input
       ref="fileInputEl"
       type="file"
-      accept="application/pdf"
+      accept=".pdf,.pptx,.txt,.md"
       data-testid="session-upload-input"
       hidden
       @change="onFileChange"
@@ -14,9 +14,9 @@
         type="button"
         class="composer-attach"
         data-testid="session-upload-btn"
-        :disabled="disabled || uploading"
-        :aria-label="uploading ? 'Uploading PDF' : 'Attach a PDF'"
-        :title="uploading ? 'Uploading…' : 'Attach PDF'"
+        :disabled="disabled || uploading || locked"
+        :aria-label="uploading ? 'Uploading file' : 'Attach a reference file'"
+        :title="uploading ? 'Uploading...' : 'Attach a reference file (PDF, PPTX, TXT, MD)'"
         @click="openFilePicker"
       >
         <i v-if="!uploading" class="pi pi-paperclip" aria-hidden="true" />
@@ -29,9 +29,10 @@
         data-testid="session-input"
         class="composer-input"
         rows="1"
-        placeholder="Ask anything. Press Enter to send · Shift + Enter for a new line."
+        :placeholder="placeholder"
         :disabled="disabled"
         :maxlength="MAX_DRAFT_LEN"
+        :aria-describedby="describedby || undefined"
         @input="onInput"
         @keydown="onKeydown"
       />
@@ -62,6 +63,17 @@
       >
         <i class="pi pi-stop" aria-hidden="true" />
       </button>
+
+      <button
+        v-if="locked"
+        type="button"
+        class="composer-skip"
+        data-testid="composer-skip"
+        aria-label="Skip this question"
+        @click="emit('skip')"
+      >
+        Skip
+      </button>
     </div>
 
     <div class="composer-hints" :class="{ 'is-near-limit': nearCharLimit }">
@@ -86,9 +98,15 @@ const props = defineProps({
   uploading: { type: Boolean, default: false },
   sending: { type: Boolean, default: false },
   streamState: { type: String, default: 'idle' },
+  // id(s) of an element explaining why the composer is disabled (e.g. the active
+  // cap banner). Wired to aria-describedby so SR users hear the reason on focus.
+  describedby: { type: String, default: null },
+  // When true, a check-question is active: show answer placeholder + Skip button,
+  // disable attach.
+  locked: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['update:modelValue', 'send', 'stop', 'attach'])
+const emit = defineEmits(['update:modelValue', 'send', 'stop', 'attach', 'skip'])
 
 const composerEl = ref(null)
 const fileInputEl = ref(null)
@@ -97,6 +115,12 @@ const MAX_DRAFT_LEN = 2000
 const COMPOSER_MAX_HEIGHT_PX = 220
 
 const nearCharLimit = computed(() => props.modelValue.length >= MAX_DRAFT_LEN * 0.9)
+
+const placeholder = computed(() =>
+  props.locked
+    ? 'Pick an answer above, or Skip...'
+    : 'Ask anything. Press Enter to send · Shift + Enter for a new line.',
+)
 
 function autoResize() {
   const inner = composerEl.value
@@ -274,7 +298,11 @@ defineExpose({ focus })
   background: var(--color-accent-soft);
   border-color: var(--color-accent-soft);
   color: var(--color-accent);
-  outline: none;
+}
+
+.composer-attach:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 
 .composer-attach:disabled {
@@ -286,7 +314,7 @@ defineExpose({ focus })
   grid-column: 3;
   align-self: end;
   margin-bottom: 0.1rem;
-  background: var(--color-accent);
+  background: var(--color-accent-strong);
   color: #FFFFFF;
   border: 0;
   box-shadow: var(--shadow-pop);
@@ -296,7 +324,11 @@ defineExpose({ focus })
 .composer-send:not(:disabled):hover,
 .composer-send:not(:disabled):focus-visible {
   transform: translateY(-2px);
-  outline: none;
+}
+
+.composer-send:not(:disabled):focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 
 .composer-send:not(:disabled):active {
@@ -328,7 +360,11 @@ defineExpose({ focus })
 .composer-stop:not(:disabled):focus-visible {
   transform: translateY(-2px);
   filter: brightness(1.08);
-  outline: none;
+}
+
+.composer-stop:not(:disabled):focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 
 .composer-stop:not(:disabled):active {
@@ -392,8 +428,35 @@ defineExpose({ focus })
 }
 
 .composer-hints.is-near-limit .composer-count {
-  color: var(--signal-warning);
+  color: var(--color-warning-text);
   font-weight: 600;
+}
+
+.composer-skip {
+  grid-column: 3;
+  align-self: end;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-pill);
+  color: var(--color-text-muted);
+  padding: 0 0.75rem;
+  height: 2.5rem;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition:
+    border-color var(--motion-fast) ease,
+    color var(--motion-fast) ease;
+}
+
+.composer-skip:hover,
+.composer-skip:focus-visible {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.composer-skip:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 
 @media (max-width: 600px) {

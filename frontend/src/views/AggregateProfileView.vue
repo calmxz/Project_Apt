@@ -11,7 +11,6 @@
           Snapshot of everything the tutor has learned about you.
         </p>
       </div>
-      <BackButton label="Back to sessions" fallback="/" />
     </header>
 
     <p v-if="loading" class="muted" data-testid="agg-loading">Loading...</p>
@@ -89,6 +88,15 @@
           </ul>
         </div>
 
+        <div class="two-col" data-testid="agg-insights">
+          <div class="col">
+            <WeakestConcepts :concept-accuracy="data.concept_accuracy" />
+          </div>
+          <div class="col">
+            <MasteryTrend :weekly-mastery="data.weekly_mastery" />
+          </div>
+        </div>
+
         <div class="two-col">
           <div class="col" data-testid="agg-mastered">
             <h2 class="section-title">
@@ -158,6 +166,11 @@
             </li>
           </ul>
         </div>
+
+        <UsagePanel v-if="usage" :usage="usage" />
+        <p v-else-if="usageError" class="muted" data-testid="usage-error">
+          Usage data is unavailable right now.
+        </p>
       </template>
     </template>
   </section>
@@ -166,15 +179,19 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 
-import BackButton from '../components/BackButton.vue'
 import EmptyState from '../components/EmptyState.vue'
+import MasteryTrend from '../components/profile/MasteryTrend.vue'
+import UsagePanel from '../components/profile/UsagePanel.vue'
+import WeakestConcepts from '../components/profile/WeakestConcepts.vue'
 import { friendlyError } from '../lib/errors.js'
-import { getAggregateProfile } from '../services/profileApi.js'
+import { getAggregateProfile, getUsageSummary } from '../services/profileApi.js'
 import { formatRelative } from '../utils/formatDate.js'
 
 const data = ref(null)
 const loading = ref(false)
 const error = ref('')
+const usage = ref(null)
+const usageError = ref(false)
 
 const levelKeys = ['beginner', 'intermediate', 'advanced', 'unknown']
 
@@ -187,13 +204,22 @@ const distAriaLabel = computed(() => {
 async function load() {
   loading.value = true
   error.value = ''
-  try {
-    data.value = await getAggregateProfile()
-  } catch (e) {
-    error.value = friendlyError(e)
-  } finally {
-    loading.value = false
+  usageError.value = false
+  const [agg, use] = await Promise.allSettled([
+    getAggregateProfile(),
+    getUsageSummary(),
+  ])
+  if (agg.status === 'fulfilled') {
+    data.value = agg.value
+  } else {
+    error.value = friendlyError(agg.reason)
   }
+  if (use.status === 'fulfilled') {
+    usage.value = use.value
+  } else {
+    usageError.value = true
+  }
+  loading.value = false
 }
 
 onMounted(load)
@@ -228,7 +254,7 @@ onMounted(load)
   text-transform: uppercase;
   letter-spacing: var(--tracking-label);
   font-weight: 600;
-  color: var(--color-accent);
+  color: var(--color-accent-text);
 }
 
 .title {
@@ -249,7 +275,7 @@ onMounted(load)
 }
 
 .muted { color: var(--color-text-muted); }
-.error { color: var(--signal-error); }
+.error { color: var(--color-error-text); }
 
 .cta-primary {
   display: inline-flex;
@@ -257,7 +283,7 @@ onMounted(load)
   gap: 0.5rem;
   padding: 0.75rem 1.375rem;
   border-radius: var(--radius-pill);
-  background: var(--color-accent);
+  background: var(--color-accent-strong);
   color: #FFFFFF;
   border: 0;
   font-family: var(--font-sans);
@@ -326,7 +352,7 @@ onMounted(load)
 :root[data-theme='dark'] .stat-green {
   background: linear-gradient(180deg, rgba(52, 215, 123, 0.16) 0%, var(--color-surface) 70%);
 }
-.stat-green .stat-glyph { background: rgba(34, 197, 94, 0.25); color: var(--signal-success); }
+.stat-green .stat-glyph { background: rgba(34, 197, 94, 0.25); color: var(--color-success-text); }
 
 .stat-yellow {
   background: linear-gradient(180deg, rgba(255, 176, 32, 0.18) 0%, var(--color-surface) 60%);
@@ -334,7 +360,7 @@ onMounted(load)
 :root[data-theme='dark'] .stat-yellow {
   background: linear-gradient(180deg, rgba(255, 197, 77, 0.18) 0%, var(--color-surface) 70%);
 }
-.stat-yellow .stat-glyph { background: rgba(255, 176, 32, 0.28); color: #8A5A00; }
+.stat-yellow .stat-glyph { background: rgba(255, 176, 32, 0.28); color: var(--color-warning-text); }
 :root[data-theme='dark'] .stat-yellow .stat-glyph { color: var(--signal-warning); }
 
 .stat-blue {
@@ -448,8 +474,8 @@ onMounted(load)
 .col-icon {
   font-size: 1.05rem;
 }
-.col-icon-green { color: var(--signal-success); }
-.col-icon-yellow { color: var(--signal-warning); }
+.col-icon-green { color: var(--color-success-text); }
+.col-icon-yellow { color: var(--color-warning-text); }
 
 .two-col {
   display: grid;
@@ -484,14 +510,14 @@ onMounted(load)
 
 .chip-mastered {
   background: rgba(34, 197, 94, 0.14);
-  color: var(--signal-success);
+  color: var(--color-success-text);
   border-color: rgba(34, 197, 94, 0.3);
 }
-:root:not([data-theme='dark']) .chip-mastered { color: #0E7A36; }
+:root:not([data-theme='dark']) .chip-mastered { color: var(--color-success-text); }
 
 .chip-gap {
   background: rgba(255, 176, 32, 0.16);
-  color: #8A5A00;
+  color: var(--color-warning-text);
   border-color: rgba(255, 176, 32, 0.35);
 }
 :root[data-theme='dark'] .chip-gap { color: var(--signal-warning); }
@@ -570,7 +596,7 @@ onMounted(load)
 }
 
 .recent-row:hover .recent-arrow {
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   transform: translateX(3px);
 }
 </style>

@@ -8,7 +8,7 @@ import { useSessionStore } from '@/stores/session.js'
 const push = vi.fn()
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push }),
-  RouterLink: { props: ['to'], template: '<a><slot /></a>' },
+  RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
 }))
 
 const apiEndSession = vi.fn()
@@ -21,23 +21,17 @@ vi.mock('@/services/profileApi.js', () => ({
   getAggregateProfile: (...args) => apiAggregate(...args),
 }))
 
-function makeRecent(id, topic, { ended = false, summary = null, createdOffset = 0 } = {}) {
-  const created = new Date(Date.now() + createdOffset).toISOString()
-  return {
-    id,
-    topic,
-    created_at: created,
-    ended_at: ended ? created : null,
-    last_session_summary: summary,
-  }
-}
+const apiReviewQueue = vi.fn()
+vi.mock('@/services/reviewApi.js', () => ({
+  getReviewQueue: (...args) => apiReviewQueue(...args),
+}))
 
 const stubs = {
   EmptyState: {
     props: ['tone', 'eyebrow', 'headline', 'subtext'],
     template: '<div data-testid="empty-stub"><slot name="subtext" /><slot name="cta" /></div>',
   },
-  RouterLink: { props: ['to'], template: '<a><slot /></a>' },
+  RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
 }
 
 function makeSession(id, topic, ended = false, createdOffset = 0) {
@@ -47,6 +41,18 @@ function makeSession(id, topic, ended = false, createdOffset = 0) {
     topic,
     created_at: created,
     ended_at: ended ? created : null,
+  }
+}
+
+function makeReviewItem(concept, overrides = {}) {
+  return {
+    concept,
+    source_session_id: 's1',
+    source_topic: 'biology',
+    last_tested_at: '2026-07-01T00:00:00Z',
+    streak: 1,
+    due_at: '2026-07-02T00:00:00Z',
+    ...overrides,
   }
 }
 
@@ -61,6 +67,8 @@ describe('HomeView', () => {
     apiEndSession.mockReset()
     apiAggregate.mockReset()
     apiAggregate.mockResolvedValue({ recent_topics: [] })
+    apiReviewQueue.mockReset()
+    apiReviewQueue.mockResolvedValue({ items: [], total: 0, limit: 3, offset: 0 })
   })
 
   it('calls listSessions on mount', async () => {
@@ -85,252 +93,191 @@ describe('HomeView', () => {
     expect(wrapper.get('[data-testid="home-error"]').text()).toBe('list failed')
   })
 
-  it('lede shows zero-session welcome when no sessions', async () => {
+  it('shows a single New lesson card, no Build a subject', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'listSessions').mockResolvedValue([])
     const wrapper = mountView()
     await flushPromises()
-    expect(wrapper.get('[data-testid="home-lede"]').text()).toContain(
-      'A study session is one conversation',
+    expect(wrapper.text()).toContain('New lesson')
+    expect(wrapper.text()).not.toContain('Build a subject')
+    expect(wrapper.find('[data-testid="home-mode-quick"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="home-mode-subject"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="home-build-start"]').exists()).toBe(false)
+  })
+
+  it('New lesson creates a session then navigates', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'listSessions').mockResolvedValue([])
+    vi.spyOn(store, 'createSession').mockResolvedValue({ id: 'sess1' })
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-testid="home-quick-topic"]').setValue('Recursion')
+    await wrapper.get('[data-testid="home-quick-go"]').trigger('click')
+    await flushPromises()
+    expect(store.createSession).toHaveBeenCalledWith({ topic: 'Recursion', seedMode: 'fresh', priorSessionId: null })
+    expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'sess1' } })
+  })
+
+  it('New lesson navigates to the existing session on server-side 409 duplicate_topic', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'listSessions').mockResolvedValue([])
+    vi.spyOn(store, 'createSession').mockRejectedValue({
+      status: 409,
+      body: { detail: { code: 'duplicate_topic', session_id: 'sess-existing' } },
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-testid="home-quick-topic"]').setValue('Recursion')
+    await wrapper.get('[data-testid="home-quick-go"]').trigger('click')
+    await flushPromises()
+    expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'sess-existing' } })
+  })
+
+  it('double-invoking startQuick while createSession is pending only calls the store once (F-45)', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'listSessions').mockResolvedValue([])
+    let resolveCreate
+    const createSpy = vi.spyOn(store, 'createSession').mockReturnValue(
+      new Promise((resolve) => {
+        resolveCreate = resolve
+      }),
     )
-  })
-
-  it('lede shows active count and points to sidebar when sessions exist', async () => {
-    const store = useSessionStore()
-    vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    store.sessions = [makeSession('a1', 'Calculus')]
     const wrapper = mountView()
     await flushPromises()
-    const lede = wrapper.get('[data-testid="home-lede"]').text()
-    expect(lede).toContain('1 active session')
-    expect(lede).toContain('Pick one from the sidebar')
+    await wrapper.get('[data-testid="home-quick-topic"]').setValue('Recursion')
+    await wrapper.get('[data-testid="home-quick-go"]').trigger('click')
+    await wrapper.get('[data-testid="home-quick-go"]').trigger('click')
+    expect(createSpy).toHaveBeenCalledTimes(1)
+    resolveCreate({ id: 'sess1' })
+    await flushPromises()
+    expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'sess1' } })
   })
 
-  it('lede pluralises when multiple active sessions', async () => {
+  it('does not render the dupe banner or recent feed (relocated)', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    store.sessions = [
-      makeSession('a1', 'Calculus'),
-      makeSession('a2', 'Algebra'),
-    ]
+    store.sessions = [makeSession('a1', 'Calc', false, -1), makeSession('a2', 'Calc', false, 0)]
     const wrapper = mountView()
     await flushPromises()
-    expect(wrapper.get('[data-testid="home-lede"]').text()).toContain('2 active sessions')
+    expect(wrapper.find('[data-testid="home-dupe-banner"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="home-recent"]').exists()).toBe(false)
   })
+})
 
-  it('empty state renders when zero sessions (active or ended)', async () => {
+describe('HomeView review card', () => {
+  beforeEach(() => {
+    push.mockClear()
     const store = useSessionStore()
     vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    const wrapper = mountView()
-    await flushPromises()
-    expect(wrapper.find('[data-testid="home-empty-active"]').exists()).toBe(true)
   })
 
-  it('empty state does not render when ended sessions exist', async () => {
-    const store = useSessionStore()
-    vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    store.sessions = [makeSession('e1', 'Topic', true)]
+  it('hides the card when nothing is due', async () => {
     const wrapper = mountView()
     await flushPromises()
-    expect(wrapper.find('[data-testid="home-empty-active"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="home-mode-review"]').exists()).toBe(false)
   })
 
-  it('new session button routes to new-session', async () => {
-    const store = useSessionStore()
-    vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    const wrapper = mountView()
-    await flushPromises()
-    await wrapper.get('[data-testid="home-new-session"]').trigger('click')
-    expect(push).toHaveBeenCalledWith({ name: 'new-session' })
-  })
-
-  it('duplicate banner appears when two active sessions share topic', async () => {
-    const store = useSessionStore()
-    vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    store.sessions = [
-      makeSession('a1', 'Calculus', false, -10000),
-      makeSession('a2', 'Calculus', false, 0),
-    ]
-    const wrapper = mountView()
-    await flushPromises()
-    const banner = wrapper.get('[data-testid="home-dupe-banner"]')
-    expect(banner.text()).toContain('1 duplicate active session')
-  })
-
-  it('cleanupDuplicates ends older dupes and re-lists', async () => {
-    const store = useSessionStore()
-    const listSpy = vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    apiEndSession.mockResolvedValue({})
-    store.sessions = [
-      makeSession('older', 'Calculus', false, -10000),
-      makeSession('newer', 'Calculus', false, 0),
-    ]
-    const wrapper = mountView()
-    await flushPromises()
-    listSpy.mockClear()
-    await wrapper.get('[data-testid="home-dupe-cleanup"]').trigger('click')
-    await flushPromises()
-    expect(apiEndSession).toHaveBeenCalledWith('older')
-    expect(apiEndSession).not.toHaveBeenCalledWith('newer')
-    expect(listSpy).toHaveBeenCalledWith()
-  })
-
-  it('cleanupDuplicates sets store.error on failure', async () => {
-    const store = useSessionStore()
-    vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    const setErrorSpy = vi.spyOn(store, 'setError')
-    apiEndSession.mockRejectedValue(new Error('end failed'))
-    store.sessions = [
-      makeSession('older', 'Calculus', false, -10000),
-      makeSession('newer', 'Calculus', false, 0),
-    ]
-    const wrapper = mountView()
-    await flushPromises()
-    await wrapper.get('[data-testid="home-dupe-cleanup"]').trigger('click')
-    await flushPromises()
-    expect(setErrorSpy).toHaveBeenCalledWith('end failed')
-  })
-
-  it('does not render tile grid or tabs (sidebar owns the list now)', async () => {
-    const store = useSessionStore()
-    vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    store.sessions = [makeSession('a1', 'Calculus')]
-    const wrapper = mountView()
-    await flushPromises()
-    expect(wrapper.find('[data-testid="home-tabs"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="home-row-active-a1"]').exists()).toBe(false)
-    expect(wrapper.find('.tile-grid').exists()).toBe(false)
-  })
-
-  it('renders one feed row per recent topic', async () => {
-    const store = useSessionStore()
-    vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    store.sessions = [makeSession('a1', 'Trees')]
-    apiAggregate.mockResolvedValue({
-      recent_topics: [
-        makeRecent('a1', 'Trees', { createdOffset: 0 }),
-        makeRecent('e1', 'Big-O', { ended: true, summary: 'Covered amortized analysis.', createdOffset: -1000 }),
-      ],
+  it('renders count and items when concepts are due', async () => {
+    apiReviewQueue.mockResolvedValue({
+      items: [makeReviewItem('mitosis'), makeReviewItem('osmosis')],
+      total: 2, limit: 3, offset: 0,
     })
     const wrapper = mountView()
     await flushPromises()
-    expect(wrapper.findAll('[data-testid^="home-recent-"]').length).toBe(2)
+    expect(wrapper.find('[data-testid="home-mode-review"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="home-review-count"]').text()).toContain('2 concepts')
+    expect(wrapper.findAll('[data-testid="home-review-item"]')).toHaveLength(2)
+    expect(wrapper.text()).toContain('mitosis')
   })
 
-  it('orders active rows before ended rows', async () => {
-    const store = useSessionStore()
-    vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    store.sessions = [makeSession('a1', 'Trees')]
-    apiAggregate.mockResolvedValue({
-      recent_topics: [
-        makeRecent('e1', 'Big-O', { ended: true, summary: 'done', createdOffset: 0 }),
-        makeRecent('a1', 'Trees', { createdOffset: -1000 }),
-      ],
+  it('hides the card when the queue fetch fails', async () => {
+    apiReviewQueue.mockRejectedValue(new Error('boom'))
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="home-mode-review"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="home-error"]').exists()).toBe(false)
+  })
+
+  it('shows View all only when total exceeds the shown items', async () => {
+    apiReviewQueue.mockResolvedValue({
+      items: [makeReviewItem('a'), makeReviewItem('b'), makeReviewItem('c')],
+      total: 5, limit: 3, offset: 0,
     })
     const wrapper = mountView()
     await flushPromises()
-    const rows = wrapper.findAll('[data-testid^="home-recent-"]')
-    expect(rows[0].attributes('data-testid')).toBe('home-recent-a1')
-    expect(rows[1].attributes('data-testid')).toBe('home-recent-e1')
+    expect(wrapper.get('[data-testid="home-review-more"]').text()).toContain('5')
   })
 
-  it('strips the [auto] prefix from the snippet', async () => {
-    const store = useSessionStore()
-    vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    store.sessions = [makeSession('e1', 'Big-O', true)]
-    apiAggregate.mockResolvedValue({
-      recent_topics: [
-        makeRecent('e1', 'Big-O', { ended: true, summary: '[auto] user: hi; assistant: yo' }),
-      ],
+  it('starts a review via continueTopic and navigates with review_gap query', async () => {
+    apiReviewQueue.mockResolvedValue({
+      items: [makeReviewItem('mitosis', { source_session_id: 'src9', source_topic: 'cells' })],
+      total: 1, limit: 3, offset: 0,
     })
+    const store = useSessionStore()
+    vi.spyOn(store, 'continueTopic').mockResolvedValue({ id: 'newsess' })
     const wrapper = mountView()
     await flushPromises()
-    const text = wrapper.get('[data-testid="home-recent-e1"]').text()
-    expect(text).not.toContain('[auto]')
-    expect(text).toContain('user: hi')
+    await wrapper.get('[data-testid="home-review-item"]').trigger('click')
+    await flushPromises()
+    expect(store.continueTopic).toHaveBeenCalledWith({ id: 'src9', topic: 'cells' })
+    expect(push).toHaveBeenCalledWith({
+      name: 'session',
+      params: { id: 'newsess' },
+      query: { review_gap: 'mitosis' },
+    })
   })
 
-  it('Enter on Continue does not bubble to row navigation', async () => {
-    const store = useSessionStore()
-    vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    vi.spyOn(store, 'reopenSession').mockResolvedValue({})
-    store.sessions = [makeSession('e1', 'Big-O', true)]
-    apiAggregate.mockResolvedValue({
-      recent_topics: [makeRecent('e1', 'Big-O', { ended: true, summary: 'done' })],
+  it('stays on Home when continueTopic fails', async () => {
+    apiReviewQueue.mockResolvedValue({
+      items: [makeReviewItem('mitosis')], total: 1, limit: 3, offset: 0,
     })
+    const store = useSessionStore()
+    vi.spyOn(store, 'continueTopic').mockResolvedValue(undefined)
     const wrapper = mountView()
     await flushPromises()
-    await wrapper.get('[data-testid="home-continue-e1"]').trigger('keydown.enter')
+    await wrapper.get('[data-testid="home-review-item"]').trigger('click')
     await flushPromises()
     expect(push).not.toHaveBeenCalled()
   })
 
-  it('shows summary snippet when present and fallback when null', async () => {
+  it('startReview swallows a rejecting continueTopic and resets busy (F-45)', async () => {
+    apiReviewQueue.mockResolvedValue({
+      items: [makeReviewItem('mitosis')], total: 1, limit: 3, offset: 0,
+    })
     const store = useSessionStore()
-    vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    store.sessions = [makeSession('a1', 'Trees')]
-    apiAggregate.mockResolvedValue({
-      recent_topics: [
-        makeRecent('e1', 'Big-O', { ended: true, summary: 'Covered amortized analysis.' }),
-        makeRecent('a1', 'Trees', { createdOffset: -1000 }),
-      ],
+    // vi.spyOn on a store action already spied by an earlier test in this
+    // describe block (pinia isn't reset here) reuses the same mock and its
+    // call history — clear it so the count below reflects only this test.
+    const continueSpy = vi.spyOn(store, 'continueTopic').mockRejectedValue(new Error('boom'))
+    continueSpy.mockClear()
+    const wrapper = mountView()
+    await flushPromises()
+    // Rejecting inside the click handler must not surface as an unhandled
+    // rejection, and busy must reset so a retry can go through.
+    await wrapper.get('[data-testid="home-review-item"]').trigger('click')
+    await flushPromises()
+    expect(push).not.toHaveBeenCalled()
+    expect(wrapper.get('[data-testid="home-review-item"]').attributes('disabled')).toBeUndefined()
+    await wrapper.get('[data-testid="home-review-item"]').trigger('click')
+    await flushPromises()
+    expect(continueSpy).toHaveBeenCalledTimes(2)
+  })
+
+  it('View all refetches with a large limit and hides itself', async () => {
+    apiReviewQueue.mockResolvedValue({
+      items: [makeReviewItem('a'), makeReviewItem('b'), makeReviewItem('c')],
+      total: 5, limit: 3, offset: 0,
     })
     const wrapper = mountView()
     await flushPromises()
-    expect(wrapper.get('[data-testid="home-recent-e1"]').text()).toContain('Covered amortized analysis.')
-    expect(wrapper.get('[data-testid="home-recent-a1"]').text()).toContain('In progress')
-  })
-
-  it('clicking a feed row navigates to the session', async () => {
-    const store = useSessionStore()
-    vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    store.sessions = [makeSession('a1', 'Trees')]
-    apiAggregate.mockResolvedValue({ recent_topics: [makeRecent('a1', 'Trees')] })
-    const wrapper = mountView()
-    await flushPromises()
-    await wrapper.get('[data-testid="home-recent-a1"] .recent-link').trigger('click')
-    expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'a1' } })
-  })
-
-  it('ended row shows Continue; active row does not', async () => {
-    const store = useSessionStore()
-    vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    store.sessions = [makeSession('a1', 'Trees')]
-    apiAggregate.mockResolvedValue({
-      recent_topics: [
-        makeRecent('a1', 'Trees'),
-        makeRecent('e1', 'Big-O', { ended: true, summary: 'done', createdOffset: -1000 }),
-      ],
+    apiReviewQueue.mockResolvedValue({
+      items: ['a', 'b', 'c', 'd', 'e'].map((c) => makeReviewItem(c)),
+      total: 5, limit: 100, offset: 0,
     })
-    const wrapper = mountView()
+    await wrapper.get('[data-testid="home-review-more"]').trigger('click')
     await flushPromises()
-    expect(wrapper.find('[data-testid="home-continue-e1"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="home-continue-a1"]').exists()).toBe(false)
-  })
-
-  it('Continue reopens then navigates, without double-firing row navigation', async () => {
-    const store = useSessionStore()
-    vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    const reopenSpy = vi.spyOn(store, 'reopenSession').mockResolvedValue({})
-    store.sessions = [makeSession('e1', 'Big-O', true)]
-    apiAggregate.mockResolvedValue({
-      recent_topics: [makeRecent('e1', 'Big-O', { ended: true, summary: 'done' })],
-    })
-    const wrapper = mountView()
-    await flushPromises()
-    await wrapper.get('[data-testid="home-continue-e1"]').trigger('click')
-    await flushPromises()
-    expect(reopenSpy).toHaveBeenCalledWith('e1')
-    expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'e1' } })
-    expect(push).toHaveBeenCalledTimes(1)
-  })
-
-  it('no feed when zero sessions (EmptyState only)', async () => {
-    const store = useSessionStore()
-    vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    const wrapper = mountView()
-    await flushPromises()
-    expect(wrapper.find('[data-testid="home-recent"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="home-empty-active"]').exists()).toBe(true)
+    expect(apiReviewQueue).toHaveBeenLastCalledWith({ limit: 100, offset: 0 })
+    expect(wrapper.findAll('[data-testid="home-review-item"]')).toHaveLength(5)
+    expect(wrapper.find('[data-testid="home-review-more"]').exists()).toBe(false)
   })
 })

@@ -13,9 +13,9 @@
     </div>
 
     <template v-else>
-      <SessionHeader :topic="store.currentSession?.topic || ''" />
-
       <BackButton />
+
+      <SessionHeader :topic="headerTopic" :session-id="props.id" />
 
       <CapBanners />
 
@@ -23,22 +23,37 @@
         v-if="isEnded"
         :ended-at="store.currentSession.ended_at"
         :loading="resuming"
+        :has-gaps="hasGaps"
         @resume="resume"
+        @resume-gaps="resumeReviewGaps"
+      />
+
+      <GapPickerDialog
+        v-model:visible="gapPickerOpen"
+        :gaps="confirmedGaps"
+        @select="onGapPicked"
       />
 
       <div ref="messagesEl" class="messages" :class="{ 'is-empty': !store.messages.length }" data-testid="session-messages">
-        <ChatEmptyState
-          v-if="!store.messages.length"
-          :archived="isEnded"
-          @quick-prompt="useQuickPrompt"
-        />
-        <MessageList
-          v-if="store.messages.length || store.streamingMessage || awaitingResponse"
-          :messages="store.messages"
-          :streaming-message="store.streamingMessage"
-          :awaiting="awaitingResponse"
-        />
+        <MessageListSkeleton v-if="store.detailLoading" />
+        <template v-else>
+          <ChatEmptyState
+            v-if="!store.messages.length"
+            :archived="isEnded"
+            @quick-prompt="useQuickPrompt"
+          />
+          <MessageList
+            v-if="store.messages.length || store.streamingMessage || awaitingResponse"
+            :messages="store.messages"
+            :streaming-message="store.streamingMessage"
+            :awaiting="awaitingResponse"
+          />
+        </template>
       </div>
+
+      <p v-if="store.followupNotice" class="followup-notice" data-testid="followup-notice" role="status" aria-live="polite">
+        {{ store.followupNotice }}
+      </p>
 
       <div
         v-if="store.error || lastError"
@@ -62,7 +77,18 @@
         </details>
       </div>
 
+      <ReferenceStatusBanner ref="referenceBannerRef" :session-id="props.id" />
+
       <UploadStatus :upload="uploadStatus" />
+
+      <CheckQuestion
+        v-if="store.pendingCheck && !store.detailLoading"
+        :check="store.pendingCheck"
+        @answer="onAnswerCheck"
+        @skip="onSkipCheck"
+        @next="store.nextCheck"
+        @done="onDoneCheck"
+      />
 
       <Composer
         v-if="!isEnded"
@@ -73,9 +99,12 @@
         :uploading="uploading"
         :sending="sending"
         :stream-state="store.streamState"
+        :describedby="capDescribedby"
+        :locked="store.checkLocked"
         @send="send"
         @stop="store.stopStream"
         @attach="onAttachFile"
+        @skip="onSkipCheck"
       />
 
       <Dialog
@@ -102,7 +131,7 @@
 
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
@@ -110,26 +139,27 @@ import Dialog from 'primevue/dialog'
 import BackButton from '../components/BackButton.vue'
 import CapBanners from '../components/chat/CapBanners.vue'
 import ChatEmptyState from '../components/chat/EmptyState.vue'
+import CheckQuestion from '../components/chat/CheckQuestion.vue'
 import Composer from '../components/chat/Composer.vue'
+import GapPickerDialog from '../components/GapPickerDialog.vue'
 import MessageList from '../components/chat/MessageList.vue'
+import MessageListSkeleton from '../components/chat/MessageListSkeleton.vue'
 import SessionHeader from '../components/chat/SessionHeader.vue'
 import SessionEndedBanner from '../components/SessionEndedBanner.vue'
+import ReferenceStatusBanner from '../components/chat/ReferenceStatusBanner.vue'
 import UploadStatus from '../components/chat/UploadStatus.vue'
 import { friendlyError } from '../lib/errors.js'
 import { useSessionStore } from '../stores/session.js'
 import { useToast } from '../composables/useToast.js'
 import { costBus } from '../services/costBus.js'
-import { getUploadStatus, uploadPdf } from '../services/uploadApi.js'
+import { getUploadStatus, uploadDocument, validateFile } from '../services/uploadApi.js'
 import { formatShortDateTime } from '../utils/formatDate.js'
 
 const props = defineProps({ id: { type: String, required: true } })
 
+const route = useRoute()
 const router = useRouter()
 const store = useSessionStore()
-
-// Streaming (SSE) is the default chat path. Set VITE_CHAT_STREAM=false to fall
-// back to the JSON POST /api/chat endpoint.
-const streamEnabled = import.meta.env.VITE_CHAT_STREAM !== 'false'
 
 const draft = ref('')
 const lastSentText = ref('')
@@ -138,18 +168,69 @@ const summaryText = ref('')
 const summaryKind = ref('summary')
 const notFound = ref(false)
 const resuming = ref(false)
+const gapPickerOpen = ref(false)
 const sending = ref(false)
 const messagesEl = ref(null)
 const composerRef = ref(null)
 const uploading = ref(false)
 const uploadStatus = ref(null)
 const lastError = ref(null)
+const referenceBannerRef = ref(null)
 
-const isEnded = computed(() => Boolean(store.currentSession?.ended_at))
-const canEnd = computed(() => Boolean(store.currentSession && !store.currentSession.ended_at))
+// Use the same target-id discriminator as headerTopic so the ended-banner /
+// composer / resume action agree with the optimistic header during a switch.
+// While detail loads, store.currentSession still holds the PREVIOUS session, so
+// reading ended_at directly would show a stale banner and misdirect resume() to
+// the old session id. Falls back to not-ended until the target detail resolves.
+const isEnded = computed(() =>
+  store.currentSession?.id === props.id ? Boolean(store.currentSession.ended_at) : false,
+)
+// Gates the "Review my gaps" CTA — only meaningful once we're showing the
+// ended banner for this session, so read confirmed_gaps off the same
+// discriminator-checked currentSession rather than re-deriving it.
+const hasGaps = computed(
+  () => (store.currentSession?.topic_profile?.confirmed_gaps?.length ?? 0) > 0,
+)
+// Same discriminator-checked source as hasGaps, but the full list is needed to
+// drive the picker (single gap skips it, >1 gap opens it).
+const confirmedGaps = computed(
+  () =>
+    (store.currentSession?.topic_profile?.confirmed_gaps ?? []).map(
+      (g) => g?.name ?? g,
+    ),
+)
+// Discriminator-gated (same as isEnded/headerTopic): during a switch,
+// store.currentSession still holds the PREVIOUS session, so gating on raw
+// currentSession would leave the composer enabled+pointed at the old session
+// (currentSessionId lags props.id until the await resolves) — a send would
+// land in the wrong session and then vanish when the target detail loads.
+const canEnd = computed(() =>
+  store.currentSession?.id === props.id && !store.currentSession.ended_at,
+)
 const canSend = computed(() => canEnd.value && !store.dailyCapReached && !store.costCapReached)
 
-const { showError, showInfo } = useToast()
+// Optimistic header: while the detail fetch is in flight, store.currentSession
+// still holds the PREVIOUS session (it is overwritten only after the await
+// resolves), so paint the target session's topic from the already-known list
+// row. View-local only — store.currentSession is never stubbed, which is what
+// keeps this clear of the PR #72 switch-reload bug class.
+const knownRow = computed(() => store.sessions.find((s) => s.id === props.id) || null)
+const headerTopic = computed(() => {
+  if (store.currentSession?.id === props.id) return store.currentSession.topic || ''
+  return knownRow.value?.topic || ''
+})
+
+// When the composer is disabled because a daily/cost cap was hit, point its
+// aria-describedby at the matching cap banner so screen-reader users hear why
+// input is blocked. null when not cap-disabled (renders no attribute).
+const capDescribedby = computed(() => {
+  const ids = []
+  if (store.dailyCapReached) ids.push('cap-banner-daily')
+  if (store.costCapReached) ids.push('cap-banner-cost')
+  return ids.length ? ids.join(' ') : null
+})
+
+const { showError, showWarn } = useToast()
 watch(
   () => store.dailyCapReached,
   (now) => {
@@ -173,12 +254,35 @@ watch(
   },
 )
 
-// One soft-cap warning per mount of this view (i.e. per session entry).
+// One warning per level, per mount of this view (i.e. per session entry).
+// Soft and urgent are tracked separately so an urgent warning can still
+// surface even if a soft one already showed earlier in this mount (urgent
+// escalates the signal; it must never be silently swallowed by a prior soft
+// warning), while neither level repeats.
 const softCapShown = ref(false)
-function onCostWarning() {
+const urgentCapShown = ref(false)
+function resolveCostWarningLevel(detail) {
+  let level = detail?.level
+  if (!level && typeof detail?.header === 'string') {
+    const match = detail.header.match(/level=(\w+)/)
+    level = match ? match[1] : null
+  }
+  return level === 'urgent' ? 'urgent' : 'soft'
+}
+function onCostWarning(event) {
+  const level = resolveCostWarningLevel(event?.detail)
+  if (level === 'urgent') {
+    if (urgentCapShown.value) return
+    urgentCapShown.value = true
+    showError(
+      'You are very close to today’s cost limit.',
+      { summary: 'Cost limit near', life: 8000 },
+    )
+    return
+  }
   if (softCapShown.value) return
   softCapShown.value = true
-  showInfo(
+  showWarn(
     'You’re approaching the daily cost limit for this session.',
     { summary: 'Cost warning', life: 6000 },
   )
@@ -215,17 +319,66 @@ watch(
   () => scrollToBottom(),
 )
 
-onMounted(async () => {
+async function loadCurrent(id) {
+  // Reset per-load so navigating away from a 404 session clears the state.
+  notFound.value = false
+  // Drop any prior session's send-error so it can't render (with a wrong-session
+  // Retry) over the newly-navigated session. Mirrors store.error clearing on
+  // loadSession entry. loadCurrent only runs on mount + id-change, so a same-
+  // session send-error stays retryable.
+  lastError.value = null
+  const startedAt = import.meta.env.DEV ? performance.now() : 0
   try {
-    await store.loadSession(props.id)
+    await store.loadSession(id)
+    if (import.meta.env.DEV) {
+      await nextTick()
+      // Dev-only WS3 gate measurement: navigate -> detail painted. This number
+      // decides whether the retention tail (warm prefetch + SWR cache) is worth
+      // building (see Task 5). Remove once that decision is recorded.
+      console.debug(`[perf] session ${id} detail painted in ${Math.round(performance.now() - startedAt)}ms`)
+    }
   } catch (e) {
+    // Superseded load: a newer navigation already changed props.id, so a late
+    // 404 from the session we left must not flash its not-found over the one now
+    // on screen. Same discriminator the success-path computeds use (id===props.id).
+    if (id !== props.id) return
     if (e?.status === 404) {
       notFound.value = true
       store.setError(null)
     }
   }
   if (!isEnded.value && !notFound.value) focusComposer()
-})
+  // Covers fresh navigation (new id, e.g. from ProfileView's "Review gaps"
+  // button) where the query is already present before the session loads.
+  if (!notFound.value) await handleReviewGapQuery()
+}
+
+onMounted(() => loadCurrent(props.id))
+
+// Sidebar session->session clicks reuse this route component (same /session/:id
+// route), so onMounted does not re-fire. Re-load when the id prop changes;
+// otherwise the body keeps showing the previous session until a full refresh.
+watch(
+  () => props.id,
+  (id) => {
+    if (id) loadCurrent(id)
+  },
+)
+
+// Covers same-id in-place navigation (e.g. ProfileView -> back to the session
+// already open) where loadCurrent does not re-run. Not immediate: the initial
+// value is handled by loadCurrent above, which waits for the session to load
+// first -- an immediate watch here would fire during setup, before
+// store.currentSession is populated, and either send into the wrong session
+// or throw "no active session".
+watch(
+  () => route.query.review_gap,
+  (gap) => {
+    if (!gap) return
+    if (store.currentSession?.id !== props.id) return
+    handleReviewGapQuery()
+  },
+)
 
 function focusComposer() {
   nextTick(() => composerRef.value?.focus())
@@ -256,11 +409,7 @@ async function send() {
   lastError.value = null
   sending.value = true
   try {
-    if (streamEnabled) {
-      await store.sendMessageStreaming({ text })
-    } else {
-      await store.sendMessage({ text })
-    }
+    await store.sendMessageStreaming({ text })
     lastSentText.value = ''
   } catch (e) {
     draft.value = text
@@ -289,14 +438,23 @@ watch(
     summaryDialog.value = true
     store.consumePendingSummary()
   },
+  { immediate: true },
 )
 
 async function onAttachFile(file) {
+  // Client-side pre-check for instant feedback; backend re-validates (type + 25 MB).
+  const v = validateFile(file)
+  if (!v.ok) {
+    uploadStatus.value = { kind: 'failed', text: v.reason }
+    return
+  }
   uploading.value = true
-  uploadStatus.value = { kind: 'pending', text: `Uploading ${file.name}…` }
+  uploadStatus.value = { kind: 'pending', text: `Uploading ${file.name}...` }
   try {
-    const resp = await uploadPdf({ sessionId: props.id, file })
+    const resp = await uploadDocument({ sessionId: props.id, file })
+    referenceBannerRef.value?.refresh?.()
     await pollUploadStatus(resp.document_id, file.name)
+    referenceBannerRef.value?.refresh?.()
   } catch (e) {
     uploadStatus.value = {
       kind: 'failed',
@@ -347,6 +505,72 @@ async function resume() {
   }
 }
 
+async function resumeReviewGaps() {
+  if (!store.currentSession) return
+  if (confirmedGaps.value.length > 1) {
+    gapPickerOpen.value = true
+    return
+  }
+  await sendReviewSeed(confirmedGaps.value[0])
+}
+
+async function onGapPicked(gap) {
+  await sendReviewSeed(gap)
+}
+
+async function sendReviewSeed(gap) {
+  // Covers the query-driven path (handleReviewGapQuery), which is only
+  // gated on !notFound in loadCurrent -- a non-404 loadSession failure
+  // leaves store.currentSession null or stale relative to props.id. The
+  // button path (resumeReviewGaps) already guards on !store.currentSession
+  // before calling in, but this covers both null and stale defensively.
+  if (!store.currentSession || store.currentSession.id !== props.id) return
+  resuming.value = true
+  try {
+    if (isEnded.value) await store.reopenSession(store.currentSession.id)
+    await store.sendMessageStreaming({
+      text: `Review my gap: ${gap}`,
+      reviewGaps: true,
+      reviewGap: gap,
+    })
+  } catch {
+    // store.error already populated
+  } finally {
+    resuming.value = false
+  }
+}
+
+async function handleReviewGapQuery() {
+  const gap = route.query.review_gap
+  if (!gap) return
+  router.replace({ query: { ...route.query, review_gap: undefined } })
+  await sendReviewSeed(String(gap))
+}
+
+async function onAnswerCheck(index) {
+  try {
+    await store.answerCheck(index)
+  } catch (e) {
+    lastError.value = e
+  }
+}
+
+async function onSkipCheck() {
+  try {
+    await store.skipCheck()
+  } catch (e) {
+    lastError.value = e
+  }
+}
+
+async function onDoneCheck() {
+  try {
+    await store.completeCheck()
+  } catch (e) {
+    lastError.value = e
+  }
+}
+
 function goHome() {
   summaryDialog.value = false
   router.push({ name: 'home' })
@@ -372,7 +596,8 @@ function goHome() {
 }
 
 .session {
-  max-width: 56rem;
+  width: 100%;
+  max-width: 64rem;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
@@ -387,7 +612,7 @@ function goHome() {
   text-transform: uppercase;
   letter-spacing: var(--tracking-label);
   font-weight: 600;
-  color: var(--color-accent);
+  color: var(--color-accent-text);
 }
 
 .topic {
@@ -410,6 +635,10 @@ function goHome() {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  /* Reserve the scrollbar gutter whether or not the chat overflows, so the
+     message column is the same fixed width in every session. Without this, a
+     scrolling session loses ~10px to the scrollbar that a short one keeps. */
+  scrollbar-gutter: stable;
   padding: 0.5rem 0.25rem;
   scrollbar-width: thin;
   scrollbar-color: var(--color-border-strong) transparent;
@@ -487,9 +716,16 @@ function goHome() {
 }
 
 .error {
-  color: var(--signal-error);
+  color: var(--color-error-text);
   margin: 0;
   font-size: var(--fs-caption);
+}
+
+.followup-notice {
+  margin: 0;
+  padding: 0.5rem 0.875rem;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted);
 }
 
 /* End-session summary dialog */
@@ -521,7 +757,7 @@ function goHome() {
 }
 
 :global(.summary-dialog .p-dialog-footer .p-button) {
-  background: var(--accent-coral-500);
+  background: var(--color-accent-strong);
   color: #FFFFFF;
   border: 0;
   border-radius: var(--radius-pill);
@@ -559,7 +795,7 @@ function goHome() {
   font-family: var(--font-sans);
   font-size: 0.875rem;
   font-weight: 600;
-  color: var(--color-accent);
+  color: var(--color-accent-text);
   text-decoration: none;
 }
 
