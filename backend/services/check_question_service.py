@@ -374,7 +374,8 @@ def reconstruct_check_batch(db: Session, msg: ChatMessage, events: list | None =
     None it is loaded once here (single query, not per item).
 
     Pulls question/options/correct_index/explanation from the message's
-    ask_check_questions tool call. selected_index is unknowable -> None.
+    ask_check_questions tool call. selected_index comes from the matched
+    LearningEvent (U-03); None for pre-0013 events that never stored it.
     status = answered if an event matched, else skipped.
 
     Known tradeoff: if the same (gap, question) recurs in a LATER batch that
@@ -409,13 +410,15 @@ def reconstruct_check_batch(db: Session, msg: ChatMessage, events: list | None =
         )
         if ev is not None:
             status, correct = "answered", ev.correct
+            selected = ev.selected_index
         else:
             status, correct = "skipped", None
+            selected = None
         items.append({
             "question": question,
             "options": it.get("options", []),
             "status": status,
-            "selected_index": None,
+            "selected_index": selected,
             "correct_index": it.get("correct_index"),
             "correct": correct,
             "explanation": it.get("explanation"),
