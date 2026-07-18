@@ -84,6 +84,7 @@
       <CheckQuestion
         v-if="store.pendingCheck && !store.detailLoading"
         :check="store.pendingCheck"
+        :busy="store.streamState !== 'idle'"
         @answer="onAnswerCheck"
         @skip="onSkipCheck"
         @next="store.nextCheck"

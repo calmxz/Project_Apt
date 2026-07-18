@@ -525,6 +525,32 @@ describe('session store — streaming', () => {
     expect(s.streamState).toBe('stopping')
   })
 
+  // F-04: both stream starters write through the shared streamingMessage /
+  // abortController, so a second start while one is live would interleave
+  // two SSE streams into a single bubble.
+  it('completeCheck does not start while another stream is live (F-04)', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 's1'
+    s.pendingCheck = { gap: 'g', total: 1, currentIndex: 1, viewIndex: 0, items: [] }
+    s.streamingMessage = { role: 'assistant', content: 'live', tool_calls: [], citations: [] }
+    s.streamState = 'streaming'
+    const spy = vi.spyOn(streamSvc, 'streamCheckComplete').mockResolvedValue(undefined)
+    await s.completeCheck()
+    expect(spy).not.toHaveBeenCalled()
+    expect(s.pendingCheck).not.toBeNull()
+    expect(s.streamingMessage.content).toBe('live')
+  })
+
+  it('sendMessageStreaming refuses to start while another stream is live (F-04)', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 's1'
+    s.streamState = 'streaming'
+    const spy = vi.spyOn(streamSvc, 'streamChat').mockResolvedValue(undefined)
+    const out = await s.sendMessageStreaming({ text: 'x' })
+    expect(out).toBeNull()
+    expect(spy).not.toHaveBeenCalled()
+  })
+
   // F-01: a stream that outlives a session switch must not deliver its
   // output, errors, or notices into the session now being viewed.
   it('a stream that emits done after a session switch delivers nothing (F-01)', async () => {

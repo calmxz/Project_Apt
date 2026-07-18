@@ -5,6 +5,9 @@ const props = defineProps({
   // Batch: { gap, total, currentIndex, viewIndex, items: [
   //   { question, options, status, selectedIndex, correctIndex, correct, explanation } ] }
   check: { type: Object, required: true },
+  // F-04: true while a stream is live; Skip/Next/Done are disabled so the
+  // follow-up stream cannot be started on top of an active one.
+  busy: { type: Boolean, default: false },
 })
 const emit = defineEmits(['answer', 'skip', 'next', 'done'])
 
@@ -60,6 +63,7 @@ function optionClass(i) {
       type="button"
       class="check-skip"
       data-testid="check-skip"
+      :disabled="busy"
       @click="emit('skip')"
     >
       Skip this question
@@ -70,6 +74,7 @@ function optionClass(i) {
       type="button"
       class="check-next"
       data-testid="check-next"
+      :disabled="busy"
       @click="emit('next')"
     >
       Next
@@ -79,6 +84,7 @@ function optionClass(i) {
       type="button"
       class="check-next"
       data-testid="check-done"
+      :disabled="busy"
       @click="emit('done')"
     >
       Done
@@ -155,6 +161,12 @@ function optionClass(i) {
   font-size: 0.8125rem;
   color: var(--color-text-muted);
   cursor: pointer;
+}
+.check-skip:disabled,
+.check-next:disabled {
+  opacity: 0.55;
+  cursor: default;
+  pointer-events: none;
 }
 .check-skip:hover {
   border-color: var(--color-accent);

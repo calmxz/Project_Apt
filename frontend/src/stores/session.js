@@ -393,6 +393,12 @@ export const useSessionStore = defineStore('session', () => {
     const id = currentSessionId.value
     if (!id || !pendingCheck.value) return
     if (checkCompleting.value) return
+    // F-04: never start the follow-up stream while another stream is live --
+    // both write through the shared streamingMessage/abortController, so a
+    // second start would interleave two SSE streams into one bubble and
+    // orphan the first stream's abort handle. The check card stays open, so
+    // Done can be clicked again once the active stream settles.
+    if (streamState.value !== 'idle') return
     checkCompleting.value = true
     pendingCheck.value = null
     streamingMessage.value = { role: 'assistant', content: '', tool_calls: [], citations: [] }
@@ -561,6 +567,8 @@ export const useSessionStore = defineStore('session', () => {
     if (!currentSessionId.value) throw new Error('no active session')
     const trimmed = (text || '').trim()
     if (!trimmed) return null
+    // F-04 (defensive): same single-live-stream invariant as completeCheck.
+    if (streamState.value !== 'idle') return null
     followupNotice.value = null
     messages.value.push({ role: 'user', content: trimmed })
     streamingMessage.value = { role: 'assistant', content: '', tool_calls: [], citations: [] }
