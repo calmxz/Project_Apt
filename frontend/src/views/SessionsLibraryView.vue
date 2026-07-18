@@ -9,9 +9,23 @@ import SessionChips from '@/components/SessionChips.vue'
 const router = useRouter()
 const store = useSessionStore()
 
+// F-06: same guard/catch shape as HomeView.startReview (F-45) -- without
+// the busy guard a double-click issues two resume-creates, and without the
+// catch the store's rethrow escapes as an unhandled rejection (store.error
+// and the errorBus toast already surface the failure).
+const continueBusy = ref(false)
+
 async function continueSession(s) {
-  const created = await store.continueTopic(s)
-  if (created) router.push({ name: 'session', params: { id: created.id } })
+  if (continueBusy.value) return
+  continueBusy.value = true
+  try {
+    const created = await store.continueTopic(s)
+    if (created) router.push({ name: 'session', params: { id: created.id } })
+  } catch {
+    // surfaced via store.error / errorBus
+  } finally {
+    continueBusy.value = false
+  }
 }
 
 const items = ref([])
@@ -199,6 +213,7 @@ defineExpose({ load }) // used by control/pagination tasks
           type="button"
           class="library-continue"
           :data-testid="`library-continue-${s.id}`"
+          :disabled="continueBusy"
           @click="continueSession(s)"
         >
           Continue topic
