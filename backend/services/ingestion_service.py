@@ -24,13 +24,13 @@ unflushed/uncommitted work from this run), then status=failed,
 error=str(exc)[:1000], committed alone.
 
 Embedding spend survives that rollback (final-review fix wave, Finding 1):
-_embed_all's per-batch cost_meter.meter_embedding_response call only flushes
-into this same transaction, so a failure after embeddings were purchased
-(e.g. merge_into_session raising) would otherwise roll back a real vendor
-charge, undercounting it against the daily cap (F-19). run() tracks the
-metered cost per batch in a holder list and, if the run fails, re-records
-the accumulated total on the fresh post-rollback transaction so it commits
-alongside the failure-status update.
+_embed_all's cost_meter.meter_embedding_response calls (deferred until after
+the network loop, B-01) only flush into this same transaction, so a failure
+after embeddings were purchased (e.g. merge_into_session raising) would
+otherwise roll back a real vendor charge, undercounting it against the daily
+cap (F-19). run() tracks the computed cost per batch in a holder list and,
+if the run fails, re-records the accumulated total on the fresh
+post-rollback transaction so it commits alongside the failure-status update.
 """
 
 import io
@@ -139,6 +139,7 @@ def _embed_all(
     even if a later batch in this same call raises -- run() needs that to
     re-record spend after a rollback (see module docstring, Finding 1)."""
     out: list[list[float]] = []
+    pending_meter: list[tuple[object, list[str]]] = []
     for i in range(0, len(texts), EMBED_BATCH):
         batch = texts[i : i + EMBED_BATCH]
         try:
@@ -151,17 +152,30 @@ def _embed_all(
         except Exception as e:
             raise RuntimeError(f"embedding api failed: {e}") from e
         if user_id is not None:
-            # F-19: ingestion is the largest embedding spender; meter it.
-            # Metering only -- NO cap gate here. Ingestion is already
-            # rate-limited at upload time, and failing a document mid-pipeline
-            # for a cap breach would strand it (F-26 territory, Batch 5).
-            cost = cost_meter.meter_embedding_response(
-                db, resp, user_id=user_id, session_id=session_id, texts=batch,
-            )
+            # B-01: cost is computed eagerly (pure arithmetic) so cost_holder
+            # stays accurate if a later batch raises, but the ledger/log
+            # writes are deferred below the loop -- record_cost's upsert
+            # takes a row lock on the user's daily ledger row, and doing it
+            # here would hold that lock across every remaining embedding
+            # HTTP call, blocking the same user's concurrent chat stream.
             if cost_holder is not None:
-                cost_holder.append(cost)
+                try:
+                    cost_holder.append(
+                        cost_meter.embedding_cost(settings.embedding_model, resp, batch)
+                    )
+                except Exception as e:  # noqa: BLE001
+                    log.warning("embedding cost estimate failed: %s", e)
+            pending_meter.append((resp, batch))
         for item in resp.data:
             out.append(item["embedding"] if isinstance(item, dict) else item.embedding)
+    for resp, batch in pending_meter:
+        # F-19: ingestion is the largest embedding spender; meter it.
+        # Metering only -- NO cap gate here. Ingestion is already
+        # rate-limited at upload time, and failing a document mid-pipeline
+        # for a cap breach would strand it (F-26 territory, Batch 5).
+        cost_meter.meter_embedding_response(
+            db, resp, user_id=user_id, session_id=session_id, texts=batch,
+        )
     return out
 
 

@@ -212,3 +212,42 @@ def test_complete_writes_check_batch_to_message(client, db_session, seeded_sessi
     assert data["gap"] == "atp"
     assert data["items"][0]["correct"] is True
     assert check_question_service.get_pending_check(db_session, sid) is None
+
+
+def test_complete_check_claims_batch_under_row_lock(client, db_session, seeded_session, monkeypatch):
+    """B-02 (final review 2026-07-18): two concurrent /check/complete calls
+    both passed the plain-read is_done guard and double-fired the paid
+    follow-up turn. The route must take the session row lock BEFORE reading
+    the batch, so the loser blocks on the winner's clear commit and then
+    re-reads an empty batch (409). SQLite cannot exercise the real race, so
+    this asserts the claim ordering (repo lock-ordering test pattern).
+    """
+    sid = seeded_session.id
+    _resolved_batch(db_session, sid)
+    monkeypatch.setattr(
+        "agent.tutor.run_streaming", _make_fake_run_streaming(db_session, sid)
+    )
+
+    events = []
+    real_lock = profile_service.lock_session_row
+
+    def lock_spy(db, session_id):
+        events.append("lock")
+        return real_lock(db, session_id)
+
+    monkeypatch.setattr(profile_service, "lock_session_row", lock_spy)
+
+    real_get = check_question_service.get_pending_check
+
+    def get_spy(db, session_id):
+        events.append("get")
+        return real_get(db, session_id)
+
+    monkeypatch.setattr(check_question_service, "get_pending_check", get_spy)
+
+    resp = client.post(f"/api/sessions/{sid}/check/complete", json={"user_id": USER_ID})
+    assert resp.status_code == 200
+    assert "lock" in events and "get" in events
+    assert events.index("lock") < events.index("get"), (
+        f"batch read before row lock -- double-fire window open (events={events})"
+    )

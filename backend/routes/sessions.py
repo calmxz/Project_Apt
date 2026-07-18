@@ -532,6 +532,13 @@ async def complete_check(
     if row.ended_at is not None:
         raise HTTPException(status_code=409, detail={"code": "session_ended"})
 
+    # B-02: claim the batch under the session row lock. Two concurrent
+    # /check/complete calls both passed the is_done guard (plain read) and
+    # both fired the paid follow-up turn; with the lock, the loser blocks
+    # until the winner's clear_pending_check commit below releases it, then
+    # re-reads an empty batch and 409s. The lock is released by that same
+    # commit, well before the LLM stream starts.
+    profile_service.lock_session_row(db, session_id)
     pc = check_question_service.get_pending_check(db, session_id)
     if pc is None or not check_question_service.is_done(pc):
         raise HTTPException(status_code=409, detail={"code": "no_resolved_batch"})
