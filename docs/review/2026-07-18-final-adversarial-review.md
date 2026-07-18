@@ -758,4 +758,59 @@ No emoji-as-icons, no purple/indigo gradients, no glassmorphism, no gradient tex
 
 ---
 
+# Post-implementation state (Phase 2/3 close-out, 2026-07-18)
+
+Every fix below carries a regression test proven to fail pre-fix (verified via
+`git stash` of the source change) unless noted. Gates after the final commit:
+backend 793 passed / 5 skipped, frontend 662 passed, `npm run lint` clean,
+contracts codegen drift clean (regenerated with the pinned
+`backend/.venv` datamodel-code-generator 0.68.1).
+
+## Fixed
+
+| ID | Sev | Commit | Fix summary |
+|----|-----|--------|-------------|
+| F-01 | P1 | 7e55220 | Stream ownership guard: `_streamSid` + `_streamSuperseded()` in terminal handlers/error paths/catch blocks; `abandonStream()` called by `loadSession` on id switch and `SessionView` unmount. 5 regression tests. |
+| B-01 | P2 | 46f2bae | Ingestion defers `daily_cost_ledger` writes until after the embedding loop (pending-meter list + eager cost holder) so the row lock is not held across network calls. |
+| B-02 | P2 | 46f2bae | `/check/complete` takes `lock_session_row` before the `get_pending_check` claim; concurrent completes can no longer double-fire the follow-up turn. |
+| F-02 | P2 | b505f3e | `user.setActiveUser` resets the session store on any uid change; token refresh (same uid) untouched. |
+| F-03 | P2 | 0d0f638 | Copy button wired via delegated click on `MarkdownContent` root (v-html cannot carry handlers) + `.code-block-header`/`.code-block-copy` styles; transient "copied" label. |
+| F-04 | P2 | 6276dac | Single-live-stream invariant: `completeCheck`/`sendMessageStreaming` early-return unless `streamState === 'idle'`; check card Skip/Next/Done disabled while streaming (`busy` prop). |
+| F-05 | P2 | fa7c9da | Dedicated `writeError` ref rendered as inline `role=alert` banner; load-path `error` no longer set by write failures, profile stays mounted. |
+| F-06 | P2 | 71866cb | `continueSession` busy guard + disabled button + swallow-catch (HomeView F-45 pattern); `SidebarSessionRow.onContinueTopic` gains the missing catch. |
+| U-01 | P2 | 85a8132 | `MessageList` filters assistant rows with no content/check_batch/tool_calls/citations and no cancelled/partial marker. |
+| U-02 | P2 | 054c63b | Removed `mode="out-in"` + leave transition from both route `RouterView`s (enter-only fade). Mechanism pinned to the out-in gap: SessionView's template renders its header unconditionally, so a blank pane can only be a not-yet-inserted route component; the observed "renders after an unrelated interaction" matches an out-in stall. With no leave phase the blank window cannot exist. No unit test (CSS/transition config); re-verified live below. |
+| U-03 | P2 | f2213e5 | `reconstruct_check_batch` now reads `selected_index` from the matched `LearningEvent` (stored since migration 0013) instead of hardcoding `None`; recap no longer claims "Answer not recorded" on answered items. No contract change needed (`selected_index` already nullable in the schema). Persisted-column path was already correct. |
+| I-01 | P2 | 4256e60 | RUNBOOK step 4 now instructs `VITE_API_BASE_URL` = Render URL **with `/api` appended**, with the 404 consequence spelled out. |
+
+## Escalated (not implemented — out of allowed scope)
+
+- **I-02 (P2)** — `ErrorResponse.detail` is `string` in `docs/api/openapi.yaml` while every structured error path (409/429/413/400/415/507) returns an object the frontend depends on. Fix requires editing the OpenAPI contract + regenerating `backend/contracts/`, which this run was not authorized to do. Recommended follow-up: change `detail` to `oneOf [string, ErrorDetail]` in the YAML, run codegen, and sweep FE `e.body.detail` consumers.
+- **U-04 (P3)** — Google Fonts CDN runtime dependency; self-hosting woff2 assets is a dependency-adjacent change deferred by ground rules.
+
+## Deferred
+
+All 36 P3 findings (B-03..B-13, F-07..F-20, I-02..I-11 minus the escalations above, U-04, U-05) remain open by design — this run's mandate was P1/P2 only. They are fully specified in the finding bodies above for a follow-up batch.
+
+## Live re-verification (Chrome, rebuilt docker stack, 2026-07-18)
+
+Frontend + backend containers rebuilt from the fix branch and re-checked at
+localhost:5173, light and dark themes:
+
+- **U-01 PASS** — Big-O notation session (19 assistant bubbles, the original
+  worst offender with 8 recap turns): 0 empty bubbles. Binary Tree session:
+  0 empty bubbles.
+- **U-02 PASS** — 0-message session ("Introduction to Binary Trees", the
+  original repro) renders header/empty-state/composer immediately on open;
+  in-place reload of a session view also renders immediately.
+- **U-03 PASS** — Binary Tree session (post-migration-0013 events): 3 of 4
+  recap items show the "your answer" tag; the single "Answer not recorded"
+  note sits on a skipped item. Residual: recaps for batches answered BEFORE
+  migration 0013 (e.g. the 2-week-old Glycolysis/Big-O sessions, 21 items)
+  still show the note — those events genuinely never stored a
+  selected_index, which is unrecoverable and matches the documented
+  "None for pre-0013 events" behavior.
+- Dark theme spot-checked on the session view: recap card, correct-option
+  highlight, note, and bubbles all render on the dark ramp correctly.
+
 
