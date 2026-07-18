@@ -1461,12 +1461,27 @@ components:
           maxItems: 3
           items: { $ref: "#/components/schemas/SessionSpend" }
 
+    # I-02: structured errors (409 session_ended / duplicate_topic /
+    # check_conflict, 429 caps, 413/400/415/507 upload) send detail as an
+    # object with a machine-readable `code` plus code-specific extras
+    # (e.g. session_id, soft_cap_usd, resets_at). Plain FastAPI/validation
+    # errors still send a bare string.
+    CodedErrorDetail:
+      type: object
+      additionalProperties: true
+      required: [code]
+      properties:
+        code: { type: string }
+
     ErrorResponse:
       type: object
       additionalProperties: false
       required: [detail]
       properties:
-        detail: { type: string }
+        detail:
+          oneOf:
+            - type: string
+            - $ref: "#/components/schemas/CodedErrorDetail"
 
 # ---------------------------------------------------------------------------
 # SSE event contract reference (vendor extension — not processed by codegen)

@@ -782,11 +782,12 @@ contracts codegen drift clean (regenerated with the pinned
 | U-02 | P2 | 054c63b | Removed `mode="out-in"` + leave transition from both route `RouterView`s (enter-only fade). Mechanism pinned to the out-in gap: SessionView's template renders its header unconditionally, so a blank pane can only be a not-yet-inserted route component; the observed "renders after an unrelated interaction" matches an out-in stall. With no leave phase the blank window cannot exist. No unit test (CSS/transition config); re-verified live below. |
 | U-03 | P2 | f2213e5 | `reconstruct_check_batch` now reads `selected_index` from the matched `LearningEvent` (stored since migration 0013) instead of hardcoding `None`; recap no longer claims "Answer not recorded" on answered items. No contract change needed (`selected_index` already nullable in the schema). Persisted-column path was already correct. |
 | I-01 | P2 | 4256e60 | RUNBOOK step 4 now instructs `VITE_API_BASE_URL` = Render URL **with `/api` appended**, with the 404 consequence spelled out. |
+| I-02 | P2 | (this commit) | `ErrorResponse.detail` is now `oneOf [string, CodedErrorDetail]` in `docs/api/openapi.yaml`; `CodedErrorDetail` requires `code` and allows code-specific extras. Contracts regenerated (pinned 0.68.1); FE consumers already parsed the object shape, no FE change. Approved by user post-review. |
 
-## Escalated (not implemented — out of allowed scope)
+## Escalated
 
-- **I-02 (P2)** — `ErrorResponse.detail` is `string` in `docs/api/openapi.yaml` while every structured error path (409/429/413/400/415/507) returns an object the frontend depends on. Fix requires editing the OpenAPI contract + regenerating `backend/contracts/`, which this run was not authorized to do. Recommended follow-up: change `detail` to `oneOf [string, ErrorDetail]` in the YAML, run codegen, and sweep FE `e.body.detail` consumers.
-- **U-04 (P3)** — Google Fonts CDN runtime dependency; self-hosting woff2 assets is a dependency-adjacent change deferred by ground rules.
+- **I-02 (P2)** — initially escalated (contract edit out of run scope); user approved the fix post-review and it landed on this branch (see Fixed table above).
+- **U-04 (P3)** — Google Fonts CDN runtime dependency; self-hosting woff2 assets is a dependency-adjacent change. User decided: defer.
 
 ## Deferred
 

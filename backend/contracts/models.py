@@ -651,11 +651,18 @@ class UsageSummaryResponse(BaseModel):
     top_sessions: list[SessionSpend] = Field(..., max_length=3)
 
 
+class CodedErrorDetail(BaseModel):
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    code: str
+
+
 class ErrorResponse(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    detail: str
+    detail: str | CodedErrorDetail
 
 
 class AggregateProfileResponse(BaseModel):
