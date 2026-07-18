@@ -645,3 +645,56 @@ def test_reaper_returns_zero_when_nothing_stale(db_session, seeded_session):
 
     _doc(db_session, seeded_session.id, "pending", age_minutes=1)
     assert ingestion_service.reap_stale_pending(db_session) == 0
+
+
+def test_embed_all_defers_ledger_writes_until_after_embedding_loop(db_session, monkeypatch):
+    """B-01 (final review 2026-07-18): record_cost's ledger upsert row-locks
+    the user's (user, day) daily ledger row until the pipeline commit.
+    Metering inside the embedding loop held that lock across every subsequent
+    embedding HTTP call, blocking the same user's concurrent chat stream at
+    record_cost. All ledger/log DB writes must happen only after the last
+    network call; the eager per-batch cost computation (pure arithmetic)
+    still fills cost_holder for the rollback re-record path.
+    """
+    from decimal import Decimal
+
+    from config import settings
+    from services import ingestion_service
+
+    events = []
+
+    def fake_embedding(model, input, **kw):
+        events.append("embed")
+        return SimpleNamespace(
+            data=[{"embedding": [0.1] * settings.embedding_dim} for _ in input]
+        )
+
+    monkeypatch.setattr(
+        "services.ingestion_service.litellm.embedding", fake_embedding
+    )
+    monkeypatch.setattr(
+        "services.cost_meter.embedding_cost",
+        lambda model, resp, texts: Decimal("0.001"),
+    )
+
+    def fake_record_cost(db, user_id, cost):
+        events.append("record")
+        return Decimal("0")
+
+    monkeypatch.setattr("services.cost_meter.record_cost", fake_record_cost)
+
+    texts = ["x"] * (ingestion_service.EMBED_BATCH + 1)  # forces 2 batches
+    holder = []
+    ingestion_service._embed_all(
+        db_session, texts, user_id=USER_ID, session_id=SESSION_ID,
+        cost_holder=holder,
+    )
+
+    assert events.count("embed") == 2
+    assert "record" in events, "metering disappeared entirely"
+    last_embed = len(events) - 1 - events[::-1].index("embed")
+    assert events.index("record") > last_embed, (
+        "ledger write happened inside the embedding loop; row lock held "
+        f"across network calls (events={events})"
+    )
+    assert holder == [Decimal("0.001"), Decimal("0.001")]

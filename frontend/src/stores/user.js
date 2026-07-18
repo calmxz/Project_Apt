@@ -1,6 +1,8 @@
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
 
+import { useSessionStore } from './session.js'
+
 // Phase 7+: identity comes from `useAuthStore` (Supabase JWT). This store
 // only persists local UX preferences -- name + feedback style + onboarding
 // completion -- in a localStorage entry namespaced by Supabase userId so two
@@ -36,6 +38,10 @@ export const useUserStore = defineStore('user', () => {
     if (next === activeUserId.value) return
     activeUserId.value = next
     _clearInMemory()
+    // F-02: an account switch (or sign-out) must not leave the previous
+    // user's sessions/messages/profile state readable by the next account
+    // on the same tab. Token refreshes hit the same-uid early return above.
+    useSessionStore().reset()
     if (next) loadFromLocalStorage()
   }
 

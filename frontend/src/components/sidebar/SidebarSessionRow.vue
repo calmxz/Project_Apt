@@ -94,6 +94,8 @@ async function onContinueTopic() {
     const created = await store.continueTopic(props.session)
     if (created) router.push({ name: 'session', params: { id: created.id } })
     closeDrawer()
+  } catch {
+    /* F-06: store.error populated; without this the rethrow is unhandled */
   } finally {
     busy.value = false
   }

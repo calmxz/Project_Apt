@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, onBeforeUnmount } from 'vue'
 import { renderMarkdown } from '@/lib/markdownRenderer.js'
 import {
   splitSafePrefixIncremental,
@@ -22,10 +22,33 @@ const parts = computed(() => {
   const { safe, deferred } = splitSafePrefixIncremental(props.text, splitState)
   return { safeHtml: renderMarkdown(safe), deferred }
 })
+
+// F-03: the fence renderer emits a [data-copy-button] per code block, but
+// v-html markup can't carry handlers (DOMPurify strips inline ones), so the
+// click is delegated from the component root.
+let _copyResetTimer = null
+onBeforeUnmount(() => clearTimeout(_copyResetTimer))
+
+async function onRootClick(e) {
+  const btn = e.target.closest?.('[data-copy-button]')
+  if (!btn) return
+  const code = btn.closest('pre')?.querySelector('code')
+  if (!code || !navigator.clipboard?.writeText) return
+  try {
+    await navigator.clipboard.writeText(code.textContent)
+  } catch {
+    return // clipboard permission denied; leave the label unchanged
+  }
+  btn.textContent = 'copied'
+  clearTimeout(_copyResetTimer)
+  _copyResetTimer = setTimeout(() => {
+    btn.textContent = 'copy'
+  }, 1500)
+}
 </script>
 
 <template>
-  <div class="markdown-content">
+  <div class="markdown-content" @click="onRootClick">
     <div class="md-rendered" v-html="parts.safeHtml"></div>
     <span v-if="parts.deferred" class="deferred">{{ parts.deferred }}</span>
   </div>
@@ -77,6 +100,30 @@ const parts = computed(() => {
   font-family: var(--font-mono);
   font-size: var(--fs-caption);
   overflow-x: auto;
+}
+.md-rendered :deep(.code-block-header) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+  color: var(--color-text-muted);
+}
+.md-rendered :deep(.code-block-copy) {
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+  border-radius: 3px;
+  padding: 1px 8px;
+  font: inherit;
+  cursor: pointer;
+}
+.md-rendered :deep(.code-block-copy:hover),
+.md-rendered :deep(.code-block-copy:focus-visible) {
+  color: var(--color-text);
+  border-color: var(--color-text-muted);
 }
 .md-rendered :deep(code:not(pre code)) {
   background: var(--color-accent-soft);

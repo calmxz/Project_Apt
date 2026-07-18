@@ -109,6 +109,9 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   async function loadSession(id) {
+    // F-01: switching sessions must not let the previous session's stream
+    // keep running (and billing) or deliver into the incoming transcript.
+    if (id !== currentSessionId.value && abortController.value) abandonStream()
     _latestRequestedId = id
     if (_inflight.has(id)) return _inflight.get(id)
     const p = (async () => {
@@ -390,10 +393,17 @@ export const useSessionStore = defineStore('session', () => {
     const id = currentSessionId.value
     if (!id || !pendingCheck.value) return
     if (checkCompleting.value) return
+    // F-04: never start the follow-up stream while another stream is live --
+    // both write through the shared streamingMessage/abortController, so a
+    // second start would interleave two SSE streams into one bubble and
+    // orphan the first stream's abort handle. The check card stays open, so
+    // Done can be clicked again once the active stream settles.
+    if (streamState.value !== 'idle') return
     checkCompleting.value = true
     pendingCheck.value = null
     streamingMessage.value = { role: 'assistant', content: '', tool_calls: [], citations: [] }
     streamState.value = 'streaming'
+    _streamSid = id
     const ctrl = new AbortController()
     abortController.value = ctrl
     error.value = null
@@ -416,8 +426,10 @@ export const useSessionStore = defineStore('session', () => {
             case 'cancelled': sawTerminal = true; handleCancelled(data.message_id, data.partial_content_chars, data.estimated_cost_usd); break
             case 'followup_skipped':
               sawTerminal = true
-              followupNotice.value =
-                'Daily message limit reached - recap saved, tutor follow-up skipped.'
+              if (!_streamSuperseded()) {
+                followupNotice.value =
+                  'Daily message limit reached - recap saved, tutor follow-up skipped.'
+              }
               streamingMessage.value = null
               streamState.value = 'idle'
               abortController.value = null
@@ -425,7 +437,7 @@ export const useSessionStore = defineStore('session', () => {
             case 'error':
               sawTerminal = true
               _applyCapError(data)
-              error.value = data.message || data.code
+              if (!_streamSuperseded()) error.value = data.message || data.code
               handleAbortError(data.code)
               break
           }
@@ -433,13 +445,14 @@ export const useSessionStore = defineStore('session', () => {
       })
       deltaBatcher.flush()
       if (!sawTerminal) {
-        error.value = 'The tutor stopped responding. Please try again.'
+        if (!_streamSuperseded()) error.value = 'The tutor stopped responding. Please try again.'
         streamingMessage.value = null
         streamState.value = 'idle'
         abortController.value = null
       }
     } catch (e) {
       deltaBatcher.flush()
+      if (_streamSuperseded()) { _clearStreamState(); return }
       if (e?.name === 'AbortError') {
         if (streamingMessage.value) handleCancelled('pending', streamingMessage.value.content.length, '0')
         return
@@ -457,6 +470,30 @@ export const useSessionStore = defineStore('session', () => {
   const streamingMessage = ref(null)
   const streamState = ref('idle') // 'idle' | 'streaming' | 'tool_running' | 'stopping'
   const abortController = ref(null)
+  // F-01: the session id the in-flight stream belongs to. Terminal handlers
+  // compare it against currentSessionId so a stream that outlived a session
+  // switch can never push its output (or errors) into the new session's
+  // transcript. `null` means "no stream may deliver" (abandoned).
+  let _streamSid = null
+
+  function _streamSuperseded() {
+    return _streamSid !== currentSessionId.value
+  }
+
+  function _clearStreamState() {
+    streamingMessage.value = null
+    streamState.value = 'idle'
+    abortController.value = null
+  }
+
+  function abandonStream() {
+    // F-01: silently discard an in-flight stream (session switch / view
+    // unmount). Unlike stopStream -- the user-visible Stop, which persists a
+    // cancelled bubble -- nothing may be pushed into messages or error state.
+    _streamSid = null
+    if (abortController.value) abortController.value.abort()
+    _clearStreamState()
+  }
   const followupNotice = ref(null)
 
   function clearFollowupNotice() {
@@ -486,6 +523,7 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   function finalizeMessage(message_id) {
+    if (_streamSuperseded()) { _clearStreamState(); return }
     if (!streamingMessage.value) return
     messages.value.push({ ...streamingMessage.value, message_id, status: 'complete' })
     streamingMessage.value = null
@@ -494,6 +532,7 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   function handleCancelled(message_id, partial_chars, estimated_cost_usd) {
+    if (_streamSuperseded()) { _clearStreamState(); return }
     if (!streamingMessage.value) return
     messages.value.push({ ...streamingMessage.value, message_id, status: 'cancelled', partial_content_chars: partial_chars, estimated_cost_usd })
     streamingMessage.value = null
@@ -509,6 +548,7 @@ export const useSessionStore = defineStore('session', () => {
   const PARTIAL_ABORT_CODES = new Set(['daily_cost_cap_reached', 'max_iters_reached'])
 
   function handleAbortError(code) {
+    if (_streamSuperseded()) { _clearStreamState(); return }
     if (!streamingMessage.value) return
     if (streamingMessage.value.content) {
       const status = PARTIAL_ABORT_CODES.has(code) ? 'partial' : 'error'
@@ -527,10 +567,13 @@ export const useSessionStore = defineStore('session', () => {
     if (!currentSessionId.value) throw new Error('no active session')
     const trimmed = (text || '').trim()
     if (!trimmed) return null
+    // F-04 (defensive): same single-live-stream invariant as completeCheck.
+    if (streamState.value !== 'idle') return null
     followupNotice.value = null
     messages.value.push({ role: 'user', content: trimmed })
     streamingMessage.value = { role: 'assistant', content: '', tool_calls: [], citations: [] }
     streamState.value = 'streaming'
+    _streamSid = currentSessionId.value
     const ctrl = new AbortController()
     abortController.value = ctrl
     error.value = null
@@ -557,7 +600,7 @@ export const useSessionStore = defineStore('session', () => {
             case 'error':
               sawTerminal = true
               _applyCapError(data)
-              error.value = data.message || data.code
+              if (!_streamSuperseded()) error.value = data.message || data.code
               handleAbortError(data.code)
               break
           }
@@ -565,13 +608,14 @@ export const useSessionStore = defineStore('session', () => {
       })
       deltaBatcher.flush()
       if (!sawTerminal) {
-        error.value = 'The tutor stopped responding. Please try again.'
+        if (!_streamSuperseded()) error.value = 'The tutor stopped responding. Please try again.'
         streamingMessage.value = null
         streamState.value = 'idle'
         abortController.value = null
       }
     } catch (e) {
       deltaBatcher.flush()
+      if (_streamSuperseded()) { _clearStreamState(); return }
       if (e?.name === 'AbortError') {
         if (streamingMessage.value) handleCancelled('pending', streamingMessage.value.content.length, '0')
         return
@@ -652,6 +696,7 @@ export const useSessionStore = defineStore('session', () => {
     handleCancelled,
     handleAbortError,
     stopStream,
+    abandonStream,
     sendMessageStreaming,
     reset,
     libraryLoading,

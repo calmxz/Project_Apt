@@ -30,6 +30,36 @@ describe('MessageList', () => {
     expect(w.findAllComponents(AssistantBubble)[0].props('streaming')).toBe(false)
   })
 
+  // U-01: assistant rows with nothing renderable (no content, no batch, no
+  // tool calls, no citations, not cancelled/partial) painted empty bubbles.
+  it('skips assistant messages with nothing to render (U-01)', () => {
+    const empty = {
+      message_id: 'a-empty', role: 'assistant', content: '',
+      tool_calls: [], citations: [], status: 'complete', check_batch: null,
+    }
+    const w = mount(MessageList, {
+      props: { messages: [userMsg, empty, assistantMsg] },
+    })
+    expect(w.findAllComponents(AssistantBubble)).toHaveLength(1)
+    expect(w.findAllComponents(UserBubble)).toHaveLength(1)
+  })
+
+  it('keeps empty-content assistant rows that carry a marker or attachments (U-01)', () => {
+    const cancelled = {
+      message_id: 'a-c', role: 'assistant', content: '',
+      tool_calls: [], citations: [], status: 'cancelled',
+    }
+    const recap = {
+      message_id: 'a-r', role: 'assistant', content: '',
+      tool_calls: [], citations: [], status: 'complete',
+      check_batch: { gap: 'g', total: 1, items: [] },
+    }
+    const w = mount(MessageList, {
+      props: { messages: [cancelled, recap] },
+    })
+    expect(w.findAllComponents(AssistantBubble)).toHaveLength(2)
+  })
+
   it('streamingMessage renders an extra AssistantBubble with streaming===true', () => {
     const w = mount(MessageList, {
       props: {

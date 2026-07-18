@@ -129,6 +129,33 @@ describe('user store', () => {
     expect(u.onboardingComplete).toBe(true)
   })
 
+  // F-02: sessions/messages of the previous account must not survive a uid
+  // change on the same tab (Sidebar skips its fetch when sessions is
+  // non-empty, so stale rows would render for the next account).
+  it('setActiveUser resets the session store on a uid change (F-02)', async () => {
+    const { useSessionStore } = await import('@/stores/session.js')
+    const u = useUserStore()
+    u.setActiveUser('user-a')
+    const s = useSessionStore()
+    s.sessions = [{ id: 's1', topic: 'secret topic' }]
+    s.currentSessionId = 's1'
+    s.messages = [{ role: 'user', content: 'private' }]
+    u.setActiveUser('user-b')
+    expect(s.sessions).toEqual([])
+    expect(s.currentSessionId).toBeNull()
+    expect(s.messages).toEqual([])
+  })
+
+  it('setActiveUser with the same uid does not reset the session store', async () => {
+    const { useSessionStore } = await import('@/stores/session.js')
+    const u = useUserStore()
+    u.setActiveUser('user-a')
+    const s = useSessionStore()
+    s.sessions = [{ id: 's1' }]
+    u.setActiveUser('user-a') // e.g. a token refresh re-emitting the same uid
+    expect(s.sessions).toEqual([{ id: 's1' }])
+  })
+
   it('setActiveUser(null) clears memory but preserves the persisted blob', async () => {
     const u = useUserStore()
     u.setActiveUser('user-a')
