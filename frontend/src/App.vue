@@ -58,7 +58,7 @@ onBeforeUnmount(() => errorBus.removeEventListener('api-error', onApiError))
       <main id="main-content" class="page">
         <div class="page-inner">
           <RouterView v-slot="{ Component }">
-            <transition name="fade" mode="out-in">
+            <transition name="fade">
               <component :is="Component" />
             </transition>
           </RouterView>
@@ -67,7 +67,7 @@ onBeforeUnmount(() => errorBus.removeEventListener('api-error', onApiError))
     </div>
   </div>
   <RouterView v-else v-slot="{ Component }">
-    <transition name="fade" mode="out-in">
+    <transition name="fade">
       <component :is="Component" />
     </transition>
   </RouterView>
@@ -102,16 +102,15 @@ onBeforeUnmount(() => errorBus.removeEventListener('api-error', onApiError))
   padding: clamp(2rem, 6vw, 4.5rem) clamp(1rem, 4vw, 2.5rem) 4rem;
 }
 
-.fade-enter-active,
-.fade-leave-active {
+/* U-02: enter-only route fade. The former mode="out-in" + leave transition
+   could stall with a fully blank pane until the next re-render (leaving view
+   removed, entering view never inserted) -- with no leave phase and no out-in
+   gap, the old view drops instantly and the new one fades in. */
+.fade-enter-active {
   transition: opacity var(--motion-base) ease, transform var(--motion-base) var(--motion-bounce);
 }
 .fade-enter-from {
   opacity: 0;
   transform: translateY(8px);
-}
-.fade-leave-to {
-  opacity: 0;
-  transform: translateY(-6px);
 }
 </style>
