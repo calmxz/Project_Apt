@@ -244,6 +244,45 @@ describe('SessionProfileView (per-session)', () => {
     expect(wrapper.get('[data-testid="sprof-conflict"]').exists()).toBe(true)
   })
 
+  // F-05: a non-412 write failure used to set the load-path `error`, whose
+  // template branch supplants the whole data branch -- one transient 500
+  // permanently replaced the loaded profile with an error paragraph.
+  it('a failed write shows an inline banner and keeps the profile visible (F-05)', async () => {
+    vi.spyOn(profileApi, 'patchProfile').mockRejectedValueOnce(
+      Object.assign(new Error('boom'), { status: 500 }),
+    )
+    const wrapper = await mountProfile({
+      profile: {
+        mastered_concepts: [{ name: 'loops', evidence_type: 'tested', last_event_at: null }],
+      },
+      etag: 'e0',
+    })
+    await wrapper.get('[data-testid="add-gap"]').setValue('window-fns')
+    await wrapper.get('[data-testid="add-gap-submit"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sprof-write-error"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sprof-mastered"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sprof-error"]').exists()).toBe(false)
+  })
+
+  it('the write-error banner clears on the next write attempt (F-05)', async () => {
+    vi.spyOn(profileApi, 'patchProfile')
+      .mockRejectedValueOnce(Object.assign(new Error('boom'), { status: 500 }))
+      .mockResolvedValueOnce({
+        profile: { mastered_concepts: [], confirmed_gaps: [] },
+        etag: 'e1',
+      })
+    const wrapper = await mountProfile({ etag: 'e0' })
+    await wrapper.get('[data-testid="add-gap"]').setValue('a')
+    await wrapper.get('[data-testid="add-gap-submit"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sprof-write-error"]').exists()).toBe(true)
+    await wrapper.get('[data-testid="add-gap"]').setValue('b')
+    await wrapper.get('[data-testid="add-gap-submit"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sprof-write-error"]').exists()).toBe(false)
+  })
+
   it('review-gaps button routes to the session with review_gap query', async () => {
     const wrapper = await mountProfile({
       profile: {

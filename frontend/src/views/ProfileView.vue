@@ -53,6 +53,9 @@
       <p v-if="conflict" class="conflict" data-testid="sprof-conflict" role="status">
         Profile changed elsewhere — reloaded with the latest.
       </p>
+      <p v-if="writeError" class="error" data-testid="sprof-write-error" role="alert">
+        {{ writeError }}
+      </p>
 
       <div
         v-if="data.profile.focus_target_gap"
@@ -263,6 +266,10 @@ const loading = ref(false)
 const error = ref('')
 const etag = ref('')
 const conflict = ref(false)
+// F-05: write failures get their own ref. Reusing the load-path `error`
+// would swap the whole loaded profile for an error paragraph (the template
+// chain is loading -> error -> data) with no control left to retry.
+const writeError = ref('')
 const newMastered = ref('')
 const newGap = ref('')
 const gapPickerOpen = ref(false)
@@ -295,6 +302,7 @@ async function load() {
 
 async function _applyWrite(fn) {
   conflict.value = false
+  writeError.value = ''
   try {
     const res = await fn()
     data.value = { ...data.value, profile: res.profile }
@@ -304,7 +312,7 @@ async function _applyWrite(fn) {
       conflict.value = true
       await load()
     } else {
-      error.value = friendlyError(e)
+      writeError.value = friendlyError(e)
     }
   }
 }
