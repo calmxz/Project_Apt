@@ -34,7 +34,10 @@ jobs:
       - name: Dump database
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: pg_dump "$DATABASE_URL" -Fc -f dump.pgc
+        # Absolute path: the runner preinstalls postgresql-client-16 and its
+        # /usr/bin/pg_dump wins the PATH race over the pgdg 17 client,
+        # aborting on "server version mismatch" against Postgres 17.
+        run: /usr/lib/postgresql/17/bin/pg_dump "$DATABASE_URL" -Fc -f dump.pgc
 
       - name: Upload and prune
         env:
