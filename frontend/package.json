@@ -22,7 +22,7 @@
     "@vscode/markdown-it-katex": "^1.1.2",
     "dompurify": "^3.4.5",
     "highlight.js": "^11.11.1",
-    "katex": "^0.16.47",
+    "katex": "^0.17.0",
     "markdown-it": "^14.2.0",
     "pinia": "^3.0.4",
     "primeicons": "^7.0.0",
