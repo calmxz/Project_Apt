@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount } from 'vue'
 import { renderMarkdown } from '@/lib/markdownRenderer.js'
 import {
   splitSafePrefixIncremental,
