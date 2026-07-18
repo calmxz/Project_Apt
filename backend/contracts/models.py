@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, RootModel, confloat, conint, constr
+from pydantic import BaseModel, ConfigDict, Field, confloat, conint, constr
 
 
 class ConceptEntry(BaseModel):
@@ -38,8 +38,8 @@ class TopicProfile(BaseModel):
     Per-subtopic knowledge levels keyed by canonicalized (strip+casefold) agent-named subtopic. knowledge_level is the session-wide default for subtopics without an entry.
 
     """
-    confirmed_gaps: list[ConceptEntry] | None = []
-    mastered_concepts: list[ConceptEntry] | None = []
+    confirmed_gaps: list[ConceptEntry] | None = Field([], validate_default=True)
+    mastered_concepts: list[ConceptEntry] | None = Field([], validate_default=True)
     focus_target_gap: str | None = None
     last_session_summary: str | None = None
 
@@ -326,8 +326,8 @@ class Message(BaseModel):
     role: str
     content: str
     created_at: datetime
-    citations: list[Citation] | None = []
-    tool_calls: list[ToolCallRecord] | None = []
+    citations: list[Citation] | None = Field([], validate_default=True)
+    tool_calls: list[ToolCallRecord] | None = Field([], validate_default=True)
     check_batch: PendingCheck | None = None
     status: str | None = None
     """
@@ -469,7 +469,7 @@ class SessionIngestionStatus(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    status: Literal["pending", "ready", "failed"] | None = None
+    status: Literal["pending", "ready", "failed"] | None
     documents: list[DocumentStatus]
 
 
@@ -651,11 +651,18 @@ class UsageSummaryResponse(BaseModel):
     top_sessions: list[SessionSpend] = Field(..., max_length=3)
 
 
+class CodedErrorDetail(BaseModel):
+    model_config = ConfigDict(
+        extra="allow",
+    )
+    code: str
+
+
 class ErrorResponse(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    detail: str
+    detail: str | CodedErrorDetail
 
 
 class AggregateProfileResponse(BaseModel):

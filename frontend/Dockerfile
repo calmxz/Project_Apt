@@ -1,5 +1,5 @@
 # Build stage: compile Vite bundle.
-FROM node:24-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
@@ -18,7 +18,7 @@ ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL \
 RUN npm run build
 
 # Serve stage: lean nginx with SPA fallback + /api proxy.
-FROM nginx:1.31.1-alpine
+FROM nginx:1.31.2-alpine
 # Pull latest alpine patches over the pinned baseline so any CVEs fixed after the
 # image was published are applied. Trivy scan gates merges on CRITICAL CVEs.
 RUN apk --no-cache upgrade

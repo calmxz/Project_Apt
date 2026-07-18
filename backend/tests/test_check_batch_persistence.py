@@ -116,7 +116,7 @@ def test_reconstruct_from_tool_calls_and_event(seeded):
     db.refresh(m)
     # A graded LearningEvent created AFTER the ask.
     db.add(LearningEvent(session_id=SID, gap_tested="atp",
-                         question="Q1?", correct=True))
+                         question="Q1?", correct=True, selected_index=0))
     db.commit()
 
     batch = check_question_service.reconstruct_check_batch(db, m)
@@ -124,9 +124,36 @@ def test_reconstruct_from_tool_calls_and_event(seeded):
     item = batch["items"][0]
     assert item["status"] == "answered"
     assert item["correct"] is True
-    assert item["selected_index"] is None
+    # U-03: the learner's pick is recoverable from the LearningEvent; a None
+    # here made the recap card claim "Answer not recorded" for graded items.
+    assert item["selected_index"] == 0
     assert item["correct_index"] == 0
     assert item["explanation"] == "a is right."
+
+
+def test_reconstruct_pre_0013_event_without_selected_index(seeded):
+    db = seeded
+    m = ChatMessage(
+        session_id=SID, role="assistant", content="",
+        tool_calls_json=_json.dumps([{
+            "name": "ask_check_questions",
+            "args": {"session_id": SID, "gap": "atp", "items": [
+                {"question": "Q1?", "options": ["a", "b"],
+                 "correct_index": 0, "explanation": "a is right."}]},
+            "status": "ok", "error": None,
+        }]),
+    )
+    db.add(m)
+    db.commit()
+    db.refresh(m)
+    # Event predating migration 0013: selected_index was never stored.
+    db.add(LearningEvent(session_id=SID, gap_tested="atp",
+                         question="Q1?", correct=False))
+    db.commit()
+
+    item = check_question_service.reconstruct_check_batch(db, m)["items"][0]
+    assert item["status"] == "answered"
+    assert item["selected_index"] is None
 
 
 def test_reconstruct_skipped_when_no_event(seeded):

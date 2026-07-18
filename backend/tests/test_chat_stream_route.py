@@ -296,7 +296,7 @@ def test_semantic_fallback_escalates_gate(client, monkeypatch):
     )
 
     captured = {}
-    import routes.chat as chat_module
+    from routes import chat as chat_module
 
     real_build = chat_module._build_prompt_state
 

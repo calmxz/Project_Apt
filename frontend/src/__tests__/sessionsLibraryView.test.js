@@ -279,6 +279,54 @@ describe('SessionsLibraryView', () => {
     expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'new-9' } })
   })
 
+  // F-06: same bug class as F-45 in HomeView -- no busy guard meant a
+  // double-click issued two resume-creates, and the store's rethrow escaped
+  // as an unhandled rejection.
+  it('double-clicking Continue topic creates only one resume session (F-06)', async () => {
+    const { useSessionStore } = await import('@/stores/session.js')
+    const store = useSessionStore()
+    let resolve
+    const continueTopicSpy = vi
+      .spyOn(store, 'continueTopic')
+      .mockImplementation(() => new Promise((r) => { resolve = r }))
+    sessionsApi.getSessionLibrary.mockResolvedValue(page([
+      item('z', { ended_at: '2026-06-02T00:00:00Z' }),
+    ]))
+    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+    await flushPromises()
+    const btn = wrapper.get('[data-testid="library-continue-z"]')
+    await btn.trigger('click')
+    await btn.trigger('click')
+    resolve({ id: 'new-1' })
+    await flushPromises()
+    expect(continueTopicSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('a failed Continue topic does not escape as an unhandled rejection (F-06)', async () => {
+    const { useSessionStore } = await import('@/stores/session.js')
+    const store = useSessionStore()
+    vi.spyOn(store, 'continueTopic').mockRejectedValue(new Error('backend down'))
+    sessionsApi.getSessionLibrary.mockResolvedValue(page([
+      item('z', { ended_at: '2026-06-02T00:00:00Z' }),
+    ]))
+    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+    await flushPromises()
+    const rejections = []
+    const onUnhandled = (e) => { rejections.push(e); e.preventDefault() }
+    window.addEventListener('unhandledrejection', onUnhandled)
+    try {
+      await wrapper.get('[data-testid="library-continue-z"]').trigger('click')
+      await flushPromises()
+      await new Promise((r) => setTimeout(r, 0))
+    } finally {
+      window.removeEventListener('unhandledrejection', onUnhandled)
+    }
+    expect(rejections).toHaveLength(0)
+    expect(push).not.toHaveBeenCalled()
+    // The button is usable again for a retry.
+    expect(wrapper.get('[data-testid="library-continue-z"]').element.disabled).toBe(false)
+  })
+
   it('labels the ended-card action Continue topic', async () => {
     sessionsApi.getSessionLibrary.mockResolvedValue(page([
       item('z', { ended_at: '2026-06-02T00:00:00Z' }),

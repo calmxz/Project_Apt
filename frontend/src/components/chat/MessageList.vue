@@ -1,18 +1,38 @@
 <script setup>
+import { computed } from 'vue'
+
 import UserBubble from './UserBubble.vue'
 import AssistantBubble from './AssistantBubble.vue'
 
-defineProps({
+const props = defineProps({
   messages: { type: Array, required: true },
   streamingMessage: { type: Object, default: null },
   awaiting: { type: Boolean, default: false },
 })
+
+// U-01: history can contain assistant rows with nothing to show (e.g. a
+// turn whose only output was tool activity that persisted no text).
+// AssistantBubble would render them as an empty bubble, so they are
+// skipped. Cancelled/partial rows keep their marker even without text.
+function _renderable(m) {
+  if (m.role === 'user') return true
+  return Boolean(
+    m.content ||
+      m.check_batch ||
+      m.tool_calls?.length ||
+      m.citations?.length ||
+      m.status === 'cancelled' ||
+      m.status === 'partial',
+  )
+}
+
+const visibleMessages = computed(() => props.messages.filter(_renderable))
 </script>
 
 <template>
   <div class="message-list" aria-live="polite" aria-atomic="false">
     <TransitionGroup name="msg-fade" tag="div" class="msg-list">
-      <template v-for="(m, i) in messages" :key="m.message_id || `m-${i}`">
+      <template v-for="(m, i) in visibleMessages" :key="m.message_id || `m-${i}`">
         <UserBubble v-if="m.role === 'user'" :content="m.content || ''" />
         <AssistantBubble v-else :message="m" :streaming="false" />
       </template>

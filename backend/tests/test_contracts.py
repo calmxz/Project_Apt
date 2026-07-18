@@ -369,3 +369,39 @@ def test_profile_patch_request_subtopic_fields():
     b = ProfilePatchRequest(subtopic="chain rule", subtopic_level="advanced")
     assert b.subtopic == "chain rule"
     assert b.subtopic_level == "advanced"
+
+
+# I-02: ErrorResponse.detail must accept BOTH shapes the backend actually
+# sends -- a bare string (plain FastAPI/validation errors) and a coded
+# object with code-specific extras (caps, session_ended, duplicate_topic,
+# upload errors).
+def test_error_response_detail_accepts_string():
+    from contracts import ErrorResponse
+
+    e = ErrorResponse.model_validate({"detail": "not found"})
+    assert e.detail == "not found"
+
+
+def test_error_response_detail_accepts_coded_object_with_extras():
+    from contracts import CodedErrorDetail, ErrorResponse
+
+    e = ErrorResponse.model_validate({
+        "detail": {
+            "code": "daily_cost_cap_reached",
+            "soft_cap_usd": "2.00",
+            "hard_cap_usd": "3.00",
+            "used_usd": "3.01",
+            "resets_at": "2026-01-02T00:00:00Z",
+        }
+    })
+    assert isinstance(e.detail, CodedErrorDetail)
+    assert e.detail.code == "daily_cost_cap_reached"
+    d = e.detail.model_dump()
+    assert d["soft_cap_usd"] == "2.00"
+
+
+def test_error_response_detail_object_requires_code():
+    from contracts import ErrorResponse
+
+    with pytest.raises(ValidationError):
+        ErrorResponse.model_validate({"detail": {"session_id": "abc"}})

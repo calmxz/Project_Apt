@@ -44,7 +44,9 @@ Copy the service URL, e.g. `https://crux-api.onrender.com`.
 2. Set **Root Directory** to `frontend/`.
 3. Framework preset: Vite (auto). Build/output come from `vercel.json`.
 4. Add build env vars:
-   - `VITE_API_BASE_URL` = the Render URL from step 3
+   - `VITE_API_BASE_URL` = the Render URL from step 3 **with `/api` appended**,
+     e.g. `https://crux-api.onrender.com/api` (the frontend does not add the
+     prefix itself; without it every API call 404s)
    - `VITE_SUPABASE_URL` = your Supabase URL
    - `VITE_SUPABASE_PUBLISHABLE_KEY` = your Supabase publishable key
 5. Deploy.

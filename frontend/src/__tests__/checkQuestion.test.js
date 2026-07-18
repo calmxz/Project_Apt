@@ -50,4 +50,16 @@ describe('CheckQuestion batch', () => {
     await w.find('[data-testid="check-next"]').trigger('click')
     expect(w.emitted('next')).toBeTruthy()
   })
+
+  // F-04: while a stream is live, Skip/Next/Done must be disabled so the
+  // follow-up stream cannot be started on top of the active one.
+  it('busy disables Skip and Done (F-04)', () => {
+    const b = batch({ total: 1, currentIndex: 1, viewIndex: 0,
+      items: [{ question: 'Q1', options: ['a', 'b'], status: 'answered',
+                selectedIndex: 0, correctIndex: 0, correct: true, explanation: 'a.' }] })
+    const done = mount(CheckQuestion, { props: { check: b, busy: true } })
+    expect(done.find('[data-testid="check-done"]').element.disabled).toBe(true)
+    const pending = mount(CheckQuestion, { props: { check: batch(), busy: true } })
+    expect(pending.find('[data-testid="check-skip"]').element.disabled).toBe(true)
+  })
 })
