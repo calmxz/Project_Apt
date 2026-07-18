@@ -524,4 +524,87 @@ describe('session store — streaming', () => {
     expect(abort).toHaveBeenCalled()
     expect(s.streamState).toBe('stopping')
   })
+
+  // F-01: a stream that outlives a session switch must not deliver its
+  // output, errors, or notices into the session now being viewed.
+  it('a stream that emits done after a session switch delivers nothing (F-01)', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 's1'
+    let emit, finish
+    vi.spyOn(streamSvc, 'streamChat').mockImplementation(
+      ({ onEvent }) => new Promise((resolve) => { emit = onEvent; finish = resolve }),
+    )
+    const p = s.sendMessageStreaming({ text: 'q' })
+    emit({ event: 'assistant_delta', data: { text: 'late reply' } })
+    s.currentSessionId = 's2' // user switched sessions mid-stream
+    emit({ event: 'done', data: { message_id: 'm-late' } })
+    finish()
+    await p
+    expect(s.messages.some((m) => m.message_id === 'm-late')).toBe(false)
+    expect(s.messages.some((m) => m.role === 'assistant')).toBe(false)
+    expect(s.streamingMessage).toBeNull()
+    expect(s.streamState).toBe('idle')
+  })
+
+  it('a superseded stream error does not surface over the new session (F-01)', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 's1'
+    let emit, finish
+    vi.spyOn(streamSvc, 'streamChat').mockImplementation(
+      ({ onEvent }) => new Promise((resolve) => { emit = onEvent; finish = resolve }),
+    )
+    const p = s.sendMessageStreaming({ text: 'q' })
+    s.currentSessionId = 's2'
+    emit({ event: 'error', data: { code: 'llm_failed', message: 'boom' } })
+    finish()
+    await p
+    expect(s.error).toBeNull()
+    expect(s.messages.some((m) => m.role === 'assistant')).toBe(false)
+    expect(s.streamState).toBe('idle')
+  })
+
+  it('abandonStream aborts silently without persisting a cancelled bubble (F-01)', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 's1'
+    vi.spyOn(streamSvc, 'streamChat').mockImplementation(
+      ({ signal }) =>
+        new Promise((_res, rej) => {
+          signal.addEventListener('abort', () =>
+            rej(Object.assign(new Error('aborted'), { name: 'AbortError' })),
+          )
+        }),
+    )
+    const p = s.sendMessageStreaming({ text: 'q' })
+    s.abandonStream()
+    await p
+    expect(s.messages.some((m) => m.role === 'assistant')).toBe(false)
+    expect(s.messages.some((m) => m.status === 'cancelled')).toBe(false)
+    expect(s.error).toBeNull()
+    expect(s.streamState).toBe('idle')
+    expect(s.streamingMessage).toBeNull()
+  })
+
+  it('loadSession to a different id abandons the in-flight stream (F-01)', async () => {
+    sessionsApi.getSession.mockResolvedValueOnce({ id: 's2', messages: [] })
+    const s = useSessionStore()
+    s.currentSessionId = 's1'
+    const abort = vi.fn()
+    s.abortController = { abort }
+    s.streamingMessage = { role: 'assistant', content: 'x', tool_calls: [], citations: [] }
+    s.streamState = 'streaming'
+    await s.loadSession('s2')
+    expect(abort).toHaveBeenCalled()
+    expect(s.streamingMessage).toBeNull()
+    expect(s.messages.some((m) => m.role === 'assistant')).toBe(false)
+  })
+
+  it('loadSession with the same id does not abort the in-flight stream', async () => {
+    sessionsApi.getSession.mockResolvedValueOnce({ id: 's1', messages: [] })
+    const s = useSessionStore()
+    s.currentSessionId = 's1'
+    const abort = vi.fn()
+    s.abortController = { abort }
+    await s.loadSession('s1')
+    expect(abort).not.toHaveBeenCalled()
+  })
 })

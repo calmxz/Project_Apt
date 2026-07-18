@@ -297,6 +297,10 @@ onUnmounted(() => costBus.removeEventListener('cost-warning', onCostWarning))
 onMounted(() => document.body.classList.add('chat-locked'))
 onUnmounted(() => document.body.classList.remove('chat-locked'))
 
+// F-01: leaving the session view must not leave a stream running (and
+// billing) in the background, nor let it deliver into a later session.
+onUnmounted(() => store.abandonStream())
+
 // Show the "typing" placeholder when we've appended the user message but the
 // tutor reply hasn't arrived yet. Driven by `sending` rather than `store.loading`
 // so list-load spinners don't flicker the placeholder.
