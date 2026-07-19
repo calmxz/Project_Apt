@@ -232,8 +232,9 @@ async def _prepare_turn(
         retrieval_required = keyword_index.match_required(
             req.message, json.loads(session.kw_index_json or "[]")
         )
+        query_vec = None
         if not retrieval_required:
-            retrieval_required = await retrieval_service.semantic_fallback_required(
+            retrieval_required, query_vec = await retrieval_service.semantic_fallback_required(
                 db, req.session_id, req.message, user_id=user_id,
                 cost_holder=embed_cost_holder,
             )
@@ -242,7 +243,7 @@ async def _prepare_turn(
         if retrieval_required:
             prefetched_chunks = await retrieval_service.prefetch_for_prompt(
                 db, req.session_id, user_id, req.message,
-                cost_holder=embed_cost_holder,
+                query_vec=query_vec, cost_holder=embed_cost_holder,
             )
 
         prompt_state = _build_prompt_state(

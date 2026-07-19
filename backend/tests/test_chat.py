@@ -117,7 +117,7 @@ def test_prepare_turn_failure_rerecords_embedding_spend(client, db_session, monk
     async def fake_fallback(db, sid, msg, *, user_id=None, cost_holder=None):
         if cost_holder is not None:
             cost_holder.append(Decimal("0.5"))
-        return False
+        return False, None
 
     monkeypatch.setattr(
         "routes.chat.retrieval_service.semantic_fallback_required", fake_fallback

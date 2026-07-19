@@ -110,6 +110,7 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
 
 async def prefetch_for_prompt(
     db: Session, session_id: str, user_id: str, query: str, k: int = 5,
+    query_vec: list | None = None,
     cost_holder: list | None = None,
 ) -> list[dict] | None:
     """F-56: server-side retrieval for REQUIRED turns. The REQUIRED flag was
@@ -122,26 +123,31 @@ async def prefetch_for_prompt(
     B-08: cost_holder, if given, collects the metered Decimal cost so a
     caller whose own transaction later rolls back (_prepare_turn) can
     re-record the real vendor spend on a fresh transaction.
+
+    B-09: query_vec, if given, is the vector semantic_fallback_required
+    already embedded for this same query -- reuse it instead of embedding
+    again (that spend was already metered by the fallback call).
     """
     try:
         if not documents_service.has_ready_document(db, session_id):
             return None
-        resp = await litellm.aembedding(
-            model=settings.embedding_model,
-            input=[query],
-            dimensions=settings.embedding_dim,
-            timeout=settings.embedding_timeout_s,
-        )
-        query_vec = (
-            resp.data[0]["embedding"]
-            if isinstance(resp.data[0], dict)
-            else resp.data[0].embedding
-        )
-        cost = cost_meter.meter_embedding_response(
-            db, resp, user_id=user_id, session_id=session_id, texts=[query],
-        )
-        if cost_holder is not None:
-            cost_holder.append(cost)
+        if query_vec is None:
+            resp = await litellm.aembedding(
+                model=settings.embedding_model,
+                input=[query],
+                dimensions=settings.embedding_dim,
+                timeout=settings.embedding_timeout_s,
+            )
+            query_vec = (
+                resp.data[0]["embedding"]
+                if isinstance(resp.data[0], dict)
+                else resp.data[0].embedding
+            )
+            cost = cost_meter.meter_embedding_response(
+                db, resp, user_id=user_id, session_id=session_id, texts=[query],
+            )
+            if cost_holder is not None:
+                cost_holder.append(cost)
         hits = pgvector_store.query_chunks(
             db, session_id=session_id, query_embedding=query_vec, k=k
         )
@@ -164,7 +170,7 @@ async def prefetch_for_prompt(
 async def semantic_fallback_required(
     db: Session, session_id: str, query: str, *, user_id: str | None = None,
     cost_holder: list | None = None,
-) -> bool:
+) -> tuple[bool, list[float] | None]:
     """D2.2: escalate the OPTIONAL lexical gate when the query is semantically
     close to the session's uploaded material (paraphrase/acronym misses that
     the stem overlap cannot catch). Best-effort by design: any failure keeps
@@ -180,15 +186,20 @@ async def semantic_fallback_required(
     re-record the real vendor spend on a fresh transaction.
 
     F-18: async embedding; this runs directly on the event loop in _prepare_turn.
+
+    B-09: also returns the embedded query vector (None whenever the
+    embedding call never ran) so a caller that goes on to call
+    prefetch_for_prompt can hand it back in and skip a second, identical
+    embed for the same query.
     """
     if settings.llm_stub_enabled:
-        return False
+        return False, None
     try:
         if not documents_service.has_ready_document(db, session_id):
-            return False
+            return False, None
         centroid = _session_centroid(db, session_id)
         if centroid is None:
-            return False
+            return False, None
         resp = await litellm.aembedding(
             model=settings.embedding_model,
             input=[query],
@@ -207,7 +218,10 @@ async def semantic_fallback_required(
             if cost_holder is not None:
                 cost_holder.append(cost)
         sim = _cosine_similarity(list(query_vec), centroid)
-        return sim >= settings.retrieval_fallback_threshold
+        # B-09: hand the vector back so prefetch_for_prompt can skip its
+        # identical embed (2x cost + one extra round-trip on every
+        # fallback-required turn otherwise).
+        return sim >= settings.retrieval_fallback_threshold, list(query_vec)
     except Exception as e:
         log.warning("semantic fallback check failed; keeping OPTIONAL: %s", e)
-        return False
+        return False, None

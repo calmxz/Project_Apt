@@ -53,7 +53,7 @@ def _stub_semantic_fallback(monkeypatch):
     # since seeded_session has no kw_index_json entries). Pin it off so this
     # test measures _prepare_turn regardless of ambient LLM-stub config.
     async def _fake_fallback(*a, **kw):
-        return False
+        return False, None
 
     monkeypatch.setattr(
         "routes.chat.retrieval_service.semantic_fallback_required",

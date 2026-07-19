@@ -289,7 +289,7 @@ def test_semantic_fallback_escalates_gate(client, monkeypatch):
     async def fake_fallback(db, session_id, query, *, user_id=None, cost_holder=None):
         calls["args"] = (session_id, query)
         calls["user_id"] = user_id
-        return True
+        return True, None
 
     monkeypatch.setattr(
         "routes.chat.retrieval_service.semantic_fallback_required", fake_fallback

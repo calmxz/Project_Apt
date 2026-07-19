@@ -37,10 +37,11 @@ def test_fallback_uses_aembedding(monkeypatch, db_session):
         "services.retrieval_service._session_centroid",
         lambda db, sid: [0.0] * 768,
     )
-    result = asyncio.run(
+    result, vec = asyncio.run(
         retrieval_service.semantic_fallback_required(db_session, "nosuch", "q")
     )
     assert called.get("hit") is True
     # Zero query vector vs zero centroid -> cosine similarity is 0.0 (the
     # zero-norm guard), which is below the fallback threshold -> False.
     assert result is False
+    assert vec == [0.0] * 768
