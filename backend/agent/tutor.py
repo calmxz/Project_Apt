@@ -570,15 +570,20 @@ async def run_streaming(
             ctx.db.rollback()  # the session may hold a failed transaction
         except Exception as rb_err:
             log.warning("rollback after agent-loop failure failed: %s", rb_err)
-        # Deferred F-03 item: the rollback above discards this turn's
-        # uncommitted ledger flushes, so re-estimate the WHOLE turn (all
-        # snapshots), not just the unbilled tail. Overcounts if a mid-turn
-        # tool commit already published earlier increments -- conservative
-        # in the cap's favor. The same rollback also discards any in-turn
-        # retrieval-embedding metering on ctx.db, which this re-estimate does
-        # not account for (it only re-tokenizes chat prompt snapshots) -- a
-        # known, negligible undercount (~$0.0005/query) opposite the
-        # accepted completion overcount above.
+        # Deferred F-03 item: re-estimate the WHOLE turn (all snapshots), not
+        # just the unbilled tail. Since B-10's loop-top commit before each
+        # acompletion, completed iterations' real costs are already published
+        # and survive the rollback above, so for errored multi-iteration turns
+        # this whole-turn re-estimate double-counts those iterations as the
+        # NORMAL case -- deliberately retained as conservative in the cap's
+        # favor (overcount only shortens the user's own daily budget; no card
+        # billing). Tail-only would undercount the one iteration whose
+        # record_cost ran but was rolled back before the next loop-top commit;
+        # reconciling the two error arms is a tracked follow-up. The rollback
+        # also discards any in-turn retrieval-embedding metering on ctx.db,
+        # which this re-estimate does not account for (it only re-tokenizes
+        # chat prompt snapshots) -- a known, negligible undercount
+        # (~$0.0005/query) opposite the accepted completion overcount above.
         _record_partial_cost(
             ctx,
             iter_prompt_snapshots,
