@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     r2_access_key_id: str = ""
     r2_secret_access_key: str = ""
     r2_bucket: str = ""
+    # B-10: pool sizing must respect Render instance + Supabase pooler client
+    # limits; env-tunable so the deploy can be sized without a code change.
+    db_pool_size: int = 5
+    db_max_overflow: int = 5
     llm_stub: bool = False
     debug_timing: bool = False
     cors_origins: str = "http://localhost:5173"
