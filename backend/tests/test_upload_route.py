@@ -6,7 +6,7 @@ import pytest
 from fastapi import HTTPException
 
 from contracts import TopicProfile
-from db.models import Document, Session as SessionModel, User
+from db.models import Document, Session as SessionModel, User, UsageCounter
 from routes.upload import _read_bounded
 
 
@@ -380,3 +380,25 @@ def test_upload_writes_through_object_store(client, seeded, db_session, monkeypa
     assert r.status_code == 202
     doc_id = r.json()["document_id"]
     assert store.puts == [(f"{doc_id}_notes.pdf", b"%PDF-fake")]
+
+
+def test_bad_extension_does_not_burn_slot(client, seeded, db_session):
+    resp = client.post(
+        "/api/upload",
+        data={"user_id": USER_ID, "session_id": SESSION_ID},
+        files={"file": ("notes.exe", io.BytesIO(b"MZ"), "application/octet-stream")},
+    )
+    assert resp.status_code == 400
+    count = db_session.query(UsageCounter).filter_by(user_id=USER_ID).count()
+    assert count == 0
+
+
+def test_foreign_session_does_not_burn_slot(client, seeded, db_session):
+    resp = client.post(
+        "/api/upload",
+        data={"user_id": USER_ID, "session_id": "not_yours"},
+        files={"file": ("notes.pdf", io.BytesIO(b"%PDF-1.4 x"), "application/pdf")},
+    )
+    assert resp.status_code == 404
+    count = db_session.query(UsageCounter).filter_by(user_id=USER_ID).count()
+    assert count == 0

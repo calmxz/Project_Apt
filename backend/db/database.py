@@ -17,17 +17,28 @@ def _normalized_url(url: str) -> str:
     return url
 
 
+def _build_engine_kwargs(url: str) -> dict:
+    kwargs: dict = {}
+    if url.startswith("sqlite:"):
+        kwargs["connect_args"] = {"check_same_thread": False}
+    else:
+        # Supabase transaction-mode pooler (port 6543) multiplexes backends across
+        # clients. psycopg3 names prepared statements `_pg3_N` per connection and
+        # collides when the pooler hands the same backend to a new client. Disable
+        # statement prepare entirely. See psycopg docs §"Pgbouncer".
+        kwargs["connect_args"] = {"prepare_threshold": None}
+        # B-10: detect dead pooled connections after idle (pre_ping) and make
+        # pool sizing explicit + env-tunable instead of SQLAlchemy defaults.
+        kwargs["pool_pre_ping"] = True
+        kwargs["pool_size"] = settings.db_pool_size
+        kwargs["max_overflow"] = settings.db_max_overflow
+        kwargs["pool_recycle"] = 1800
+    return kwargs
+
+
 _db_url = _normalized_url(settings.database_url)
 _is_sqlite = _db_url.startswith("sqlite:")
-_engine_kwargs: dict = {}
-if _is_sqlite:
-    _engine_kwargs["connect_args"] = {"check_same_thread": False}
-else:
-    # Supabase transaction-mode pooler (port 6543) multiplexes backends across
-    # clients. psycopg3 names prepared statements `_pg3_N` per connection and
-    # collides when the pooler hands the same backend to a new client. Disable
-    # statement prepare entirely. See psycopg docs §"Pgbouncer".
-    _engine_kwargs["connect_args"] = {"prepare_threshold": None}
+_engine_kwargs = _build_engine_kwargs(_db_url)
 
 engine = create_engine(_db_url, **_engine_kwargs)
 

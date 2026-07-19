@@ -71,18 +71,6 @@ def upload_file(
     user_id: str = Depends(current_user_id),
     db: Session = Depends(get_db),
 ):
-    allowed, used = rate_limit.check_and_increment(db, user_id)
-    if not allowed:
-        raise HTTPException(
-            status_code=429,
-            detail={
-                "code": DAILY_CAP_REACHED,
-                "cap": settings.daily_cap,
-                "used": used,
-                "resets_at": rate_limit.midnight_utc_iso(),
-            },
-        )
-
     content_length = request.headers.get("content-length")
     if content_length is not None:
         try:
@@ -107,6 +95,22 @@ def upload_file(
     sess = db.get(SessionModel, session_id)
     if sess is None or sess.user_id != user_id:
         raise HTTPException(status_code=404, detail="session not found")
+
+    # B-07: rate limit only after extension + ownership pass, mirroring
+    # _prepare_turn's guard order - a rejected upload must not consume a
+    # daily slot. Ownership-before-increment also guarantees the users row
+    # exists for the usage_counters FK (owning a session implies it).
+    allowed, used = rate_limit.check_and_increment(db, user_id)
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code": DAILY_CAP_REACHED,
+                "cap": settings.daily_cap,
+                "used": used,
+                "resets_at": rate_limit.midnight_utc_iso(),
+            },
+        )
 
     raw_name = Path(file.filename or "upload.pdf").name
     safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", raw_name)
