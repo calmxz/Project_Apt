@@ -40,20 +40,20 @@
           type="submit"
           class="save-btn"
           data-testid="settings-save"
-          :disabled="!dirty"
+          :disabled="!dirty || saving"
         >
           <i class="pi pi-check" aria-hidden="true" />
           <span>Save preferences</span>
         </button>
-        <span
-          v-if="savedFlash"
-          class="saved-flash"
-          data-testid="settings-saved"
-        >
+        <span v-if="savedFlash" class="saved-flash" data-testid="settings-saved">
           <i class="pi pi-check-circle" aria-hidden="true" />
           Saved.
         </span>
       </div>
+
+      <p v-if="saveError" class="error" role="alert" data-testid="settings-error">
+        {{ saveError }}
+      </p>
     </form>
 
     <section class="card" data-testid="settings-appearance">
@@ -81,11 +81,7 @@
       </div>
     </section>
 
-    <section
-      v-if="authStore.isAuthenticated"
-      class="card"
-      data-testid="settings-security"
-    >
+    <section v-if="authStore.isAuthenticated" class="card" data-testid="settings-security">
       <h2 class="card-title">
         <i class="pi pi-lock card-icon" aria-hidden="true" />
         Security
@@ -153,12 +149,7 @@
       class="signout"
       data-testid="settings-signout-section"
     >
-      <button
-        type="button"
-        class="signout-btn"
-        data-testid="settings-sign-out"
-        @click="signOut"
-      >
+      <button type="button" class="signout-btn" data-testid="settings-sign-out" @click="signOut">
         <i class="pi pi-sign-out" aria-hidden="true" />
         <span>Sign out</span>
       </button>
@@ -189,6 +180,7 @@ import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 import FeedbackStylePicker from '../components/FeedbackStylePicker.vue'
+import { friendlyError } from '@/lib/errors.js'
 import { useUserStore } from '../stores/user.js'
 import { useAuthStore } from '../stores/auth.js'
 import { useTheme } from '../composables/useTheme.js'
@@ -212,11 +204,12 @@ const feedbackOptions = [
 const displayName = ref(user.name || '')
 const feedback = ref(user.interactionPreferences?.feedback || 'hints')
 const savedFlash = ref(false)
+const saving = ref(false)
+const saveError = ref(null)
 
 const dirty = computed(() => {
   const nameChanged = (displayName.value || '').trim() !== (user.name || '')
-  const feedbackChanged =
-    feedback.value !== (user.interactionPreferences?.feedback || 'hints')
+  const feedbackChanged = feedback.value !== (user.interactionPreferences?.feedback || 'hints')
   return nameChanged || feedbackChanged
 })
 
@@ -225,9 +218,20 @@ watch([displayName, feedback], () => {
 })
 
 async function save() {
-  await user.updateProfile({ name: displayName.value, feedback: feedback.value })
-  savedFlash.value = true
-  showSuccess('Preferences saved.')
+  if (!dirty.value || saving.value) return
+  saving.value = true
+  saveError.value = null
+  try {
+    await user.updateProfile({ name: displayName.value, feedback: feedback.value })
+    savedFlash.value = true
+    showSuccess('Preferences saved.')
+  } catch (e) {
+    // F-11: inline surface (LoginView pattern); the errorBus toast alone
+    // left the form frozen with no explanation and an unhandled rejection.
+    saveError.value = friendlyError(e)
+  } finally {
+    saving.value = false
+  }
 }
 
 const pwCurrent = ref('')
@@ -237,14 +241,9 @@ const pwError = ref('')
 const pwSuccess = ref(false)
 const pwSubmitting = ref(false)
 
-const pwMismatch = computed(
-  () => pwConfirm.value.length > 0 && pwConfirm.value !== pwNew.value,
-)
+const pwMismatch = computed(() => pwConfirm.value.length > 0 && pwConfirm.value !== pwNew.value)
 const pwCanSubmit = computed(
-  () =>
-    pwCurrent.value.length > 0 &&
-    pwNew.value.length >= 8 &&
-    pwNew.value === pwConfirm.value,
+  () => pwCurrent.value.length > 0 && pwNew.value.length >= 8 && pwNew.value === pwConfirm.value,
 )
 
 async function changePassword() {
@@ -323,7 +322,9 @@ async function signOut() {
   color: var(--color-text-muted);
 }
 
-.muted { color: var(--color-text-muted); }
+.muted {
+  color: var(--color-text-muted);
+}
 
 .form {
   display: flex;
@@ -383,7 +384,9 @@ async function signOut() {
   color: var(--color-heading);
   font-family: var(--font-sans);
   font-size: 1rem;
-  transition: border-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease;
+  transition:
+    border-color var(--motion-fast) ease,
+    box-shadow var(--motion-fast) ease;
 }
 
 .input::placeholder {
@@ -418,17 +421,22 @@ async function signOut() {
   padding: 0.75rem 1.5rem;
   border-radius: var(--radius-pill);
   background: var(--color-accent-strong);
-  color: #FFFFFF;
+  color: #ffffff;
   border: 0;
   font-family: var(--font-sans);
   font-weight: 600;
   font-size: 0.9375rem;
   cursor: pointer;
   box-shadow: var(--shadow-pop);
-  transition: transform var(--motion-fast) var(--motion-bounce), box-shadow var(--motion-fast) ease, opacity var(--motion-fast) ease;
+  transition:
+    transform var(--motion-fast) var(--motion-bounce),
+    box-shadow var(--motion-fast) ease,
+    opacity var(--motion-fast) ease;
 }
 
-.save-btn:hover:not(:disabled) { transform: translateY(-2px); }
+.save-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
 
 .save-btn:active:not(:disabled) {
   transform: translateY(4px);
@@ -439,6 +447,12 @@ async function signOut() {
   opacity: 0.5;
   cursor: not-allowed;
   box-shadow: none;
+}
+
+.error {
+  margin: 0;
+  color: var(--color-error-text);
+  font-size: 0.875rem;
 }
 
 .saved-flash {
@@ -490,12 +504,15 @@ async function signOut() {
   font-weight: 600;
   font-size: 0.8125rem;
   text-decoration: none;
-  transition: background var(--motion-fast) ease, color var(--motion-fast) ease, transform var(--motion-fast) var(--motion-bounce);
+  transition:
+    background var(--motion-fast) ease,
+    color var(--motion-fast) ease,
+    transform var(--motion-fast) var(--motion-bounce);
 }
 
 .danger-link:hover {
   background: var(--signal-error);
-  color: #FFFFFF;
+  color: #ffffff;
   transform: translateY(-1px);
 }
 
@@ -537,7 +554,9 @@ async function signOut() {
   border: 1px solid var(--color-border-strong);
   background: var(--color-border-strong);
   cursor: pointer;
-  transition: background var(--motion-fast) ease, border-color var(--motion-fast) ease;
+  transition:
+    background var(--motion-fast) ease,
+    border-color var(--motion-fast) ease;
 }
 
 .switch--on {
@@ -558,7 +577,7 @@ async function signOut() {
   height: 1.125rem;
   transform: translateY(-50%);
   border-radius: var(--radius-pill);
-  background: #FFFFFF;
+  background: #ffffff;
   box-shadow: var(--shadow-paper);
   transition: left var(--motion-fast) var(--motion-bounce);
 }
@@ -585,7 +604,11 @@ async function signOut() {
   font-weight: 600;
   font-size: 0.8125rem;
   cursor: pointer;
-  transition: background var(--motion-fast) ease, color var(--motion-fast) ease, border-color var(--motion-fast) ease, transform var(--motion-fast) var(--motion-bounce);
+  transition:
+    background var(--motion-fast) ease,
+    color var(--motion-fast) ease,
+    border-color var(--motion-fast) ease,
+    transform var(--motion-fast) var(--motion-bounce);
 }
 
 .signout-btn:hover {
