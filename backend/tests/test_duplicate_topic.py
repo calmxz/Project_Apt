@@ -114,7 +114,7 @@ def test_rename_active_session_to_duplicate_topic_409(client):
 
 
 def test_rename_ended_session_to_duplicate_topic_ok(client):
-    session_a = _create(client, "A")
+    assert _create(client, "A").status_code == 201
     session_c = _create(client, "C")
     session_c_id = session_c.json()["id"]
     ended = client.post(f"/api/sessions/{session_c_id}/end", headers=_AUTH)
