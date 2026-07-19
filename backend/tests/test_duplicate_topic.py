@@ -1,5 +1,12 @@
 """F-34: duplicate-topic detection is server-side, case-insensitive, and
 covers create + reopen."""
+from datetime import datetime, timezone
+
+import pytest
+from sqlalchemy.exc import IntegrityError
+
+from contracts import TopicProfile
+from db.models import Session as SessionModel, User
 
 
 def _create(client, topic, uid="dupe-user"):
@@ -51,3 +58,36 @@ def test_other_users_topic_does_not_conflict(client):
     _create(client, "Redox", uid="alice")
     other = _create(client, "Redox", uid="bob")
     assert other.status_code == 201
+
+
+def test_db_rejects_second_active_session_same_topic_casefold(db_session):
+    db_session.add(User(id="u_ix"))
+    db_session.flush()
+    db_session.add(SessionModel(
+        id="s_ix1", user_id="u_ix", topic="Calculus",
+        topic_profile_json=TopicProfile().model_dump_json(),
+    ))
+    db_session.commit()
+    db_session.add(SessionModel(
+        id="s_ix2", user_id="u_ix", topic="calculus",
+        topic_profile_json=TopicProfile().model_dump_json(),
+    ))
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+    db_session.rollback()
+
+
+def test_db_allows_duplicate_topic_when_first_is_ended(db_session):
+    db_session.add(User(id="u_ix2"))
+    db_session.flush()
+    db_session.add(SessionModel(
+        id="s_ix3", user_id="u_ix2", topic="Algebra",
+        topic_profile_json=TopicProfile().model_dump_json(),
+        ended_at=datetime.now(timezone.utc),
+    ))
+    db_session.commit()
+    db_session.add(SessionModel(
+        id="s_ix4", user_id="u_ix2", topic="Algebra",
+        topic_profile_json=TopicProfile().model_dump_json(),
+    ))
+    db_session.commit()  # must not raise
