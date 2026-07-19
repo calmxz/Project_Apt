@@ -8,6 +8,8 @@ vi.mock('@/services/sessionsApi.js', () => ({
   endSession: vi.fn(),
   reopenSession: vi.fn(),
   getSessionLibrary: vi.fn(),
+  renameSession: vi.fn(),
+  setPinned: vi.fn(),
 }))
 
 import { useSessionStore } from '@/stores/session.js'
@@ -76,8 +78,21 @@ describe('session store', () => {
     sessionsApi.getSession.mockResolvedValueOnce({
       id: 's1',
       messages: [
-        { id: 'm1', role: 'user', content: 'hi', citations: [], created_at: '2026-01-01', status: 'complete' },
-        { id: 'm2', role: 'assistant', content: 'draft', created_at: '2026-01-02', status: 'partial' },
+        {
+          id: 'm1',
+          role: 'user',
+          content: 'hi',
+          citations: [],
+          created_at: '2026-01-01',
+          status: 'complete',
+        },
+        {
+          id: 'm2',
+          role: 'assistant',
+          content: 'draft',
+          created_at: '2026-01-02',
+          status: 'partial',
+        },
       ],
     })
     const s = useSessionStore()
@@ -102,7 +117,9 @@ describe('session store', () => {
   // dialog, not a real recap -- it must not be written into topic_profile.
   it('endSession writes the profile summary when kind is summary', async () => {
     sessionsApi.createSession.mockResolvedValueOnce({
-      id: 's1', topic: 't', topic_profile: { last_session_summary: 'old' },
+      id: 's1',
+      topic: 't',
+      topic_profile: { last_session_summary: 'old' },
     })
     sessionsApi.endSession.mockResolvedValueOnce({
       ended_at: '2026-01-01',
@@ -116,7 +133,9 @@ describe('session store', () => {
 
   it('endSession does NOT write the profile summary when kind is no_exchanges', async () => {
     sessionsApi.createSession.mockResolvedValueOnce({
-      id: 's1', topic: 't', topic_profile: { last_session_summary: 'old' },
+      id: 's1',
+      topic: 't',
+      topic_profile: { last_session_summary: 'old' },
     })
     sessionsApi.endSession.mockResolvedValueOnce({
       ended_at: '2026-01-01',
@@ -153,7 +172,10 @@ describe('session store', () => {
   it('listSessions de-dupes concurrent calls into one network request', async () => {
     let resolve
     sessionsApi.listSessions.mockImplementationOnce(
-      () => new Promise((r) => { resolve = r }),
+      () =>
+        new Promise((r) => {
+          resolve = r
+        }),
     )
     const s = useSessionStore()
     const p1 = s.listSessions()
@@ -191,7 +213,10 @@ describe('session store', () => {
   it('loadSession de-dupes concurrent same-id calls and toggles detailLoading', async () => {
     let resolve
     sessionsApi.getSession.mockImplementationOnce(
-      () => new Promise((r) => { resolve = r }),
+      () =>
+        new Promise((r) => {
+          resolve = r
+        }),
     )
     const s = useSessionStore()
     const p1 = s.loadSession('s1')
@@ -213,7 +238,10 @@ describe('session store', () => {
   it('drops a superseded out-of-order load (A->B->A, B resolves last)', async () => {
     const resolvers = {}
     sessionsApi.getSession.mockImplementation(
-      (id) => new Promise((r) => { resolvers[id] = () => r({ id, messages: [] }) }),
+      (id) =>
+        new Promise((r) => {
+          resolvers[id] = () => r({ id, messages: [] })
+        }),
     )
     const s = useSessionStore()
     const pA1 = s.loadSession('A')
@@ -229,7 +257,10 @@ describe('session store', () => {
   it('a superseded load that 404s does not clobber the current session error', async () => {
     const slots = {}
     sessionsApi.getSession.mockImplementation(
-      (id) => new Promise((res, rej) => { slots[id] = { res, rej } }),
+      (id) =>
+        new Promise((res, rej) => {
+          slots[id] = { res, rej }
+        }),
     )
     const s = useSessionStore()
     const pA = s.loadSession('A')
@@ -243,9 +274,7 @@ describe('session store', () => {
   })
 
   it('a non-superseded 404 still surfaces the error (guard does not over-suppress)', async () => {
-    sessionsApi.getSession.mockRejectedValueOnce(
-      Object.assign(new Error('gone'), { status: 404 }),
-    )
+    sessionsApi.getSession.mockRejectedValueOnce(Object.assign(new Error('gone'), { status: 404 }))
     const s = useSessionStore()
     await expect(s.loadSession('gone')).rejects.toBeTruthy()
     expect(s.error).toBeTruthy()
@@ -256,7 +285,11 @@ describe('session store', () => {
     sessionsApi.getSessionLibrary.mockResolvedValueOnce(page)
     const s = useSessionStore()
     const out = await s.fetchLibrary({ status: 'all', limit: 20, offset: 0 })
-    expect(sessionsApi.getSessionLibrary).toHaveBeenCalledWith({ status: 'all', limit: 20, offset: 0 })
+    expect(sessionsApi.getSessionLibrary).toHaveBeenCalledWith({
+      status: 'all',
+      limit: 20,
+      offset: 0,
+    })
     expect(out).toEqual(page)
     expect(s.libraryLoading).toBe(false)
     expect(s.libraryError).toBeNull()
@@ -268,6 +301,28 @@ describe('session store', () => {
     await expect(s.fetchLibrary({})).rejects.toThrow('boom')
     expect(s.libraryError).toBeTruthy()
     expect(s.libraryLoading).toBe(false)
+  })
+
+  // F-07: renameSession/setPinned are background sidebar actions -- a failure
+  // must roll back local state and rethrow for the caller to toast, but must
+  // never write the store's global `error` (that unmounts unrelated screens,
+  // e.g. Home, which treats a non-empty error as fatal).
+  it('renameSession failure rolls back but does not write global error', async () => {
+    const store = useSessionStore()
+    store.sessions = [{ id: 's1', topic: 'Old' }]
+    sessionsApi.renameSession.mockRejectedValue(new ApiErrorLike(500, {}))
+    await expect(store.renameSession('s1', 'New')).rejects.toBeTruthy()
+    expect(store.sessions[0].topic).toBe('Old')
+    expect(store.error).toBeNull()
+  })
+
+  it('setPinned failure rolls back but does not write global error', async () => {
+    const store = useSessionStore()
+    store.sessions = [{ id: 's1', topic: 'Old', pinned: false }]
+    sessionsApi.setPinned.mockRejectedValue(new ApiErrorLike(500, {}))
+    await expect(store.setPinned('s1', true)).rejects.toBeTruthy()
+    expect(store.sessions[0].pinned).toBe(false)
+    expect(store.error).toBeNull()
   })
 })
 
@@ -303,7 +358,12 @@ describe('session store — streaming', () => {
 
   it('recordToolCall (done) marks chip done and returns to streaming', () => {
     const s = useSessionStore()
-    s.streamingMessage = { role: 'assistant', content: '', citations: [], tool_calls: [{ id: 't1', name: 'retrieve_chunks', state: 'running' }] }
+    s.streamingMessage = {
+      role: 'assistant',
+      content: '',
+      citations: [],
+      tool_calls: [{ id: 't1', name: 'retrieve_chunks', state: 'running' }],
+    }
     s.streamState = 'tool_running'
     s.recordToolCall({ kind: 'done', tool_call: { id: 't1', summary: '5 found' } })
     expect(s.streamingMessage.tool_calls[0].state).toBe('done')
@@ -318,7 +378,12 @@ describe('session store — streaming', () => {
     s.finalizeMessage('msg_xyz')
     expect(s.streamingMessage).toBeNull()
     expect(s.streamState).toBe('idle')
-    expect(s.messages.at(-1)).toMatchObject({ role: 'assistant', content: 'done', message_id: 'msg_xyz', status: 'complete' })
+    expect(s.messages.at(-1)).toMatchObject({
+      role: 'assistant',
+      content: 'done',
+      message_id: 'msg_xyz',
+      status: 'complete',
+    })
   })
 
   it('handleCancelled persists partial as status=cancelled', () => {
@@ -398,10 +463,12 @@ describe('session store — streaming', () => {
     const s = useSessionStore()
     s.currentSessionId = 's1'
     const spy = vi.spyOn(streamSvc, 'streamChat').mockResolvedValue(undefined)
-    await s.sendMessageStreaming({ text: 'Review my gap: recursion', reviewGaps: true, reviewGap: 'recursion' })
-    expect(spy).toHaveBeenCalledWith(
-      expect.objectContaining({ reviewGap: 'recursion' }),
-    )
+    await s.sendMessageStreaming({
+      text: 'Review my gap: recursion',
+      reviewGaps: true,
+      reviewGap: 'recursion',
+    })
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ reviewGap: 'recursion' }))
   })
 
   it('continueTopic creates a resume session and marks the prior ended locally', async () => {
@@ -410,7 +477,9 @@ describe('session store — streaming', () => {
     s.sessions = [{ id: 'old-1', topic: 'Calculus', ended_at: null }]
     const created = await s.continueTopic({ id: 'old-1', topic: 'Calculus' })
     expect(sessionsApi.createSession).toHaveBeenCalledWith({
-      topic: 'Calculus', seedMode: 'resume', priorSessionId: 'old-1',
+      topic: 'Calculus',
+      seedMode: 'resume',
+      priorSessionId: 'old-1',
     })
     expect(created.id).toBe('new-1')
     expect(s.sessions.find((x) => x.id === 'old-1').ended_at).toBeTruthy()
@@ -418,9 +487,7 @@ describe('session store — streaming', () => {
 
   it('sendMessageStreaming rejects without an active session', async () => {
     const s = useSessionStore()
-    await expect(s.sendMessageStreaming({ text: 'x' })).rejects.toThrow(
-      'no active session',
-    )
+    await expect(s.sendMessageStreaming({ text: 'x' })).rejects.toThrow('no active session')
   })
 
   it('sendMessageStreaming returns null when text is empty', async () => {
@@ -488,12 +555,20 @@ describe('session store — streaming', () => {
       onEvent({ event: 'assistant_delta', data: { text: 'partial' } })
       onEvent({
         event: 'error',
-        data: { code: ERR_DAILY_COST_CAP_REACHED, used_usd: '3.0100', soft_cap_usd: '2.0', hard_cap_usd: '3.0' },
+        data: {
+          code: ERR_DAILY_COST_CAP_REACHED,
+          used_usd: '3.0100',
+          soft_cap_usd: '2.0',
+          hard_cap_usd: '3.0',
+        },
       })
     })
     await s.sendMessageStreaming({ text: 'x' })
     expect(s.costCapInfo).toEqual({
-      used_usd: '3.0100', soft_cap_usd: '2.0', hard_cap_usd: '3.0', resets_at: null,
+      used_usd: '3.0100',
+      soft_cap_usd: '2.0',
+      hard_cap_usd: '3.0',
+      resets_at: null,
     })
     expect(s.costCapReached).toBe(true)
     expect(s.streamState).toBe('idle')
@@ -558,7 +633,11 @@ describe('session store — streaming', () => {
     s.currentSessionId = 's1'
     let emit, finish
     vi.spyOn(streamSvc, 'streamChat').mockImplementation(
-      ({ onEvent }) => new Promise((resolve) => { emit = onEvent; finish = resolve }),
+      ({ onEvent }) =>
+        new Promise((resolve) => {
+          emit = onEvent
+          finish = resolve
+        }),
     )
     const p = s.sendMessageStreaming({ text: 'q' })
     emit({ event: 'assistant_delta', data: { text: 'late reply' } })
@@ -577,7 +656,11 @@ describe('session store — streaming', () => {
     s.currentSessionId = 's1'
     let emit, finish
     vi.spyOn(streamSvc, 'streamChat').mockImplementation(
-      ({ onEvent }) => new Promise((resolve) => { emit = onEvent; finish = resolve }),
+      ({ onEvent }) =>
+        new Promise((resolve) => {
+          emit = onEvent
+          finish = resolve
+        }),
     )
     const p = s.sendMessageStreaming({ text: 'q' })
     s.currentSessionId = 's2'

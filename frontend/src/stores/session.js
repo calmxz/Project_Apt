@@ -289,7 +289,9 @@ export const useSessionStore = defineStore('session', () => {
     } catch (e) {
       if (idx !== -1) sessions.value[idx].topic = prev
       if (currentSession.value?.id === id) currentSession.value.topic = prev
-      _setError(e)
+      // F-07: background action - rollback and rethrow, but never write the
+      // global error (it unmounts unrelated screens). Callers toast.
+      throw e
     }
   }
 
@@ -304,7 +306,9 @@ export const useSessionStore = defineStore('session', () => {
     } catch (e) {
       if (idx !== -1) sessions.value[idx].pinned = prev
       if (currentSession.value?.id === id) currentSession.value.pinned = prev
-      _setError(e)
+      // F-07: background action - rollback and rethrow, but never write the
+      // global error (it unmounts unrelated screens). Callers toast.
+      throw e
     }
   }
 
@@ -416,14 +420,32 @@ export const useSessionStore = defineStore('session', () => {
         onEvent: ({ event, data }) => {
           if (event !== 'assistant_delta') deltaBatcher.flush()
           switch (event) {
-            case 'tool_call_start': recordToolCall({ kind: 'start', tool_call: data }); break
-            case 'tool_call_done': recordToolCall({ kind: 'done', tool_call: data }); break
-            case 'assistant_delta': deltaBatcher.push(data.text); break
-            case 'citations': setCitations(data); break
-            case 'cost_warning': reportCostWarning(data); break
-            case 'check_question': handleCheckQuestion(data); break
-            case 'done': sawTerminal = true; finalizeMessage(data.message_id); break
-            case 'cancelled': sawTerminal = true; handleCancelled(data.message_id, data.partial_content_chars, data.estimated_cost_usd); break
+            case 'tool_call_start':
+              recordToolCall({ kind: 'start', tool_call: data })
+              break
+            case 'tool_call_done':
+              recordToolCall({ kind: 'done', tool_call: data })
+              break
+            case 'assistant_delta':
+              deltaBatcher.push(data.text)
+              break
+            case 'citations':
+              setCitations(data)
+              break
+            case 'cost_warning':
+              reportCostWarning(data)
+              break
+            case 'check_question':
+              handleCheckQuestion(data)
+              break
+            case 'done':
+              sawTerminal = true
+              finalizeMessage(data.message_id)
+              break
+            case 'cancelled':
+              sawTerminal = true
+              handleCancelled(data.message_id, data.partial_content_chars, data.estimated_cost_usd)
+              break
             case 'followup_skipped':
               sawTerminal = true
               if (!_streamSuperseded()) {
@@ -452,9 +474,13 @@ export const useSessionStore = defineStore('session', () => {
       }
     } catch (e) {
       deltaBatcher.flush()
-      if (_streamSuperseded()) { _clearStreamState(); return }
+      if (_streamSuperseded()) {
+        _clearStreamState()
+        return
+      }
       if (e?.name === 'AbortError') {
-        if (streamingMessage.value) handleCancelled('pending', streamingMessage.value.content.length, '0')
+        if (streamingMessage.value)
+          handleCancelled('pending', streamingMessage.value.content.length, '0')
         return
       }
       if (e?.status === 429) _applyCapError(e?.body?.detail)
@@ -512,7 +538,11 @@ export const useSessionStore = defineStore('session', () => {
       streamState.value = 'tool_running'
     } else if (kind === 'done') {
       const tc = streamingMessage.value.tool_calls.find((t) => t.id === tool_call.id)
-      if (tc) { tc.state = tool_call.status === 'error' ? 'error' : 'done'; tc.summary = tool_call.summary; tc.error = tool_call.error }
+      if (tc) {
+        tc.state = tool_call.status === 'error' ? 'error' : 'done'
+        tc.summary = tool_call.summary
+        tc.error = tool_call.error
+      }
       streamState.value = 'streaming'
     }
   }
@@ -523,7 +553,10 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   function finalizeMessage(message_id) {
-    if (_streamSuperseded()) { _clearStreamState(); return }
+    if (_streamSuperseded()) {
+      _clearStreamState()
+      return
+    }
     if (!streamingMessage.value) return
     messages.value.push({ ...streamingMessage.value, message_id, status: 'complete' })
     streamingMessage.value = null
@@ -532,9 +565,18 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   function handleCancelled(message_id, partial_chars, estimated_cost_usd) {
-    if (_streamSuperseded()) { _clearStreamState(); return }
+    if (_streamSuperseded()) {
+      _clearStreamState()
+      return
+    }
     if (!streamingMessage.value) return
-    messages.value.push({ ...streamingMessage.value, message_id, status: 'cancelled', partial_content_chars: partial_chars, estimated_cost_usd })
+    messages.value.push({
+      ...streamingMessage.value,
+      message_id,
+      status: 'cancelled',
+      partial_content_chars: partial_chars,
+      estimated_cost_usd,
+    })
     streamingMessage.value = null
     streamState.value = 'idle'
     abortController.value = null
@@ -548,7 +590,10 @@ export const useSessionStore = defineStore('session', () => {
   const PARTIAL_ABORT_CODES = new Set(['daily_cost_cap_reached', 'max_iters_reached'])
 
   function handleAbortError(code) {
-    if (_streamSuperseded()) { _clearStreamState(); return }
+    if (_streamSuperseded()) {
+      _clearStreamState()
+      return
+    }
     if (!streamingMessage.value) return
     if (streamingMessage.value.content) {
       const status = PARTIAL_ABORT_CODES.has(code) ? 'partial' : 'error'
@@ -560,7 +605,10 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   function stopStream() {
-    if (abortController.value) { abortController.value.abort(); streamState.value = 'stopping' }
+    if (abortController.value) {
+      abortController.value.abort()
+      streamState.value = 'stopping'
+    }
   }
 
   async function sendMessageStreaming({ text, reviewGaps = false, reviewGap = null }) {
@@ -589,14 +637,32 @@ export const useSessionStore = defineStore('session', () => {
         onEvent: ({ event, data }) => {
           if (event !== 'assistant_delta') deltaBatcher.flush()
           switch (event) {
-            case 'tool_call_start': recordToolCall({ kind: 'start', tool_call: data }); break
-            case 'tool_call_done': recordToolCall({ kind: 'done', tool_call: data }); break
-            case 'assistant_delta': deltaBatcher.push(data.text); break
-            case 'citations': setCitations(data); break
-            case 'cost_warning': reportCostWarning(data); break
-            case 'check_question': handleCheckQuestion(data); break
-            case 'done': sawTerminal = true; finalizeMessage(data.message_id); break
-            case 'cancelled': sawTerminal = true; handleCancelled(data.message_id, data.partial_content_chars, data.estimated_cost_usd); break
+            case 'tool_call_start':
+              recordToolCall({ kind: 'start', tool_call: data })
+              break
+            case 'tool_call_done':
+              recordToolCall({ kind: 'done', tool_call: data })
+              break
+            case 'assistant_delta':
+              deltaBatcher.push(data.text)
+              break
+            case 'citations':
+              setCitations(data)
+              break
+            case 'cost_warning':
+              reportCostWarning(data)
+              break
+            case 'check_question':
+              handleCheckQuestion(data)
+              break
+            case 'done':
+              sawTerminal = true
+              finalizeMessage(data.message_id)
+              break
+            case 'cancelled':
+              sawTerminal = true
+              handleCancelled(data.message_id, data.partial_content_chars, data.estimated_cost_usd)
+              break
             case 'error':
               sawTerminal = true
               _applyCapError(data)
@@ -615,9 +681,13 @@ export const useSessionStore = defineStore('session', () => {
       }
     } catch (e) {
       deltaBatcher.flush()
-      if (_streamSuperseded()) { _clearStreamState(); return }
+      if (_streamSuperseded()) {
+        _clearStreamState()
+        return
+      }
       if (e?.name === 'AbortError') {
-        if (streamingMessage.value) handleCancelled('pending', streamingMessage.value.content.length, '0')
+        if (streamingMessage.value)
+          handleCancelled('pending', streamingMessage.value.content.length, '0')
         return
       }
       if (e?.status === 409 && e?.body?.detail?.code === 'session_ended') {

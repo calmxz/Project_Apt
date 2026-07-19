@@ -3,11 +3,7 @@
     <h1 class="title">What do you want to learn?</h1>
 
     <p v-if="store.loading" class="muted">Loading...</p>
-    <p
-      v-else-if="store.error"
-      class="error"
-      data-testid="home-error"
-    >
+    <p v-else-if="store.error && !store.sessions.length" class="error" data-testid="home-error">
       {{ friendlyError(store.error) }}
     </p>
 
@@ -35,14 +31,11 @@
           <RouterLink to="/new" class="quick-more">Add reference files</RouterLink>
         </div>
 
-        <div
-          v-if="reviewQueue.total > 0"
-          class="mode-card"
-          data-testid="home-mode-review"
-        >
+        <div v-if="reviewQueue.total > 0" class="mode-card" data-testid="home-mode-review">
           <h2 class="mode-title">Due for review</h2>
           <p class="mode-sub" data-testid="home-review-count">
-            {{ reviewQueue.total }} concept{{ reviewQueue.total === 1 ? '' : 's' }} ready for a quick check.
+            {{ reviewQueue.total }} concept{{ reviewQueue.total === 1 ? '' : 's' }} ready for a
+            quick check.
           </p>
           <ul class="review-list">
             <li v-for="item in reviewQueue.items" :key="item.concept">
@@ -54,7 +47,9 @@
                 @click="startReview(item)"
               >
                 <span class="review-concept">{{ item.concept }}</span>
-                <span class="review-meta">{{ item.source_topic }} &middot; streak {{ item.streak }}</span>
+                <span class="review-meta"
+                  >{{ item.source_topic }} &middot; streak {{ item.streak }}</span
+                >
               </button>
             </li>
           </ul>
@@ -235,14 +230,16 @@ async function expandReview() {
   padding: 0.75rem 1.375rem;
   border-radius: var(--radius-pill);
   background: var(--color-accent-strong);
-  color: #FFFFFF;
+  color: #ffffff;
   border: 0;
   font-family: var(--font-sans);
   font-weight: 600;
   font-size: 0.9375rem;
   cursor: pointer;
   box-shadow: var(--shadow-pop);
-  transition: transform var(--motion-fast) var(--motion-bounce), box-shadow var(--motion-fast) ease;
+  transition:
+    transform var(--motion-fast) var(--motion-bounce),
+    box-shadow var(--motion-fast) ease;
 }
 
 .cta-primary:hover {
