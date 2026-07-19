@@ -177,7 +177,7 @@ async def create_session(
     new_session = SessionModel(
         id=new_id,
         user_id=user_id,
-        topic=req.topic,
+        topic=req.topic.strip(),
         topic_profile_json=profile_json,
     )
     db.add(new_session)
@@ -477,7 +477,7 @@ def update_session(
                     status_code=409,
                     detail={"code": "duplicate_topic", "session_id": existing},
                 )
-        row.topic = req.topic
+        row.topic = req.topic.strip()
     if req.pinned is not None:
         row.pinned = req.pinned
     try:

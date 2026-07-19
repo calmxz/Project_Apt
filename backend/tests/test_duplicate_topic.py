@@ -181,6 +181,23 @@ def test_reopen_race_maps_integrityerror_to_409(client, monkeypatch):
     assert reopened.json()["detail"]["session_id"] == second_id
 
 
+def test_create_conflicts_with_active_same_topic_untrimmed(client):
+    """M2: pre-check normalizes via .strip().lower(), but create used to
+    store req.topic raw. The FIRST session is created with untrimmed
+    whitespace (" Calc "); if it is stored raw, a later create with the
+    trimmed "Calc" fails to match on both the pre-check (compares against
+    the raw, unstripped stored value) and the DB unique index (also keyed
+    on raw lower(topic)), letting two active sessions on the same logical
+    topic coexist. Storing stripped at creation time closes both holes."""
+    first = _create(client, " Calc ")
+    assert first.status_code == 201
+    dup = _create(client, "Calc")
+    assert dup.status_code == 409
+    detail = dup.json()["detail"]
+    assert detail["code"] == "duplicate_topic"
+    assert detail["session_id"] == first.json()["id"]
+
+
 def test_rename_race_maps_integrityerror_to_409(client, monkeypatch):
     import routes.sessions as sessions_route
 
