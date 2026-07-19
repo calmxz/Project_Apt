@@ -3,7 +3,7 @@ from decimal import Decimal
 from uuid import uuid4
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from config import settings
@@ -37,6 +37,20 @@ class User(Base):
 
 class Session(Base):
     __tablename__ = "sessions"
+    __table_args__ = (
+        # B-11: every list/library/aggregate query filters on user_id.
+        Index("ix_sessions_user_id", "user_id"),
+        # B-05: DB-authoritative form of the F-34 duplicate-active-topic
+        # guard; the route pre-check remains for the friendly 409 payload.
+        Index(
+            "uq_sessions_active_topic",
+            "user_id",
+            text("lower(topic)"),
+            unique=True,
+            sqlite_where=text("ended_at IS NULL"),
+            postgresql_where=text("ended_at IS NULL"),
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)

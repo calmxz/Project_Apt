@@ -51,11 +51,11 @@ def seeded_user(db_session):
     db_session.commit()
 
 
-def _seed_asking_session(db, sid, n_asking, items_per=3):
+def _seed_asking_session(db, sid, n_asking, items_per=3, topic="bio"):
     """Session with n_asking messages that each ask `items_per` check questions
     via an ask_check_questions tool call but have NO persisted check_batch_json
     (the legacy/reconstruct path). Each item has a matching LearningEvent."""
-    db.add(SessionModel(id=sid, user_id=USER_ID, topic="bio",
+    db.add(SessionModel(id=sid, user_id=USER_ID, topic=topic,
                         topic_profile_json=TopicProfile().model_dump_json()))
     for a in range(n_asking):
         gap = f"gap-{sid}-{a}"
@@ -112,8 +112,11 @@ def test_list_sessions_query_count_constant(client, db_session, seeded_user):
 
 
 def test_get_session_detail_is_not_n_plus_one(client, db_session, seeded_user):
-    _seed_asking_session(db_session, "s_one", n_asking=1)
-    _seed_asking_session(db_session, "s_three", n_asking=3)
+    # Distinct topics: both sessions are active (no ended_at) for the same
+    # user, and uq_sessions_active_topic forbids two simultaneously-active
+    # same-topic sessions per user. Topic content is not asserted here.
+    _seed_asking_session(db_session, "s_one", n_asking=1, topic="bio-one")
+    _seed_asking_session(db_session, "s_three", n_asking=3, topic="bio-three")
 
     with count_queries(db_session) as q1:
         r1 = client.get(f"/api/sessions/s_one?user_id={USER_ID}")
@@ -212,8 +215,13 @@ def test_library_rejects_invalid_params(client, db_session, seeded_user, qs):
 def test_library_sort_topic_is_stable_by_id(client, db_session, seeded_user):
     # All same topic so ONLY the id tiebreaker determines order. Insert in an
     # order that differs from id-sorted order to prove the tiebreaker is applied.
+    # uq_sessions_active_topic forbids two simultaneously-active same-topic
+    # sessions per user, so only one of the three stays active; the other two
+    # are ended. The library endpoint defaults to status=all (both active and
+    # ended rows), and sort=topic ignores ended_at entirely, so this does not
+    # affect the id-tiebreak this test is verifying.
     for sid in ["s_z", "s_a", "s_m"]:
-        _seed_simple(db_session, sid, "SameTopic")
+        _seed_simple(db_session, sid, "SameTopic", ended=(sid != "s_z"))
     r = client.get(f"/api/sessions/library?sort=topic&user_id={USER_ID}")
     assert r.status_code == 200, r.text
     ids = [i["id"] for i in r.json()["items"]]

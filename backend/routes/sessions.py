@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from typing import Literal
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from agent import prompts, tutor
@@ -176,11 +177,21 @@ async def create_session(
     new_session = SessionModel(
         id=new_id,
         user_id=user_id,
-        topic=req.topic,
+        topic=req.topic.strip(),
         topic_profile_json=profile_json,
     )
     db.add(new_session)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # B-05: concurrent create raced past the pre-check; the partial
+        # unique index is authoritative. Map to the same 409 payload.
+        db.rollback()
+        existing = _active_session_on_topic(db, user_id, req.topic)
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "duplicate_topic", "session_id": existing},
+        )
     db.refresh(new_session)
     return _to_response(db, new_session)
 
@@ -405,7 +416,17 @@ def reopen_session(
                 detail={"code": "duplicate_topic", "session_id": existing},
             )
         row.ended_at = None
-        db.commit()
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            existing = _active_session_on_topic(
+                db, user_id, row.topic, exclude_id=row.id
+            )
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "duplicate_topic", "session_id": existing},
+            )
         db.refresh(row)
     return _to_response(db, row)
 
@@ -444,10 +465,37 @@ def update_session(
     if req.pinned is True and row.ended_at is not None:
         raise HTTPException(status_code=400, detail="cannot pin an ended session")
     if req.topic is not None:
-        row.topic = req.topic
+        if row.ended_at is None:
+            # B-06: rename must honor the same duplicate-active-topic guard
+            # as create/reopen; without it a rename reproduces the duplicate
+            # state through the front door.
+            existing = _active_session_on_topic(
+                db, user_id, req.topic, exclude_id=row.id
+            )
+            if existing is not None:
+                raise HTTPException(
+                    status_code=409,
+                    detail={"code": "duplicate_topic", "session_id": existing},
+                )
+        row.topic = req.topic.strip()
     if req.pinned is not None:
         row.pinned = req.pinned
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # B-05: concurrent rename raced past the pre-check; the partial
+        # unique index is authoritative. Map to the same 409 payload.
+        # NOTE: use req.topic, not row.topic -- db.rollback() expires the
+        # ORM object, so row.topic would reload the pre-rename value from
+        # the DB rather than reflecting the attempted (rejected) rename.
+        db.rollback()
+        existing = _active_session_on_topic(
+            db, user_id, req.topic, exclude_id=row.id
+        )
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "duplicate_topic", "session_id": existing},
+        )
     db.refresh(row)
     return _to_response(db, row)
 

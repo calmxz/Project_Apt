@@ -117,8 +117,24 @@ def test_resume_409_when_second_active_session_exists_leaves_prior_untouched(
 ):
     """Final-review fix: the duplicate-topic check must run BEFORE the
     resume block's irreversible side effects (claim-end + summary LLM call).
-    A pre-existing second active session on the same topic must 409 without
-    ending or summarizing the session being resumed."""
+    A pre-existing active session on the same topic must 409 without ending
+    or summarizing the (already-ended) session being resumed.
+
+    P3 B-05 note: `uq_sessions_active_topic` now makes it impossible for two
+    *active* (ended_at IS NULL) same-topic sessions to coexist in the DB, so
+    the original seeding (both rows active) can no longer be constructed at
+    all -- it would fail at fixture insert, not at the route. This version
+    seeds a legal pre-state instead: `active_other` active, `prior_dup`
+    already ENDED (the partial index ignores ended rows), then resumes the
+    ended `prior_dup` while `active_other` still holds the topic. The route's
+    pre-check must still 409 and leave both rows untouched. Because
+    `prior_dup` starts already ended, the resume block's own
+    `if prior.ended_at is None` gate would skip claim-end/summary regardless
+    of check ordering here -- so this no longer isolates "check runs before
+    claim-end" the way the original did, but it still guards the same
+    externally observable contract: a blocked resume must not mutate either
+    row or fire the summary call.
+    """
     called = {"summary": False}
 
     async def fake_acompletion(**kwargs):
@@ -127,6 +143,7 @@ def test_resume_409_when_second_active_session_exists_leaves_prior_untouched(
 
     monkeypatch.setattr("services.summary_service.litellm.acompletion", fake_acompletion)
 
+    prior_ended_at = datetime(2026, 7, 1, tzinfo=timezone.utc)
     active_other = SessionModel(
         id="active_other",
         user_id=USER_ID,
@@ -138,6 +155,7 @@ def test_resume_409_when_second_active_session_exists_leaves_prior_untouched(
         user_id=USER_ID,
         topic="sql",
         topic_profile_json=TopicProfile(mastered_concepts=[{"name": "select"}]).model_dump_json(),
+        ended_at=prior_ended_at,
     )
     db_session.add_all([active_other, prior])
     db_session.flush()
@@ -160,7 +178,11 @@ def test_resume_409_when_second_active_session_exists_leaves_prior_untouched(
     db_session.expire_all()
     refreshed_prior = db_session.get(SessionModel, "prior_dup")
     refreshed_active = db_session.get(SessionModel, "active_other")
-    assert refreshed_prior.ended_at is None, "aborted resume must not claim-end the prior"
+    # SQLite drops tzinfo on read (see test_list_returns_tz_aware_timestamps
+    # above); compare naive values.
+    assert refreshed_prior.ended_at == prior_ended_at.replace(tzinfo=None), (
+        "aborted resume must not touch the prior"
+    )
     assert refreshed_active.ended_at is None, "pre-existing active session must be untouched"
     assert called["summary"] is False, "no summary LLM call must fire before the 409"
 

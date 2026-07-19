@@ -83,6 +83,11 @@ def attach_message_id(db: Session, session_id: str, message_id: int) -> None:
 
     No-op when there is no open batch (older flow / race). Read-time backfill
     covers messages whose batch was never linked."""
+    from services import profile_service  # local import avoids circular
+
+    # B-04: serialize with answer()/skip() (F-24 convention). Unlocked, this
+    # whole-blob save could re-save pre-answer state over a concurrent grade.
+    profile_service.lock_session_row(db, session_id)
     pc = get_pending_check(db, session_id)
     if pc is None:
         return
@@ -140,6 +145,14 @@ def register(db: Session, ctx: "ToolContext", args: AskCheckQuestionsArgs) -> To
                     f"for {len(it.options)} options"
                 ),
             )
+
+    from services import profile_service  # local import avoids circular
+
+    # B-12: serialize the open-batch guard with answer()/skip() (F-24
+    # convention); two concurrent streams otherwise both read None and the
+    # second _save silently overwrites the first batch.
+    profile_service.lock_session_row(db, ctx.session_id)
+
     if get_pending_check(db, ctx.session_id) is not None:
         return ToolResult(
             ok=False, status="failed",

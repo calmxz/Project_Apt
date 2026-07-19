@@ -404,8 +404,10 @@ def apply_patch(
 
     if args.add_confirmed_gap:
         gap_evidence = evidence if evidence in ("declared", "tested") else None
-        profile.confirmed_gaps = upsert_entry(
-            profile.confirmed_gaps or [], args.add_confirmed_gap,
+        # B-03: route through the exclusivity choke point (F-13) like the
+        # user PATCH path; upsert_entry left the concept in both lists.
+        add_exclusive(
+            profile, "confirmed_gaps", args.add_confirmed_gap,
             evidence_type=gap_evidence, stamp=datetime.now(timezone.utc),
         )
 

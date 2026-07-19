@@ -945,3 +945,17 @@ def test_inferred_mastery_alongside_real_change_is_ok_with_note(db_session, tool
     assert "inferred" in json.dumps(result.data or {})
     after = profile_service.load_profile(db_session, tool_ctx.session_id)
     assert "product rule" in profile_service.concept_names(after.confirmed_gaps)
+
+
+def test_agent_gap_add_removes_concept_from_mastered(db_session, session_row, ctx):
+    profile_service.apply_patch(
+        db_session, ctx, _patch(add_mastered_concept="chain rule", evidence_type="tested")
+    )
+    profile_service.apply_patch(
+        db_session, ctx, _patch(add_confirmed_gap="chain rule", evidence_type="inferred")
+    )
+    profile = profile_service.load_profile(db_session, session_row.id)
+    gaps = [e.name for e in (profile.confirmed_gaps or [])]
+    mastered = [e.name for e in (profile.mastered_concepts or [])]
+    assert "chain rule" in gaps
+    assert "chain rule" not in mastered

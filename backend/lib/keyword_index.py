@@ -49,7 +49,11 @@ def build_from_text(text: str) -> set[str]:
 
 
 def merge_into_session(db: Session, session_id: str, new_stems: set[str]) -> None:
-    row = db.get(SessionModel, session_id)
+    # B-13: FOR UPDATE on the read-union-write; concurrent ingestions for one
+    # session otherwise last-write-win with a stale base set. No-op on SQLite.
+    # Taken at the END of the ingestion pipeline, so hold time is only the
+    # final flush+commit.
+    row = db.get(SessionModel, session_id, with_for_update=True)
     if row is None:
         raise ValueError(f"session not found: {session_id}")
     current = set(json.loads(row.kw_index_json or "[]"))

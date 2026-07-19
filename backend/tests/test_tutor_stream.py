@@ -28,8 +28,8 @@ import pytest
 
 from agent.types import ToolContext
 from config import settings
-from contracts import Citation, ToolResult
-from db.models import ChatMessage, LlmCallLog, User
+from contracts import Citation, ToolResult, TopicProfile
+from db.models import ChatMessage, LlmCallLog, Session as SessionModel, User
 from services import cost_meter
 from services.cost_meter import CapStatus
 
@@ -751,6 +751,17 @@ async def test_run_streaming_ask_check_question_dispatches_sibling_first(db_sess
         )
     )
     monkeypatch.setattr("agent.tutor.tools.dispatch", dispatch)
+
+    # Seed user and session row for attach_message_id lock to succeed
+    db_session.add(User(id="u1"))
+    db_session.flush()
+    db_session.add(SessionModel(
+        id="s_ask_skip",
+        user_id="u1",
+        topic="test",
+        topic_profile_json=TopicProfile().model_dump_json(),
+    ))
+    db_session.commit()
 
     ctx = _ctx(db_session, session_id="s_ask_skip")
     events = await _drain(
