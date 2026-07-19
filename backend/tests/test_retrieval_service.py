@@ -504,6 +504,68 @@ def test_prefetch_for_prompt_no_ready_document_returns_none(db_session, monkeypa
     assert called["n"] == 0  # short-circuits before embedding when no ready doc
 
 
+# --- B-08: cost_holder collects metered spend across a retrieval call ----
+
+
+def test_prefetch_appends_metered_cost_to_holder(session, db_session, monkeypatch):
+    """B-08: _prepare_turn re-records embedding spend after a rollback, so
+    prefetch_for_prompt must let the caller collect what meter_embedding_response
+    actually charged via an out-param, independent of the return value."""
+    _seed_ready_doc(db_session)
+    _stub_query(monkeypatch, [])
+
+    async def fake_aembedding(**kw):
+        return _fake_embedding_resp([0.1] * 8)
+
+    monkeypatch.setattr(retrieval_service.litellm, "aembedding", fake_aembedding)
+    monkeypatch.setattr(
+        retrieval_service.cost_meter.litellm, "completion_cost", lambda **kw: 0.0005
+    )
+
+    holder: list = []
+    asyncio.run(
+        retrieval_service.prefetch_for_prompt(
+            db_session, SESSION_ID, USER_ID, "query", cost_holder=holder
+        )
+    )
+    assert len(holder) == 1 and holder[0] >= 0
+    assert holder[0] == Decimal("0.0005")
+
+
+def test_semantic_fallback_appends_metered_cost_to_holder(db_session, monkeypatch):
+    """Same out-param contract for semantic_fallback_required, which only
+    meters when user_id is given (F-19)."""
+    db_session.add(User(id="u_holder"))
+    db_session.commit()
+    monkeypatch.setattr(
+        "services.retrieval_service.documents_service.has_ready_document",
+        lambda db, sid: True,
+    )
+    monkeypatch.setattr(
+        "services.retrieval_service._session_centroid",
+        lambda db, sid: [1.0, 0.0, 0.0],
+    )
+
+    async def fake_aembedding(**kw):
+        return _fake_embedding_resp([1.0, 0.0, 0.0])
+
+    monkeypatch.setattr(
+        "services.retrieval_service.litellm.aembedding", fake_aembedding
+    )
+    monkeypatch.setattr(
+        retrieval_service.cost_meter.litellm, "completion_cost", lambda **kw: 0.0005
+    )
+
+    holder: list = []
+    asyncio.run(
+        retrieval_service.semantic_fallback_required(
+            db_session, "s1", "q", user_id="u_holder", cost_holder=holder
+        )
+    )
+    assert len(holder) == 1 and holder[0] >= 0
+    assert holder[0] == Decimal("0.0005")
+
+
 def test_semantic_fallback_calls_pass_timeout(db_session, monkeypatch):
     from config import settings
 

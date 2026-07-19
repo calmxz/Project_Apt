@@ -105,6 +105,37 @@ def test_prompt_build_failure_still_persists_user_message(client, db_session, mo
     assert [m.content for m in user_msgs] == ["save me"]
 
 
+def test_prepare_turn_failure_rerecords_embedding_spend(client, db_session, monkeypatch):
+    """B-08: when _prepare_turn crashes after retrieval already metered and
+    flushed embedding spend, db.rollback() in the except arm must not discard
+    that real vendor cost. The retrieval call reports what it spent via
+    cost_holder; the except arm re-records the total on the fresh transaction."""
+    monkeypatch.setattr(settings, "llm_stub", True)
+
+    from decimal import Decimal
+
+    async def fake_fallback(db, sid, msg, *, user_id=None, cost_holder=None):
+        if cost_holder is not None:
+            cost_holder.append(Decimal("0.5"))
+        return False
+
+    monkeypatch.setattr(
+        "routes.chat.retrieval_service.semantic_fallback_required", fake_fallback
+    )
+
+    def _boom(prompt_state):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("routes.chat.prompts.build_system_prompt", _boom)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        _post_stream(client, message="hi")
+
+    from services import cost_meter
+
+    assert cost_meter.current_spend(db_session, USER_ID) == Decimal("0.5")
+
+
 def test_chat_stream_429_on_cap(client, monkeypatch):
     monkeypatch.setattr(settings, "llm_stub", True)
 

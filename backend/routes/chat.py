@@ -199,6 +199,7 @@ async def _prepare_turn(
     # 6) History through prompt build. An unexpected crash here must not lose
     # the user's message (before the P3.1 consolidation it was persisted
     # up-front): persist it, then re-raise. Happy path pays no extra statement.
+    embed_cost_holder: list = []
     try:
         history = db.execute(
             select(ChatMessage)
@@ -233,13 +234,15 @@ async def _prepare_turn(
         )
         if not retrieval_required:
             retrieval_required = await retrieval_service.semantic_fallback_required(
-                db, req.session_id, req.message, user_id=user_id
+                db, req.session_id, req.message, user_id=user_id,
+                cost_holder=embed_cost_holder,
             )
 
         prefetched_chunks = None
         if retrieval_required:
             prefetched_chunks = await retrieval_service.prefetch_for_prompt(
-                db, req.session_id, user_id, req.message
+                db, req.session_id, user_id, req.message,
+                cost_holder=embed_cost_holder,
             )
 
         prompt_state = _build_prompt_state(
@@ -257,6 +260,13 @@ async def _prepare_turn(
         system_prompt = prompts.build_system_prompt(prompt_state)
     except Exception:
         db.rollback()
+        # B-08: the rollback discarded metered embedding spend flushed by the
+        # retrieval calls (F-19 class - fixed in tutor error arm + ingestion,
+        # missed here). Re-record real vendor cost on the fresh transaction;
+        # the user-message commit below publishes both.
+        total_embed = sum(embed_cost_holder, Decimal("0"))
+        if total_embed > 0:
+            cost_meter.record_cost(db, user_id, total_embed)
         db.add(ChatMessage(session_id=req.session_id, role="user", content=req.message))
         db.commit()
         raise

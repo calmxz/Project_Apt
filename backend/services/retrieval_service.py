@@ -109,14 +109,20 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
 
 
 async def prefetch_for_prompt(
-    db: Session, session_id: str, user_id: str, query: str, k: int = 5
+    db: Session, session_id: str, user_id: str, query: str, k: int = 5,
+    cost_holder: list | None = None,
 ) -> list[dict] | None:
     """F-56: server-side retrieval for REQUIRED turns. The REQUIRED flag was
     advisory -- the model could answer ungrounded without calling
     retrieve_chunks. Fetch the chunks ourselves and inject them into the
     prompt instead. Returns chunk dicts (same shape retrieve() produces) or
     None on any failure/no-results -- the caller then falls back to the
-    advisory flag. Embedding spend is metered like every other call (F-19)."""
+    advisory flag. Embedding spend is metered like every other call (F-19).
+
+    B-08: cost_holder, if given, collects the metered Decimal cost so a
+    caller whose own transaction later rolls back (_prepare_turn) can
+    re-record the real vendor spend on a fresh transaction.
+    """
     try:
         if not documents_service.has_ready_document(db, session_id):
             return None
@@ -131,9 +137,11 @@ async def prefetch_for_prompt(
             if isinstance(resp.data[0], dict)
             else resp.data[0].embedding
         )
-        cost_meter.meter_embedding_response(
+        cost = cost_meter.meter_embedding_response(
             db, resp, user_id=user_id, session_id=session_id, texts=[query],
         )
+        if cost_holder is not None:
+            cost_holder.append(cost)
         hits = pgvector_store.query_chunks(
             db, session_id=session_id, query_embedding=query_vec, k=k
         )
@@ -154,7 +162,8 @@ async def prefetch_for_prompt(
 
 
 async def semantic_fallback_required(
-    db: Session, session_id: str, query: str, *, user_id: str | None = None
+    db: Session, session_id: str, query: str, *, user_id: str | None = None,
+    cost_holder: list | None = None,
 ) -> bool:
     """D2.2: escalate the OPTIONAL lexical gate when the query is semantically
     close to the session's uploaded material (paraphrase/acronym misses that
@@ -164,6 +173,11 @@ async def semantic_fallback_required(
     F-19: when `user_id` is supplied, the embedding call's spend is metered
     onto the cost ledger. Callers that cannot attribute the call to a user
     (or don't have one handy) may omit it and simply skip metering.
+
+    B-08: cost_holder, if given, collects the metered Decimal cost (only
+    when user_id is also given, since that's when metering runs) so a
+    caller whose own transaction later rolls back (_prepare_turn) can
+    re-record the real vendor spend on a fresh transaction.
 
     F-18: async embedding; this runs directly on the event loop in _prepare_turn.
     """
@@ -187,9 +201,11 @@ async def semantic_fallback_required(
             else resp.data[0].embedding
         )
         if user_id is not None:
-            cost_meter.meter_embedding_response(
+            cost = cost_meter.meter_embedding_response(
                 db, resp, user_id=user_id, session_id=session_id, texts=[query],
             )
+            if cost_holder is not None:
+                cost_holder.append(cost)
         sim = _cosine_similarity(list(query_vec), centroid)
         return sim >= settings.retrieval_fallback_threshold
     except Exception as e:
