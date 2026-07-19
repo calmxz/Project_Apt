@@ -125,10 +125,12 @@ def test_aggregate_overlapping_concepts_dedupe_and_count(client, db_session):
 def test_aggregate_knowledge_level_distribution(client, db_session):
     db_session.add(User(id=USER_ID))
     db_session.flush()
-    _mk_session(db_session, "k1", profile=TopicProfile(knowledge_level="beginner"))
-    _mk_session(db_session, "k2", profile=TopicProfile(knowledge_level="beginner"))
-    _mk_session(db_session, "k3", profile=TopicProfile(knowledge_level="advanced"))
-    _mk_session(db_session, "k4", profile=TopicProfile())  # unknown
+    # Distinct topics: uq_sessions_active_topic forbids two simultaneously-active
+    # same-topic sessions per user, and topic content is irrelevant to this test.
+    _mk_session(db_session, "k1", topic="k1-topic", profile=TopicProfile(knowledge_level="beginner"))
+    _mk_session(db_session, "k2", topic="k2-topic", profile=TopicProfile(knowledge_level="beginner"))
+    _mk_session(db_session, "k3", topic="k3-topic", profile=TopicProfile(knowledge_level="advanced"))
+    _mk_session(db_session, "k4", topic="k4-topic", profile=TopicProfile())  # unknown
     db_session.commit()
 
     r = client.get("/api/profile/aggregate", params={"user_id": USER_ID})
@@ -317,8 +319,12 @@ def _seed_event_for_insights(db, session_id, gap, correct, created_at, purpose=N
 
 
 def test_concept_accuracy_math_and_first_session(client, db_session):
+    # s2 needs a distinct topic from s1's default "biology": both are active
+    # (no ended_at) for the same user, and uq_sessions_active_topic forbids two
+    # simultaneously-active same-topic sessions per user. Topic content is not
+    # asserted here.
     _seed_session_for_insights(db_session, session_id="s1")
-    _seed_session_for_insights(db_session, session_id="s2")
+    _seed_session_for_insights(db_session, session_id="s2", topic="biology-2")
     _seed_event_for_insights(db_session, "s1", "mitosis", False, T0)
     _seed_event_for_insights(db_session, "s2", "mitosis", True, T0 + timedelta(hours=1))
     _seed_event_for_insights(db_session, "s2", "mitosis", True, T0 + timedelta(hours=2))

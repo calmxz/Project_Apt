@@ -77,13 +77,17 @@ def test_no_data_returns_zeroes(db_session):
 
 def test_top_sessions_ordering_and_cap_at_three(db_session):
     _seed_user(db_session)
-    for sid, costs in [
-        ("s1", ["0.1000"]),
-        ("s2", ["0.5000", "0.5000"]),  # total 1.0 -> top
-        ("s3", ["0.3000"]),
-        ("s4", ["0.2000"]),
+    # Distinct topics per session: all are active (no ended_at) for the same
+    # user, and uq_sessions_active_topic forbids two simultaneously-active
+    # same-topic sessions per user. s2 keeps the default "biology" topic since
+    # its value is asserted below; the others' topics are not asserted.
+    for sid, costs, topic in [
+        ("s1", ["0.1000"], "s1-topic"),
+        ("s2", ["0.5000", "0.5000"], "biology"),  # total 1.0 -> top
+        ("s3", ["0.3000"], "s3-topic"),
+        ("s4", ["0.2000"], "s4-topic"),
     ]:
-        _seed_session(db_session, sid)
+        _seed_session(db_session, sid, topic=topic)
         for c in costs:
             _seed_call(db_session, "test-user", sid, c)
     resp = usage_summary(db_session, "test-user", now=NOW)
