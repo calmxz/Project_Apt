@@ -50,7 +50,9 @@ function onClick() {
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;
   border-radius: var(--radius-sm);
-  transition: color 180ms ease, background 180ms ease;
+  transition:
+    color 180ms ease,
+    background 180ms ease;
 }
 
 .back-btn.is-icon-only {
@@ -63,7 +65,11 @@ function onClick() {
 .back-btn:focus-visible {
   color: var(--color-heading);
   background: var(--color-surface-soft);
-  outline: none;
+}
+
+.back-btn:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 
 .arrow {

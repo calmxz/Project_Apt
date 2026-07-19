@@ -22,7 +22,10 @@
   text-decoration: none;
   font-family: var(--font-sans);
   font-size: var(--fs-label);
-  transition: color 180ms ease, background 180ms ease, border-color 180ms ease;
+  transition:
+    color 180ms ease,
+    background 180ms ease,
+    border-color 180ms ease;
 }
 
 .profile-link.profile-link-compact {
@@ -34,5 +37,9 @@
   color: var(--color-heading);
   background: var(--color-surface);
   border-color: var(--color-heading);
-  outline: none;
+}
+
+.profile-link:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }

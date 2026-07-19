@@ -34,7 +34,12 @@
         @select="onGapPicked"
       />
 
-      <div ref="messagesEl" class="messages" :class="{ 'is-empty': !store.messages.length }" data-testid="session-messages">
+      <div
+        ref="messagesEl"
+        class="messages"
+        :class="{ 'is-empty': !store.messages.length }"
+        data-testid="session-messages"
+      >
         <MessageListSkeleton v-if="store.detailLoading" />
         <template v-else>
           <ChatEmptyState
@@ -51,7 +56,13 @@
         </template>
       </div>
 
-      <p v-if="store.followupNotice" class="followup-notice" data-testid="followup-notice" role="status" aria-live="polite">
+      <p
+        v-if="store.followupNotice"
+        class="followup-notice"
+        data-testid="followup-notice"
+        role="status"
+        aria-live="polite"
+      >
         {{ store.followupNotice }}
       </p>
 
@@ -116,10 +127,7 @@
         data-testid="session-summary-dialog"
         class="summary-dialog"
       >
-        <p
-          class="summary"
-          :data-testid="`session-summary-${summaryKind}`"
-        >
+        <p class="summary" :data-testid="`session-summary-${summaryKind}`">
           {{ summaryText }}
         </p>
         <template #footer>
@@ -194,19 +202,16 @@ const hasGaps = computed(
 )
 // Same discriminator-checked source as hasGaps, but the full list is needed to
 // drive the picker (single gap skips it, >1 gap opens it).
-const confirmedGaps = computed(
-  () =>
-    (store.currentSession?.topic_profile?.confirmed_gaps ?? []).map(
-      (g) => g?.name ?? g,
-    ),
+const confirmedGaps = computed(() =>
+  (store.currentSession?.topic_profile?.confirmed_gaps ?? []).map((g) => g?.name ?? g),
 )
 // Discriminator-gated (same as isEnded/headerTopic): during a switch,
 // store.currentSession still holds the PREVIOUS session, so gating on raw
 // currentSession would leave the composer enabled+pointed at the old session
 // (currentSessionId lags props.id until the await resolves) — a send would
 // land in the wrong session and then vanish when the target detail loads.
-const canEnd = computed(() =>
-  store.currentSession?.id === props.id && !store.currentSession.ended_at,
+const canEnd = computed(
+  () => store.currentSession?.id === props.id && !store.currentSession.ended_at,
 )
 const canSend = computed(() => canEnd.value && !store.dailyCapReached && !store.costCapReached)
 
@@ -275,18 +280,18 @@ function onCostWarning(event) {
   if (level === 'urgent') {
     if (urgentCapShown.value) return
     urgentCapShown.value = true
-    showError(
-      'You are very close to today’s cost limit.',
-      { summary: 'Cost limit near', life: 8000 },
-    )
+    showError('You are very close to today’s cost limit.', {
+      summary: 'Cost limit near',
+      life: 8000,
+    })
     return
   }
   if (softCapShown.value) return
   softCapShown.value = true
-  showWarn(
-    'You’re approaching the daily cost limit for this session.',
-    { summary: 'Cost warning', life: 6000 },
-  )
+  showWarn('You’re approaching the daily cost limit for this session.', {
+    summary: 'Cost warning',
+    life: 6000,
+  })
 }
 onMounted(() => costBus.addEventListener('cost-warning', onCostWarning))
 onUnmounted(() => costBus.removeEventListener('cost-warning', onCostWarning))
@@ -319,10 +324,7 @@ function scrollToBottom() {
   })
 }
 
-watch(
-  [() => store.messages.length, awaitingResponse],
-  () => scrollToBottom(),
-)
+watch([() => store.messages.length, awaitingResponse], () => scrollToBottom())
 
 async function loadCurrent(id) {
   // Reset per-load so navigating away from a 404 session clears the state.
@@ -340,7 +342,9 @@ async function loadCurrent(id) {
       // Dev-only WS3 gate measurement: navigate -> detail painted. This number
       // decides whether the retention tail (warm prefetch + SWR cache) is worth
       // building (see Task 5). Remove once that decision is recorded.
-      console.debug(`[perf] session ${id} detail painted in ${Math.round(performance.now() - startedAt)}ms`)
+      console.debug(
+        `[perf] session ${id} detail painted in ${Math.round(performance.now() - startedAt)}ms`,
+      )
     }
   } catch (e) {
     // Superseded load: a newer navigation already changed props.id, so a late
@@ -476,7 +480,10 @@ async function pollUploadStatus(documentId, filename) {
     try {
       s = await getUploadStatus(documentId)
     } catch (e) {
-      uploadStatus.value = { kind: 'failed', text: `Upload status unavailable: ${friendlyError(e)}` }
+      uploadStatus.value = {
+        kind: 'failed',
+        text: `Upload status unavailable: ${friendlyError(e)}`,
+      }
       return
     }
     if (s.status === 'ready') {
@@ -588,9 +595,16 @@ function goHome() {
    mount/unmount) drives the overflow lock and the flex-height cascade — every
    ancestor down to the scroller needs min-height: 0 so it can shrink instead of
    overflowing. Scoped to this route; other routes keep normal document scroll. */
-:global(body.chat-locked) { overflow: hidden; }
-:global(body.chat-locked #app) { height: 100vh; height: 100dvh; }
-:global(body.chat-locked .page) { min-height: 0; }
+:global(body.chat-locked) {
+  overflow: hidden;
+}
+:global(body.chat-locked #app) {
+  height: 100vh;
+  height: 100dvh;
+}
+:global(body.chat-locked .page) {
+  min-height: 0;
+}
 :global(body.chat-locked .page-inner) {
   display: flex;
   flex-direction: column;
@@ -649,16 +663,26 @@ function goHome() {
   scrollbar-color: var(--color-border-strong) transparent;
 }
 
-.messages::-webkit-scrollbar { width: 8px; }
-.messages::-webkit-scrollbar-button { display: none; height: 0; width: 0; }
-.messages::-webkit-scrollbar-track { background: transparent; }
+.messages::-webkit-scrollbar {
+  width: 8px;
+}
+.messages::-webkit-scrollbar-button {
+  display: none;
+  height: 0;
+  width: 0;
+}
+.messages::-webkit-scrollbar-track {
+  background: transparent;
+}
 .messages::-webkit-scrollbar-thumb {
   background: var(--color-border-strong);
   border-radius: var(--radius-pill);
   border: 2px solid transparent;
   background-clip: padding-box;
 }
-.messages::-webkit-scrollbar-thumb:hover { background: var(--color-text-faint); }
+.messages::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-faint);
+}
 
 .messages.is-empty {
   /* When the conversation is empty, let the empty-state anchor naturally
@@ -689,8 +713,8 @@ function goHome() {
 
 .error-retry {
   flex: 0 0 auto;
-  background: var(--signal-error);
-  color: #FFFFFF;
+  background: var(--color-error-text);
+  color: #ffffff;
   border: 0;
   border-radius: var(--radius-pill);
   padding: 0.4rem 0.875rem;
@@ -698,14 +722,19 @@ function goHome() {
   font-weight: 600;
   font-size: 0.8125rem;
   cursor: pointer;
-  transition: filter var(--motion-fast) ease, transform var(--motion-fast) var(--motion-bounce);
+  transition:
+    filter var(--motion-fast) ease,
+    transform var(--motion-fast) var(--motion-bounce);
 }
 
-.error-retry:hover,
-.error-retry:focus-visible {
+.error-retry:hover {
   filter: brightness(1.08);
   transform: translateY(-1px);
-  outline: none;
+}
+
+.error-retry:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 
 .error-details {
@@ -763,7 +792,7 @@ function goHome() {
 
 :global(.summary-dialog .p-dialog-footer .p-button) {
   background: var(--color-accent-strong);
-  color: #FFFFFF;
+  color: #ffffff;
   border: 0;
   border-radius: var(--radius-pill);
   padding: 0.625rem 1.5rem;
@@ -804,9 +833,12 @@ function goHome() {
   text-decoration: none;
 }
 
-.home-link:hover,
-.home-link:focus-visible {
+.home-link:hover {
   color: var(--color-accent-hover);
-  outline: none;
+}
+
+.home-link:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 </style>

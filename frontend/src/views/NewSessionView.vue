@@ -21,9 +21,8 @@
           @keydown.enter="onEnter"
         />
         <p class="help">
-          To continue an ended topic, use "Continue topic" on its card in the
-          Sessions library — the tutor keeps your profile. Reopening from the
-          sidebar picks up the same session instead.
+          To continue an ended topic, use "Continue topic" on its card in the Sessions library — the
+          tutor keeps your profile. Reopening from the sidebar picks up the same session instead.
         </p>
       </div>
 
@@ -53,10 +52,17 @@
           <i class="pi pi-paperclip" aria-hidden="true" />
           <span>Add reference files (optional)</span>
         </button>
-        <p class="attach-hint">PDF, PPTX, TXT, or MD. The tutor can cite these during the session.</p>
+        <p class="attach-hint">
+          PDF, PPTX, TXT, or MD. The tutor can cite these during the session.
+        </p>
 
         <ul v-if="files.length" class="chips" aria-label="Attached files">
-          <li v-for="(f, i) in files" :key="`${f.name}-${i}`" class="chip" data-testid="new-file-chip">
+          <li
+            v-for="(f, i) in files"
+            :key="`${f.name}-${i}`"
+            class="chip"
+            data-testid="new-file-chip"
+          >
             <i class="pi pi-file" aria-hidden="true" />
             <span class="chip-name">{{ f.name }}</span>
             <button
@@ -77,17 +83,14 @@
         </div>
       </div>
 
-      <div
-        v-if="activeOnTopic"
-        class="warn"
-        data-testid="new-active-warn"
-      >
+      <div v-if="activeOnTopic" class="warn" data-testid="new-active-warn">
         <i class="pi pi-info-circle warn-icon" aria-hidden="true" />
         <div class="warn-body">
           <p class="warn-line">
             You already have an active session on
             <strong>"{{ activeOnTopic.topic }}"</strong>
-            (#{{ shortId(activeOnTopic.id) }}, started {{ formatRelative(activeOnTopic.created_at) }}).
+            (#{{ shortId(activeOnTopic.id) }}, started
+            {{ formatRelative(activeOnTopic.created_at) }}).
           </p>
           <button
             type="button"
@@ -162,9 +165,7 @@ onMounted(async () => {
   }
 })
 
-const activeOnTopic = computed(() =>
-  findActiveSessionByTopic(store.sessions, topic.value),
-)
+const activeOnTopic = computed(() => findActiveSessionByTopic(store.sessions, topic.value))
 
 const dupeBlocked = computed(() => Boolean(activeOnTopic.value))
 const canSubmit = computed(() => Boolean(topic.value.trim()))
@@ -328,7 +329,10 @@ async function submit() {
   font-weight: 500;
   letter-spacing: var(--tracking-tight);
   box-shadow: var(--shadow-paper);
-  transition: border-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease, transform var(--motion-fast) ease;
+  transition:
+    border-color var(--motion-fast) ease,
+    box-shadow var(--motion-fast) ease,
+    transform var(--motion-fast) ease;
 }
 
 .topic-input::placeholder {
@@ -369,7 +373,11 @@ async function submit() {
   font-size: 0.8125rem;
   font-weight: 500;
   cursor: pointer;
-  transition: background var(--motion-fast) ease, color var(--motion-fast) ease, border-color var(--motion-fast) ease, transform var(--motion-fast) ease;
+  transition:
+    background var(--motion-fast) ease,
+    color var(--motion-fast) ease,
+    border-color var(--motion-fast) ease,
+    transform var(--motion-fast) ease;
 }
 
 .quick-pick:hover {
@@ -404,7 +412,9 @@ async function submit() {
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
-  transition: border-color var(--motion-fast) ease, color var(--motion-fast) ease;
+  transition:
+    border-color var(--motion-fast) ease,
+    color var(--motion-fast) ease;
 }
 
 .attach-btn:hover,
@@ -518,14 +528,16 @@ async function submit() {
   gap: 0.375rem;
   padding: 0.4rem 0.875rem;
   border-radius: var(--radius-pill);
-  background: var(--signal-info);
-  color: #FFFFFF;
+  background: var(--color-info-strong);
+  color: #ffffff;
   border: 0;
   font-family: var(--font-sans);
   font-weight: 600;
   font-size: 0.8125rem;
   cursor: pointer;
-  transition: filter var(--motion-fast) ease, transform var(--motion-fast) var(--motion-bounce);
+  transition:
+    filter var(--motion-fast) ease,
+    transform var(--motion-fast) var(--motion-bounce);
 }
 
 .warn-action:hover {
@@ -546,14 +558,16 @@ async function submit() {
   gap: 0.375rem;
   padding: 0.4rem 0.875rem;
   border-radius: var(--radius-pill);
-  background: var(--signal-info);
-  color: #FFFFFF;
+  background: var(--color-info-strong);
+  color: #ffffff;
   border: 0;
   font-family: var(--font-sans);
   font-weight: 600;
   font-size: 0.8125rem;
   cursor: pointer;
-  transition: filter var(--motion-fast) ease, transform var(--motion-fast) var(--motion-bounce);
+  transition:
+    filter var(--motion-fast) ease,
+    transform var(--motion-fast) var(--motion-bounce);
 }
 
 .open-existing:hover {
@@ -569,14 +583,17 @@ async function submit() {
   padding: 0.9rem 1.625rem;
   border-radius: var(--radius-pill);
   background: var(--color-accent-strong);
-  color: #FFFFFF;
+  color: #ffffff;
   border: 0;
   font-family: var(--font-sans);
   font-weight: 600;
   font-size: 1rem;
   cursor: pointer;
   box-shadow: var(--shadow-pop);
-  transition: transform var(--motion-fast) var(--motion-bounce), box-shadow var(--motion-fast) ease, opacity var(--motion-fast) ease;
+  transition:
+    transform var(--motion-fast) var(--motion-bounce),
+    box-shadow var(--motion-fast) ease,
+    opacity var(--motion-fast) ease;
 }
 
 .cta-primary:hover:not(:disabled) {

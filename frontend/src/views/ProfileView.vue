@@ -8,7 +8,9 @@
         <h1 class="title">{{ topicLabel }}</h1>
         <p v-if="data?.profile?.knowledge_level" class="lede">
           Working at the
-          <span class="level-pill" :data-level="data.profile.knowledge_level">{{ data.profile.knowledge_level }}</span>
+          <span class="level-pill" :data-level="data.profile.knowledge_level">{{
+            data.profile.knowledge_level
+          }}</span>
           level.
         </p>
       </div>
@@ -40,11 +42,7 @@
       </div>
     </header>
 
-    <GapPickerDialog
-      v-model:visible="gapPickerOpen"
-      :gaps="gapNames"
-      @select="goReview"
-    />
+    <GapPickerDialog v-model:visible="gapPickerOpen" :gaps="gapNames" @select="goReview" />
 
     <p v-if="loading" class="muted" data-testid="sprof-loading">Loading...</p>
     <p v-else-if="error" class="error" data-testid="sprof-error">{{ error }}</p>
@@ -57,11 +55,7 @@
         {{ writeError }}
       </p>
 
-      <div
-        v-if="data.profile.focus_target_gap"
-        class="focus"
-        data-testid="sprof-focus"
-      >
+      <div v-if="data.profile.focus_target_gap" class="focus" data-testid="sprof-focus">
         <span class="focus-icon" aria-hidden="true">
           <i class="pi pi-bullseye" />
         </span>
@@ -71,11 +65,7 @@
         </div>
       </div>
 
-      <div
-        v-if="subtopicEntries.length"
-        class="subtopics"
-        data-testid="sprof-subtopics"
-      >
+      <div v-if="subtopicEntries.length" class="subtopics" data-testid="sprof-subtopics">
         <h2 class="section-title">
           <i class="pi pi-sliders-h col-icon" aria-hidden="true" />
           Subtopic levels
@@ -114,9 +104,7 @@
             <i class="pi pi-check-circle col-icon col-icon-green" aria-hidden="true" />
             Mastered
           </h2>
-          <p v-if="!data.profile.mastered_concepts?.length" class="muted">
-            Nothing recorded yet.
-          </p>
+          <p v-if="!data.profile.mastered_concepts?.length" class="muted">Nothing recorded yet.</p>
           <ul v-else class="chip-list">
             <li
               v-for="c in data.profile.mastered_concepts"
@@ -164,15 +152,9 @@
             <i class="pi pi-bolt col-icon col-icon-yellow" aria-hidden="true" />
             Confirmed gaps
           </h2>
-          <p v-if="!data.profile.confirmed_gaps?.length" class="muted">
-            None.
-          </p>
+          <p v-if="!data.profile.confirmed_gaps?.length" class="muted">None.</p>
           <ul v-else class="chip-list">
-            <li
-              v-for="g in data.profile.confirmed_gaps"
-              :key="`g-${g.name}`"
-              class="chip chip-gap"
-            >
+            <li v-for="g in data.profile.confirmed_gaps" :key="`g-${g.name}`" class="chip chip-gap">
               {{ g.name }}
               <span v-if="g.evidence_type" class="chip-badge" data-testid="evidence-badge">
                 {{ g.evidence_type }}
@@ -279,13 +261,9 @@ const topicLabel = computed(() => {
   return fromStore || store.currentSession?.topic || 'Session profile'
 })
 
-const gapNames = computed(
-  () => (data.value?.profile?.confirmed_gaps ?? []).map((g) => g.name),
-)
+const gapNames = computed(() => (data.value?.profile?.confirmed_gaps ?? []).map((g) => g.name))
 
-const subtopicEntries = computed(() =>
-  Object.entries(data.value?.profile?.subtopic_levels ?? {}),
-)
+const subtopicEntries = computed(() => Object.entries(data.value?.profile?.subtopic_levels ?? {}))
 
 async function load() {
   loading.value = true
@@ -346,9 +324,7 @@ function setSubtopicLevel(name, level) {
 }
 
 function removeSubtopic(name) {
-  return _applyWrite(() =>
-    deleteProfileItem(props.id, 'subtopic_levels', name, etag.value),
-  )
+  return _applyWrite(() => deleteProfileItem(props.id, 'subtopic_levels', name, etag.value))
 }
 
 function startReview() {
@@ -417,11 +393,11 @@ onMounted(load)
 
 .level-pill[data-level='beginner'] {
   background: rgba(91, 141, 239, 0.16);
-  color: #2E5DC4;
+  color: var(--color-info-text);
   border-color: rgba(91, 141, 239, 0.3);
 }
 :root[data-theme='dark'] .level-pill[data-level='beginner'] {
-  color: #7AA3F5;
+  color: #7aa3f5;
 }
 
 .level-pill[data-level='intermediate'] {
@@ -440,7 +416,9 @@ onMounted(load)
   color: var(--color-success-text);
   border-color: rgba(34, 197, 94, 0.3);
 }
-:root:not([data-theme='dark']) .level-pill[data-level='advanced'] { color: var(--color-success-text); }
+:root:not([data-theme='dark']) .level-pill[data-level='advanced'] {
+  color: var(--color-success-text);
+}
 
 .level-pill[data-level='unknown'] {
   background: var(--color-surface-soft);
@@ -448,8 +426,12 @@ onMounted(load)
   border-color: var(--color-border);
 }
 
-.muted { color: var(--color-text-muted); }
-.error { color: var(--color-error-text); }
+.muted {
+  color: var(--color-text-muted);
+}
+.error {
+  color: var(--color-error-text);
+}
 
 /* Focus */
 .focus {
@@ -477,7 +459,7 @@ onMounted(load)
   height: 2.25rem;
   border-radius: var(--radius-pill);
   background: var(--color-accent-strong);
-  color: #FFFFFF;
+  color: #ffffff;
   font-size: 1rem;
   flex-shrink: 0;
 }
@@ -496,7 +478,9 @@ onMounted(load)
   font-weight: 600;
   color: var(--accent-coral-700);
 }
-:root[data-theme='dark'] .focus-label { color: var(--accent-coral-300); }
+:root[data-theme='dark'] .focus-label {
+  color: var(--accent-coral-300);
+}
 
 .focus-gap {
   font-family: var(--font-display);
@@ -519,9 +503,15 @@ onMounted(load)
   margin: 0 0 0.875rem 0;
 }
 
-.col-icon { font-size: 1.05rem; }
-.col-icon-green { color: var(--color-success-text); }
-.col-icon-yellow { color: var(--color-warning-text); }
+.col-icon {
+  font-size: 1.05rem;
+}
+.col-icon-green {
+  color: var(--color-success-text);
+}
+.col-icon-yellow {
+  color: var(--color-warning-text);
+}
 
 .two-col {
   display: grid;
@@ -549,21 +539,27 @@ onMounted(load)
   transition: transform var(--motion-fast) var(--motion-bounce);
 }
 
-.chip:hover { transform: translateY(-1px); }
+.chip:hover {
+  transform: translateY(-1px);
+}
 
 .chip-mastered {
   background: rgba(34, 197, 94, 0.14);
   color: var(--color-success-text);
   border-color: rgba(34, 197, 94, 0.3);
 }
-:root:not([data-theme='dark']) .chip-mastered { color: var(--color-success-text); }
+:root:not([data-theme='dark']) .chip-mastered {
+  color: var(--color-success-text);
+}
 
 .chip-gap {
   background: rgba(255, 176, 32, 0.16);
   color: var(--color-warning-text);
   border-color: rgba(255, 176, 32, 0.35);
 }
-:root[data-theme='dark'] .chip-gap { color: var(--signal-warning); }
+:root[data-theme='dark'] .chip-gap {
+  color: var(--signal-warning);
+}
 
 /* Summary card */
 .summary-card {
@@ -604,10 +600,16 @@ onMounted(load)
   transition: transform var(--motion-fast) var(--motion-bounce);
 }
 
-.event-row:hover { transform: translateY(-1px); }
+.event-row:hover {
+  transform: translateY(-1px);
+}
 
-.evt-ok { border-left: 3px solid var(--signal-success); }
-.evt-bad { border-left: 3px solid var(--signal-warning); }
+.evt-ok {
+  border-left: 3px solid var(--signal-success);
+}
+.evt-bad {
+  border-left: 3px solid var(--signal-warning);
+}
 
 .event-head {
   display: flex;
@@ -632,11 +634,16 @@ onMounted(load)
   height: 1.5rem;
   border-radius: var(--radius-pill);
   font-size: 0.7rem;
-  color: #FFFFFF;
+  color: #ffffff;
 }
 
-.evt-ok .event-mark { background: var(--signal-success); }
-.evt-bad .event-mark { background: var(--signal-warning); color: #2A1F00; }
+.evt-ok .event-mark {
+  background: var(--signal-success);
+}
+.evt-bad .event-mark {
+  background: var(--signal-warning);
+  color: #2a1f00;
+}
 
 .event-q {
   margin: 0;
@@ -680,7 +687,9 @@ onMounted(load)
   opacity: 0.7;
   transition: opacity var(--motion-fast) var(--motion-bounce);
 }
-.chip-x:hover { opacity: 1; }
+.chip-x:hover {
+  opacity: 1;
+}
 
 /* Add-item row */
 .add-row {
@@ -712,7 +721,9 @@ onMounted(load)
   color: var(--color-accent-strong);
   cursor: pointer;
 }
-.add-btn:hover { background: var(--color-surface-soft); }
+.add-btn:hover {
+  background: var(--color-surface-soft);
+}
 
 /* Header actions */
 .header-actions {
@@ -735,7 +746,9 @@ onMounted(load)
   background: var(--accent-coral-100);
   color: var(--accent-coral-700);
   cursor: pointer;
-  transition: transform var(--motion-fast) var(--motion-bounce), background var(--motion-fast) ease;
+  transition:
+    transform var(--motion-fast) var(--motion-bounce),
+    background var(--motion-fast) ease;
 }
 
 .review-gaps-btn:hover {
@@ -773,7 +786,7 @@ onMounted(load)
 
 .level-opt.active {
   background: var(--color-accent-strong);
-  color: #FFFFFF;
+  color: #ffffff;
   border-color: var(--color-accent-strong);
 }
 
