@@ -129,7 +129,7 @@
         modal
         :closable="true"
         data-testid="session-summary-dialog"
-        class="summary-dialog"
+        class="crux-dialog summary-dialog"
       >
         <p class="summary" :data-testid="`session-summary-${summaryKind}`">
           {{ summaryText }}
@@ -788,34 +788,6 @@ function goHome() {
   line-height: 1.6;
   color: var(--color-text);
   padding: 0.5rem 0;
-}
-
-:global(.summary-dialog .p-dialog) {
-  border-radius: var(--radius-card);
-  border: 1px solid var(--color-border);
-  box-shadow: var(--shadow-lift);
-}
-
-:global(.summary-dialog .p-dialog-header) {
-  font-family: var(--font-display);
-  font-weight: 700;
-  letter-spacing: var(--tracking-tight);
-  font-size: 1.5rem;
-  padding: 1.25rem 1.5rem 0.75rem;
-}
-
-:global(.summary-dialog .p-dialog-content) {
-  padding: 0.5rem 1.5rem 1.25rem;
-}
-
-:global(.summary-dialog .p-dialog-footer .p-button) {
-  background: var(--color-accent-strong);
-  color: #ffffff;
-  border: 0;
-  border-radius: var(--radius-pill);
-  padding: 0.625rem 1.5rem;
-  font-weight: 600;
-  box-shadow: var(--shadow-pop);
 }
 
 /* Not-found */

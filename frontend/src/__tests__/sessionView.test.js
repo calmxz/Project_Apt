@@ -410,6 +410,22 @@ describe('SessionView', () => {
     expect(store.pendingSummary).toBe(null)
   })
 
+  it('summary dialog carries the shared dialog chrome class', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession()
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    store.pendingSummary = {
+      sessionId: 's1',
+      kind: 'summary',
+      text: 'Great progress on derivatives.',
+    }
+    await flushPromises()
+    expect(wrapper.get('[data-testid="session-summary-dialog"]').classes()).toContain('crux-dialog')
+  })
+
   it('ignores pendingSummary targeting a different session', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'loadSession').mockImplementation(async () => {
