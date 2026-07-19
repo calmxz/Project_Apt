@@ -56,6 +56,10 @@
         </template>
       </div>
 
+      <div class="sr-only" role="status" aria-live="polite" data-testid="stream-status">
+        {{ streamAnnouncement }}
+      </div>
+
       <p
         v-if="store.followupNotice"
         class="followup-notice"
@@ -185,6 +189,20 @@ const uploading = ref(false)
 const uploadStatus = ref(null)
 const lastError = ref(null)
 const referenceBannerRef = ref(null)
+
+// F-18: a live region over the token-streaming bubble spams SRs with every
+// mutation. Announce discrete transitions instead. The store's stream state
+// machine has intermediate members beyond idle/streaming (tool_running,
+// stopping), so the edges we care about are idle -> non-idle (start) and
+// non-idle -> idle (finish), not every individual hop.
+const streamAnnouncement = ref('')
+watch(
+  () => store.streamState,
+  (next, prev) => {
+    if (prev === 'idle' && next !== 'idle') streamAnnouncement.value = 'Tutor is replying.'
+    else if (prev !== 'idle' && next === 'idle') streamAnnouncement.value = 'Reply finished.'
+  },
+)
 
 // Use the same target-id discriminator as headerTopic so the ended-banner /
 // composer / resume action agree with the optimistic header during a switch.
