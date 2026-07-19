@@ -92,7 +92,14 @@ router.beforeEach(async (to) => {
   const auth = useAuthStore()
   // If auth store hasn't booted yet (first navigation in tests/dev), do it
   // now so the guard has a deterministic answer.
-  if (!auth.ready) await auth.init()
+  if (!auth.ready) {
+    try {
+      await auth.init()
+    } catch {
+      // F-14: a failed init means no session - proceed unauthenticated;
+      // the guard below routes to /login.
+    }
+  }
 
   const isPublic = to.meta?.public === true
   if (!auth.isAuthenticated && !isPublic) {

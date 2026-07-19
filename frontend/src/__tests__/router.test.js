@@ -112,4 +112,15 @@ describe('router', () => {
     await router.push({ name: 'register' })
     expect(router.currentRoute.value.name).toBe('home')
   })
+
+  it('guard proceeds unauthenticated when auth.init rejects', async () => {
+    const auth = useAuthStore()
+    auth._resetForTests()
+    globalThis.__supabaseAuthStub.getSession.mockRejectedValueOnce(new Error('corrupt session'))
+    // Push to a different route than the current one (beforeEach already
+    // landed on '/'): a same-route push is a vue-router no-op and skips the
+    // guard entirely, which would defeat this test.
+    await router.push('/settings') // must not throw
+    expect(router.currentRoute.value.name).toBe('login')
+  })
 })
