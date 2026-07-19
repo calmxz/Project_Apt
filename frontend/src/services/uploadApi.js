@@ -4,6 +4,7 @@ import {
   apiDelete,
   getFreshAccessToken,
   _refreshAccessToken,
+  _onAuthExpired,
 } from './apiClient.js'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
@@ -63,10 +64,12 @@ export async function uploadDocument({ sessionId, file }) {
   fd.append('file', file)
 
   let resp
+  let retried = false
   try {
     resp = await _postUpload(fd, await _authHeaders())
     if (resp.status === 401) {
       // F-12: one silent refresh-retry, same policy as request() (F-09).
+      retried = true
       const token = await _refreshAccessToken()
       resp = await _postUpload(fd, token ? { authorization: `Bearer ${token}` } : {})
     }
@@ -83,7 +86,13 @@ export async function uploadDocument({ sessionId, file }) {
     /* leave parsed null */
   }
 
-  if (!resp.ok) throw new ApiError(resp.status, parsed ?? text, '/upload')
+  if (!resp.ok) {
+    // F-12: still-401 after the retry means the session is truly dead --
+    // same policy as request()'s still-401 branch (F-09): sign out and
+    // redirect to login instead of leaving the app believing it's signed in.
+    if (resp.status === 401 && retried) await _onAuthExpired()
+    throw new ApiError(resp.status, parsed ?? text, '/upload')
+  }
   return parsed
 }
 

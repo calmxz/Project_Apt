@@ -12,6 +12,8 @@ import {
 } from '@/services/uploadApi.js'
 import { ApiError } from '@/services/apiClient.js'
 
+vi.mock('../router/index.js', () => ({ default: { push: vi.fn() } }))
+
 function fakeFile(name, size) {
   return { name, size }
 }
@@ -144,5 +146,15 @@ describe('uploadApi', () => {
     fetchMock.mockReturnValueOnce(fail(401, {})).mockReturnValueOnce(ok({}))
     await uploadDocument({ sessionId: 's1', file: new File(['x'], 'a.pdf') })
     expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('signs out and redirects to login when the retry also gets a 401 (F-12)', async () => {
+    const router = (await import('../router/index.js')).default
+    fetchMock.mockReturnValueOnce(fail(401, {})).mockReturnValueOnce(fail(401, {}))
+    await expect(
+      uploadDocument({ sessionId: 's1', file: new File(['x'], 'a.pdf') }),
+    ).rejects.toMatchObject({ status: 401 })
+    expect(globalThis.__supabaseAuthStub.signOut).toHaveBeenCalled()
+    expect(router.push).toHaveBeenCalledWith({ name: 'login' })
   })
 })
