@@ -18,7 +18,7 @@ const route = useRoute()
 const router = useRouter()
 const store = useSessionStore()
 const { mode, closeDrawer } = useSidebar()
-const { showSuccess } = useToast()
+const { showSuccess, showError } = useToast()
 
 const busy = ref(false)
 
@@ -60,8 +60,7 @@ async function onEnd() {
     // F-44: the summary dialog lives in SessionView; ending from anywhere
     // else would silently drop the pending summary. Toast it instead.
     const s = store.pendingSummary
-    const onThatSession =
-      route.name === 'session' && route.params.id === props.session.id
+    const onThatSession = route.name === 'session' && route.params.id === props.session.id
     if (s && s.sessionId === props.session.id && !onThatSession) {
       showSuccess(s.text)
       store.consumePendingSummary()
@@ -110,13 +109,13 @@ function refocusRowTrigger(id) {
 
 function onPin() {
   const id = props.session.id
-  store.setPinned(id, true).catch(() => {})
+  store.setPinned(id, true).catch(() => showError('Could not pin the session.'))
   refocusRowTrigger(id)
 }
 
 function onUnpin() {
   const id = props.session.id
-  store.setPinned(id, false).catch(() => {})
+  store.setPinned(id, false).catch(() => showError('Could not unpin the session.'))
   refocusRowTrigger(id)
 }
 
@@ -140,7 +139,11 @@ async function commitRename() {
   const next = draft.value.trim()
   renaming.value = false
   if (!next || next === (props.session.topic || '')) return
-  try { await store.renameSession(props.session.id, next) } catch { /* store.error populated */ }
+  try {
+    await store.renameSession(props.session.id, next)
+  } catch {
+    showError('Could not rename the session.')
+  }
 }
 
 function commitRenameFromKey() {
@@ -187,7 +190,11 @@ function commitRenameFromKey() {
           @click.stop
         />
         <span v-else class="sb-row-topic">
-          <i v-if="session.pinned && !session.ended_at" class="pi pi-bookmark-fill sb-row-pin" aria-hidden="true" />
+          <i
+            v-if="session.pinned && !session.ended_at"
+            class="pi pi-bookmark-fill sb-row-pin"
+            aria-hidden="true"
+          />
           {{ session.topic || 'Untitled' }}
         </span>
         <SessionChips
@@ -275,7 +282,9 @@ function commitRenameFromKey() {
   border-radius: var(--radius-pill);
   border: 1.5px solid var(--color-text-faint);
   background: transparent;
-  transition: background var(--motion-fast) ease, border-color var(--motion-fast) ease;
+  transition:
+    background var(--motion-fast) ease,
+    border-color var(--motion-fast) ease;
 }
 
 .sb-row-dot--filled {

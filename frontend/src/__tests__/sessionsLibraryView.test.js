@@ -23,9 +23,14 @@ function page(items, over = {}) {
 }
 function item(id, over = {}) {
   return {
-    id, topic: `Topic ${id}`, created_at: '2026-06-01T00:00:00Z', ended_at: null,
-    message_count: 2, last_activity_at: '2026-06-01T00:00:00Z',
-    last_message_preview: null, last_session_summary: null,
+    id,
+    topic: `Topic ${id}`,
+    created_at: '2026-06-01T00:00:00Z',
+    ended_at: null,
+    message_count: 2,
+    last_activity_at: '2026-06-01T00:00:00Z',
+    last_message_preview: null,
+    last_session_summary: null,
     progress: { focus_target_gap: 'gap-' + id, mastered_count: 0 },
     ...over,
   }
@@ -85,12 +90,14 @@ describe('SessionsLibraryView', () => {
   })
 
   it('does not nest the Continue button inside the card link', async () => {
-    sessionsApi.getSessionLibrary.mockResolvedValue(page([
-      item('z', { ended_at: '2026-06-02T00:00:00Z' }),
-    ]))
+    sessionsApi.getSessionLibrary.mockResolvedValue(
+      page([item('z', { ended_at: '2026-06-02T00:00:00Z' })]),
+    )
     const wrapper = mount(SessionsLibraryView, { global: { stubs } })
     await flushPromises()
-    expect(wrapper.find('[data-testid="library-card-z"] .library-card-link button').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="library-card-z"] .library-card-link button').exists()).toBe(
+      false,
+    )
     expect(wrapper.find('[data-testid="library-continue-z"]').exists()).toBe(true)
   })
 
@@ -98,10 +105,14 @@ describe('SessionsLibraryView', () => {
   // RecentSessionSummary). This fails unless SessionListItem carries
   // last_session_summary (Task 1 Step 5b) AND it is in the item() factory.
   it('ended card shows the auto-stripped summary, not "Completed"', async () => {
-    sessionsApi.getSessionLibrary.mockResolvedValue(page([
-      item('z', { ended_at: '2026-06-02T00:00:00Z',
-                  last_session_summary: '[auto] Covered the Krebs cycle' }),
-    ]))
+    sessionsApi.getSessionLibrary.mockResolvedValue(
+      page([
+        item('z', {
+          ended_at: '2026-06-02T00:00:00Z',
+          last_session_summary: '[auto] Covered the Krebs cycle',
+        }),
+      ]),
+    )
     const wrapper = mount(SessionsLibraryView, { global: { stubs } })
     await flushPromises()
     const card = wrapper.get('[data-testid="library-card-z"]')
@@ -114,7 +125,9 @@ describe('SessionsLibraryView', () => {
     const wrapper = mount(SessionsLibraryView, { global: { stubs } })
     await flushPromises()
     sessionsApi.getSessionLibrary.mockClear()
-    sessionsApi.getSessionLibrary.mockResolvedValue(page([item('b', { ended_at: '2026-06-02T00:00:00Z' })]))
+    sessionsApi.getSessionLibrary.mockResolvedValue(
+      page([item('b', { ended_at: '2026-06-02T00:00:00Z' })]),
+    )
     await wrapper.get('[data-testid="library-filter-ended"]').trigger('click')
     await flushPromises()
     expect(sessionsApi.getSessionLibrary).toHaveBeenCalledWith(
@@ -136,13 +149,21 @@ describe('SessionsLibraryView', () => {
     expect(wrapper.find('[aria-selected]').exists()).toBe(false)
 
     // 'all' is the default and is pressed; 'ended' is not.
-    expect(wrapper.get('[data-testid="library-filter-all"]').attributes('aria-pressed')).toBe('true')
-    expect(wrapper.get('[data-testid="library-filter-ended"]').attributes('aria-pressed')).toBe('false')
+    expect(wrapper.get('[data-testid="library-filter-all"]').attributes('aria-pressed')).toBe(
+      'true',
+    )
+    expect(wrapper.get('[data-testid="library-filter-ended"]').attributes('aria-pressed')).toBe(
+      'false',
+    )
 
     await wrapper.get('[data-testid="library-filter-ended"]').trigger('click')
     await flushPromises()
-    expect(wrapper.get('[data-testid="library-filter-ended"]').attributes('aria-pressed')).toBe('true')
-    expect(wrapper.get('[data-testid="library-filter-all"]').attributes('aria-pressed')).toBe('false')
+    expect(wrapper.get('[data-testid="library-filter-ended"]').attributes('aria-pressed')).toBe(
+      'true',
+    )
+    expect(wrapper.get('[data-testid="library-filter-all"]').attributes('aria-pressed')).toBe(
+      'false',
+    )
   })
 
   it('refetches with sort when sort changes', async () => {
@@ -182,16 +203,24 @@ describe('SessionsLibraryView', () => {
     await flushPromises()
 
     sessionsApi.getSessionLibrary.mockClear()
-    sessionsApi.getSessionLibrary.mockResolvedValue(page([item('b')], { total: 45, limit: 20, offset: 20 }))
+    sessionsApi.getSessionLibrary.mockResolvedValue(
+      page([item('b')], { total: 45, limit: 20, offset: 20 }),
+    )
     await wrapper.get('[data-testid="library-next"]').trigger('click')
     await flushPromises()
-    expect(sessionsApi.getSessionLibrary).toHaveBeenCalledWith(expect.objectContaining({ offset: 20 }))
+    expect(sessionsApi.getSessionLibrary).toHaveBeenCalledWith(
+      expect.objectContaining({ offset: 20 }),
+    )
 
     sessionsApi.getSessionLibrary.mockClear()
-    sessionsApi.getSessionLibrary.mockResolvedValue(page([item('a')], { total: 45, limit: 20, offset: 0 }))
+    sessionsApi.getSessionLibrary.mockResolvedValue(
+      page([item('a')], { total: 45, limit: 20, offset: 0 }),
+    )
     await wrapper.get('[data-testid="library-prev"]').trigger('click')
     await flushPromises()
-    expect(sessionsApi.getSessionLibrary).toHaveBeenCalledWith(expect.objectContaining({ offset: 0 }))
+    expect(sessionsApi.getSessionLibrary).toHaveBeenCalledWith(
+      expect.objectContaining({ offset: 0 }),
+    )
   })
 
   it('disables Next on the last page', async () => {
@@ -239,10 +268,9 @@ describe('SessionsLibraryView', () => {
   })
 
   it('ended card shows Continue button; active card does not', async () => {
-    sessionsApi.getSessionLibrary.mockResolvedValue(page([
-      item('active1'),
-      item('ended1', { ended_at: '2026-06-02T00:00:00Z' }),
-    ]))
+    sessionsApi.getSessionLibrary.mockResolvedValue(
+      page([item('active1'), item('ended1', { ended_at: '2026-06-02T00:00:00Z' })]),
+    )
     const wrapper = mount(SessionsLibraryView, { global: { stubs } })
     await flushPromises()
     expect(wrapper.find('[data-testid="library-continue-ended1"]').exists()).toBe(true)
@@ -253,9 +281,9 @@ describe('SessionsLibraryView', () => {
     const { useSessionStore } = await import('@/stores/session.js')
     const store = useSessionStore()
     const continueTopicSpy = vi.spyOn(store, 'continueTopic').mockResolvedValue({ id: 'z' })
-    sessionsApi.getSessionLibrary.mockResolvedValue(page([
-      item('z', { ended_at: '2026-06-02T00:00:00Z' }),
-    ]))
+    sessionsApi.getSessionLibrary.mockResolvedValue(
+      page([item('z', { ended_at: '2026-06-02T00:00:00Z' })]),
+    )
     const wrapper = mount(SessionsLibraryView, { global: { stubs } })
     await flushPromises()
     await wrapper.get('[data-testid="library-continue-z"]').trigger('click')
@@ -286,12 +314,15 @@ describe('SessionsLibraryView', () => {
     const { useSessionStore } = await import('@/stores/session.js')
     const store = useSessionStore()
     let resolve
-    const continueTopicSpy = vi
-      .spyOn(store, 'continueTopic')
-      .mockImplementation(() => new Promise((r) => { resolve = r }))
-    sessionsApi.getSessionLibrary.mockResolvedValue(page([
-      item('z', { ended_at: '2026-06-02T00:00:00Z' }),
-    ]))
+    const continueTopicSpy = vi.spyOn(store, 'continueTopic').mockImplementation(
+      () =>
+        new Promise((r) => {
+          resolve = r
+        }),
+    )
+    sessionsApi.getSessionLibrary.mockResolvedValue(
+      page([item('z', { ended_at: '2026-06-02T00:00:00Z' })]),
+    )
     const wrapper = mount(SessionsLibraryView, { global: { stubs } })
     await flushPromises()
     const btn = wrapper.get('[data-testid="library-continue-z"]')
@@ -306,13 +337,16 @@ describe('SessionsLibraryView', () => {
     const { useSessionStore } = await import('@/stores/session.js')
     const store = useSessionStore()
     vi.spyOn(store, 'continueTopic').mockRejectedValue(new Error('backend down'))
-    sessionsApi.getSessionLibrary.mockResolvedValue(page([
-      item('z', { ended_at: '2026-06-02T00:00:00Z' }),
-    ]))
+    sessionsApi.getSessionLibrary.mockResolvedValue(
+      page([item('z', { ended_at: '2026-06-02T00:00:00Z' })]),
+    )
     const wrapper = mount(SessionsLibraryView, { global: { stubs } })
     await flushPromises()
     const rejections = []
-    const onUnhandled = (e) => { rejections.push(e); e.preventDefault() }
+    const onUnhandled = (e) => {
+      rejections.push(e)
+      e.preventDefault()
+    }
     window.addEventListener('unhandledrejection', onUnhandled)
     try {
       await wrapper.get('[data-testid="library-continue-z"]').trigger('click')
@@ -327,10 +361,43 @@ describe('SessionsLibraryView', () => {
     expect(wrapper.get('[data-testid="library-continue-z"]').element.disabled).toBe(false)
   })
 
+  // F-15: two rapid filter clicks issue two fetchLibrary calls; if the first
+  // (slow) one settles after the second (fast) one, its stale page must not
+  // clobber the fast page's already-rendered results.
+  it('drops a stale response that settles after a newer one (F-15)', async () => {
+    sessionsApi.getSessionLibrary.mockResolvedValue(page([item('a')]))
+    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+    await flushPromises()
+
+    let resolveSlow, resolveFast
+    sessionsApi.getSessionLibrary
+      .mockReturnValueOnce(
+        new Promise((r) => {
+          resolveSlow = r
+        }),
+      )
+      .mockReturnValueOnce(
+        new Promise((r) => {
+          resolveFast = r
+        }),
+      )
+
+    await wrapper.get('[data-testid="library-filter-active"]').trigger('click')
+    await wrapper.get('[data-testid="library-filter-ended"]').trigger('click')
+
+    resolveFast(page([item('new')]))
+    await flushPromises()
+    resolveSlow(page([item('stale')], { total: 9 }))
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="library-card-new"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="library-card-stale"]').exists()).toBe(false)
+  })
+
   it('labels the ended-card action Continue topic', async () => {
-    sessionsApi.getSessionLibrary.mockResolvedValue(page([
-      item('z', { ended_at: '2026-06-02T00:00:00Z' }),
-    ]))
+    sessionsApi.getSessionLibrary.mockResolvedValue(
+      page([item('z', { ended_at: '2026-06-02T00:00:00Z' })]),
+    )
     const wrapper = mount(SessionsLibraryView, { global: { stubs } })
     await flushPromises()
     expect(wrapper.get('[data-testid="library-continue-z"]').text()).toBe('Continue topic')

@@ -22,17 +22,21 @@ export const endSession = (sessionId) => apiPost(`/sessions/${sessionId}/end`, {
 
 export const reopenSession = (sessionId) => apiPost(`/sessions/${sessionId}/reopen`, {})
 
-export const renameSession = (sessionId, topic) =>
-  apiPatch(`/sessions/${sessionId}`, { topic })
+export const renameSession = (sessionId, topic) => apiPatch(`/sessions/${sessionId}`, { topic })
 
-export const setPinned = (sessionId, pinned) =>
-  apiPatch(`/sessions/${sessionId}`, { pinned })
+export const setPinned = (sessionId, pinned) => apiPatch(`/sessions/${sessionId}`, { pinned })
 
+// F-20: SessionView banners these failures itself (lastError); silent stops
+// the errorBus double-toast - same opt-out pattern as profileApi.
 export const skipCheck = (sessionId, index) =>
-  apiPost(`/sessions/${sessionId}/check/skip`, { index })
+  apiPost(`/sessions/${sessionId}/check/skip`, { index }, { silent: true })
 
 export const answerCheck = (sessionId, index, selectedIndex) =>
-  apiPost(`/sessions/${sessionId}/check/answer`, {
-    index,
-    selected_index: selectedIndex,
-  })
+  apiPost(
+    `/sessions/${sessionId}/check/answer`,
+    {
+      index,
+      selected_index: selectedIndex,
+    },
+    { silent: true },
+  )

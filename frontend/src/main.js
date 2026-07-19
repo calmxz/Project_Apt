@@ -27,7 +27,13 @@ async function bootstrap() {
   // navigation has a deterministic auth answer rather than racing with the
   // SDK's initial getSession() call. auth.init() also re-keys the user
   // store to the resolved uid (F-08), so no separate boot-time load here.
-  await useAuthStore().init()
+  try {
+    await useAuthStore().init()
+  } catch (e) {
+    // F-14: never leave a blank page - mount unauthenticated and let the
+    // router guard route to /login.
+    console.error('auth init failed; continuing unauthenticated', e)
+  }
   app.use(router)
   app.use(PrimeVue, {
     theme: {

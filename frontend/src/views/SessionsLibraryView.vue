@@ -40,7 +40,11 @@ const status = ref('all')
 const q = ref('')
 const sort = ref('last_activity')
 
+let _loadSeq = 0
 async function load() {
+  // F-15: discard out-of-order settles - same discriminator idiom as the
+  // session store's _latestRequestedId.
+  const seq = ++_loadSeq
   loading.value = true
   error.value = null
   try {
@@ -51,14 +55,16 @@ async function load() {
       limit: limit.value,
       offset: offset.value,
     })
+    if (seq !== _loadSeq) return
     items.value = page.items
     total.value = page.total
     limit.value = page.limit
     offset.value = page.offset
   } catch (e) {
+    if (seq !== _loadSeq) return
     error.value = e?.message || 'Failed to load sessions'
   } finally {
-    loading.value = false
+    if (seq === _loadSeq) loading.value = false
   }
 }
 
@@ -175,16 +181,8 @@ defineExpose({ load }) // used by control/pagination tasks
     />
 
     <ul v-else class="library-grid">
-      <li
-        v-for="s in items"
-        :key="s.id"
-        class="library-card"
-        :data-testid="`library-card-${s.id}`"
-      >
-        <RouterLink
-          class="library-card-link"
-          :to="{ name: 'session', params: { id: s.id } }"
-        >
+      <li v-for="s in items" :key="s.id" class="library-card" :data-testid="`library-card-${s.id}`">
+        <RouterLink class="library-card-link" :to="{ name: 'session', params: { id: s.id } }">
           <div class="library-card-head">
             <span class="library-topic">{{ s.topic || 'Untitled' }}</span>
             <span class="library-status" :class="{ ended: !!s.ended_at }">
@@ -430,7 +428,9 @@ defineExpose({ load }) // used by control/pagination tasks
   color: var(--color-text);
   font-size: var(--fs-caption);
   cursor: pointer;
-  transition: background var(--motion-fast), border-color var(--motion-fast);
+  transition:
+    background var(--motion-fast),
+    border-color var(--motion-fast);
 }
 
 .library-filter-btn:hover {

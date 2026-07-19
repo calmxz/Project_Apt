@@ -67,13 +67,23 @@ export async function _onAuthExpired() {
   }
   try {
     const { default: router } = await import('../router/index.js')
-    router.push({ name: 'login' })
+    // F-16: carry the location like the router guard does (F-49), so
+    // re-login returns the user to where the expiry hit them.
+    router.push({
+      name: 'login',
+      query: { redirect: router.currentRoute.value.fullPath },
+    })
   } catch {
     // Router unavailable outside the app shell.
   }
 }
 
-async function request(method, path, { body, params, silent = false, headers } = {}, _retried = false) {
+async function request(
+  method,
+  path,
+  { body, params, silent = false, headers } = {},
+  _retried = false,
+) {
   let url = `${BASE_URL}${path}`
   if (params) {
     const qs = new URLSearchParams(

@@ -93,6 +93,26 @@ describe('HomeView', () => {
     expect(wrapper.get('[data-testid="home-error"]').text()).toBe('list failed')
   })
 
+  // F-07: a background sidebar action failure (rename/pin) writing store.error
+  // must not nuke an already-loaded Home screen -- the fatal error branch is
+  // scoped to Home's own load (no sessions yet).
+  it('keeps the mode cards mounted when a background error arrives but sessions are already loaded', () => {
+    const store = useSessionStore()
+    store.error = 'boom'
+    store.sessions = [{ id: 's1' }]
+    const wrapper = mountView()
+    expect(wrapper.find('[data-testid="home-mode-quick"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="home-error"]').exists()).toBe(false)
+  })
+
+  it('shows the fatal error branch when there are no sessions to render', () => {
+    const store = useSessionStore()
+    store.error = 'boom'
+    store.sessions = []
+    const wrapper = mountView()
+    expect(wrapper.find('[data-testid="home-error"]').exists()).toBe(true)
+  })
+
   it('shows a single New lesson card, no Build a subject', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'listSessions').mockResolvedValue([])
@@ -114,7 +134,11 @@ describe('HomeView', () => {
     await wrapper.get('[data-testid="home-quick-topic"]').setValue('Recursion')
     await wrapper.get('[data-testid="home-quick-go"]').trigger('click')
     await flushPromises()
-    expect(store.createSession).toHaveBeenCalledWith({ topic: 'Recursion', seedMode: 'fresh', priorSessionId: null })
+    expect(store.createSession).toHaveBeenCalledWith({
+      topic: 'Recursion',
+      seedMode: 'fresh',
+      priorSessionId: null,
+    })
     expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'sess1' } })
   })
 
@@ -180,7 +204,9 @@ describe('HomeView review card', () => {
   it('renders count and items when concepts are due', async () => {
     apiReviewQueue.mockResolvedValue({
       items: [makeReviewItem('mitosis'), makeReviewItem('osmosis')],
-      total: 2, limit: 3, offset: 0,
+      total: 2,
+      limit: 3,
+      offset: 0,
     })
     const wrapper = mountView()
     await flushPromises()
@@ -201,7 +227,9 @@ describe('HomeView review card', () => {
   it('shows View all only when total exceeds the shown items', async () => {
     apiReviewQueue.mockResolvedValue({
       items: [makeReviewItem('a'), makeReviewItem('b'), makeReviewItem('c')],
-      total: 5, limit: 3, offset: 0,
+      total: 5,
+      limit: 3,
+      offset: 0,
     })
     const wrapper = mountView()
     await flushPromises()
@@ -211,7 +239,9 @@ describe('HomeView review card', () => {
   it('starts a review via continueTopic and navigates with review_gap query', async () => {
     apiReviewQueue.mockResolvedValue({
       items: [makeReviewItem('mitosis', { source_session_id: 'src9', source_topic: 'cells' })],
-      total: 1, limit: 3, offset: 0,
+      total: 1,
+      limit: 3,
+      offset: 0,
     })
     const store = useSessionStore()
     vi.spyOn(store, 'continueTopic').mockResolvedValue({ id: 'newsess' })
@@ -229,7 +259,10 @@ describe('HomeView review card', () => {
 
   it('stays on Home when continueTopic fails', async () => {
     apiReviewQueue.mockResolvedValue({
-      items: [makeReviewItem('mitosis')], total: 1, limit: 3, offset: 0,
+      items: [makeReviewItem('mitosis')],
+      total: 1,
+      limit: 3,
+      offset: 0,
     })
     const store = useSessionStore()
     vi.spyOn(store, 'continueTopic').mockResolvedValue(undefined)
@@ -242,7 +275,10 @@ describe('HomeView review card', () => {
 
   it('startReview swallows a rejecting continueTopic and resets busy (F-45)', async () => {
     apiReviewQueue.mockResolvedValue({
-      items: [makeReviewItem('mitosis')], total: 1, limit: 3, offset: 0,
+      items: [makeReviewItem('mitosis')],
+      total: 1,
+      limit: 3,
+      offset: 0,
     })
     const store = useSessionStore()
     // vi.spyOn on a store action already spied by an earlier test in this
@@ -266,13 +302,17 @@ describe('HomeView review card', () => {
   it('View all refetches with a large limit and hides itself', async () => {
     apiReviewQueue.mockResolvedValue({
       items: [makeReviewItem('a'), makeReviewItem('b'), makeReviewItem('c')],
-      total: 5, limit: 3, offset: 0,
+      total: 5,
+      limit: 3,
+      offset: 0,
     })
     const wrapper = mountView()
     await flushPromises()
     apiReviewQueue.mockResolvedValue({
       items: ['a', 'b', 'c', 'd', 'e'].map((c) => makeReviewItem(c)),
-      total: 5, limit: 100, offset: 0,
+      total: 5,
+      limit: 100,
+      offset: 0,
     })
     await wrapper.get('[data-testid="home-review-more"]').trigger('click')
     await flushPromises()
