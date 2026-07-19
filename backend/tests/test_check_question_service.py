@@ -312,3 +312,15 @@ def test_abandon_open_batch_commit_false_leaves_writes_pending(db, ctx, session_
 
     db.rollback()
     assert cq.get_pending_check(db, session_id) is not None
+
+
+def test_attach_message_id_takes_the_lock(db, ctx, session_id, monkeypatch):
+    cq.register(db, ctx, _batch_args(session_id))
+    calls = []
+    real = profile_service.lock_session_row
+    monkeypatch.setattr(
+        profile_service, "lock_session_row",
+        lambda db_, sid: calls.append(sid) or real(db_, sid),
+    )
+    cq.attach_message_id(db, session_id, 123)
+    assert calls == [session_id]
