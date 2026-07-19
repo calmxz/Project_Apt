@@ -197,6 +197,14 @@ async def run_streaming(
             # even if a later iteration's prune stubs an earlier round.
             iter_prompt_snapshots.append([dict(m) for m in full])
 
+            # B-10 (structural): close the transaction the loop-top check_cap
+            # SELECT opened so the pooled connection (and, on the Supabase
+            # transaction pooler, its pinned backend) returns to the pool for
+            # the 10-60 s stream. Commit, not rollback: any flushed ledger
+            # increments from earlier this turn are real spend and must
+            # survive. Post-stream code reopens a transaction on first use.
+            ctx.db.commit()
+
             resp = await litellm.acompletion(
                 model=settings.model,
                 temperature=settings.llm_temperature,

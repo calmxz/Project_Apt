@@ -1158,6 +1158,40 @@ def test_summarize_labels_ignored_profile_patch():
 
 
 @pytest.mark.asyncio
+async def test_no_open_transaction_during_llm_stream(db_session, monkeypatch):
+    """B-10 (structural): the pooled DB connection must be released before the
+    LLM stream begins. The loop-top cost_meter.check_cap SELECT autobegins a
+    transaction; that transaction must be committed before litellm.acompletion
+    is awaited, so the connection returns to the pool for the 10-60s stream
+    (Supabase transaction pooler ceiling).
+
+    check_cap is NOT mocked here (unlike most tests in this file, which use
+    _allow_cap): the real check_cap SELECT against db_session is exactly what
+    autobegins the transaction this test must observe closed by the time
+    acompletion is awaited."""
+    _disable_stub(monkeypatch)
+
+    from agent import tutor
+
+    captured = {}
+
+    async def _fake_acompletion(*args, **kwargs):
+        captured["open_txn"] = db_session.in_transaction()
+        return _make_stream(_content_chunk("hi"))
+
+    monkeypatch.setattr("agent.tutor.litellm.acompletion", _fake_acompletion)
+    monkeypatch.setattr(
+        "agent.tutor.litellm.stream_chunk_builder", MagicMock(return_value=SimpleNamespace())
+    )
+    monkeypatch.setattr("agent.tutor.litellm.completion_cost", MagicMock(return_value=0.0))
+
+    ctx = _ctx(db_session, session_id="s_no_open_txn")
+    await _drain(tutor.run_streaming([{"role": "user", "content": "hi"}], "sys", ctx))
+
+    assert captured["open_txn"] is False
+
+
+@pytest.mark.asyncio
 async def test_cancel_mid_dispatch_drains_inflight_thread_before_persisting(
     db_session, monkeypatch
 ):
