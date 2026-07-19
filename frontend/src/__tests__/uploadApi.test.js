@@ -1,7 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
-import { uploadPdf, getUploadStatus, validateFile, ACCEPT_ATTR, MAX_UPLOAD_BYTES, deleteDocument } from '@/services/uploadApi.js'
+import {
+  uploadPdf,
+  uploadDocument,
+  getUploadStatus,
+  validateFile,
+  ACCEPT_ATTR,
+  MAX_UPLOAD_BYTES,
+  deleteDocument,
+} from '@/services/uploadApi.js'
 import { ApiError } from '@/services/apiClient.js'
 
 function fakeFile(name, size) {
@@ -122,5 +130,19 @@ describe('uploadApi', () => {
       Promise.resolve({ ok: false, status: 404, text: () => Promise.resolve('') }),
     )
     await expect(deleteDocument(7)).rejects.toThrow(/404/)
+  })
+
+  // F-12: uploadDocument gets the same timeout + 401 refresh-retry discipline
+  // as the main request() path (F-06/F-09), which uploadPdf's raw fetch lacked.
+  it('passes an abort timeout signal to fetch', async () => {
+    fetchMock.mockReturnValueOnce(ok({}))
+    await uploadDocument({ sessionId: 's1', file: new File(['x'], 'a.pdf') })
+    expect(fetchMock.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal)
+  })
+
+  it('retries once with a refreshed token on 401', async () => {
+    fetchMock.mockReturnValueOnce(fail(401, {})).mockReturnValueOnce(ok({}))
+    await uploadDocument({ sessionId: 's1', file: new File(['x'], 'a.pdf') })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 })
