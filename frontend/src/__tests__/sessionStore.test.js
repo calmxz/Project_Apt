@@ -324,6 +324,30 @@ describe('session store', () => {
     expect(store.sessions[0].pinned).toBe(false)
     expect(store.error).toBeNull()
   })
+
+  it('superseded load settling first does not clear loading flags', async () => {
+    const store = useSessionStore()
+    let resolveB, resolveC
+    sessionsApi.getSession
+      .mockReturnValueOnce(
+        new Promise((r) => {
+          resolveB = r
+        }),
+      )
+      .mockReturnValueOnce(
+        new Promise((r) => {
+          resolveC = r
+        }),
+      )
+    const pB = store.loadSession('B')
+    const pC = store.loadSession('C')
+    resolveB({ id: 'B', messages: [] })
+    await pB
+    expect(store.detailLoading).toBe(true) // C still in flight
+    resolveC({ id: 'C', messages: [] })
+    await pC
+    expect(store.detailLoading).toBe(false)
+  })
 })
 
 describe('session store — streaming', () => {

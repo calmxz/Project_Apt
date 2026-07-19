@@ -171,8 +171,13 @@ export const useSessionStore = defineStore('session', () => {
         if (_latestRequestedId !== id) return
         _setError(e)
       } finally {
-        loading.value = false
-        detailLoading.value = false
+        // F-13: mirror the write discriminator - only the latest-requested
+        // load may clear the shared flags, else a superseded load drops the
+        // skeleton while the real target is still in flight.
+        if (_latestRequestedId === id) {
+          loading.value = false
+          detailLoading.value = false
+        }
         _inflight.delete(id)
       }
     })()
