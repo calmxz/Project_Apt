@@ -409,7 +409,11 @@ export const useSessionStore = defineStore('session', () => {
     // Done can be clicked again once the active stream settles.
     if (streamState.value !== 'idle') return
     checkCompleting.value = true
+    // F-17: remember the batch until the stream is proven underway - a
+    // pre-flight failure must put the card back, not strand it server-open.
+    const savedCheck = pendingCheck.value
     pendingCheck.value = null
+    let sawAnyEvent = false
     streamingMessage.value = { role: 'assistant', content: '', tool_calls: [], citations: [] }
     streamState.value = 'streaming'
     _streamSid = id
@@ -423,6 +427,7 @@ export const useSessionStore = defineStore('session', () => {
         sessionId: id,
         signal: ctrl.signal,
         onEvent: ({ event, data }) => {
+          sawAnyEvent = true
           if (event !== 'assistant_delta') deltaBatcher.flush()
           switch (event) {
             case 'tool_call_start':
@@ -483,6 +488,7 @@ export const useSessionStore = defineStore('session', () => {
         _clearStreamState()
         return
       }
+      if (!sawAnyEvent && !pendingCheck.value) pendingCheck.value = savedCheck
       if (e?.name === 'AbortError') {
         if (streamingMessage.value)
           handleCancelled('pending', streamingMessage.value.content.length, '0')

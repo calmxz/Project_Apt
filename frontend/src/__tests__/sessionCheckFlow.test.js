@@ -8,6 +8,14 @@ vi.mock('@/services/sessionsApi.js')
 vi.mock('@/services/chatStreamService.js')
 vi.mock('@/services/costBus.js', () => ({ reportCostWarning: vi.fn() }))
 
+class ApiErrorLike extends Error {
+  constructor(status, body) {
+    super('api error')
+    this.status = status
+    this.body = body
+  }
+}
+
 function batchEvent() {
   return {
     gap: 'atp',
@@ -31,8 +39,13 @@ describe('multi-check store', () => {
     s.handleCheckQuestion(batchEvent())
     expect(s.pendingCheck.viewIndex).toBe(0)
     sessionsApi.answerCheck.mockResolvedValue({
-      correct: true, explanation: 'a.', correct_index: 0,
-      current_index: 1, total: 2, has_next: true, done: false,
+      correct: true,
+      explanation: 'a.',
+      correct_index: 0,
+      current_index: 1,
+      total: 2,
+      has_next: true,
+      done: false,
     })
     await s.answerCheck(0)
     expect(s.pendingCheck.currentIndex).toBe(1)
@@ -46,8 +59,13 @@ describe('multi-check store', () => {
     s.currentSessionId = 'sid'
     s.handleCheckQuestion(batchEvent())
     sessionsApi.answerCheck.mockResolvedValue({
-      correct: true, explanation: 'a.', correct_index: 0,
-      current_index: 1, total: 2, has_next: true, done: false,
+      correct: true,
+      explanation: 'a.',
+      correct_index: 0,
+      current_index: 1,
+      total: 2,
+      has_next: true,
+      done: false,
     })
     await s.answerCheck(0)
     s.nextCheck()
@@ -59,8 +77,24 @@ describe('multi-check store', () => {
     s.currentSessionId = 'sid'
     s.handleCheckQuestion(batchEvent())
     sessionsApi.answerCheck
-      .mockResolvedValueOnce({ correct: true, explanation: 'a.', correct_index: 0, current_index: 1, total: 2, has_next: true, done: false })
-      .mockResolvedValueOnce({ correct: true, explanation: 'a.', correct_index: 0, current_index: 2, total: 2, has_next: false, done: true })
+      .mockResolvedValueOnce({
+        correct: true,
+        explanation: 'a.',
+        correct_index: 0,
+        current_index: 1,
+        total: 2,
+        has_next: true,
+        done: false,
+      })
+      .mockResolvedValueOnce({
+        correct: true,
+        explanation: 'a.',
+        correct_index: 0,
+        current_index: 2,
+        total: 2,
+        has_next: false,
+        done: true,
+      })
     streamSvc.streamCheckComplete.mockResolvedValue(undefined)
     await s.answerCheck(0)
     s.nextCheck()
@@ -75,8 +109,17 @@ describe('multi-check store', () => {
   it('per-item skip that resolves the batch fires completeCheck', async () => {
     const s = useSessionStore()
     s.currentSessionId = 'sid'
-    s.handleCheckQuestion({ gap: 'atp', total: 1, items: [{ question: 'Q1', options: ['a', 'b'] }] })
-    sessionsApi.skipCheck.mockResolvedValue({ current_index: 1, total: 1, has_next: false, done: true })
+    s.handleCheckQuestion({
+      gap: 'atp',
+      total: 1,
+      items: [{ question: 'Q1', options: ['a', 'b'] }],
+    })
+    sessionsApi.skipCheck.mockResolvedValue({
+      current_index: 1,
+      total: 1,
+      has_next: false,
+      done: true,
+    })
     streamSvc.streamCheckComplete.mockResolvedValue(undefined)
     await s.skipCheck()
     expect(streamSvc.streamCheckComplete).toHaveBeenCalledTimes(1)
@@ -86,14 +129,31 @@ describe('multi-check store', () => {
   it('loadSession rebuilds batch at current_index with prior verdicts', async () => {
     const s = useSessionStore()
     sessionsApi.getSession.mockResolvedValue({
-      id: 'sid', messages: [],
+      id: 'sid',
+      messages: [],
       pending_check: {
-        gap: 'atp', current_index: 1, total: 2,
+        gap: 'atp',
+        current_index: 1,
+        total: 2,
         items: [
-          { question: 'Q1', options: ['a', 'b'], status: 'answered',
-            selected_index: 0, correct_index: 0, correct: true, explanation: 'a.' },
-          { question: 'Q2', options: ['a', 'b'], status: 'pending',
-            selected_index: null, correct_index: null, correct: null, explanation: null },
+          {
+            question: 'Q1',
+            options: ['a', 'b'],
+            status: 'answered',
+            selected_index: 0,
+            correct_index: 0,
+            correct: true,
+            explanation: 'a.',
+          },
+          {
+            question: 'Q2',
+            options: ['a', 'b'],
+            status: 'pending',
+            selected_index: null,
+            correct_index: null,
+            correct: null,
+            explanation: null,
+          },
         ],
       },
     })
@@ -120,15 +180,30 @@ describe('multi-check store', () => {
   it('loadSession maps check_batch onto messages (camelCase)', async () => {
     const store = useSessionStore()
     sessionsApi.getSession.mockResolvedValue({
-      id: 's1', messages: [
+      id: 's1',
+      messages: [
         {
-          id: 1, role: 'assistant', content: '', created_at: '2026-06-07T00:00:00Z',
-          citations: [], tool_calls: [],
+          id: 1,
+          role: 'assistant',
+          content: '',
+          created_at: '2026-06-07T00:00:00Z',
+          citations: [],
+          tool_calls: [],
           check_batch: {
-            gap: 'atp', current_index: 1, total: 1,
-            items: [{ question: 'Q?', options: ['a', 'b'], status: 'answered',
-                      selected_index: 0, correct_index: 0, correct: true,
-                      explanation: 'a.' }],
+            gap: 'atp',
+            current_index: 1,
+            total: 1,
+            items: [
+              {
+                question: 'Q?',
+                options: ['a', 'b'],
+                status: 'answered',
+                selected_index: 0,
+                correct_index: 0,
+                correct: true,
+                explanation: 'a.',
+              },
+            ],
           },
         },
       ],
@@ -140,5 +215,14 @@ describe('multi-check store', () => {
     expect(cb.items[0].selectedIndex).toBe(0)
     expect(cb.items[0].correctIndex).toBe(0)
     expect(cb.items[0].correct).toBe(true)
+  })
+
+  it('restores pendingCheck when the completion stream fails before any event', async () => {
+    const store = useSessionStore()
+    store.currentSessionId = 'sid'
+    store.handleCheckQuestion(batchEvent())
+    streamSvc.streamCheckComplete.mockRejectedValue(new ApiErrorLike(0, { detail: 'offline' }))
+    await store.completeCheck().catch(() => {})
+    expect(store.pendingCheck).not.toBeNull()
   })
 })
