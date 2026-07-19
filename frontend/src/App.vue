@@ -19,7 +19,10 @@ const { drawerOpen } = useSidebar()
 
 // Close mobile drawer on every route change so tapping a session row
 // dismisses the overlay (mobile UX expectation).
-watch(() => route.fullPath, () => closeDrawer())
+watch(
+  () => route.fullPath,
+  () => closeDrawer(),
+)
 
 // Lock body scroll while the mobile drawer is open so the user doesn't
 // scroll the page underneath the backdrop.
@@ -49,13 +52,11 @@ onBeforeUnmount(() => errorBus.removeEventListener('api-error', onApiError))
 
 <template>
   <div v-if="showShell" class="shell">
-    <a class="skip-link" href="#main-content" data-testid="skip-link">
-      Skip to main content
-    </a>
+    <a class="skip-link" href="#main-content" data-testid="skip-link"> Skip to main content </a>
     <Sidebar />
     <div class="shell-main">
       <SidebarMobileTopStrip v-if="!isDesktop" />
-      <main id="main-content" class="page">
+      <main id="main-content" class="page" tabindex="-1">
         <div class="page-inner">
           <RouterView v-slot="{ Component }">
             <transition name="fade">
@@ -107,7 +108,9 @@ onBeforeUnmount(() => errorBus.removeEventListener('api-error', onApiError))
    removed, entering view never inserted) -- with no leave phase and no out-in
    gap, the old view drops instantly and the new one fades in. */
 .fade-enter-active {
-  transition: opacity var(--motion-base) ease, transform var(--motion-base) var(--motion-bounce);
+  transition:
+    opacity var(--motion-base) ease,
+    transform var(--motion-base) var(--motion-bounce);
 }
 .fade-enter-from {
   opacity: 0;
