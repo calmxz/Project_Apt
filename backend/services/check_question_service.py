@@ -87,11 +87,7 @@ def attach_message_id(db: Session, session_id: str, message_id: int) -> None:
 
     # B-04: serialize with answer()/skip() (F-24 convention). Unlocked, this
     # whole-blob save could re-save pre-answer state over a concurrent grade.
-    try:
-        profile_service.lock_session_row(db, session_id)
-    except ValueError:
-        # Session doesn't exist - no open batch possible, no-op
-        return
+    profile_service.lock_session_row(db, session_id)
     pc = get_pending_check(db, session_id)
     if pc is None:
         return
