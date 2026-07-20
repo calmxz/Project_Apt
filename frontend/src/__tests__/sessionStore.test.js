@@ -160,6 +160,16 @@ describe('session store', () => {
     expect(s.currentSession.ended_at).toBeNull()
   })
 
+  it('reopen 409 duplicate_topic exposes the conflicting session id', async () => {
+    const store = useSessionStore()
+    sessionsApi.reopenSession.mockRejectedValue(
+      new ApiErrorLike(409, { detail: { code: 'duplicate_topic', session_id: 'other1' } }),
+    )
+    await store.reopenSession('s1').catch(() => {})
+    expect(store.duplicateReopen).toEqual({ sessionId: 'other1' })
+    expect(store.error).toMatch(/active session with this topic/i)
+  })
+
   it('setError and reset work', () => {
     const s = useSessionStore()
     s.setError('boom')

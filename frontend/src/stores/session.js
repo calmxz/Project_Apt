@@ -24,6 +24,11 @@ export const useSessionStore = defineStore('session', () => {
   // dialog regardless of *where* the End action was triggered (sidebar row
   // menu, future shortcuts, etc.). SessionView consumes and clears it.
   const pendingSummary = ref(null) // { sessionId, kind, text } | null
+  // I-05: set by reopenSession on a 409 duplicate_topic conflict so the UI
+  // can offer a real affordance (go to the conflicting active session)
+  // instead of a dead-end error. Cleared on the next reopen attempt and on
+  // navigation (loadSession) so it never survives past its own screen.
+  const duplicateReopen = ref(null) // { sessionId } | null
 
   // Library-scoped state — never touches sidebar sessions/loading/error
   const libraryLoading = ref(false)
@@ -118,6 +123,7 @@ export const useSessionStore = defineStore('session', () => {
       loading.value = true
       detailLoading.value = true
       error.value = null
+      duplicateReopen.value = null
       try {
         const s = await sessionsApi.getSession(id)
         if (_latestRequestedId !== id) return s // superseded by a newer load; drop the write
@@ -239,6 +245,7 @@ export const useSessionStore = defineStore('session', () => {
   async function reopenSession(sessionId) {
     loading.value = true
     error.value = null
+    duplicateReopen.value = null
     try {
       const resp = await sessionsApi.reopenSession(sessionId)
       if (currentSession.value && currentSession.value.id === sessionId) {
@@ -248,6 +255,13 @@ export const useSessionStore = defineStore('session', () => {
       if (idx !== -1) sessions.value[idx].ended_at = null
       return resp
     } catch (e) {
+      // I-05: the contract hands over the conflicting session id - surface
+      // it as an affordance instead of the generic dead end.
+      if (e?.status === 409 && e?.body?.detail?.code === 'duplicate_topic') {
+        duplicateReopen.value = { sessionId: e.body.detail.session_id }
+        error.value = 'An active session with this topic already exists.'
+        throw e
+      }
       _setError(e)
     } finally {
       loading.value = false
@@ -746,6 +760,7 @@ export const useSessionStore = defineStore('session', () => {
     costCapReached,
     costCapInfo,
     pendingSummary,
+    duplicateReopen,
     consumePendingSummary,
     pendingCheck,
     checkLocked,

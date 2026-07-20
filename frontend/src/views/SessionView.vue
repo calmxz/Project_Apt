@@ -86,6 +86,14 @@
         >
           Retry
         </button>
+        <router-link
+          v-if="store.duplicateReopen"
+          :to="{ name: 'session', params: { id: store.duplicateReopen.sessionId } }"
+          class="home-link"
+          data-testid="go-to-active-session"
+        >
+          Go to active session
+        </router-link>
         <details v-if="rawErrorDetail" class="error-details">
           <summary>Technical details</summary>
           <pre>{{ rawErrorDetail }}</pre>

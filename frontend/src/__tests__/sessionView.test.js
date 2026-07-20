@@ -576,6 +576,24 @@ describe('SessionView', () => {
     expect(sendSpy).toHaveBeenCalledTimes(1)
   })
 
+  it('duplicateReopen renders a go-to-active-session link targeting the conflicting session', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession()
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="go-to-active-session"]').exists()).toBe(false)
+
+    store.error = 'An active session with this topic already exists.'
+    store.duplicateReopen = { sessionId: 'other1' }
+    await flushPromises()
+
+    const link = wrapper.findComponent('[data-testid="go-to-active-session"]')
+    expect(link.exists()).toBe(true)
+    expect(link.vm.$attrs.to).toEqual({ name: 'session', params: { id: 'other1' } })
+  })
+
   it('daily cap banner shown when cap reached', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'loadSession').mockImplementation(async () => {
