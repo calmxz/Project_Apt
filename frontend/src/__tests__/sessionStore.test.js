@@ -179,6 +179,13 @@ describe('session store', () => {
     expect(s.currentSessionId).toBeNull()
   })
 
+  it('reset clears duplicateReopen so it cannot survive a sign-out', () => {
+    const s = useSessionStore()
+    s.duplicateReopen = { sessionId: 'other1' }
+    s.reset()
+    expect(s.duplicateReopen).toBeNull()
+  })
+
   it('listSessions de-dupes concurrent calls into one network request', async () => {
     let resolve
     sessionsApi.listSessions.mockImplementationOnce(

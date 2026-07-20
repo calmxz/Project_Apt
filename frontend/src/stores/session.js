@@ -750,6 +750,7 @@ export const useSessionStore = defineStore('session', () => {
     dailyCapInfo.value = null
     costCapInfo.value = null
     pendingSummary.value = null
+    duplicateReopen.value = null
     pendingCheck.value = null
     streamingMessage.value = null
     streamState.value = 'idle'
