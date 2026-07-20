@@ -160,6 +160,16 @@ describe('session store', () => {
     expect(s.currentSession.ended_at).toBeNull()
   })
 
+  it('reopen 409 duplicate_topic exposes the conflicting session id', async () => {
+    const store = useSessionStore()
+    sessionsApi.reopenSession.mockRejectedValue(
+      new ApiErrorLike(409, { detail: { code: 'duplicate_topic', session_id: 'other1' } }),
+    )
+    await store.reopenSession('s1').catch(() => {})
+    expect(store.duplicateReopen).toEqual({ sessionId: 'other1' })
+    expect(store.error).toMatch(/active session with this topic/i)
+  })
+
   it('setError and reset work', () => {
     const s = useSessionStore()
     s.setError('boom')
@@ -167,6 +177,13 @@ describe('session store', () => {
     s.reset()
     expect(s.error).toBeNull()
     expect(s.currentSessionId).toBeNull()
+  })
+
+  it('reset clears duplicateReopen so it cannot survive a sign-out', () => {
+    const s = useSessionStore()
+    s.duplicateReopen = { sessionId: 'other1' }
+    s.reset()
+    expect(s.duplicateReopen).toBeNull()
   })
 
   it('listSessions de-dupes concurrent calls into one network request', async () => {
@@ -556,6 +573,18 @@ describe('session store — streaming', () => {
     expect(s.streamingMessage).toBeNull()
   })
 
+  // I-10: a send rejected before the stream starts must not strand the
+  // optimistic user bubble in the transcript.
+  it('pops the optimistic user bubble on pre-stream HTTP failure', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 's1'
+    vi.spyOn(streamSvc, 'streamChat').mockRejectedValueOnce(
+      new ApiErrorLike(422, { detail: 'too long' }),
+    )
+    await s.sendMessageStreaming({ text: 'hi' }).catch(() => {})
+    expect(s.messages.filter((m) => m.role === 'user' && m.content === 'hi')).toHaveLength(0)
+  })
+
   it('maps a session_ended 409 to a friendly error and marks the session ended', async () => {
     const s = useSessionStore()
     s.currentSessionId = 's1'
@@ -570,6 +599,25 @@ describe('session store — streaming', () => {
     expect(s.error).toMatch(/ended/i)
     expect(s.streamState).toBe('idle')
     expect(s.currentSession.ended_at).not.toBeNull()
+  })
+
+  // I-10 follow-up: a session_ended 409 is itself a pre-stream failure
+  // (no SSE events were ever seen) - it must drop the stranded optimistic
+  // bubble exactly like the generic pre-stream-failure case above, instead
+  // of leaving a user message that was never persisted server-side and
+  // silently vanishes on the next reload.
+  it('pops the optimistic user bubble on a pre-stream session_ended 409', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 's1'
+    s.currentSession = { id: 's1', ended_at: null }
+    vi.spyOn(streamSvc, 'streamChat').mockRejectedValueOnce(
+      Object.assign(new Error('conflict'), {
+        status: 409,
+        body: { detail: { code: 'session_ended' } },
+      }),
+    )
+    await s.sendMessageStreaming({ text: 'hello' })
+    expect(s.messages.filter((m) => m.role === 'user' && m.content === 'hello')).toHaveLength(0)
   })
 
   it('sendMessageStreaming maps a mid-turn SSE cost-cap error event into costCapInfo', async () => {

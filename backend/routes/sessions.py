@@ -5,7 +5,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from typing import Literal
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select, update
@@ -40,6 +40,7 @@ from db.database import get_db
 from db.models import ChatMessage, Session as SessionModel
 from services import (
     check_question_service,
+    cost_meter,
     diagnostic_service,
     documents_service,
     pending_check_store,
@@ -360,6 +361,7 @@ def _claim_end(db: Session, session_id: str) -> bool:
 @router.post("/sessions/{session_id}/end", response_model=SessionEndResponse)
 async def end_session(
     session_id: str,
+    response: Response,
     user_id: str = Depends(current_user_id),
     db: Session = Depends(get_db),
 ):
@@ -374,6 +376,9 @@ async def end_session(
             # stored summary; no second LLM call (F-30).
             db.refresh(row)
             profile = profile_service.load_profile(db, session_id)
+            warn = cost_meter.cost_warning_header(db, user_id)
+            if warn:
+                response.headers["X-Cost-Warning"] = warn
             return SessionEndResponse(
                 id=row.id,
                 ended_at=_aware_utc(row.ended_at),
@@ -385,6 +390,9 @@ async def end_session(
         allow_llm, _ = rate_limit.check_and_increment(db, user_id)
         summary_text = await summary_service.generate_and_persist(db, row, allow_llm=allow_llm)
         db.refresh(row)
+        warn = cost_meter.cost_warning_header(db, user_id)
+        if warn:
+            response.headers["X-Cost-Warning"] = warn
         return SessionEndResponse(
             id=row.id,
             ended_at=_aware_utc(row.ended_at),

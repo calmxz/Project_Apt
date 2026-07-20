@@ -576,6 +576,24 @@ describe('SessionView', () => {
     expect(sendSpy).toHaveBeenCalledTimes(1)
   })
 
+  it('duplicateReopen renders a go-to-active-session link targeting the conflicting session', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession()
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="go-to-active-session"]').exists()).toBe(false)
+
+    store.error = 'An active session with this topic already exists.'
+    store.duplicateReopen = { sessionId: 'other1' }
+    await flushPromises()
+
+    const link = wrapper.findComponent('[data-testid="go-to-active-session"]')
+    expect(link.exists()).toBe(true)
+    expect(link.vm.$attrs.to).toEqual({ name: 'session', params: { id: 'other1' } })
+  })
+
   it('daily cap banner shown when cap reached', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'loadSession').mockImplementation(async () => {
@@ -610,6 +628,35 @@ describe('SessionView', () => {
     expect(wrapper.find('[data-testid="upload-status-ready"]').exists()).toBe(true)
     // Banner is refreshed so the newly uploaded doc's ingestion status appears.
     expect(bannerRefresh).toHaveBeenCalled()
+  })
+
+  // I-09: the 415 (and friends) carry an actionable server message - prefer
+  // it over the generic friendlyError copy.
+  it('upload failure surfaces the backend detail message when present', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession()
+    })
+    validateFile.mockReturnValue({ ok: true })
+    uploadDocument.mockRejectedValue(
+      Object.assign(new Error('415'), {
+        status: 415,
+        body: {
+          detail: {
+            code: 'CONTENT_TYPE_MISMATCH',
+            message: 'file content does not match its extension',
+          },
+        },
+      }),
+    )
+    const wrapper = mountView()
+    await flushPromises()
+    const file = new File(['pdf-bytes'], 'notes.pdf', { type: 'application/pdf' })
+    const input = wrapper.get('[data-testid="session-upload-input"]')
+    Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
+    await input.trigger('change')
+    await flushPromises()
+    expect(wrapper.text()).toContain('file content does not match its extension')
   })
 
   it('rejects an oversize file client-side without uploading (H5)', async () => {

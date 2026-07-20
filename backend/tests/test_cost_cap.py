@@ -207,6 +207,28 @@ async def test_tutor_records_cost_per_call(
     assert cost_meter.current_spend(db_session, USER_ID) == Decimal("0.0123")
 
 
+def test_end_session_sets_cost_warning_header_when_soft_breached(
+    client, db_session, seed_user
+):
+    """I-03: soft-cap breach on end must surface an X-Cost-Warning header
+    (seed_user's session has no messages, so the mechanical no_exchanges
+    fallback fires and no LLM call is needed to reach the 200)."""
+    cost_meter.record_cost(
+        db_session, USER_ID, Decimal(str(settings.llm_soft_cap_usd)) + Decimal("0.01")
+    )
+    db_session.commit()
+
+    resp = client.post(f"/api/sessions/{SESSION_ID}/end?user_id={USER_ID}")
+    assert resp.status_code == 200, resp.text
+    assert resp.headers["x-cost-warning"].startswith("level=")
+
+
+def test_end_session_no_header_under_soft_cap(client, db_session, seed_user):
+    resp = client.post(f"/api/sessions/{SESSION_ID}/end?user_id={USER_ID}")
+    assert resp.status_code == 200, resp.text
+    assert "x-cost-warning" not in resp.headers
+
+
 @pytest.mark.asyncio
 async def test_tutor_short_circuits_on_mid_turn_hard_cap(
     db_session, seed_user, monkeypatch

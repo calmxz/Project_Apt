@@ -86,6 +86,14 @@
         >
           Retry
         </button>
+        <router-link
+          v-if="store.duplicateReopen"
+          :to="{ name: 'session', params: { id: store.duplicateReopen.sessionId } }"
+          class="home-link"
+          data-testid="go-to-active-session"
+        >
+          Go to active session
+        </router-link>
         <details v-if="rawErrorDetail" class="error-details">
           <summary>Technical details</summary>
           <pre>{{ rawErrorDetail }}</pre>
@@ -483,9 +491,12 @@ async function onAttachFile(file) {
     await pollUploadStatus(resp.document_id, file.name)
     referenceBannerRef.value?.refresh?.()
   } catch (e) {
+    // I-09: the 415 (and friends) carry an actionable server message -
+    // prefer it over the generic friendlyError copy.
+    const serverMsg = e?.body?.detail?.message
     uploadStatus.value = {
       kind: 'failed',
-      text: `Upload failed: ${friendlyError(e)}`,
+      text: `Upload failed: ${serverMsg || friendlyError(e)}`,
     }
   } finally {
     uploading.value = false

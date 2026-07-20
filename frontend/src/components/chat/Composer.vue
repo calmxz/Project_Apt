@@ -46,10 +46,7 @@
         :aria-label="sending ? 'Sending message' : 'Send message'"
         @click="emit('send')"
       >
-        <i
-          :class="sending ? 'pi pi-spin pi-spinner' : 'pi pi-arrow-up'"
-          aria-hidden="true"
-        />
+        <i :class="sending ? 'pi pi-spin pi-spinner' : 'pi pi-arrow-up'" aria-hidden="true" />
       </button>
 
       <button
@@ -80,7 +77,8 @@
       <span class="composer-hint">
         <kbd aria-label="Enter"><span aria-hidden="true">⏎</span></kbd> to send
         <span class="composer-hint-sep" aria-hidden="true">·</span>
-        <kbd aria-label="Shift"><span aria-hidden="true">⇧</span></kbd>+<kbd aria-label="Enter"><span aria-hidden="true">⏎</span></kbd> newline
+        <kbd aria-label="Shift"><span aria-hidden="true">⇧</span></kbd
+        >+<kbd aria-label="Enter"><span aria-hidden="true">⏎</span></kbd> newline
       </span>
       <span v-if="modelValue.length" class="composer-count" aria-live="polite">
         {{ modelValue.length.toLocaleString() }} / {{ MAX_DRAFT_LEN.toLocaleString() }}
@@ -111,7 +109,8 @@ const emit = defineEmits(['update:modelValue', 'send', 'stop', 'attach', 'skip']
 const composerEl = ref(null)
 const fileInputEl = ref(null)
 
-const MAX_DRAFT_LEN = 2000
+// I-10: matches ChatRequest.message maxLength in the API contract.
+const MAX_DRAFT_LEN = 4000
 const COMPOSER_MAX_HEIGHT_PX = 220
 
 const nearCharLimit = computed(() => props.modelValue.length >= MAX_DRAFT_LEN * 0.9)
@@ -250,16 +249,26 @@ defineExpose({ focus })
   cursor: not-allowed;
 }
 
-.composer-input::-webkit-scrollbar { width: 8px; }
-.composer-input::-webkit-scrollbar-button { display: none; height: 0; width: 0; }
-.composer-input::-webkit-scrollbar-track { background: transparent; }
+.composer-input::-webkit-scrollbar {
+  width: 8px;
+}
+.composer-input::-webkit-scrollbar-button {
+  display: none;
+  height: 0;
+  width: 0;
+}
+.composer-input::-webkit-scrollbar-track {
+  background: transparent;
+}
 .composer-input::-webkit-scrollbar-thumb {
   background: var(--color-border-strong);
   border-radius: var(--radius-pill);
   border: 2px solid transparent;
   background-clip: padding-box;
 }
-.composer-input::-webkit-scrollbar-thumb:hover { background: var(--color-text-faint); }
+.composer-input::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-faint);
+}
 
 /* Attach, send, and stop share the round-icon vocabulary. Sizes intentionally
    identical so the composer reads as balanced book-ends around the input. */
@@ -315,7 +324,7 @@ defineExpose({ focus })
   align-self: end;
   margin-bottom: 0.1rem;
   background: var(--color-accent-strong);
-  color: #FFFFFF;
+  color: #ffffff;
   border: 0;
   box-shadow: var(--shadow-pop);
   font-weight: 600;
@@ -350,7 +359,7 @@ defineExpose({ focus })
   align-self: end;
   margin-bottom: 0.1rem;
   background: var(--signal-error);
-  color: #FFFFFF;
+  color: #ffffff;
   border: 0;
   box-shadow: var(--shadow-pop);
   font-weight: 600;
@@ -460,7 +469,9 @@ defineExpose({ focus })
 }
 
 @media (max-width: 600px) {
-  .composer-hints { display: none; }
+  .composer-hints {
+    display: none;
+  }
   .composer-attach,
   .composer-send,
   .composer-stop {

@@ -125,4 +125,10 @@ describe('Composer', () => {
     const wrapper = mountComposer({ modelValue: '' })
     expect(wrapper.find('.composer-count').exists()).toBe(false)
   })
+
+  // I-10: cap must match ChatRequest.message maxLength (docs/api/openapi.yaml).
+  it('caps the draft at the contract limit 4000', () => {
+    const wrapper = mountComposer({ modelValue: '' })
+    expect(wrapper.get('[data-testid="session-input"]').attributes('maxlength')).toBe('4000')
+  })
 })

@@ -24,6 +24,11 @@ export const useSessionStore = defineStore('session', () => {
   // dialog regardless of *where* the End action was triggered (sidebar row
   // menu, future shortcuts, etc.). SessionView consumes and clears it.
   const pendingSummary = ref(null) // { sessionId, kind, text } | null
+  // I-05: set by reopenSession on a 409 duplicate_topic conflict so the UI
+  // can offer a real affordance (go to the conflicting active session)
+  // instead of a dead-end error. Cleared on the next reopen attempt and on
+  // navigation (loadSession) so it never survives past its own screen.
+  const duplicateReopen = ref(null) // { sessionId } | null
 
   // Library-scoped state — never touches sidebar sessions/loading/error
   const libraryLoading = ref(false)
@@ -118,6 +123,7 @@ export const useSessionStore = defineStore('session', () => {
       loading.value = true
       detailLoading.value = true
       error.value = null
+      duplicateReopen.value = null
       try {
         const s = await sessionsApi.getSession(id)
         if (_latestRequestedId !== id) return s // superseded by a newer load; drop the write
@@ -239,6 +245,7 @@ export const useSessionStore = defineStore('session', () => {
   async function reopenSession(sessionId) {
     loading.value = true
     error.value = null
+    duplicateReopen.value = null
     try {
       const resp = await sessionsApi.reopenSession(sessionId)
       if (currentSession.value && currentSession.value.id === sessionId) {
@@ -248,6 +255,13 @@ export const useSessionStore = defineStore('session', () => {
       if (idx !== -1) sessions.value[idx].ended_at = null
       return resp
     } catch (e) {
+      // I-05: the contract hands over the conflicting session id - surface
+      // it as an affordance instead of the generic dead end.
+      if (e?.status === 409 && e?.body?.detail?.code === 'duplicate_topic') {
+        duplicateReopen.value = { sessionId: e.body.detail.session_id }
+        error.value = 'An active session with this topic already exists.'
+        throw e
+      }
       _setError(e)
     } finally {
       loading.value = false
@@ -638,6 +652,7 @@ export const useSessionStore = defineStore('session', () => {
     error.value = null
     const deltaBatcher = createDeltaBatcher(appendAssistantDelta)
     let sawTerminal = false
+    let sawAnyEvent = false
     try {
       await streamChat({
         sessionId: currentSessionId.value,
@@ -646,6 +661,7 @@ export const useSessionStore = defineStore('session', () => {
         reviewGap,
         signal: ctrl.signal,
         onEvent: ({ event, data }) => {
+          sawAnyEvent = true
           if (event !== 'assistant_delta') deltaBatcher.flush()
           switch (event) {
             case 'tool_call_start':
@@ -701,6 +717,14 @@ export const useSessionStore = defineStore('session', () => {
           handleCancelled('pending', streamingMessage.value.content.length, '0')
         return
       }
+      if (!sawAnyEvent && typeof e?.status === 'number' && e.status >= 400) {
+        // I-10: the server persisted nothing pre-stream - drop the
+        // optimistic bubble instead of stranding it in the transcript.
+        // Runs before the session_ended arm too: that 409 is itself a
+        // pre-stream failure and must not strand the bubble either.
+        const last = messages.value[messages.value.length - 1]
+        if (last?.role === 'user' && last.message_id === undefined) messages.value.pop()
+      }
       if (e?.status === 409 && e?.body?.detail?.code === 'session_ended') {
         error.value = 'This session was ended elsewhere. Reopen it to continue.'
         if (currentSession.value) currentSession.value.ended_at = new Date().toISOString()
@@ -726,6 +750,7 @@ export const useSessionStore = defineStore('session', () => {
     dailyCapInfo.value = null
     costCapInfo.value = null
     pendingSummary.value = null
+    duplicateReopen.value = null
     pendingCheck.value = null
     streamingMessage.value = null
     streamState.value = 'idle'
@@ -746,6 +771,7 @@ export const useSessionStore = defineStore('session', () => {
     costCapReached,
     costCapInfo,
     pendingSummary,
+    duplicateReopen,
     consumePendingSummary,
     pendingCheck,
     checkLocked,

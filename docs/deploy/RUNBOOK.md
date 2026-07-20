@@ -59,12 +59,13 @@ Copy the deployment URL, e.g. `https://crux.vercel.app`.
 
 1. Render → `crux-api` → Environment → set `CORS_ORIGINS` = the Vercel URL
    from step 5 → save (triggers a redeploy).
-2. In `frontend/vercel.json`, replace the `CRUX_API_HOST` placeholder in the
-   CSP `connect-src` with the Render host (no scheme), commit, and let Vercel
-   redeploy. NOTE: unlike the `CORS_ORIGINS` change above (a dashboard edit),
-   this is a git commit — `vercel.json` headers have no env interpolation. The
-   app deployed in step 4 cannot reach the real API until this redeploy lands,
-   so do not expect a working app between steps 5 and 6.
+2. CSP is injected at build time from `VITE_API_BASE_URL` — no commit needed.
+   The Vercel build reads `VITE_API_BASE_URL` (set in step 4) and derives the
+   `connect-src` origin via `frontend/cspPlugin.js`, emitting a
+   `<meta http-equiv="Content-Security-Policy">` tag into `dist/index.html`.
+   Just verify the meta tag in the deployed page source (view-source on the
+   Vercel URL) shows the correct Render host in `connect-src` after the step-4
+   build completes.
 
 ## Step 7 — Live smoke (owed gate)
 
@@ -74,7 +75,8 @@ CSP violations block the app (watch for blocked `wss://` Supabase connections
 too — `connect-src` currently allows `https://*.supabase.co` only, fine for
 auth-only usage but would need `wss://*.supabase.co` if realtime is ever added).
 If the CSP blocks a needed origin, widen the relevant directive in
-`vercel.json` and redeploy.
+`frontend/cspPlugin.js` and rebuild/redeploy (the policy is generated at
+build time into `dist/index.html`, not read from `vercel.json`).
 
 ## Step 8 — Uploads caveat
 

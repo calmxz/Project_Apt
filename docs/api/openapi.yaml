@@ -89,6 +89,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /api/sessions:
     post:
@@ -116,6 +120,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
     get:
       tags: [sessions]
       summary: List sessions for the authenticated user.
@@ -129,6 +137,10 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/SessionListItem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /api/sessions/library:
     get:
@@ -163,6 +175,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SessionLibraryPage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /api/review/queue:
     get:
@@ -185,6 +201,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReviewQueuePage"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /api/usage/summary:
     get:
@@ -198,6 +218,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/UsageSummaryResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /api/me:
     get:
@@ -211,6 +235,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MeResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
     patch:
       tags: [me]
       summary: Update display name, feedback preference, or onboarding state.
@@ -230,6 +258,10 @@ paths:
                 $ref: "#/components/schemas/MeResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /api/sessions/{session_id}:
     get:
@@ -247,6 +279,10 @@ paths:
                 $ref: "#/components/schemas/SessionDetail"
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
     patch:
       tags: [sessions]
       summary: Update a session's topic and/or pinned state.
@@ -270,6 +306,10 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /api/sessions/{session_id}/end:
     post:
@@ -287,6 +327,10 @@ paths:
                 $ref: "#/components/schemas/SessionEndResponse"
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /api/sessions/{session_id}/reopen:
     post:
@@ -310,6 +354,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /api/sessions/{session_id}/ingestion:
     get:
@@ -327,6 +375,10 @@ paths:
                 $ref: "#/components/schemas/SessionIngestionStatus"
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /api/sessions/{session_id}/check/answer:
     post:
@@ -356,6 +408,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /api/sessions/{session_id}/check/skip:
     post:
@@ -385,6 +441,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /api/sessions/{session_id}/check/complete:
     post:
@@ -417,6 +477,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /api/upload:
     post:
@@ -453,10 +517,20 @@ paths:
           $ref: "#/components/responses/BadRequest"
         "413":
           $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          description: File content does not match its extension (code CONTENT_TYPE_MISMATCH).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "429":
           $ref: "#/components/responses/RateLimited"
         "507":
           description: Storage write failed; the document row is marked failed.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /api/upload/{document_id}:
     get:
@@ -477,6 +551,10 @@ paths:
                 $ref: "#/components/schemas/UploadStatus"
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /api/documents/{document_id}:
     delete:
@@ -493,6 +571,10 @@ paths:
           description: Document deleted.
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /api/profile/aggregate:
     get:
@@ -509,6 +591,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AggregateProfileResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
 
   /api/profile/{session_id}:
     get:
@@ -526,6 +612,10 @@ paths:
                 $ref: "#/components/schemas/ProfileResponse"
         "404":
           $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
     patch:
       tags: [profile]
       summary: Add a list item and/or set knowledge level. Optimistic-concurrency guarded.
@@ -547,6 +637,9 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "412": { $ref: "#/components/responses/PreconditionFailed" }
         "428": { $ref: "#/components/responses/PreconditionRequired" }
+        "422": { $ref: "#/components/responses/UnprocessableEntity" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
 
   /api/profile/{session_id}/mastered_concepts/{item}:
     delete:
@@ -569,6 +662,8 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "412": { $ref: "#/components/responses/PreconditionFailed" }
         "428": { $ref: "#/components/responses/PreconditionRequired" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
 
   /api/profile/{session_id}/confirmed_gaps/{item}:
     delete:
@@ -591,6 +686,8 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "412": { $ref: "#/components/responses/PreconditionFailed" }
         "428": { $ref: "#/components/responses/PreconditionRequired" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
 
   /api/profile/{session_id}/subtopic_levels/{item}:
     delete:
@@ -613,6 +710,8 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "412": { $ref: "#/components/responses/PreconditionFailed" }
         "428": { $ref: "#/components/responses/PreconditionRequired" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "503": { $ref: "#/components/responses/ServiceUnavailable" }
 
 components:
   securitySchemes:
@@ -659,11 +758,12 @@ components:
       content:
         application/json:
           schema: { $ref: "#/components/schemas/ErrorResponse" }
-    UpstreamUnavailable:
-      description: LLM provider timeout or unavailable.
-      content:
-        application/json:
-          schema: { $ref: "#/components/schemas/ErrorResponse" }
+    Unauthorized:
+      description: Missing, invalid, or expired bearer token.
+    ServiceUnavailable:
+      description: Upstream dependency unavailable (auth JWKS outage or LLM provider).
+    UnprocessableEntity:
+      description: Request failed validation (malformed body, or empty/invalid profile patch).
     PreconditionFailed:
       description: If-Match did not match the current profile; refetch and retry.
       content:
@@ -1566,3 +1666,28 @@ x-sse-events:
         used_usd:     { type: [string, "null"], default: null }
         soft_cap_usd: { type: [string, "null"], default: null }
         hard_cap_usd: { type: [string, "null"], default: null }
+
+  check_question:
+    data:
+      type: object
+      required: [gap, total, items]
+      properties:
+        gap:   { type: string }
+        total: { type: integer }
+        items:
+          type: array
+          items:
+            type: object
+            required: [question, options]
+            properties:
+              question: { type: string }
+              options:
+                type: array
+                items: { type: string }
+
+  followup_skipped:
+    data:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, enum: [daily_cap] }

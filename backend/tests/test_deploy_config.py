@@ -48,9 +48,17 @@ def test_vercel_spa_rewrite():
     assert "/index.html" in dests
 
 
-def test_vercel_has_csp():
+def test_vercel_has_security_headers_but_not_csp():
+    # P3 I-06: Content-Security-Policy is deliberately NOT a vercel.json header.
+    # It is injected at build time as a <meta http-equiv="Content-Security-Policy">
+    # tag by frontend/cspPlugin.js (behavior covered by
+    # frontend/src/__tests__/cspPlugin.test.js), because the header value needs
+    # to interpolate VITE_API_BASE_URL, which vercel.json cannot do. Do not
+    # "restore" a Content-Security-Policy header here.
     data = json.loads(VERCEL.read_text(encoding="utf-8"))
     headers = data["headers"][0]["headers"]
     keys = {h["key"] for h in headers}
-    assert "Content-Security-Policy" in keys
+    assert "Content-Security-Policy" not in keys
     assert "X-Content-Type-Options" in keys
+    assert "X-Frame-Options" in keys
+    assert "Referrer-Policy" in keys
