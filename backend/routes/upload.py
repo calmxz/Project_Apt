@@ -10,6 +10,7 @@ from fastapi import (
     Form,
     HTTPException,
     Request,
+    Response,
     UploadFile,
     status,
 )
@@ -20,7 +21,7 @@ from contracts import UploadResponse, UploadStatus
 from db.database import get_db
 from db.models import Document, Session as SessionModel
 from lib.error_codes import DAILY_CAP_REACHED
-from services import ingestion_service, object_store, rate_limit
+from services import cost_meter, ingestion_service, object_store, rate_limit
 from services.auth import current_user_id
 
 
@@ -66,6 +67,7 @@ def _read_bounded(fh, max_bytes: int) -> bytes:
 def upload_file(
     request: Request,
     background_tasks: BackgroundTasks,
+    response: Response,
     session_id: str = Form(...),
     file: UploadFile = File(...),
     user_id: str = Depends(current_user_id),
@@ -161,6 +163,10 @@ def upload_file(
         )
 
     background_tasks.add_task(ingestion_service.run, doc.id)
+
+    warn = cost_meter.cost_warning_header(db, user_id)
+    if warn:
+        response.headers["X-Cost-Warning"] = warn
 
     return UploadResponse(
         document_id=doc.id,

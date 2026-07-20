@@ -184,6 +184,17 @@ def check_cap(db: Session, user_id: str) -> CapStatus:
     return check_cap_from_spend(current_spend(db, user_id))
 
 
+def cost_warning_header(db: Session, user_id: str) -> str | None:
+    """I-03: header form of the soft-cap signal for non-SSE responses (the
+    SSE cost_warning event covers chat). Format matches the FE parser
+    (level=<soft|urgent>; ...) in SessionView.resolveCostWarningLevel."""
+    cap = check_cap(db, user_id)
+    if not cap.soft_breached:
+        return None
+    level = "urgent" if cap.urgent_breached else "soft"
+    return f"level={level}; used={cap.used}; soft_cap={cap.soft_cap}"
+
+
 def spend_subquery(user_id: str):
     """Scalar subquery: today's spend for user_id (0/NULL when no row).
 
