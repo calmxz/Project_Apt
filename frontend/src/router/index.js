@@ -130,4 +130,13 @@ router.beforeEach(async (to) => {
   }
 })
 
+router.afterEach((to, from, failure) => {
+  // F-08: SPA route swaps leave keyboard/SR focus on a removed node. Reset
+  // to the main landmark on real navigations (skip the initial load so we
+  // don't steal focus from the address bar / skip-link).
+  if (failure || !from.name) return
+  if (typeof document === 'undefined') return
+  document.getElementById('main-content')?.focus()
+})
+
 export default router

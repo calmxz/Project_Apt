@@ -70,7 +70,6 @@ onBeforeUnmount(() => {
       type="button"
       class="sb-row-menu-trigger"
       :class="{ 'is-open': open }"
-      aria-haspopup="menu"
       :aria-expanded="open"
       :aria-label="state === 'active' ? 'Session actions' : 'Ended session actions'"
       :disabled="busy"
@@ -83,12 +82,12 @@ onBeforeUnmount(() => {
       v-if="open"
       ref="popoverEl"
       class="sb-row-menu-popover"
-      role="menu"
+      role="group"
+      :aria-label="state === 'active' ? 'Session actions' : 'Ended session actions'"
       data-testid="sidebar-row-menu-popover"
     >
       <button
         type="button"
-        role="menuitem"
         class="sb-row-menu-item"
         data-testid="sidebar-row-menu-rename"
         :disabled="busy"
@@ -99,7 +98,6 @@ onBeforeUnmount(() => {
       <button
         v-if="state === 'active'"
         type="button"
-        role="menuitem"
         class="sb-row-menu-item"
         data-testid="sidebar-row-menu-pin"
         :disabled="busy"
@@ -111,7 +109,6 @@ onBeforeUnmount(() => {
       <button
         v-if="state === 'active'"
         type="button"
-        role="menuitem"
         class="sb-row-menu-item sb-row-menu-item--danger"
         data-testid="sidebar-row-menu-end"
         :disabled="busy"
@@ -123,7 +120,6 @@ onBeforeUnmount(() => {
       <button
         v-if="state === 'ended'"
         type="button"
-        role="menuitem"
         class="sb-row-menu-item"
         data-testid="sidebar-row-menu-continue-topic"
         :disabled="busy"
@@ -135,7 +131,6 @@ onBeforeUnmount(() => {
       <button
         v-if="state === 'ended'"
         type="button"
-        role="menuitem"
         class="sb-row-menu-item"
         data-testid="sidebar-row-menu-resume"
         :disabled="busy"
@@ -167,7 +162,10 @@ onBeforeUnmount(() => {
   cursor: pointer;
   font-size: 0.875rem;
   opacity: 0;
-  transition: opacity var(--motion-fast) ease, background var(--motion-fast) ease, color var(--motion-fast) ease;
+  transition:
+    opacity var(--motion-fast) ease,
+    background var(--motion-fast) ease,
+    color var(--motion-fast) ease;
 }
 
 .sb-row-menu-trigger.is-open,
@@ -226,7 +224,9 @@ onBeforeUnmount(() => {
   color: var(--color-text);
   cursor: pointer;
   text-align: left;
-  transition: background var(--motion-fast) ease, color var(--motion-fast) ease;
+  transition:
+    background var(--motion-fast) ease,
+    color var(--motion-fast) ease;
 }
 
 .sb-row-menu-item:hover:not(:disabled) {

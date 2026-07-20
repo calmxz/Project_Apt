@@ -23,7 +23,7 @@ const display = computed(() => {
   <span
     class="tool-pill"
     :class="`tool-pill--${state}`"
-    :title="state === 'error' ? (tool_call.error || display) : undefined"
+    :title="state === 'error' ? tool_call.error || display : undefined"
   >
     <span class="tool-pill-dot" aria-hidden="true"></span>
     <span class="tool-pill-text">{{ display }}</span>
@@ -35,9 +35,9 @@ const display = computed(() => {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: var(--tool-pill-bg, rgba(255,107,91,0.08));
-  border: 1px solid var(--tool-pill-border, rgba(255,107,91,0.2));
-  color: var(--tool-pill-text, #c44);
+  background: var(--tool-pill-bg, rgba(255, 107, 91, 0.08));
+  border: 1px solid var(--tool-pill-border, rgba(255, 107, 91, 0.2));
+  color: var(--tool-pill-text, var(--color-error-text));
   padding: 4px 10px;
   border-radius: var(--radius-md);
   font-size: var(--fs-label);
@@ -59,7 +59,12 @@ const display = computed(() => {
   color: var(--color-text-muted, #888);
 }
 @keyframes tool-pill-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
 }
 </style>

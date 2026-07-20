@@ -36,4 +36,9 @@ describe('GapPickerDialog', () => {
     expect(w.emitted('select')[0]).toEqual(['closures'])
     expect(w.emitted('update:visible')[0]).toEqual([false])
   })
+
+  it('gap picker carries the shared dialog chrome class', () => {
+    const w = mountPicker()
+    expect(w.get('[data-testid="gap-picker"]').classes()).toContain('crux-dialog')
+  })
 })

@@ -4,6 +4,7 @@
     modal
     header="Which gap should we review?"
     :style="{ width: '24rem' }"
+    class="crux-dialog"
     data-testid="gap-picker"
     @update:visible="$emit('update:visible', $event)"
   >
@@ -63,7 +64,9 @@ function choose(gap) {
   font-size: 0.9375rem;
   cursor: pointer;
   text-align: left;
-  transition: background var(--motion-fast) ease, border-color var(--motion-fast) ease;
+  transition:
+    background var(--motion-fast) ease,
+    border-color var(--motion-fast) ease;
 }
 
 .gap-option:hover {

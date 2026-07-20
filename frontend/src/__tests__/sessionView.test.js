@@ -57,8 +57,7 @@ const stubs = {
   Dialog: {
     props: ['visible'],
     emits: ['update:visible'],
-    template:
-      '<div v-if="visible" data-testid="dialog"><slot /><slot name="footer" /></div>',
+    template: '<div v-if="visible" data-testid="dialog"><slot /><slot name="footer" /></div>',
   },
   RouterLink: { template: '<a><slot /></a>' },
 }
@@ -411,6 +410,22 @@ describe('SessionView', () => {
     expect(store.pendingSummary).toBe(null)
   })
 
+  it('summary dialog carries the shared dialog chrome class', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession()
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    store.pendingSummary = {
+      sessionId: 's1',
+      kind: 'summary',
+      text: 'Great progress on derivatives.',
+    }
+    await flushPromises()
+    expect(wrapper.get('[data-testid="session-summary-dialog"]').classes()).toContain('crux-dialog')
+  })
+
   it('ignores pendingSummary targeting a different session', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'loadSession').mockImplementation(async () => {
@@ -626,7 +641,10 @@ describe('SessionView', () => {
     await flushPromises()
     // .exe is not in the accepted set (PDF/PPTX/TXT/MD); validateFile returns not-ok.
     const file = new File(['x'], 'malware.exe', { type: 'application/octet-stream' })
-    validateFile.mockReturnValue({ ok: false, reason: 'malware.exe is not a supported type. Use PDF, PPTX, TXT, or MD.' })
+    validateFile.mockReturnValue({
+      ok: false,
+      reason: 'malware.exe is not a supported type. Use PDF, PPTX, TXT, or MD.',
+    })
     const input = wrapper.get('[data-testid="session-upload-input"]')
     Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
     await input.trigger('change')
@@ -649,7 +667,9 @@ describe('SessionView', () => {
 
   it('logs a dev-only navigate->painted timing after detail resolves', async () => {
     const store = useSessionStore()
-    vi.spyOn(store, 'loadSession').mockImplementation(async () => { setupSession() })
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession()
+    })
     const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {})
     mountView()
     await flushPromises()
@@ -699,10 +719,69 @@ describe('SessionView', () => {
     })
     const wrapper = mountView()
     await flushPromises()
-    store.streamingMessage = { role: 'assistant', content: 'streaming text', tool_calls: [], citations: [] }
+    store.streamingMessage = {
+      role: 'assistant',
+      content: 'streaming text',
+      tool_calls: [],
+      citations: [],
+    }
     await nextTick()
     const bubble = wrapper.find('[data-testid="msg-streaming"]')
     expect(bubble.exists()).toBe(true)
     expect(bubble.text()).toContain('streaming text')
+  })
+
+  // F-18: MessageList is no longer a live region (it spammed SRs with every
+  // token mutation). A single discrete status region announces exactly the
+  // start/finish transitions instead, driven off store.streamState.
+  it('announces stream start and finish discretely (F-18)', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession()
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    const region = wrapper.get('[data-testid="stream-status"]')
+    expect(region.attributes('role')).toBe('status')
+    expect(region.attributes('aria-live')).toBe('polite')
+    expect(region.text()).toBe('')
+
+    store.streamState = 'streaming'
+    await nextTick()
+    expect(region.text()).toBe('Tutor is replying.')
+
+    store.streamState = 'idle'
+    await nextTick()
+    expect(region.text()).toBe('Reply finished.')
+  })
+
+  // The store's stream state machine has intermediate members beyond
+  // idle/streaming (tool_running, stopping) — the announcement must not
+  // re-fire "Tutor is replying." on every intermediate hop, only on the
+  // idle -> non-idle and non-idle -> idle edges.
+  it('does not re-announce start on tool_running/stopping hops (F-18)', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession()
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    const region = wrapper.get('[data-testid="stream-status"]')
+
+    store.streamState = 'streaming'
+    await nextTick()
+    expect(region.text()).toBe('Tutor is replying.')
+
+    store.streamState = 'tool_running'
+    await nextTick()
+    expect(region.text()).toBe('Tutor is replying.')
+
+    store.streamState = 'streaming'
+    await nextTick()
+    expect(region.text()).toBe('Tutor is replying.')
+
+    store.streamState = 'idle'
+    await nextTick()
+    expect(region.text()).toBe('Reply finished.')
   })
 })

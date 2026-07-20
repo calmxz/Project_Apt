@@ -18,11 +18,11 @@ function _renderable(m) {
   if (m.role === 'user') return true
   return Boolean(
     m.content ||
-      m.check_batch ||
-      m.tool_calls?.length ||
-      m.citations?.length ||
-      m.status === 'cancelled' ||
-      m.status === 'partial',
+    m.check_batch ||
+    m.tool_calls?.length ||
+    m.citations?.length ||
+    m.status === 'cancelled' ||
+    m.status === 'partial',
   )
 }
 
@@ -30,7 +30,7 @@ const visibleMessages = computed(() => props.messages.filter(_renderable))
 </script>
 
 <template>
-  <div class="message-list" aria-live="polite" aria-atomic="false">
+  <div class="message-list">
     <TransitionGroup name="msg-fade" tag="div" class="msg-list">
       <template v-for="(m, i) in visibleMessages" :key="m.message_id || `m-${i}`">
         <UserBubble v-if="m.role === 'user'" :content="m.content || ''" />
@@ -57,11 +57,7 @@ const visibleMessages = computed(() => props.messages.filter(_renderable))
         </p>
       </div>
     </article>
-    <AssistantBubble
-      v-if="streamingMessage"
-      :message="streamingMessage"
-      :streaming="true"
-    />
+    <AssistantBubble v-if="streamingMessage" :message="streamingMessage" :streaming="true" />
   </div>
 </template>
 
@@ -80,11 +76,19 @@ const visibleMessages = computed(() => props.messages.filter(_renderable))
 
 .msg-fade-enter-active,
 .msg-fade-leave-active {
-  transition: opacity var(--motion-base) ease, transform var(--motion-base) var(--motion-bounce);
+  transition:
+    opacity var(--motion-base) ease,
+    transform var(--motion-base) var(--motion-bounce);
 }
 
-.msg-fade-enter-from { opacity: 0; transform: translateY(8px); }
-.msg-fade-leave-to { opacity: 0; transform: translateY(-4px); }
+.msg-fade-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.msg-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
 
 /* Typing indicator article (bespoke markup) */
 .msg {
@@ -145,11 +149,23 @@ const visibleMessages = computed(() => props.messages.filter(_renderable))
   animation: typing-bob 1200ms ease-in-out infinite;
 }
 
-.typing-dots span:nth-child(2) { animation-delay: 200ms; }
-.typing-dots span:nth-child(3) { animation-delay: 400ms; }
+.typing-dots span:nth-child(2) {
+  animation-delay: 200ms;
+}
+.typing-dots span:nth-child(3) {
+  animation-delay: 400ms;
+}
 
 @keyframes typing-bob {
-  0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
-  30% { transform: translateY(-5px); opacity: 1; }
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  30% {
+    transform: translateY(-5px);
+    opacity: 1;
+  }
 }
 </style>

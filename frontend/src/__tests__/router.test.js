@@ -123,4 +123,18 @@ describe('router', () => {
     await router.push('/settings') // must not throw
     expect(router.currentRoute.value.name).toBe('login')
   })
+
+  it('focuses #main-content after push navigation', async () => {
+    setAuth(true)
+    const user = useUserStore()
+    user.onboardingComplete = true
+    const main = document.createElement('main')
+    main.id = 'main-content'
+    main.setAttribute('tabindex', '-1')
+    document.body.appendChild(main)
+    await router.push('/') // establish an initial route first
+    await router.push({ name: 'settings' }) // any second authenticated route in this suite
+    expect(document.activeElement).toBe(main)
+    main.remove()
+  })
 })

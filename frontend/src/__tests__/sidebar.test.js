@@ -71,7 +71,12 @@ describe('Sidebar.vue — session list rendering', () => {
     const store = useSessionStore()
     store.sessions = [
       { id: 'a1', topic: 'Big-O', created_at: '2026-05-20T10:00:00Z', ended_at: null },
-      { id: 'e1', topic: 'Recursion', created_at: '2026-05-15T10:00:00Z', ended_at: '2026-05-18T10:00:00Z' },
+      {
+        id: 'e1',
+        topic: 'Recursion',
+        created_at: '2026-05-15T10:00:00Z',
+        ended_at: '2026-05-18T10:00:00Z',
+      },
     ]
     wrapper = mount(Sidebar)
     await flushPromises()
@@ -86,17 +91,26 @@ describe('Sidebar.vue — session list rendering', () => {
     const store = useSessionStore()
     store.sessions = [
       { id: 'a1', topic: 'Active one', created_at: '2026-05-20T10:00:00Z', ended_at: null },
-      { id: 'e1', topic: 'Ended one', created_at: '2026-05-15T10:00:00Z', ended_at: '2026-05-18T10:00:00Z' },
+      {
+        id: 'e1',
+        topic: 'Ended one',
+        created_at: '2026-05-15T10:00:00Z',
+        ended_at: '2026-05-18T10:00:00Z',
+      },
     ]
     wrapper = mount(Sidebar)
     await flushPromises()
     // Active view by default.
-    expect(wrapper.find('[data-testid="sidebar-status-active"]').attributes('aria-pressed')).toBe('true')
+    expect(wrapper.find('[data-testid="sidebar-status-active"]').attributes('aria-pressed')).toBe(
+      'true',
+    )
     expect(wrapper.find('[data-testid="sidebar-row-a1"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="sidebar-row-e1"]').exists()).toBe(false)
     // Switch to Ended.
     await wrapper.find('[data-testid="sidebar-status-ended"]').trigger('click')
-    expect(wrapper.find('[data-testid="sidebar-status-ended"]').attributes('aria-pressed')).toBe('true')
+    expect(wrapper.find('[data-testid="sidebar-status-ended"]').attributes('aria-pressed')).toBe(
+      'true',
+    )
     expect(wrapper.find('[data-testid="sidebar-row-e1"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="sidebar-row-a1"]').exists()).toBe(false)
   })
@@ -104,8 +118,19 @@ describe('Sidebar.vue — session list rendering', () => {
   it('keeps the pinned mini-group under the Active view only', async () => {
     const store = useSessionStore()
     store.sessions = [
-      { id: 'p1', topic: 'Pinned', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: true },
-      { id: 'e1', topic: 'Ended', created_at: '2026-05-15T10:00:00Z', ended_at: '2026-05-18T10:00:00Z' },
+      {
+        id: 'p1',
+        topic: 'Pinned',
+        created_at: '2026-05-20T10:00:00Z',
+        ended_at: null,
+        pinned: true,
+      },
+      {
+        id: 'e1',
+        topic: 'Ended',
+        created_at: '2026-05-15T10:00:00Z',
+        ended_at: '2026-05-18T10:00:00Z',
+      },
     ]
     wrapper = mount(Sidebar)
     await flushPromises()
@@ -301,13 +326,23 @@ describe('Sidebar.vue — session list rendering', () => {
   it('renders the pinned mini-group when a session is pinned', async () => {
     const store = useSessionStore()
     store.sessions = [
-      { id: 'p1', topic: 'Pinned', created_at: new Date().toISOString(), ended_at: null, pinned: true },
+      {
+        id: 'p1',
+        topic: 'Pinned',
+        created_at: new Date().toISOString(),
+        ended_at: null,
+        pinned: true,
+      },
       { id: 'a1', topic: 'Normal', created_at: new Date().toISOString(), ended_at: null },
     ]
     wrapper = mount(Sidebar)
     await flushPromises()
     expect(wrapper.find('[data-testid="sidebar-section-pinned"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="sidebar-section-pinned"] [data-testid="sidebar-row-p1"]').exists()).toBe(true)
+    expect(
+      wrapper
+        .find('[data-testid="sidebar-section-pinned"] [data-testid="sidebar-row-p1"]')
+        .exists(),
+    ).toBe(true)
   })
 
   it('clears the search query when the sidebar collapses so the rail is not blank', async () => {
@@ -351,9 +386,7 @@ describe('Sidebar.vue — row interactions', () => {
     ]
     wrapper = mount(Sidebar)
     await flushPromises()
-    await wrapper
-      .find('[data-session-id="a1"] [data-testid="sidebar-row-open"]')
-      .trigger('click')
+    await wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-open"]').trigger('click')
     expect(routerPush).toHaveBeenCalledWith({ name: 'session', params: { id: 'a1' } })
   })
 
@@ -365,8 +398,31 @@ describe('Sidebar.vue — row interactions', () => {
     wrapper = mount(Sidebar, { attachTo: document.body })
     await flushPromises()
     expect(wrapper.find('[data-testid="sidebar-row-menu-popover"]').exists()).toBe(false)
-    await wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]').trigger('click')
+    await wrapper
+      .find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]')
+      .trigger('click')
     expect(wrapper.find('[data-testid="sidebar-row-menu-popover"]').exists()).toBe(true)
+  })
+
+  it('popover uses honest group semantics, not role=menu', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'a1', topic: 'Big-O', created_at: '2026-05-20T10:00:00Z', ended_at: null },
+    ]
+    wrapper = mount(Sidebar, { attachTo: document.body })
+    await flushPromises()
+    await wrapper
+      .find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]')
+      .trigger('click')
+    const pop = wrapper.get('[data-testid="sidebar-row-menu-popover"]')
+    expect(pop.attributes('role')).toBe('group')
+    expect(pop.attributes('aria-label')).toBeTruthy()
+    expect(wrapper.findAll('[role="menuitem"]')).toHaveLength(0)
+    expect(
+      wrapper
+        .get('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]')
+        .attributes('aria-haspopup'),
+    ).toBeUndefined()
   })
 
   it('End session menu item calls store.endSession with row id', async () => {
@@ -377,12 +433,14 @@ describe('Sidebar.vue — row interactions', () => {
     const endSpy = vi.spyOn(store, 'endSession').mockResolvedValue({})
     wrapper = mount(Sidebar, { attachTo: document.body })
     await flushPromises()
-    await wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]').trigger('click')
+    await wrapper
+      .find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]')
+      .trigger('click')
     await wrapper.find('[data-testid="sidebar-row-menu-end"]').trigger('click')
     expect(endSpy).toHaveBeenCalledWith('a1')
   })
 
-  it('End session toasts the pending summary when ending from off that session\'s view (F-44)', async () => {
+  it("End session toasts the pending summary when ending from off that session's view (F-44)", async () => {
     const store = useSessionStore()
     store.sessions = [
       { id: 'a1', topic: 'Big-O', created_at: '2026-05-20T10:00:00Z', ended_at: null },
@@ -396,14 +454,16 @@ describe('Sidebar.vue — row interactions', () => {
     routeRef.params = {}
     wrapper = mount(Sidebar, { attachTo: document.body })
     await flushPromises()
-    await wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]').trigger('click')
+    await wrapper
+      .find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]')
+      .trigger('click')
     await wrapper.find('[data-testid="sidebar-row-menu-end"]').trigger('click')
     await flushPromises()
     expect(showSuccess).toHaveBeenCalledWith('Great progress on Big-O.')
     expect(store.pendingSummary).toBe(null)
   })
 
-  it('End session does not toast when this session\'s own view is active', async () => {
+  it("End session does not toast when this session's own view is active", async () => {
     const store = useSessionStore()
     store.sessions = [
       { id: 'a1', topic: 'Big-O', created_at: '2026-05-20T10:00:00Z', ended_at: null },
@@ -416,7 +476,9 @@ describe('Sidebar.vue — row interactions', () => {
     routeRef.params = { id: 'a1' }
     wrapper = mount(Sidebar, { attachTo: document.body })
     await flushPromises()
-    await wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]').trigger('click')
+    await wrapper
+      .find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]')
+      .trigger('click')
     await wrapper.find('[data-testid="sidebar-row-menu-end"]').trigger('click')
     await flushPromises()
     expect(showSuccess).not.toHaveBeenCalled()
@@ -425,15 +487,15 @@ describe('Sidebar.vue — row interactions', () => {
 
   it('Resume menu item calls store.reopenSession and navigates', async () => {
     const store = useSessionStore()
-    store.sessions = [
-      { id: 'e1', topic: 'X', ended_at: '2026-05-18T10:00:00Z' },
-    ]
+    store.sessions = [{ id: 'e1', topic: 'X', ended_at: '2026-05-18T10:00:00Z' }]
     const reopenSpy = vi.spyOn(store, 'reopenSession').mockResolvedValue({})
     wrapper = mount(Sidebar, { attachTo: document.body })
     await flushPromises()
     // Ended rows now live behind the Ended tab (default view is Active).
     await wrapper.find('[data-testid="sidebar-status-ended"]').trigger('click')
-    await wrapper.find('[data-session-id="e1"] [data-testid="sidebar-row-menu-trigger"]').trigger('click')
+    await wrapper
+      .find('[data-session-id="e1"] [data-testid="sidebar-row-menu-trigger"]')
+      .trigger('click')
     await wrapper.find('[data-testid="sidebar-row-menu-resume"]').trigger('click')
     await flushPromises()
     expect(reopenSpy).toHaveBeenCalledWith('e1')
@@ -442,15 +504,15 @@ describe('Sidebar.vue — row interactions', () => {
 
   it('ended row menu offers Continue topic which calls store.continueTopic and routes', async () => {
     const store = useSessionStore()
-    store.sessions = [
-      { id: 'e1', topic: 'X', ended_at: '2026-05-18T10:00:00Z' },
-    ]
+    store.sessions = [{ id: 'e1', topic: 'X', ended_at: '2026-05-18T10:00:00Z' }]
     const continueTopicSpy = vi.spyOn(store, 'continueTopic').mockResolvedValue({ id: 'new-1' })
     wrapper = mount(Sidebar, { attachTo: document.body })
     await flushPromises()
     // Ended rows now live behind the Ended tab (default view is Active).
     await wrapper.find('[data-testid="sidebar-status-ended"]').trigger('click')
-    await wrapper.find('[data-session-id="e1"] [data-testid="sidebar-row-menu-trigger"]').trigger('click')
+    await wrapper
+      .find('[data-session-id="e1"] [data-testid="sidebar-row-menu-trigger"]')
+      .trigger('click')
     await wrapper.find('[data-testid="sidebar-row-menu-continue-topic"]').trigger('click')
     await flushPromises()
     expect(continueTopicSpy).toHaveBeenCalled()
@@ -459,48 +521,56 @@ describe('Sidebar.vue — row interactions', () => {
 
   it('Ended row still offers Resume alongside Continue topic', async () => {
     const store = useSessionStore()
-    store.sessions = [
-      { id: 'e1', topic: 'X', ended_at: '2026-05-18T10:00:00Z' },
-    ]
+    store.sessions = [{ id: 'e1', topic: 'X', ended_at: '2026-05-18T10:00:00Z' }]
     wrapper = mount(Sidebar, { attachTo: document.body })
     await flushPromises()
     await wrapper.find('[data-testid="sidebar-status-ended"]').trigger('click')
-    await wrapper.find('[data-session-id="e1"] [data-testid="sidebar-row-menu-trigger"]').trigger('click')
+    await wrapper
+      .find('[data-session-id="e1"] [data-testid="sidebar-row-menu-trigger"]')
+      .trigger('click')
     expect(wrapper.find('[data-testid="sidebar-row-menu-resume"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="sidebar-row-menu-continue-topic"]').exists()).toBe(true)
   })
 
   it('Ended row does not offer End menu item', async () => {
     const store = useSessionStore()
-    store.sessions = [
-      { id: 'e1', topic: 'X', ended_at: '2026-05-18T10:00:00Z' },
-    ]
+    store.sessions = [{ id: 'e1', topic: 'X', ended_at: '2026-05-18T10:00:00Z' }]
     wrapper = mount(Sidebar, { attachTo: document.body })
     await flushPromises()
     // Ended rows now live behind the Ended tab (default view is Active).
     await wrapper.find('[data-testid="sidebar-status-ended"]').trigger('click')
-    await wrapper.find('[data-session-id="e1"] [data-testid="sidebar-row-menu-trigger"]').trigger('click')
+    await wrapper
+      .find('[data-session-id="e1"] [data-testid="sidebar-row-menu-trigger"]')
+      .trigger('click')
     expect(wrapper.find('[data-testid="sidebar-row-menu-end"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="sidebar-row-menu-resume"]').exists()).toBe(true)
   })
 
   it('active row menu offers Rename and Pin', async () => {
     const store = useSessionStore()
-    store.sessions = [{ id: 'a1', topic: 'X', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false }]
+    store.sessions = [
+      { id: 'a1', topic: 'X', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false },
+    ]
     wrapper = mount(Sidebar, { attachTo: document.body })
     await flushPromises()
-    await wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]').trigger('click')
+    await wrapper
+      .find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]')
+      .trigger('click')
     expect(wrapper.find('[data-testid="sidebar-row-menu-rename"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="sidebar-row-menu-pin"]').exists()).toBe(true)
   })
 
   it('Pin menu item calls store.setPinned(true)', async () => {
     const store = useSessionStore()
-    store.sessions = [{ id: 'a1', topic: 'X', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false }]
+    store.sessions = [
+      { id: 'a1', topic: 'X', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false },
+    ]
     const pinSpy = vi.spyOn(store, 'setPinned').mockResolvedValue({})
     wrapper = mount(Sidebar, { attachTo: document.body })
     await flushPromises()
-    await wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]').trigger('click')
+    await wrapper
+      .find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]')
+      .trigger('click')
     await wrapper.find('[data-testid="sidebar-row-menu-pin"]').trigger('click')
     expect(pinSpy).toHaveBeenCalledWith('a1', true)
   })
@@ -519,21 +589,29 @@ describe('Sidebar.vue — row interactions', () => {
     })
     wrapper = mount(Sidebar, { attachTo: document.body })
     await flushPromises()
-    await wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]').trigger('click')
+    await wrapper
+      .find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]')
+      .trigger('click')
     await wrapper.find('[data-testid="sidebar-row-menu-pin"]').trigger('click')
     await flushPromises()
     const active = document.activeElement
-    const a1Trigger = wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]').element
+    const a1Trigger = wrapper.find(
+      '[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]',
+    ).element
     expect(active).toBe(a1Trigger)
   })
 
   it('Rename enters inline edit and commits on Enter via store.renameSession', async () => {
     const store = useSessionStore()
-    store.sessions = [{ id: 'a1', topic: 'Old', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false }]
+    store.sessions = [
+      { id: 'a1', topic: 'Old', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false },
+    ]
     const renameSpy = vi.spyOn(store, 'renameSession').mockResolvedValue({})
     wrapper = mount(Sidebar, { attachTo: document.body })
     await flushPromises()
-    await wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]').trigger('click')
+    await wrapper
+      .find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]')
+      .trigger('click')
     await wrapper.find('[data-testid="sidebar-row-menu-rename"]').trigger('click')
     const input = wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-rename-input"]')
     expect(input.exists()).toBe(true)
@@ -544,26 +622,42 @@ describe('Sidebar.vue — row interactions', () => {
 
   it('Rename cancels on Escape without calling the store', async () => {
     const store = useSessionStore()
-    store.sessions = [{ id: 'a1', topic: 'Old', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false }]
+    store.sessions = [
+      { id: 'a1', topic: 'Old', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false },
+    ]
     const renameSpy = vi.spyOn(store, 'renameSession').mockResolvedValue({})
     wrapper = mount(Sidebar, { attachTo: document.body })
     await flushPromises()
-    await wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]').trigger('click')
+    await wrapper
+      .find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]')
+      .trigger('click')
     await wrapper.find('[data-testid="sidebar-row-menu-rename"]').trigger('click')
     const input = wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-rename-input"]')
     await input.setValue('Discard me')
     await input.trigger('keydown.esc')
     expect(renameSpy).not.toHaveBeenCalled()
-    expect(wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-rename-input"]').exists()).toBe(false)
+    expect(
+      wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-rename-input"]').exists(),
+    ).toBe(false)
   })
 
   it('Rename Enter with unchanged topic does not call the store', async () => {
     const store = useSessionStore()
-    store.sessions = [{ id: 'a1', topic: 'Same', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false }]
+    store.sessions = [
+      {
+        id: 'a1',
+        topic: 'Same',
+        created_at: '2026-05-20T10:00:00Z',
+        ended_at: null,
+        pinned: false,
+      },
+    ]
     const renameSpy = vi.spyOn(store, 'renameSession').mockResolvedValue({})
     wrapper = mount(Sidebar, { attachTo: document.body })
     await flushPromises()
-    await wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]').trigger('click')
+    await wrapper
+      .find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]')
+      .trigger('click')
     await wrapper.find('[data-testid="sidebar-row-menu-rename"]').trigger('click')
     const input = wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-rename-input"]')
     await input.setValue('Same')
@@ -573,11 +667,15 @@ describe('Sidebar.vue — row interactions', () => {
 
   it('Rename Enter with empty topic does not call the store', async () => {
     const store = useSessionStore()
-    store.sessions = [{ id: 'a1', topic: 'Old', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false }]
+    store.sessions = [
+      { id: 'a1', topic: 'Old', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false },
+    ]
     const renameSpy = vi.spyOn(store, 'renameSession').mockResolvedValue({})
     wrapper = mount(Sidebar, { attachTo: document.body })
     await flushPromises()
-    await wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]').trigger('click')
+    await wrapper
+      .find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]')
+      .trigger('click')
     await wrapper.find('[data-testid="sidebar-row-menu-rename"]').trigger('click')
     const input = wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-rename-input"]')
     await input.setValue('   ')
@@ -588,7 +686,13 @@ describe('Sidebar.vue — row interactions', () => {
   it('does not show the pin glyph on an ended (but pinned) session', async () => {
     const store = useSessionStore()
     store.sessions = [
-      { id: 'e1', topic: 'EndedPinned', created_at: '2026-05-20T10:00:00Z', ended_at: '2026-05-21T10:00:00Z', pinned: true },
+      {
+        id: 'e1',
+        topic: 'EndedPinned',
+        created_at: '2026-05-20T10:00:00Z',
+        ended_at: '2026-05-21T10:00:00Z',
+        pinned: true,
+      },
     ]
     wrapper = mount(Sidebar)
     await flushPromises()
@@ -601,7 +705,13 @@ describe('Sidebar.vue — row interactions', () => {
   it('shows the pin glyph on an active pinned session', async () => {
     const store = useSessionStore()
     store.sessions = [
-      { id: 'a1', topic: 'ActivePinned', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: true },
+      {
+        id: 'a1',
+        topic: 'ActivePinned',
+        created_at: '2026-05-20T10:00:00Z',
+        ended_at: null,
+        pinned: true,
+      },
     ]
     wrapper = mount(Sidebar)
     await flushPromises()
@@ -610,16 +720,24 @@ describe('Sidebar.vue — row interactions', () => {
 
   it('Rename commits exactly once on Enter even though blur also fires', async () => {
     const store = useSessionStore()
-    store.sessions = [{ id: 'a1', topic: 'Old', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false }]
+    store.sessions = [
+      { id: 'a1', topic: 'Old', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false },
+    ]
     const renameSpy = vi.spyOn(store, 'renameSession').mockResolvedValue({})
     wrapper = mount(Sidebar, { attachTo: document.body })
     await flushPromises()
-    await wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]').trigger('click')
+    await wrapper
+      .find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]')
+      .trigger('click')
     await wrapper.find('[data-testid="sidebar-row-menu-rename"]').trigger('click')
     const input = wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-rename-input"]')
     await input.setValue('New')
     await input.trigger('keydown.enter')
-    try { await input.trigger('blur') } catch { /* input may be detached after rename exits */ }
+    try {
+      await input.trigger('blur')
+    } catch {
+      /* input may be detached after rename exits */
+    }
     await flushPromises()
     expect(renameSpy).toHaveBeenCalledTimes(1)
     expect(renameSpy).toHaveBeenCalledWith('a1', 'New')
@@ -712,11 +830,15 @@ describe('Sidebar.vue — mount fetch', () => {
 })
 
 describe('session store — rename + pin actions', () => {
-  beforeEach(() => { setActivePinia(createPinia()) })
+  beforeEach(() => {
+    setActivePinia(createPinia())
+  })
 
   it('renameSession optimistically updates the row and calls the API', async () => {
     const store = useSessionStore()
-    store.sessions = [{ id: 'a1', topic: 'old', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false }]
+    store.sessions = [
+      { id: 'a1', topic: 'old', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false },
+    ]
     const api = await import('@/services/sessionsApi.js')
     vi.spyOn(api, 'renameSession').mockResolvedValue({ id: 'a1', topic: 'new', pinned: false })
     await store.renameSession('a1', 'new')
@@ -726,10 +848,16 @@ describe('session store — rename + pin actions', () => {
 
   it('setPinned applies optimistic update then rolls back on API error', async () => {
     const store = useSessionStore()
-    store.sessions = [{ id: 'a1', topic: 'x', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false }]
+    store.sessions = [
+      { id: 'a1', topic: 'x', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false },
+    ]
     const api = await import('@/services/sessionsApi.js')
     let reject
-    vi.spyOn(api, 'setPinned').mockReturnValue(new Promise((_, r) => { reject = r }))
+    vi.spyOn(api, 'setPinned').mockReturnValue(
+      new Promise((_, r) => {
+        reject = r
+      }),
+    )
     const p = store.setPinned('a1', true).catch(() => {})
     expect(store.sessions[0].pinned).toBe(true) // optimistic applied
     reject(new Error('boom'))
@@ -739,11 +867,17 @@ describe('session store — rename + pin actions', () => {
 
   it('setPinned syncs currentSession.pinned and rolls it back on error', async () => {
     const store = useSessionStore()
-    store.sessions = [{ id: 'a1', topic: 'X', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false }]
+    store.sessions = [
+      { id: 'a1', topic: 'X', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false },
+    ]
     store.currentSession = { id: 'a1', topic: 'X', ended_at: null, pinned: false }
     const api = await import('@/services/sessionsApi.js')
     let reject
-    vi.spyOn(api, 'setPinned').mockReturnValue(new Promise((_, r) => { reject = r }))
+    vi.spyOn(api, 'setPinned').mockReturnValue(
+      new Promise((_, r) => {
+        reject = r
+      }),
+    )
     const p = store.setPinned('a1', true).catch(() => {})
     expect(store.currentSession.pinned).toBe(true)
     reject(new Error('boom'))
@@ -753,10 +887,16 @@ describe('session store — rename + pin actions', () => {
 
   it('renameSession rolls back topic on API error', async () => {
     const store = useSessionStore()
-    store.sessions = [{ id: 'a1', topic: 'old', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false }]
+    store.sessions = [
+      { id: 'a1', topic: 'old', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false },
+    ]
     const api = await import('@/services/sessionsApi.js')
     let reject
-    vi.spyOn(api, 'renameSession').mockReturnValue(new Promise((_, r) => { reject = r }))
+    vi.spyOn(api, 'renameSession').mockReturnValue(
+      new Promise((_, r) => {
+        reject = r
+      }),
+    )
     const p = store.renameSession('a1', 'new').catch(() => {})
     expect(store.sessions[0].topic).toBe('new') // optimistic applied
     reject(new Error('boom'))

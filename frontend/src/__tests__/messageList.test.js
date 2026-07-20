@@ -34,8 +34,13 @@ describe('MessageList', () => {
   // tool calls, no citations, not cancelled/partial) painted empty bubbles.
   it('skips assistant messages with nothing to render (U-01)', () => {
     const empty = {
-      message_id: 'a-empty', role: 'assistant', content: '',
-      tool_calls: [], citations: [], status: 'complete', check_batch: null,
+      message_id: 'a-empty',
+      role: 'assistant',
+      content: '',
+      tool_calls: [],
+      citations: [],
+      status: 'complete',
+      check_batch: null,
     }
     const w = mount(MessageList, {
       props: { messages: [userMsg, empty, assistantMsg] },
@@ -46,12 +51,20 @@ describe('MessageList', () => {
 
   it('keeps empty-content assistant rows that carry a marker or attachments (U-01)', () => {
     const cancelled = {
-      message_id: 'a-c', role: 'assistant', content: '',
-      tool_calls: [], citations: [], status: 'cancelled',
+      message_id: 'a-c',
+      role: 'assistant',
+      content: '',
+      tool_calls: [],
+      citations: [],
+      status: 'cancelled',
     }
     const recap = {
-      message_id: 'a-r', role: 'assistant', content: '',
-      tool_calls: [], citations: [], status: 'complete',
+      message_id: 'a-r',
+      role: 'assistant',
+      content: '',
+      tool_calls: [],
+      citations: [],
+      status: 'complete',
       check_batch: { gap: 'g', total: 1, items: [] },
     }
     const w = mount(MessageList, {
@@ -108,10 +121,14 @@ describe('MessageList', () => {
     expect(w.find('[data-testid="msg-streaming"]').exists()).toBe(false)
   })
 
-  it('.message-list is a polite, non-atomic live region', () => {
+  // F-18: the transcript is no longer a live region — it spammed screen
+  // readers with every token mutation while streaming. Discrete
+  // announcements live in SessionView instead (see sessionView.test.js).
+  it('message list is not a live region', () => {
     const w = mount(MessageList, { props: { messages: [userMsg] } })
+    expect(w.find('[aria-live]').exists()).toBe(false)
     const list = w.find('.message-list')
-    expect(list.attributes('aria-live')).toBe('polite')
-    expect(list.attributes('aria-atomic')).toBe('false')
+    expect(list.exists()).toBe(true)
+    expect(list.attributes('aria-atomic')).toBeUndefined()
   })
 })
