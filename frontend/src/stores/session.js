@@ -717,6 +717,14 @@ export const useSessionStore = defineStore('session', () => {
           handleCancelled('pending', streamingMessage.value.content.length, '0')
         return
       }
+      if (!sawAnyEvent && typeof e?.status === 'number' && e.status >= 400) {
+        // I-10: the server persisted nothing pre-stream - drop the
+        // optimistic bubble instead of stranding it in the transcript.
+        // Runs before the session_ended arm too: that 409 is itself a
+        // pre-stream failure and must not strand the bubble either.
+        const last = messages.value[messages.value.length - 1]
+        if (last?.role === 'user' && last.message_id === undefined) messages.value.pop()
+      }
       if (e?.status === 409 && e?.body?.detail?.code === 'session_ended') {
         error.value = 'This session was ended elsewhere. Reopen it to continue.'
         if (currentSession.value) currentSession.value.ended_at = new Date().toISOString()
@@ -724,12 +732,6 @@ export const useSessionStore = defineStore('session', () => {
         streamState.value = 'idle'
         abortController.value = null
         return
-      }
-      if (!sawAnyEvent && typeof e?.status === 'number' && e.status >= 400) {
-        // I-10: the server persisted nothing pre-stream - drop the
-        // optimistic bubble instead of stranding it in the transcript.
-        const last = messages.value[messages.value.length - 1]
-        if (last?.role === 'user' && last.message_id === undefined) messages.value.pop()
       }
       if (e?.status === 429) _applyCapError(e?.body?.detail)
       streamingMessage.value = null
