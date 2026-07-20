@@ -83,8 +83,16 @@ const reviewExpanded = ref(false)
 const startBusy = ref(false)
 
 onMounted(() => {
+  // U-05: boot-path load - the failure is already handled locally (store
+  // error state / empty review card), so a transient backend hiccup here
+  // must not toast on Home's very first mount. store.listSessions() is
+  // silent unconditionally now (sessionsApi.js), so it can't be defeated by
+  // racing another mounted caller (e.g. Sidebar) into the store's in-flight
+  // de-dupe. getReviewQueue has no such de-dupe, so silent:true is threaded
+  // per-call here instead; the user-initiated "View all" refetch below
+  // stays toasted.
   store.listSessions().catch(() => {})
-  loadReviewQueue()
+  loadReviewQueue(3, { silent: true })
 })
 
 async function startQuick() {
@@ -104,9 +112,14 @@ async function startQuick() {
   }
 }
 
-async function loadReviewQueue(limit = 3) {
+async function loadReviewQueue(limit = 3, { silent } = {}) {
   try {
-    reviewQueue.value = await getReviewQueue({ limit, offset: 0 })
+    // Only the boot-mount call passes silent:true; user-initiated refetches
+    // (expandReview's "View all") keep the toast on a real failure, so pass
+    // the opts arg through conditionally rather than always as {}.
+    reviewQueue.value = silent
+      ? await getReviewQueue({ limit, offset: 0 }, { silent: true })
+      : await getReviewQueue({ limit, offset: 0 })
   } catch {
     // The review card must never block Home; hide it on failure.
     reviewQueue.value = { items: [], total: 0 }
