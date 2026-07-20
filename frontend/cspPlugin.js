@@ -29,6 +29,17 @@ export function cspPlugin(apiBase) {
     name: 'crux-csp-meta',
     apply: 'build', // dev server needs HMR websockets a strict CSP would block
     transformIndexHtml(html) {
+      if (!html.includes('</title>')) {
+        // I-06: a silent no-op here would ship the production bundle with NO
+        // Content-Security-Policy at all, while tests and the build both stay
+        // green. Fail loudly instead so a missing/renamed anchor is caught at
+        // build time, not discovered as a missing security header in prod.
+        throw new Error(
+          '[crux-csp-meta] could not find a </title> anchor in index.html to inject the ' +
+            'Content-Security-Policy meta tag. Refusing to build without CSP - update ' +
+            'transformIndexHtml in cspPlugin.js to match the new index.html shape.',
+        )
+      }
       const meta = `<meta http-equiv="Content-Security-Policy" content="${buildCspContent(apiBase)}">`
       return html.replace('</title>', `</title>\n    ${meta}`)
     },

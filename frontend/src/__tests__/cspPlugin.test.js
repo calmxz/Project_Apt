@@ -15,4 +15,10 @@ describe('csp plugin', () => {
     const out = cspPlugin('https://x.example/api').transformIndexHtml(html)
     expect(out).toContain('http-equiv="Content-Security-Policy"')
   })
+  it('throws a clear build-time error instead of silently skipping injection when the </title> anchor is missing', () => {
+    const html = '<html><head></head><body></body></html>'
+    expect(() => cspPlugin('https://x.example/api').transformIndexHtml(html)).toThrow(
+      /crux-csp-meta/,
+    )
+  })
 })
