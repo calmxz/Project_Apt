@@ -75,7 +75,8 @@ CSP violations block the app (watch for blocked `wss://` Supabase connections
 too — `connect-src` currently allows `https://*.supabase.co` only, fine for
 auth-only usage but would need `wss://*.supabase.co` if realtime is ever added).
 If the CSP blocks a needed origin, widen the relevant directive in
-`vercel.json` and redeploy.
+`frontend/cspPlugin.js` and rebuild/redeploy (the policy is generated at
+build time into `dist/index.html`, not read from `vercel.json`).
 
 ## Step 8 — Uploads caveat
 
