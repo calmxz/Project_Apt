@@ -566,6 +566,18 @@ describe('session store — streaming', () => {
     expect(s.streamingMessage).toBeNull()
   })
 
+  // I-10: a send rejected before the stream starts must not strand the
+  // optimistic user bubble in the transcript.
+  it('pops the optimistic user bubble on pre-stream HTTP failure', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 's1'
+    vi.spyOn(streamSvc, 'streamChat').mockRejectedValueOnce(
+      new ApiErrorLike(422, { detail: 'too long' }),
+    )
+    await s.sendMessageStreaming({ text: 'hi' }).catch(() => {})
+    expect(s.messages.filter((m) => m.role === 'user' && m.content === 'hi')).toHaveLength(0)
+  })
+
   it('maps a session_ended 409 to a friendly error and marks the session ended', async () => {
     const s = useSessionStore()
     s.currentSessionId = 's1'

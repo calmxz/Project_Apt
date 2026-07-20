@@ -652,6 +652,7 @@ export const useSessionStore = defineStore('session', () => {
     error.value = null
     const deltaBatcher = createDeltaBatcher(appendAssistantDelta)
     let sawTerminal = false
+    let sawAnyEvent = false
     try {
       await streamChat({
         sessionId: currentSessionId.value,
@@ -660,6 +661,7 @@ export const useSessionStore = defineStore('session', () => {
         reviewGap,
         signal: ctrl.signal,
         onEvent: ({ event, data }) => {
+          sawAnyEvent = true
           if (event !== 'assistant_delta') deltaBatcher.flush()
           switch (event) {
             case 'tool_call_start':
@@ -722,6 +724,12 @@ export const useSessionStore = defineStore('session', () => {
         streamState.value = 'idle'
         abortController.value = null
         return
+      }
+      if (!sawAnyEvent && typeof e?.status === 'number' && e.status >= 400) {
+        // I-10: the server persisted nothing pre-stream - drop the
+        // optimistic bubble instead of stranding it in the transcript.
+        const last = messages.value[messages.value.length - 1]
+        if (last?.role === 'user' && last.message_id === undefined) messages.value.pop()
       }
       if (e?.status === 429) _applyCapError(e?.body?.detail)
       streamingMessage.value = null

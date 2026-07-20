@@ -630,6 +630,35 @@ describe('SessionView', () => {
     expect(bannerRefresh).toHaveBeenCalled()
   })
 
+  // I-09: the 415 (and friends) carry an actionable server message - prefer
+  // it over the generic friendlyError copy.
+  it('upload failure surfaces the backend detail message when present', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession()
+    })
+    validateFile.mockReturnValue({ ok: true })
+    uploadDocument.mockRejectedValue(
+      Object.assign(new Error('415'), {
+        status: 415,
+        body: {
+          detail: {
+            code: 'CONTENT_TYPE_MISMATCH',
+            message: 'file content does not match its extension',
+          },
+        },
+      }),
+    )
+    const wrapper = mountView()
+    await flushPromises()
+    const file = new File(['pdf-bytes'], 'notes.pdf', { type: 'application/pdf' })
+    const input = wrapper.get('[data-testid="session-upload-input"]')
+    Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
+    await input.trigger('change')
+    await flushPromises()
+    expect(wrapper.text()).toContain('file content does not match its extension')
+  })
+
   it('rejects an oversize file client-side without uploading (H5)', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'loadSession').mockImplementation(async () => {

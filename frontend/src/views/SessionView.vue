@@ -491,9 +491,12 @@ async function onAttachFile(file) {
     await pollUploadStatus(resp.document_id, file.name)
     referenceBannerRef.value?.refresh?.()
   } catch (e) {
+    // I-09: the 415 (and friends) carry an actionable server message -
+    // prefer it over the generic friendlyError copy.
+    const serverMsg = e?.body?.detail?.message
     uploadStatus.value = {
       kind: 'failed',
-      text: `Upload failed: ${friendlyError(e)}`,
+      text: `Upload failed: ${serverMsg || friendlyError(e)}`,
     }
   } finally {
     uploading.value = false
