@@ -82,7 +82,9 @@ def upload_file(
                     detail={"code": "FILE_TOO_LARGE", "max_bytes": MAX_UPLOAD_BYTES},
                 )
         except ValueError:
-            pass
+            # Malformed header - not a size signal. The real guard is the
+            # streamed byte count below, so fall through rather than 400 here.
+            log.debug("ignoring non-integer content-length header %r", content_length)
 
     ext = Path(file.filename or "").suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:

@@ -85,7 +85,8 @@ def _load_blob(store: "object_store.ObjectStore", doc: Document) -> bytes:
     try:
         return store.get(object_store.key_for(doc.id, doc.filename))
     except object_store.ObjectNotFound:
-        pass
+        # Not under the canonical key - try the legacy layout below.
+        log.debug("blob miss on canonical key for doc %s; trying legacy key", doc.id)
     # Legacy fallback: pre-F-15 uploads were stored under the bare filename.
     # LocalDiskStore path-containment rejects traversal in doc.filename.
     try:

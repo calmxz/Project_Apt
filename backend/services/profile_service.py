@@ -136,7 +136,8 @@ def _parse_profile(raw: str | None) -> TopicProfile:
     try:
         return TopicProfile.model_validate(data)
     except ValidationError:
-        pass
+        # Strict parse failed - retry below with unknown keys dropped.
+        log.debug("topic_profile strict validation failed; retrying on known fields")
     known = {k: v for k, v in data.items() if k in TopicProfile.model_fields}
     dropped = sorted(set(data) - set(known))
     try:
