@@ -4,7 +4,12 @@ import { ApiError, apiGet, apiPost } from '../services/apiClient.js'
 import { errorBus } from '../services/errorBus.js'
 import { useAuthStore } from '../stores/auth.js'
 
-vi.mock('../router/index.js', () => ({ default: { push: vi.fn() } }))
+vi.mock('../router/index.js', () => ({
+  default: {
+    push: vi.fn(),
+    currentRoute: { value: { fullPath: '/session/abc' } },
+  },
+}))
 
 describe('apiClient', () => {
   let listener
@@ -166,7 +171,20 @@ describe('apiClient', () => {
 
     await expect(apiGet('/whatever')).rejects.toMatchObject({ status: 401 })
     expect(globalThis.__supabaseAuthStub.signOut).toHaveBeenCalled()
-    expect(router.push).toHaveBeenCalledWith({ name: 'login' })
+    expect(router.push).toHaveBeenCalledWith({
+      name: 'login',
+      query: { redirect: '/session/abc' },
+    })
     expect(fetch).toHaveBeenCalledTimes(2) // hard cap: one retry
+  })
+
+  it('_onAuthExpired pushes login with redirect query', async () => {
+    const { _onAuthExpired } = await import('../services/apiClient.js')
+    const router = (await import('../router/index.js')).default
+    await _onAuthExpired()
+    expect(router.push).toHaveBeenCalledWith({
+      name: 'login',
+      query: { redirect: '/session/abc' },
+    })
   })
 })

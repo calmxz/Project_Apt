@@ -1,6 +1,17 @@
-import { ApiError, apiGet, apiDelete, getFreshAccessToken } from './apiClient.js'
+import {
+  ApiError,
+  apiGet,
+  apiDelete,
+  getFreshAccessToken,
+  _refreshAccessToken,
+  _onAuthExpired,
+} from './apiClient.js'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
+
+// F-12: uploads get the same timeout discipline as request() (F-06) but a
+// longer budget - multipart PDF bodies legitimately exceed 30 s.
+const UPLOAD_TIMEOUT_MS = 120000
 
 // Mirror of the backend cap (backend/routes/upload.py MAX_UPLOAD_BYTES). This is
 // a client-side pre-check for instant feedback only; the backend remains the
@@ -35,20 +46,36 @@ async function _authHeaders() {
   return token ? { authorization: `Bearer ${token}` } : {}
 }
 
+async function _postUpload(fd, headers) {
+  return fetch(`${BASE_URL}/upload`, {
+    method: 'POST',
+    body: fd,
+    headers,
+    signal:
+      typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+        ? AbortSignal.timeout(UPLOAD_TIMEOUT_MS)
+        : undefined,
+  })
+}
+
 export async function uploadDocument({ sessionId, file }) {
   const fd = new FormData()
   fd.append('session_id', sessionId)
   fd.append('file', file)
 
   let resp
+  let retried = false
   try {
-    resp = await fetch(`${BASE_URL}/upload`, {
-      method: 'POST',
-      body: fd,
-      headers: await _authHeaders(),
-    })
+    resp = await _postUpload(fd, await _authHeaders())
+    if (resp.status === 401) {
+      // F-12: one silent refresh-retry, same policy as request() (F-09).
+      retried = true
+      const token = await _refreshAccessToken()
+      resp = await _postUpload(fd, token ? { authorization: `Bearer ${token}` } : {})
+    }
   } catch (e) {
-    throw new ApiError(0, { detail: e.message }, '/upload')
+    const detail = e?.name === 'TimeoutError' ? 'upload timed out' : e.message
+    throw new ApiError(0, { detail }, '/upload')
   }
 
   const text = await resp.text()
@@ -59,7 +86,13 @@ export async function uploadDocument({ sessionId, file }) {
     /* leave parsed null */
   }
 
-  if (!resp.ok) throw new ApiError(resp.status, parsed ?? text, '/upload')
+  if (!resp.ok) {
+    // F-12: still-401 after the retry means the session is truly dead --
+    // same policy as request()'s still-401 branch (F-09): sign out and
+    // redirect to login instead of leaving the app believing it's signed in.
+    if (resp.status === 401 && retried) await _onAuthExpired()
+    throw new ApiError(resp.status, parsed ?? text, '/upload')
+  }
   return parsed
 }
 
@@ -73,4 +106,5 @@ export const getSessionIngestion = (sessionId) => apiGet(`/sessions/${sessionId}
 // silent: true — the banner's delete handler is the sole error surface. Without
 // it, request()/errorBus would auto-toast non-404 failures AND the component's
 // catch would toast again (double toast).
-export const deleteDocument = (documentId) => apiDelete(`/documents/${documentId}`, { silent: true })
+export const deleteDocument = (documentId) =>
+  apiDelete(`/documents/${documentId}`, { silent: true })

@@ -80,6 +80,39 @@ describe('SettingsView', () => {
     expect(wrapper.find('[data-testid="settings-saved"]').exists()).toBe(true)
   })
 
+  // F-11: API failure must surface inline and re-enable the form, not leave
+  // it frozen with an unhandled rejection.
+  it('shows inline error and re-enables on API failure', async () => {
+    const user = useUserStore()
+    vi.spyOn(user, 'updateProfile').mockRejectedValue(new Error('down'))
+    const wrapper = mount(SettingsView, { global: { stubs } })
+    await wrapper.get('[data-testid="settings-name"]').setValue('Edward')
+    await wrapper.find('form').trigger('submit.prevent')
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    expect(wrapper.find('[data-testid="settings-error"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="settings-save"]').attributes('disabled')).toBeUndefined()
+    expect(showSuccess).not.toHaveBeenCalled()
+  })
+
+  it('ignores double submit while in flight', async () => {
+    const user = useUserStore()
+    let resolveCompletion
+    vi.spyOn(user, 'updateProfile').mockReturnValue(
+      new Promise((resolve) => {
+        resolveCompletion = resolve
+      }),
+    )
+    const wrapper = mount(SettingsView, { global: { stubs } })
+    await wrapper.get('[data-testid="settings-name"]').setValue('Edward')
+    await wrapper.find('form').trigger('submit.prevent')
+    await wrapper.find('form').trigger('submit.prevent')
+
+    expect(user.updateProfile).toHaveBeenCalledTimes(1)
+    resolveCompletion()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  })
+
   it('appearance switch reflects and toggles dark mode', async () => {
     const wrapper = mount(SettingsView, { global: { stubs } })
     const sw = wrapper.get('[data-testid="settings-theme-toggle"]')

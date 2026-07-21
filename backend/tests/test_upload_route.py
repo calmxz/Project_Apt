@@ -1,13 +1,16 @@
 """TDD: POST /api/upload (multipart PDF -> Document row + background ingestion)."""
 
 import io
+from decimal import Decimal
 
 import pytest
 from fastapi import HTTPException
 
+from config import settings
 from contracts import TopicProfile
-from db.models import Document, Session as SessionModel, User
+from db.models import Document, Session as SessionModel, User, UsageCounter
 from routes.upload import _read_bounded
+from services import cost_meter
 
 
 SESSION_ID = "sess_up"
@@ -86,6 +89,31 @@ def test_allowed_non_pdf_types_202(client, seeded, name, ctype, content):
     )
     assert r.status_code == 202, r.text
     assert r.json()["status"] == "pending"
+
+
+# ---------------------------------------------------------------------------
+# I-03: X-Cost-Warning header on soft-cap breach (mirrors test_cost_cap.py's
+# end_session coverage for the other non-SSE response that needs the header).
+# ---------------------------------------------------------------------------
+
+
+def test_upload_sets_cost_warning_header_when_soft_breached(client, seeded, db_session):
+    cost_meter.record_cost(
+        db_session, USER_ID, Decimal(str(settings.llm_soft_cap_usd)) + Decimal("0.01")
+    )
+    db_session.commit()
+
+    files = {"file": ("notes.pdf", io.BytesIO(b"%PDF-fake"), "application/pdf")}
+    r = client.post("/api/upload", data={"user_id": USER_ID, "session_id": SESSION_ID}, files=files)
+    assert r.status_code == 202, r.text
+    assert r.headers["x-cost-warning"].startswith("level=")
+
+
+def test_upload_no_header_under_soft_cap(client, seeded):
+    files = {"file": ("notes2.pdf", io.BytesIO(b"%PDF-fake"), "application/pdf")}
+    r = client.post("/api/upload", data={"user_id": USER_ID, "session_id": SESSION_ID}, files=files)
+    assert r.status_code == 202, r.text
+    assert "x-cost-warning" not in r.headers
 
 
 def test_missing_session_id_field_400(client, seeded):
@@ -380,3 +408,25 @@ def test_upload_writes_through_object_store(client, seeded, db_session, monkeypa
     assert r.status_code == 202
     doc_id = r.json()["document_id"]
     assert store.puts == [(f"{doc_id}_notes.pdf", b"%PDF-fake")]
+
+
+def test_bad_extension_does_not_burn_slot(client, seeded, db_session):
+    resp = client.post(
+        "/api/upload",
+        data={"user_id": USER_ID, "session_id": SESSION_ID},
+        files={"file": ("notes.exe", io.BytesIO(b"MZ"), "application/octet-stream")},
+    )
+    assert resp.status_code == 400
+    count = db_session.query(UsageCounter).filter_by(user_id=USER_ID).count()
+    assert count == 0
+
+
+def test_foreign_session_does_not_burn_slot(client, seeded, db_session):
+    resp = client.post(
+        "/api/upload",
+        data={"user_id": USER_ID, "session_id": "not_yours"},
+        files={"file": ("notes.pdf", io.BytesIO(b"%PDF-1.4 x"), "application/pdf")},
+    )
+    assert resp.status_code == 404
+    count = db_session.query(UsageCounter).filter_by(user_id=USER_ID).count()
+    assert count == 0

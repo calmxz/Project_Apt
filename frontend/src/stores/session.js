@@ -24,6 +24,11 @@ export const useSessionStore = defineStore('session', () => {
   // dialog regardless of *where* the End action was triggered (sidebar row
   // menu, future shortcuts, etc.). SessionView consumes and clears it.
   const pendingSummary = ref(null) // { sessionId, kind, text } | null
+  // I-05: set by reopenSession on a 409 duplicate_topic conflict so the UI
+  // can offer a real affordance (go to the conflicting active session)
+  // instead of a dead-end error. Cleared on the next reopen attempt and on
+  // navigation (loadSession) so it never survives past its own screen.
+  const duplicateReopen = ref(null) // { sessionId } | null
 
   // Library-scoped state — never touches sidebar sessions/loading/error
   const libraryLoading = ref(false)
@@ -118,6 +123,7 @@ export const useSessionStore = defineStore('session', () => {
       loading.value = true
       detailLoading.value = true
       error.value = null
+      duplicateReopen.value = null
       try {
         const s = await sessionsApi.getSession(id)
         if (_latestRequestedId !== id) return s // superseded by a newer load; drop the write
@@ -171,8 +177,13 @@ export const useSessionStore = defineStore('session', () => {
         if (_latestRequestedId !== id) return
         _setError(e)
       } finally {
-        loading.value = false
-        detailLoading.value = false
+        // F-13: mirror the write discriminator - only the latest-requested
+        // load may clear the shared flags, else a superseded load drops the
+        // skeleton while the real target is still in flight.
+        if (_latestRequestedId === id) {
+          loading.value = false
+          detailLoading.value = false
+        }
         _inflight.delete(id)
       }
     })()
@@ -234,6 +245,7 @@ export const useSessionStore = defineStore('session', () => {
   async function reopenSession(sessionId) {
     loading.value = true
     error.value = null
+    duplicateReopen.value = null
     try {
       const resp = await sessionsApi.reopenSession(sessionId)
       if (currentSession.value && currentSession.value.id === sessionId) {
@@ -243,6 +255,13 @@ export const useSessionStore = defineStore('session', () => {
       if (idx !== -1) sessions.value[idx].ended_at = null
       return resp
     } catch (e) {
+      // I-05: the contract hands over the conflicting session id - surface
+      // it as an affordance instead of the generic dead end.
+      if (e?.status === 409 && e?.body?.detail?.code === 'duplicate_topic') {
+        duplicateReopen.value = { sessionId: e.body.detail.session_id }
+        error.value = 'An active session with this topic already exists.'
+        throw e
+      }
       _setError(e)
     } finally {
       loading.value = false
@@ -289,7 +308,9 @@ export const useSessionStore = defineStore('session', () => {
     } catch (e) {
       if (idx !== -1) sessions.value[idx].topic = prev
       if (currentSession.value?.id === id) currentSession.value.topic = prev
-      _setError(e)
+      // F-07: background action - rollback and rethrow, but never write the
+      // global error (it unmounts unrelated screens). Callers toast.
+      throw e
     }
   }
 
@@ -304,7 +325,9 @@ export const useSessionStore = defineStore('session', () => {
     } catch (e) {
       if (idx !== -1) sessions.value[idx].pinned = prev
       if (currentSession.value?.id === id) currentSession.value.pinned = prev
-      _setError(e)
+      // F-07: background action - rollback and rethrow, but never write the
+      // global error (it unmounts unrelated screens). Callers toast.
+      throw e
     }
   }
 
@@ -400,7 +423,11 @@ export const useSessionStore = defineStore('session', () => {
     // Done can be clicked again once the active stream settles.
     if (streamState.value !== 'idle') return
     checkCompleting.value = true
+    // F-17: remember the batch until the stream is proven underway - a
+    // pre-flight failure must put the card back, not strand it server-open.
+    const savedCheck = pendingCheck.value
     pendingCheck.value = null
+    let sawAnyEvent = false
     streamingMessage.value = { role: 'assistant', content: '', tool_calls: [], citations: [] }
     streamState.value = 'streaming'
     _streamSid = id
@@ -414,16 +441,35 @@ export const useSessionStore = defineStore('session', () => {
         sessionId: id,
         signal: ctrl.signal,
         onEvent: ({ event, data }) => {
+          sawAnyEvent = true
           if (event !== 'assistant_delta') deltaBatcher.flush()
           switch (event) {
-            case 'tool_call_start': recordToolCall({ kind: 'start', tool_call: data }); break
-            case 'tool_call_done': recordToolCall({ kind: 'done', tool_call: data }); break
-            case 'assistant_delta': deltaBatcher.push(data.text); break
-            case 'citations': setCitations(data); break
-            case 'cost_warning': reportCostWarning(data); break
-            case 'check_question': handleCheckQuestion(data); break
-            case 'done': sawTerminal = true; finalizeMessage(data.message_id); break
-            case 'cancelled': sawTerminal = true; handleCancelled(data.message_id, data.partial_content_chars, data.estimated_cost_usd); break
+            case 'tool_call_start':
+              recordToolCall({ kind: 'start', tool_call: data })
+              break
+            case 'tool_call_done':
+              recordToolCall({ kind: 'done', tool_call: data })
+              break
+            case 'assistant_delta':
+              deltaBatcher.push(data.text)
+              break
+            case 'citations':
+              setCitations(data)
+              break
+            case 'cost_warning':
+              reportCostWarning(data)
+              break
+            case 'check_question':
+              handleCheckQuestion(data)
+              break
+            case 'done':
+              sawTerminal = true
+              finalizeMessage(data.message_id)
+              break
+            case 'cancelled':
+              sawTerminal = true
+              handleCancelled(data.message_id, data.partial_content_chars, data.estimated_cost_usd)
+              break
             case 'followup_skipped':
               sawTerminal = true
               if (!_streamSuperseded()) {
@@ -452,9 +498,14 @@ export const useSessionStore = defineStore('session', () => {
       }
     } catch (e) {
       deltaBatcher.flush()
-      if (_streamSuperseded()) { _clearStreamState(); return }
+      if (_streamSuperseded()) {
+        _clearStreamState()
+        return
+      }
+      if (!sawAnyEvent && !pendingCheck.value) pendingCheck.value = savedCheck
       if (e?.name === 'AbortError') {
-        if (streamingMessage.value) handleCancelled('pending', streamingMessage.value.content.length, '0')
+        if (streamingMessage.value)
+          handleCancelled('pending', streamingMessage.value.content.length, '0')
         return
       }
       if (e?.status === 429) _applyCapError(e?.body?.detail)
@@ -512,7 +563,11 @@ export const useSessionStore = defineStore('session', () => {
       streamState.value = 'tool_running'
     } else if (kind === 'done') {
       const tc = streamingMessage.value.tool_calls.find((t) => t.id === tool_call.id)
-      if (tc) { tc.state = tool_call.status === 'error' ? 'error' : 'done'; tc.summary = tool_call.summary; tc.error = tool_call.error }
+      if (tc) {
+        tc.state = tool_call.status === 'error' ? 'error' : 'done'
+        tc.summary = tool_call.summary
+        tc.error = tool_call.error
+      }
       streamState.value = 'streaming'
     }
   }
@@ -523,7 +578,10 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   function finalizeMessage(message_id) {
-    if (_streamSuperseded()) { _clearStreamState(); return }
+    if (_streamSuperseded()) {
+      _clearStreamState()
+      return
+    }
     if (!streamingMessage.value) return
     messages.value.push({ ...streamingMessage.value, message_id, status: 'complete' })
     streamingMessage.value = null
@@ -532,9 +590,18 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   function handleCancelled(message_id, partial_chars, estimated_cost_usd) {
-    if (_streamSuperseded()) { _clearStreamState(); return }
+    if (_streamSuperseded()) {
+      _clearStreamState()
+      return
+    }
     if (!streamingMessage.value) return
-    messages.value.push({ ...streamingMessage.value, message_id, status: 'cancelled', partial_content_chars: partial_chars, estimated_cost_usd })
+    messages.value.push({
+      ...streamingMessage.value,
+      message_id,
+      status: 'cancelled',
+      partial_content_chars: partial_chars,
+      estimated_cost_usd,
+    })
     streamingMessage.value = null
     streamState.value = 'idle'
     abortController.value = null
@@ -548,7 +615,10 @@ export const useSessionStore = defineStore('session', () => {
   const PARTIAL_ABORT_CODES = new Set(['daily_cost_cap_reached', 'max_iters_reached'])
 
   function handleAbortError(code) {
-    if (_streamSuperseded()) { _clearStreamState(); return }
+    if (_streamSuperseded()) {
+      _clearStreamState()
+      return
+    }
     if (!streamingMessage.value) return
     if (streamingMessage.value.content) {
       const status = PARTIAL_ABORT_CODES.has(code) ? 'partial' : 'error'
@@ -560,7 +630,10 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   function stopStream() {
-    if (abortController.value) { abortController.value.abort(); streamState.value = 'stopping' }
+    if (abortController.value) {
+      abortController.value.abort()
+      streamState.value = 'stopping'
+    }
   }
 
   async function sendMessageStreaming({ text, reviewGaps = false, reviewGap = null }) {
@@ -579,6 +652,7 @@ export const useSessionStore = defineStore('session', () => {
     error.value = null
     const deltaBatcher = createDeltaBatcher(appendAssistantDelta)
     let sawTerminal = false
+    let sawAnyEvent = false
     try {
       await streamChat({
         sessionId: currentSessionId.value,
@@ -587,16 +661,35 @@ export const useSessionStore = defineStore('session', () => {
         reviewGap,
         signal: ctrl.signal,
         onEvent: ({ event, data }) => {
+          sawAnyEvent = true
           if (event !== 'assistant_delta') deltaBatcher.flush()
           switch (event) {
-            case 'tool_call_start': recordToolCall({ kind: 'start', tool_call: data }); break
-            case 'tool_call_done': recordToolCall({ kind: 'done', tool_call: data }); break
-            case 'assistant_delta': deltaBatcher.push(data.text); break
-            case 'citations': setCitations(data); break
-            case 'cost_warning': reportCostWarning(data); break
-            case 'check_question': handleCheckQuestion(data); break
-            case 'done': sawTerminal = true; finalizeMessage(data.message_id); break
-            case 'cancelled': sawTerminal = true; handleCancelled(data.message_id, data.partial_content_chars, data.estimated_cost_usd); break
+            case 'tool_call_start':
+              recordToolCall({ kind: 'start', tool_call: data })
+              break
+            case 'tool_call_done':
+              recordToolCall({ kind: 'done', tool_call: data })
+              break
+            case 'assistant_delta':
+              deltaBatcher.push(data.text)
+              break
+            case 'citations':
+              setCitations(data)
+              break
+            case 'cost_warning':
+              reportCostWarning(data)
+              break
+            case 'check_question':
+              handleCheckQuestion(data)
+              break
+            case 'done':
+              sawTerminal = true
+              finalizeMessage(data.message_id)
+              break
+            case 'cancelled':
+              sawTerminal = true
+              handleCancelled(data.message_id, data.partial_content_chars, data.estimated_cost_usd)
+              break
             case 'error':
               sawTerminal = true
               _applyCapError(data)
@@ -615,10 +708,22 @@ export const useSessionStore = defineStore('session', () => {
       }
     } catch (e) {
       deltaBatcher.flush()
-      if (_streamSuperseded()) { _clearStreamState(); return }
-      if (e?.name === 'AbortError') {
-        if (streamingMessage.value) handleCancelled('pending', streamingMessage.value.content.length, '0')
+      if (_streamSuperseded()) {
+        _clearStreamState()
         return
+      }
+      if (e?.name === 'AbortError') {
+        if (streamingMessage.value)
+          handleCancelled('pending', streamingMessage.value.content.length, '0')
+        return
+      }
+      if (!sawAnyEvent && typeof e?.status === 'number' && e.status >= 400) {
+        // I-10: the server persisted nothing pre-stream - drop the
+        // optimistic bubble instead of stranding it in the transcript.
+        // Runs before the session_ended arm too: that 409 is itself a
+        // pre-stream failure and must not strand the bubble either.
+        const last = messages.value[messages.value.length - 1]
+        if (last?.role === 'user' && last.message_id === undefined) messages.value.pop()
       }
       if (e?.status === 409 && e?.body?.detail?.code === 'session_ended') {
         error.value = 'This session was ended elsewhere. Reopen it to continue.'
@@ -645,6 +750,7 @@ export const useSessionStore = defineStore('session', () => {
     dailyCapInfo.value = null
     costCapInfo.value = null
     pendingSummary.value = null
+    duplicateReopen.value = null
     pendingCheck.value = null
     streamingMessage.value = null
     streamState.value = 'idle'
@@ -665,6 +771,7 @@ export const useSessionStore = defineStore('session', () => {
     costCapReached,
     costCapInfo,
     pendingSummary,
+    duplicateReopen,
     consumePendingSummary,
     pendingCheck,
     checkLocked,

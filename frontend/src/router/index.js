@@ -92,7 +92,14 @@ router.beforeEach(async (to) => {
   const auth = useAuthStore()
   // If auth store hasn't booted yet (first navigation in tests/dev), do it
   // now so the guard has a deterministic answer.
-  if (!auth.ready) await auth.init()
+  if (!auth.ready) {
+    try {
+      await auth.init()
+    } catch {
+      // F-14: a failed init means no session - proceed unauthenticated;
+      // the guard below routes to /login.
+    }
+  }
 
   const isPublic = to.meta?.public === true
   if (!auth.isAuthenticated && !isPublic) {
@@ -121,6 +128,15 @@ router.beforeEach(async (to) => {
   if (user.onboardingComplete && to.name === 'onboarding' && to.query.retake !== '1') {
     return { name: 'home' }
   }
+})
+
+router.afterEach((to, from, failure) => {
+  // F-08: SPA route swaps leave keyboard/SR focus on a removed node. Reset
+  // to the main landmark on real navigations (skip the initial load so we
+  // don't steal focus from the address bar / skip-link).
+  if (failure || !from.name) return
+  if (typeof document === 'undefined') return
+  document.getElementById('main-content')?.focus()
 })
 
 export default router

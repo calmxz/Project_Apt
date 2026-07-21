@@ -44,6 +44,30 @@ def test_merge_into_session_persists_union(db_session):
     assert stored == {"existing", "new_stem"}
 
 
+def test_merge_into_session_locks_row(db_session, monkeypatch):
+    db_session.add(User(id="u1"))
+    db_session.flush()
+    db_session.add(
+        SessionModel(
+            id="s1",
+            user_id="u1",
+            topic="t",
+            topic_profile_json=TopicProfile().model_dump_json(),
+            kw_index_json=json.dumps(["existing"]),
+        )
+    )
+    db_session.commit()
+
+    seen = {}
+    real_get = db_session.get
+    def spy(entity, ident, **kw):
+        seen.update(kw)
+        return real_get(entity, ident, **kw)
+    monkeypatch.setattr(db_session, "get", spy)
+    keyword_index.merge_into_session(db_session, "s1", {"stem"})
+    assert seen.get("with_for_update") is True
+
+
 def test_acronym_and_digit_tokens_indexed():
     stems = keyword_index.build_from_text(
         "DNA replication, IPv4 subnetting, and 3NF normalization"

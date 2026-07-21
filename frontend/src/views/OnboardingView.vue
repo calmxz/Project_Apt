@@ -41,12 +41,16 @@
           type="submit"
           class="cta"
           data-testid="onboarding-submit"
-          :disabled="!canSubmit"
+          :disabled="!canSubmit || submitting"
         >
           <span>Begin</span>
           <i class="pi pi-arrow-right" aria-hidden="true" />
         </button>
       </div>
+
+      <p v-if="submitError" class="error" role="alert" data-testid="onboarding-error">
+        {{ submitError }}
+      </p>
     </form>
   </section>
 </template>
@@ -59,6 +63,7 @@ import InputText from 'primevue/inputtext'
 
 import FeedbackStylePicker from '../components/FeedbackStylePicker.vue'
 import Logo from '../components/Logo.vue'
+import { friendlyError } from '@/lib/errors.js'
 import { useUserStore } from '../stores/user.js'
 
 const router = useRouter()
@@ -73,13 +78,26 @@ const feedback = ref(userStore.interactionPreferences?.feedback || 'hints')
 
 const canSubmit = computed(() => Boolean(feedback.value))
 
+const submitting = ref(false)
+const submitError = ref(null)
+
 async function submit() {
-  if (!canSubmit.value) return
-  await userStore.completeOnboarding({
-    name: displayName.value,
-    feedback: feedback.value,
-  })
-  router.push({ name: 'home' })
+  if (!canSubmit.value || submitting.value) return
+  submitting.value = true
+  submitError.value = null
+  try {
+    await userStore.completeOnboarding({
+      name: displayName.value,
+      feedback: feedback.value,
+    })
+    router.push({ name: 'home' })
+  } catch (e) {
+    // F-11: inline surface (LoginView pattern); the errorBus toast alone
+    // left the form frozen with no explanation and an unhandled rejection.
+    submitError.value = friendlyError(e)
+  } finally {
+    submitting.value = false
+  }
 }
 </script>
 
@@ -106,8 +124,13 @@ async function submit() {
 }
 
 @keyframes gentle-spin {
-  0%, 100% { transform: rotate(0deg); }
-  50% { transform: rotate(12deg); }
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(12deg);
+  }
 }
 
 .folio {
@@ -181,6 +204,12 @@ async function submit() {
   animation-delay: var(--delay, 0ms);
 }
 
+.error {
+  margin: 0;
+  color: var(--color-error-text);
+  font-size: 0.875rem;
+}
+
 .input :deep(input),
 .input.p-inputtext {
   font-family: var(--font-sans);
@@ -192,7 +221,9 @@ async function submit() {
   padding: 0.75rem 1.25rem;
   color: var(--color-heading);
   width: 100%;
-  transition: border-color var(--motion-fast) ease, box-shadow var(--motion-fast) ease;
+  transition:
+    border-color var(--motion-fast) ease,
+    box-shadow var(--motion-fast) ease;
 }
 
 .input :deep(input):focus,
@@ -209,14 +240,17 @@ async function submit() {
   padding: 0.9rem 1.75rem;
   border-radius: var(--radius-pill);
   background: var(--color-accent-strong);
-  color: #FFFFFF;
+  color: #ffffff;
   border: 0;
   font-family: var(--font-sans);
   font-weight: 600;
   font-size: 1rem;
   cursor: pointer;
   box-shadow: var(--shadow-pop);
-  transition: transform var(--motion-fast) var(--motion-bounce), box-shadow var(--motion-fast) ease, opacity var(--motion-fast) ease;
+  transition:
+    transform var(--motion-fast) var(--motion-bounce),
+    box-shadow var(--motion-fast) ease,
+    opacity var(--motion-fast) ease;
 }
 
 .cta:hover:not(:disabled) {

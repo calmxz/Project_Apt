@@ -136,7 +136,8 @@ def _parse_profile(raw: str | None) -> TopicProfile:
     try:
         return TopicProfile.model_validate(data)
     except ValidationError:
-        pass
+        # Strict parse failed - retry below with unknown keys dropped.
+        log.debug("topic_profile strict validation failed; retrying on known fields")
     known = {k: v for k, v in data.items() if k in TopicProfile.model_fields}
     dropped = sorted(set(data) - set(known))
     try:
@@ -404,8 +405,10 @@ def apply_patch(
 
     if args.add_confirmed_gap:
         gap_evidence = evidence if evidence in ("declared", "tested") else None
-        profile.confirmed_gaps = upsert_entry(
-            profile.confirmed_gaps or [], args.add_confirmed_gap,
+        # B-03: route through the exclusivity choke point (F-13) like the
+        # user PATCH path; upsert_entry left the concept in both lists.
+        add_exclusive(
+            profile, "confirmed_gaps", args.add_confirmed_gap,
             evidence_type=gap_evidence, stamp=datetime.now(timezone.utc),
         )
 

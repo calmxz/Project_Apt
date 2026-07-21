@@ -22,6 +22,8 @@ def test_openapi_has_x_sse_events():
         "done",
         "cancelled",
         "error",
+        "check_question",
+        "followup_skipped",
     }
     assert set(doc["x-sse-events"].keys()) == expected
 

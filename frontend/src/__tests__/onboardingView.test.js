@@ -67,4 +67,37 @@ describe('OnboardingView', () => {
     await wrapper.get('[data-testid="feedback-style-direct_answers"]').setValue(true)
     expect(wrapper.text()).toContain('explain')
   })
+
+  // F-11: API failure must surface inline and re-enable the form, not leave
+  // it frozen with an unhandled rejection.
+  it('shows inline error and re-enables on API failure', async () => {
+    const user = useUserStore()
+    vi.spyOn(user, 'completeOnboarding').mockRejectedValue(new Error('down'))
+    const wrapper = mount(OnboardingView, { global: { stubs } })
+    await wrapper.get('[data-testid="onboarding-name"]').setValue('Eddy')
+    await wrapper.find('form').trigger('submit.prevent')
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    expect(wrapper.find('[data-testid="onboarding-error"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="onboarding-submit"]').attributes('disabled')).toBeUndefined()
+    expect(push).not.toHaveBeenCalled()
+  })
+
+  it('ignores double submit while in flight', async () => {
+    const user = useUserStore()
+    let resolveCompletion
+    vi.spyOn(user, 'completeOnboarding').mockReturnValue(
+      new Promise((resolve) => {
+        resolveCompletion = resolve
+      }),
+    )
+    const wrapper = mount(OnboardingView, { global: { stubs } })
+    await wrapper.get('[data-testid="onboarding-name"]').setValue('Eddy')
+    await wrapper.find('form').trigger('submit.prevent')
+    await wrapper.find('form').trigger('submit.prevent')
+
+    expect(user.completeOnboarding).toHaveBeenCalledTimes(1)
+    resolveCompletion()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  })
 })

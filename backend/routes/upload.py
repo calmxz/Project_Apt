@@ -10,6 +10,7 @@ from fastapi import (
     Form,
     HTTPException,
     Request,
+    Response,
     UploadFile,
     status,
 )
@@ -20,7 +21,7 @@ from contracts import UploadResponse, UploadStatus
 from db.database import get_db
 from db.models import Document, Session as SessionModel
 from lib.error_codes import DAILY_CAP_REACHED
-from services import ingestion_service, object_store, rate_limit
+from services import cost_meter, ingestion_service, object_store, rate_limit
 from services.auth import current_user_id
 
 
@@ -66,23 +67,12 @@ def _read_bounded(fh, max_bytes: int) -> bytes:
 def upload_file(
     request: Request,
     background_tasks: BackgroundTasks,
+    response: Response,
     session_id: str = Form(...),
     file: UploadFile = File(...),
     user_id: str = Depends(current_user_id),
     db: Session = Depends(get_db),
 ):
-    allowed, used = rate_limit.check_and_increment(db, user_id)
-    if not allowed:
-        raise HTTPException(
-            status_code=429,
-            detail={
-                "code": DAILY_CAP_REACHED,
-                "cap": settings.daily_cap,
-                "used": used,
-                "resets_at": rate_limit.midnight_utc_iso(),
-            },
-        )
-
     content_length = request.headers.get("content-length")
     if content_length is not None:
         try:
@@ -92,7 +82,9 @@ def upload_file(
                     detail={"code": "FILE_TOO_LARGE", "max_bytes": MAX_UPLOAD_BYTES},
                 )
         except ValueError:
-            pass
+            # Malformed header - not a size signal. The real guard is the
+            # streamed byte count below, so fall through rather than 400 here.
+            log.debug("ignoring non-integer content-length header %r", content_length)
 
     ext = Path(file.filename or "").suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:
@@ -107,6 +99,22 @@ def upload_file(
     sess = db.get(SessionModel, session_id)
     if sess is None or sess.user_id != user_id:
         raise HTTPException(status_code=404, detail="session not found")
+
+    # B-07: rate limit only after extension + ownership pass, mirroring
+    # _prepare_turn's guard order - a rejected upload must not consume a
+    # daily slot. Ownership-before-increment also guarantees the users row
+    # exists for the usage_counters FK (owning a session implies it).
+    allowed, used = rate_limit.check_and_increment(db, user_id)
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code": DAILY_CAP_REACHED,
+                "cap": settings.daily_cap,
+                "used": used,
+                "resets_at": rate_limit.midnight_utc_iso(),
+            },
+        )
 
     raw_name = Path(file.filename or "upload.pdf").name
     safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", raw_name)
@@ -157,6 +165,10 @@ def upload_file(
         )
 
     background_tasks.add_task(ingestion_service.run, doc.id)
+
+    warn = cost_meter.cost_warning_header(db, user_id)
+    if warn:
+        response.headers["X-Cost-Warning"] = warn
 
     return UploadResponse(
         document_id=doc.id,

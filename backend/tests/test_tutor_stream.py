@@ -28,8 +28,8 @@ import pytest
 
 from agent.types import ToolContext
 from config import settings
-from contracts import Citation, ToolResult
-from db.models import ChatMessage, LlmCallLog, User
+from contracts import Citation, ToolResult, TopicProfile
+from db.models import ChatMessage, LlmCallLog, Session as SessionModel, User
 from services import cost_meter
 from services.cost_meter import CapStatus
 
@@ -752,6 +752,17 @@ async def test_run_streaming_ask_check_question_dispatches_sibling_first(db_sess
     )
     monkeypatch.setattr("agent.tutor.tools.dispatch", dispatch)
 
+    # Seed user and session row for attach_message_id lock to succeed
+    db_session.add(User(id="u1"))
+    db_session.flush()
+    db_session.add(SessionModel(
+        id="s_ask_skip",
+        user_id="u1",
+        topic="test",
+        topic_profile_json=TopicProfile().model_dump_json(),
+    ))
+    db_session.commit()
+
     ctx = _ctx(db_session, session_id="s_ask_skip")
     events = await _drain(
         tutor.run_streaming([{"role": "user", "content": "quiz me"}], "sys", ctx)
@@ -1144,6 +1155,40 @@ def test_summarize_labels_ignored_profile_patch():
     from agent.tutor import _summarize
     result = ToolResult(ok=True, status="ignored", data={"notes": ["inferred mastery ignored"]})
     assert "ignored" in _summarize("update_topic_profile", result).lower()
+
+
+@pytest.mark.asyncio
+async def test_no_open_transaction_during_llm_stream(db_session, monkeypatch):
+    """B-10 (structural): the pooled DB connection must be released before the
+    LLM stream begins. The loop-top cost_meter.check_cap SELECT autobegins a
+    transaction; that transaction must be committed before litellm.acompletion
+    is awaited, so the connection returns to the pool for the 10-60s stream
+    (Supabase transaction pooler ceiling).
+
+    check_cap is NOT mocked here (unlike most tests in this file, which use
+    _allow_cap): the real check_cap SELECT against db_session is exactly what
+    autobegins the transaction this test must observe closed by the time
+    acompletion is awaited."""
+    _disable_stub(monkeypatch)
+
+    from agent import tutor
+
+    captured = {}
+
+    async def _fake_acompletion(*args, **kwargs):
+        captured["open_txn"] = db_session.in_transaction()
+        return _make_stream(_content_chunk("hi"))
+
+    monkeypatch.setattr("agent.tutor.litellm.acompletion", _fake_acompletion)
+    monkeypatch.setattr(
+        "agent.tutor.litellm.stream_chunk_builder", MagicMock(return_value=SimpleNamespace())
+    )
+    monkeypatch.setattr("agent.tutor.litellm.completion_cost", MagicMock(return_value=0.0))
+
+    ctx = _ctx(db_session, session_id="s_no_open_txn")
+    await _drain(tutor.run_streaming([{"role": "user", "content": "hi"}], "sys", ctx))
+
+    assert captured["open_txn"] is False
 
 
 @pytest.mark.asyncio

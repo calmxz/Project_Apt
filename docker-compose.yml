@@ -23,6 +23,7 @@ services:
     ports:
       - "8000:8000"
     environment:
+      ENV: dev
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       MODEL: ${MODEL:-gemini/gemini-3.1-flash-lite}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-gemini/gemini-embedding-2}

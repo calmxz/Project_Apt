@@ -43,6 +43,7 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Content-Type", "Accept", "Authorization", "If-Match"],
+    expose_headers=["X-Cost-Warning"],
 )
 
 app.include_router(health.router)

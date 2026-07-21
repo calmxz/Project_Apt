@@ -34,7 +34,12 @@
         @select="onGapPicked"
       />
 
-      <div ref="messagesEl" class="messages" :class="{ 'is-empty': !store.messages.length }" data-testid="session-messages">
+      <div
+        ref="messagesEl"
+        class="messages"
+        :class="{ 'is-empty': !store.messages.length }"
+        data-testid="session-messages"
+      >
         <MessageListSkeleton v-if="store.detailLoading" />
         <template v-else>
           <ChatEmptyState
@@ -51,7 +56,17 @@
         </template>
       </div>
 
-      <p v-if="store.followupNotice" class="followup-notice" data-testid="followup-notice" role="status" aria-live="polite">
+      <div class="sr-only" role="status" aria-live="polite" data-testid="stream-status">
+        {{ streamAnnouncement }}
+      </div>
+
+      <p
+        v-if="store.followupNotice"
+        class="followup-notice"
+        data-testid="followup-notice"
+        role="status"
+        aria-live="polite"
+      >
         {{ store.followupNotice }}
       </p>
 
@@ -71,6 +86,14 @@
         >
           Retry
         </button>
+        <router-link
+          v-if="store.duplicateReopen"
+          :to="{ name: 'session', params: { id: store.duplicateReopen.sessionId } }"
+          class="home-link"
+          data-testid="go-to-active-session"
+        >
+          Go to active session
+        </router-link>
         <details v-if="rawErrorDetail" class="error-details">
           <summary>Technical details</summary>
           <pre>{{ rawErrorDetail }}</pre>
@@ -114,12 +137,9 @@
         modal
         :closable="true"
         data-testid="session-summary-dialog"
-        class="summary-dialog"
+        class="crux-dialog summary-dialog"
       >
-        <p
-          class="summary"
-          :data-testid="`session-summary-${summaryKind}`"
-        >
+        <p class="summary" :data-testid="`session-summary-${summaryKind}`">
           {{ summaryText }}
         </p>
         <template #footer>
@@ -178,6 +198,20 @@ const uploadStatus = ref(null)
 const lastError = ref(null)
 const referenceBannerRef = ref(null)
 
+// F-18: a live region over the token-streaming bubble spams SRs with every
+// mutation. Announce discrete transitions instead. The store's stream state
+// machine has intermediate members beyond idle/streaming (tool_running,
+// stopping), so the edges we care about are idle -> non-idle (start) and
+// non-idle -> idle (finish), not every individual hop.
+const streamAnnouncement = ref('')
+watch(
+  () => store.streamState,
+  (next, prev) => {
+    if (prev === 'idle' && next !== 'idle') streamAnnouncement.value = 'Tutor is replying.'
+    else if (prev !== 'idle' && next === 'idle') streamAnnouncement.value = 'Reply finished.'
+  },
+)
+
 // Use the same target-id discriminator as headerTopic so the ended-banner /
 // composer / resume action agree with the optimistic header during a switch.
 // While detail loads, store.currentSession still holds the PREVIOUS session, so
@@ -194,19 +228,16 @@ const hasGaps = computed(
 )
 // Same discriminator-checked source as hasGaps, but the full list is needed to
 // drive the picker (single gap skips it, >1 gap opens it).
-const confirmedGaps = computed(
-  () =>
-    (store.currentSession?.topic_profile?.confirmed_gaps ?? []).map(
-      (g) => g?.name ?? g,
-    ),
+const confirmedGaps = computed(() =>
+  (store.currentSession?.topic_profile?.confirmed_gaps ?? []).map((g) => g?.name ?? g),
 )
 // Discriminator-gated (same as isEnded/headerTopic): during a switch,
 // store.currentSession still holds the PREVIOUS session, so gating on raw
 // currentSession would leave the composer enabled+pointed at the old session
 // (currentSessionId lags props.id until the await resolves) — a send would
 // land in the wrong session and then vanish when the target detail loads.
-const canEnd = computed(() =>
-  store.currentSession?.id === props.id && !store.currentSession.ended_at,
+const canEnd = computed(
+  () => store.currentSession?.id === props.id && !store.currentSession.ended_at,
 )
 const canSend = computed(() => canEnd.value && !store.dailyCapReached && !store.costCapReached)
 
@@ -275,18 +306,18 @@ function onCostWarning(event) {
   if (level === 'urgent') {
     if (urgentCapShown.value) return
     urgentCapShown.value = true
-    showError(
-      'You are very close to today’s cost limit.',
-      { summary: 'Cost limit near', life: 8000 },
-    )
+    showError('You are very close to today’s cost limit.', {
+      summary: 'Cost limit near',
+      life: 8000,
+    })
     return
   }
   if (softCapShown.value) return
   softCapShown.value = true
-  showWarn(
-    'You’re approaching the daily cost limit for this session.',
-    { summary: 'Cost warning', life: 6000 },
-  )
+  showWarn('You’re approaching the daily cost limit for this session.', {
+    summary: 'Cost warning',
+    life: 6000,
+  })
 }
 onMounted(() => costBus.addEventListener('cost-warning', onCostWarning))
 onUnmounted(() => costBus.removeEventListener('cost-warning', onCostWarning))
@@ -319,10 +350,7 @@ function scrollToBottom() {
   })
 }
 
-watch(
-  [() => store.messages.length, awaitingResponse],
-  () => scrollToBottom(),
-)
+watch([() => store.messages.length, awaitingResponse], () => scrollToBottom())
 
 async function loadCurrent(id) {
   // Reset per-load so navigating away from a 404 session clears the state.
@@ -340,7 +368,9 @@ async function loadCurrent(id) {
       // Dev-only WS3 gate measurement: navigate -> detail painted. This number
       // decides whether the retention tail (warm prefetch + SWR cache) is worth
       // building (see Task 5). Remove once that decision is recorded.
-      console.debug(`[perf] session ${id} detail painted in ${Math.round(performance.now() - startedAt)}ms`)
+      console.debug(
+        `[perf] session ${id} detail painted in ${Math.round(performance.now() - startedAt)}ms`,
+      )
     }
   } catch (e) {
     // Superseded load: a newer navigation already changed props.id, so a late
@@ -461,9 +491,12 @@ async function onAttachFile(file) {
     await pollUploadStatus(resp.document_id, file.name)
     referenceBannerRef.value?.refresh?.()
   } catch (e) {
+    // I-09: the 415 (and friends) carry an actionable server message -
+    // prefer it over the generic friendlyError copy.
+    const serverMsg = e?.body?.detail?.message
     uploadStatus.value = {
       kind: 'failed',
-      text: `Upload failed: ${friendlyError(e)}`,
+      text: `Upload failed: ${serverMsg || friendlyError(e)}`,
     }
   } finally {
     uploading.value = false
@@ -476,7 +509,10 @@ async function pollUploadStatus(documentId, filename) {
     try {
       s = await getUploadStatus(documentId)
     } catch (e) {
-      uploadStatus.value = { kind: 'failed', text: `Upload status unavailable: ${friendlyError(e)}` }
+      uploadStatus.value = {
+        kind: 'failed',
+        text: `Upload status unavailable: ${friendlyError(e)}`,
+      }
       return
     }
     if (s.status === 'ready') {
@@ -588,9 +624,16 @@ function goHome() {
    mount/unmount) drives the overflow lock and the flex-height cascade — every
    ancestor down to the scroller needs min-height: 0 so it can shrink instead of
    overflowing. Scoped to this route; other routes keep normal document scroll. */
-:global(body.chat-locked) { overflow: hidden; }
-:global(body.chat-locked #app) { height: 100vh; height: 100dvh; }
-:global(body.chat-locked .page) { min-height: 0; }
+:global(body.chat-locked) {
+  overflow: hidden;
+}
+:global(body.chat-locked #app) {
+  height: 100vh;
+  height: 100dvh;
+}
+:global(body.chat-locked .page) {
+  min-height: 0;
+}
 :global(body.chat-locked .page-inner) {
   display: flex;
   flex-direction: column;
@@ -649,16 +692,26 @@ function goHome() {
   scrollbar-color: var(--color-border-strong) transparent;
 }
 
-.messages::-webkit-scrollbar { width: 8px; }
-.messages::-webkit-scrollbar-button { display: none; height: 0; width: 0; }
-.messages::-webkit-scrollbar-track { background: transparent; }
+.messages::-webkit-scrollbar {
+  width: 8px;
+}
+.messages::-webkit-scrollbar-button {
+  display: none;
+  height: 0;
+  width: 0;
+}
+.messages::-webkit-scrollbar-track {
+  background: transparent;
+}
 .messages::-webkit-scrollbar-thumb {
   background: var(--color-border-strong);
   border-radius: var(--radius-pill);
   border: 2px solid transparent;
   background-clip: padding-box;
 }
-.messages::-webkit-scrollbar-thumb:hover { background: var(--color-text-faint); }
+.messages::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-faint);
+}
 
 .messages.is-empty {
   /* When the conversation is empty, let the empty-state anchor naturally
@@ -689,8 +742,8 @@ function goHome() {
 
 .error-retry {
   flex: 0 0 auto;
-  background: var(--signal-error);
-  color: #FFFFFF;
+  background: var(--color-error-text);
+  color: #ffffff;
   border: 0;
   border-radius: var(--radius-pill);
   padding: 0.4rem 0.875rem;
@@ -698,14 +751,19 @@ function goHome() {
   font-weight: 600;
   font-size: 0.8125rem;
   cursor: pointer;
-  transition: filter var(--motion-fast) ease, transform var(--motion-fast) var(--motion-bounce);
+  transition:
+    filter var(--motion-fast) ease,
+    transform var(--motion-fast) var(--motion-bounce);
 }
 
-.error-retry:hover,
-.error-retry:focus-visible {
+.error-retry:hover {
   filter: brightness(1.08);
   transform: translateY(-1px);
-  outline: none;
+}
+
+.error-retry:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 
 .error-details {
@@ -743,34 +801,6 @@ function goHome() {
   padding: 0.5rem 0;
 }
 
-:global(.summary-dialog .p-dialog) {
-  border-radius: var(--radius-card);
-  border: 1px solid var(--color-border);
-  box-shadow: var(--shadow-lift);
-}
-
-:global(.summary-dialog .p-dialog-header) {
-  font-family: var(--font-display);
-  font-weight: 700;
-  letter-spacing: var(--tracking-tight);
-  font-size: 1.5rem;
-  padding: 1.25rem 1.5rem 0.75rem;
-}
-
-:global(.summary-dialog .p-dialog-content) {
-  padding: 0.5rem 1.5rem 1.25rem;
-}
-
-:global(.summary-dialog .p-dialog-footer .p-button) {
-  background: var(--color-accent-strong);
-  color: #FFFFFF;
-  border: 0;
-  border-radius: var(--radius-pill);
-  padding: 0.625rem 1.5rem;
-  font-weight: 600;
-  box-shadow: var(--shadow-pop);
-}
-
 /* Not-found */
 .not-found {
   display: flex;
@@ -804,9 +834,12 @@ function goHome() {
   text-decoration: none;
 }
 
-.home-link:hover,
-.home-link:focus-visible {
+.home-link:hover {
   color: var(--color-accent-hover);
-  outline: none;
+}
+
+.home-link:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 </style>

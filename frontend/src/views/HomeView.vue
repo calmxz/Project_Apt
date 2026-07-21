@@ -3,11 +3,7 @@
     <h1 class="title">What do you want to learn?</h1>
 
     <p v-if="store.loading" class="muted">Loading...</p>
-    <p
-      v-else-if="store.error"
-      class="error"
-      data-testid="home-error"
-    >
+    <p v-else-if="store.error && !store.sessions.length" class="error" data-testid="home-error">
       {{ friendlyError(store.error) }}
     </p>
 
@@ -35,14 +31,11 @@
           <RouterLink to="/new" class="quick-more">Add reference files</RouterLink>
         </div>
 
-        <div
-          v-if="reviewQueue.total > 0"
-          class="mode-card"
-          data-testid="home-mode-review"
-        >
+        <div v-if="reviewQueue.total > 0" class="mode-card" data-testid="home-mode-review">
           <h2 class="mode-title">Due for review</h2>
           <p class="mode-sub" data-testid="home-review-count">
-            {{ reviewQueue.total }} concept{{ reviewQueue.total === 1 ? '' : 's' }} ready for a quick check.
+            {{ reviewQueue.total }} concept{{ reviewQueue.total === 1 ? '' : 's' }} ready for a
+            quick check.
           </p>
           <ul class="review-list">
             <li v-for="item in reviewQueue.items" :key="item.concept">
@@ -54,7 +47,9 @@
                 @click="startReview(item)"
               >
                 <span class="review-concept">{{ item.concept }}</span>
-                <span class="review-meta">{{ item.source_topic }} &middot; streak {{ item.streak }}</span>
+                <span class="review-meta"
+                  >{{ item.source_topic }} &middot; streak {{ item.streak }}</span
+                >
               </button>
             </li>
           </ul>
@@ -88,8 +83,16 @@ const reviewExpanded = ref(false)
 const startBusy = ref(false)
 
 onMounted(() => {
+  // U-05: boot-path load - the failure is already handled locally (store
+  // error state / empty review card), so a transient backend hiccup here
+  // must not toast on Home's very first mount. store.listSessions() is
+  // silent unconditionally now (sessionsApi.js), so it can't be defeated by
+  // racing another mounted caller (e.g. Sidebar) into the store's in-flight
+  // de-dupe. getReviewQueue has no such de-dupe, so silent:true is threaded
+  // per-call here instead; the user-initiated "View all" refetch below
+  // stays toasted.
   store.listSessions().catch(() => {})
-  loadReviewQueue()
+  loadReviewQueue(3, { silent: true })
 })
 
 async function startQuick() {
@@ -109,9 +112,14 @@ async function startQuick() {
   }
 }
 
-async function loadReviewQueue(limit = 3) {
+async function loadReviewQueue(limit = 3, { silent } = {}) {
   try {
-    reviewQueue.value = await getReviewQueue({ limit, offset: 0 })
+    // Only the boot-mount call passes silent:true; user-initiated refetches
+    // (expandReview's "View all") keep the toast on a real failure, so pass
+    // the opts arg through conditionally rather than always as {}.
+    reviewQueue.value = silent
+      ? await getReviewQueue({ limit, offset: 0 }, { silent: true })
+      : await getReviewQueue({ limit, offset: 0 })
   } catch {
     // The review card must never block Home; hide it on failure.
     reviewQueue.value = { items: [], total: 0 }
@@ -235,14 +243,16 @@ async function expandReview() {
   padding: 0.75rem 1.375rem;
   border-radius: var(--radius-pill);
   background: var(--color-accent-strong);
-  color: #FFFFFF;
+  color: #ffffff;
   border: 0;
   font-family: var(--font-sans);
   font-weight: 600;
   font-size: 0.9375rem;
   cursor: pointer;
   box-shadow: var(--shadow-pop);
-  transition: transform var(--motion-fast) var(--motion-bounce), box-shadow var(--motion-fast) ease;
+  transition:
+    transform var(--motion-fast) var(--motion-bounce),
+    box-shadow var(--motion-fast) ease;
 }
 
 .cta-primary:hover {
