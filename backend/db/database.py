@@ -1,8 +1,12 @@
+import logging
+
 from sqlalchemy import create_engine
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from config import settings
+
+log = logging.getLogger(__name__)
 
 
 class Base(DeclarativeBase):
@@ -77,4 +81,7 @@ def create_tables():
             try:
                 conn.exec_driver_sql(sql)
             except OperationalError:
-                pass
+                # Column already present - these statements are idempotent
+                # catch-up DDL for pre-Alembic sqlite dev DBs, so a duplicate
+                # column error is the expected steady state.
+                log.debug("legacy sqlite migration already applied: %s", sql)
