@@ -200,16 +200,11 @@ defineExpose({ focus })
   box-shadow: var(--shadow-lift);
   transition:
     border-color var(--motion-fast) ease,
-    box-shadow var(--motion-base) ease,
-    transform var(--motion-base) var(--motion-bounce);
+    box-shadow var(--motion-base) ease;
 }
 
 .composer:focus-within {
   border-color: var(--color-accent);
-  box-shadow:
-    var(--shadow-lift),
-    0 0 0 4px var(--color-accent-ring);
-  transform: translateY(-1px);
 }
 
 .composer.is-disabled {
@@ -288,8 +283,7 @@ defineExpose({ focus })
     background var(--motion-fast) ease,
     color var(--motion-fast) ease,
     border-color var(--motion-fast) ease,
-    transform var(--motion-fast) var(--motion-bounce),
-    box-shadow var(--motion-fast) ease,
+    filter var(--motion-fast) ease,
     opacity var(--motion-fast) ease;
 }
 
@@ -326,13 +320,12 @@ defineExpose({ focus })
   background: var(--color-accent-strong);
   color: #ffffff;
   border: 0;
-  box-shadow: var(--shadow-pop);
   font-weight: 600;
 }
 
 .composer-send:not(:disabled):hover,
 .composer-send:not(:disabled):focus-visible {
-  transform: translateY(-2px);
+  filter: brightness(1.08);
 }
 
 .composer-send:not(:disabled):focus-visible {
@@ -341,8 +334,7 @@ defineExpose({ focus })
 }
 
 .composer-send:not(:disabled):active {
-  transform: translateY(3px);
-  box-shadow: var(--shadow-pop-pressed);
+  filter: brightness(0.95);
 }
 
 .composer-send:disabled {
@@ -361,13 +353,11 @@ defineExpose({ focus })
   background: var(--signal-error);
   color: #ffffff;
   border: 0;
-  box-shadow: var(--shadow-pop);
   font-weight: 600;
 }
 
 .composer-stop:not(:disabled):hover,
 .composer-stop:not(:disabled):focus-visible {
-  transform: translateY(-2px);
   filter: brightness(1.08);
 }
 
@@ -377,8 +367,7 @@ defineExpose({ focus })
 }
 
 .composer-stop:not(:disabled):active {
-  transform: translateY(3px);
-  box-shadow: var(--shadow-pop-pressed);
+  filter: brightness(0.95);
 }
 
 .composer-stop:disabled {

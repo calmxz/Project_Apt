@@ -7,9 +7,7 @@
         <p v-if="data?.last_active_at" class="lede">
           Last active {{ formatRelative(data.last_active_at) }}.
         </p>
-        <p v-else class="lede">
-          Snapshot of everything the tutor has learned about you.
-        </p>
+        <p v-else class="lede">Snapshot of everything the tutor has learned about you.</p>
       </div>
     </header>
 
@@ -65,11 +63,7 @@
 
         <div class="dist" data-testid="agg-dist">
           <h2 class="section-title">Knowledge level distribution</h2>
-          <div
-            class="dist-bar"
-            role="img"
-            :aria-label="distAriaLabel"
-          >
+          <div class="dist-bar" role="img" :aria-label="distAriaLabel">
             <span
               v-for="key in levelKeys"
               :key="key"
@@ -103,9 +97,7 @@
               <i class="pi pi-check-circle col-icon col-icon-green" aria-hidden="true" />
               Mastered concepts
             </h2>
-            <p v-if="!data.combined_mastered_concepts.length" class="muted">
-              None yet.
-            </p>
+            <p v-if="!data.combined_mastered_concepts.length" class="muted">None yet.</p>
             <ul v-else class="chip-list">
               <li
                 v-for="item in data.combined_mastered_concepts"
@@ -129,9 +121,7 @@
               <i class="pi pi-bolt col-icon col-icon-yellow" aria-hidden="true" />
               Confirmed gaps
             </h2>
-            <p v-if="!data.combined_confirmed_gaps.length" class="muted">
-              None yet.
-            </p>
+            <p v-if="!data.combined_confirmed_gaps.length" class="muted">None yet.</p>
             <ul v-else class="chip-list">
               <li
                 v-for="item in data.combined_confirmed_gaps"
@@ -205,10 +195,7 @@ async function load() {
   loading.value = true
   error.value = ''
   usageError.value = false
-  const [agg, use] = await Promise.allSettled([
-    getAggregateProfile(),
-    getUsageSummary(),
-  ])
+  const [agg, use] = await Promise.allSettled([getAggregateProfile(), getUsageSummary()])
   if (agg.status === 'fulfilled') {
     data.value = agg.value
   } else {
@@ -274,8 +261,12 @@ onMounted(load)
   font-size: 1rem;
 }
 
-.muted { color: var(--color-text-muted); }
-.error { color: var(--color-error-text); }
+.muted {
+  color: var(--color-text-muted);
+}
+.error {
+  color: var(--color-error-text);
+}
 
 .cta-primary {
   display: inline-flex;
@@ -284,19 +275,18 @@ onMounted(load)
   padding: 0.75rem 1.375rem;
   border-radius: var(--radius-pill);
   background: var(--color-accent-strong);
-  color: #FFFFFF;
+  color: #ffffff;
   border: 0;
   font-family: var(--font-sans);
   font-weight: 600;
   font-size: 0.9375rem;
   text-decoration: none;
   cursor: pointer;
-  box-shadow: var(--shadow-pop);
-  transition: transform var(--motion-fast) var(--motion-bounce), box-shadow var(--motion-fast) ease;
+  transition: filter var(--motion-fast) ease;
 }
 
 .cta-primary:hover {
-  transform: translateY(-2px);
+  filter: brightness(1.08);
 }
 
 /* Colorful stat cards */
@@ -344,7 +334,10 @@ onMounted(load)
 :root[data-theme='dark'] .stat-coral {
   background: linear-gradient(180deg, rgba(255, 107, 92, 0.18) 0%, var(--color-surface) 70%);
 }
-.stat-coral .stat-glyph { background: var(--accent-coral-200); color: var(--accent-coral-700); }
+.stat-coral .stat-glyph {
+  background: var(--accent-coral-200);
+  color: var(--accent-coral-700);
+}
 
 .stat-green {
   background: linear-gradient(180deg, rgba(34, 197, 94, 0.15) 0%, var(--color-surface) 60%);
@@ -352,7 +345,10 @@ onMounted(load)
 :root[data-theme='dark'] .stat-green {
   background: linear-gradient(180deg, rgba(52, 215, 123, 0.16) 0%, var(--color-surface) 70%);
 }
-.stat-green .stat-glyph { background: rgba(34, 197, 94, 0.25); color: var(--color-success-text); }
+.stat-green .stat-glyph {
+  background: rgba(34, 197, 94, 0.25);
+  color: var(--color-success-text);
+}
 
 .stat-yellow {
   background: linear-gradient(180deg, rgba(255, 176, 32, 0.18) 0%, var(--color-surface) 60%);
@@ -360,8 +356,13 @@ onMounted(load)
 :root[data-theme='dark'] .stat-yellow {
   background: linear-gradient(180deg, rgba(255, 197, 77, 0.18) 0%, var(--color-surface) 70%);
 }
-.stat-yellow .stat-glyph { background: rgba(255, 176, 32, 0.28); color: var(--color-warning-text); }
-:root[data-theme='dark'] .stat-yellow .stat-glyph { color: var(--signal-warning); }
+.stat-yellow .stat-glyph {
+  background: rgba(255, 176, 32, 0.28);
+  color: var(--color-warning-text);
+}
+:root[data-theme='dark'] .stat-yellow .stat-glyph {
+  color: var(--signal-warning);
+}
 
 .stat-blue {
   background: linear-gradient(180deg, rgba(91, 141, 239, 0.15) 0%, var(--color-surface) 60%);
@@ -369,7 +370,10 @@ onMounted(load)
 :root[data-theme='dark'] .stat-blue {
   background: linear-gradient(180deg, rgba(122, 163, 245, 0.18) 0%, var(--color-surface) 70%);
 }
-.stat-blue .stat-glyph { background: rgba(91, 141, 239, 0.2); color: var(--signal-info); }
+.stat-blue .stat-glyph {
+  background: rgba(91, 141, 239, 0.2);
+  color: var(--signal-info);
+}
 
 .stat-label {
   font-family: var(--font-sans);
@@ -419,10 +423,18 @@ onMounted(load)
   border-radius: var(--radius-pill);
 }
 
-.seg-beginner { background: var(--accent-coral-200); }
-.seg-intermediate { background: var(--accent-coral-400); }
-.seg-advanced { background: var(--accent-coral-600); }
-.seg-unknown { background: var(--color-border-strong); }
+.seg-beginner {
+  background: var(--accent-coral-200);
+}
+.seg-intermediate {
+  background: var(--accent-coral-400);
+}
+.seg-advanced {
+  background: var(--accent-coral-600);
+}
+.seg-unknown {
+  background: var(--color-border-strong);
+}
 
 .dist-legend {
   display: flex;
@@ -474,8 +486,12 @@ onMounted(load)
 .col-icon {
   font-size: 1.05rem;
 }
-.col-icon-green { color: var(--color-success-text); }
-.col-icon-yellow { color: var(--color-warning-text); }
+.col-icon-green {
+  color: var(--color-success-text);
+}
+.col-icon-yellow {
+  color: var(--color-warning-text);
+}
 
 .two-col {
   display: grid;
@@ -503,26 +519,36 @@ onMounted(load)
   font-size: 0.875rem;
   font-weight: 500;
   border: 1px solid transparent;
-  transition: transform var(--motion-fast) var(--motion-bounce), filter var(--motion-fast) ease;
+  transition:
+    transform var(--motion-fast) var(--motion-bounce),
+    filter var(--motion-fast) ease;
 }
 
-.chip:hover { transform: translateY(-1px); }
+.chip:hover {
+  transform: translateY(-1px);
+}
 
 .chip-mastered {
   background: rgba(34, 197, 94, 0.14);
   color: var(--color-success-text);
   border-color: rgba(34, 197, 94, 0.3);
 }
-:root:not([data-theme='dark']) .chip-mastered { color: var(--color-success-text); }
+:root:not([data-theme='dark']) .chip-mastered {
+  color: var(--color-success-text);
+}
 
 .chip-gap {
   background: rgba(255, 176, 32, 0.16);
   color: var(--color-warning-text);
   border-color: rgba(255, 176, 32, 0.35);
 }
-:root[data-theme='dark'] .chip-gap { color: var(--signal-warning); }
+:root[data-theme='dark'] .chip-gap {
+  color: var(--signal-warning);
+}
 
-.chip-name { line-height: 1; }
+.chip-name {
+  line-height: 1;
+}
 
 .chip-meta {
   font-family: var(--font-mono);
@@ -557,7 +583,9 @@ onMounted(load)
   border-radius: var(--radius-md);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  transition: border-color var(--motion-fast) ease, transform var(--motion-fast) var(--motion-bounce);
+  transition:
+    border-color var(--motion-fast) ease,
+    transform var(--motion-fast) var(--motion-bounce);
 }
 
 .recent-row:hover {
@@ -592,7 +620,9 @@ onMounted(load)
 .recent-arrow {
   color: var(--color-text-faint);
   font-size: 0.9rem;
-  transition: transform var(--motion-fast) var(--motion-bounce), color var(--motion-fast) ease;
+  transition:
+    transform var(--motion-fast) var(--motion-bounce),
+    color var(--motion-fast) ease;
 }
 
 .recent-row:hover .recent-arrow {

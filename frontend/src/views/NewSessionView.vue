@@ -535,14 +535,11 @@ async function submit() {
   font-weight: 600;
   font-size: 0.8125rem;
   cursor: pointer;
-  transition:
-    filter var(--motion-fast) ease,
-    transform var(--motion-fast) var(--motion-bounce);
+  transition: filter var(--motion-fast) ease;
 }
 
 .warn-action:hover {
   filter: brightness(1.08);
-  transform: translateY(-1px);
 }
 
 .error {
@@ -565,14 +562,11 @@ async function submit() {
   font-weight: 600;
   font-size: 0.8125rem;
   cursor: pointer;
-  transition:
-    filter var(--motion-fast) ease,
-    transform var(--motion-fast) var(--motion-bounce);
+  transition: filter var(--motion-fast) ease;
 }
 
 .open-existing:hover {
   filter: brightness(1.08);
-  transform: translateY(-1px);
 }
 
 .cta-primary {
@@ -589,20 +583,17 @@ async function submit() {
   font-weight: 600;
   font-size: 1rem;
   cursor: pointer;
-  box-shadow: var(--shadow-pop);
   transition:
-    transform var(--motion-fast) var(--motion-bounce),
-    box-shadow var(--motion-fast) ease,
+    filter var(--motion-fast) ease,
     opacity var(--motion-fast) ease;
 }
 
 .cta-primary:hover:not(:disabled) {
-  transform: translateY(-2px);
+  filter: brightness(1.08);
 }
 
 .cta-primary:active:not(:disabled) {
-  transform: translateY(4px);
-  box-shadow: var(--shadow-pop-pressed);
+  filter: brightness(0.95);
 }
 
 .cta-primary:disabled {

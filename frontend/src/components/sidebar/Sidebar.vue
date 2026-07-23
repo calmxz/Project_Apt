@@ -94,9 +94,7 @@ const activeFlat = computed(() => activeGroups.value.flatMap((g) => g.rows))
 
 const showSkeleton = computed(() => loading.value && !sessions.value.length)
 
-const showEmptyHint = computed(
-  () => !loading.value && !searching.value && !sessions.value.length,
-)
+const showEmptyHint = computed(() => !loading.value && !searching.value && !sessions.value.length)
 
 const showEmptyActiveHint = computed(
   () =>
@@ -122,9 +120,7 @@ watch(
   async () => {
     await nextTick()
     if (!listEl.value) return
-    const target = listEl.value.querySelector(
-      `[data-session-id="${route.params.id}"]`,
-    )
+    const target = listEl.value.querySelector(`[data-session-id="${route.params.id}"]`)
     target?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   },
 )
@@ -242,14 +238,21 @@ function onNewSession() {
         @click="statusFilter = t.key"
       >
         {{ t.label }}
-        <span v-if="t.key === 'ended' && endedRows.length" class="sb-section-count">({{ endedRows.length }})</span>
+        <span v-if="t.key === 'ended' && endedRows.length" class="sb-section-count"
+          >({{ endedRows.length }})</span
+        >
       </button>
     </div>
 
     <nav ref="listEl" class="sb-list-wrap" aria-label="Sessions">
       <template v-if="isExpanded">
         <template v-if="searching">
-          <p class="sb-search-count label" data-testid="sidebar-search-count" aria-live="polite" aria-atomic="true">
+          <p
+            class="sb-search-count label"
+            data-testid="sidebar-search-count"
+            aria-live="polite"
+            aria-atomic="true"
+          >
             {{ matchCount }} {{ matchCount === 1 ? 'match' : 'matches' }}
           </p>
           <ul v-if="filteredFlat.length" class="sb-session-list">
@@ -260,7 +263,13 @@ function onNewSession() {
               :state="s.ended_at ? 'ended' : 'active'"
             />
           </ul>
-          <p v-else class="sb-empty-hint" data-testid="sidebar-search-empty" aria-live="polite" aria-atomic="true">
+          <p
+            v-else
+            class="sb-empty-hint"
+            data-testid="sidebar-search-empty"
+            aria-live="polite"
+            aria-atomic="true"
+          >
             No sessions match "{{ searchQuery }}".
           </p>
         </template>
@@ -277,7 +286,12 @@ function onNewSession() {
                 <span class="sb-section-count">({{ pinnedActive.length }})</span>
               </h3>
               <ul class="sb-session-list">
-                <SidebarSessionRow v-for="s in pinnedActive" :key="s.id" :session="s" state="active" />
+                <SidebarSessionRow
+                  v-for="s in pinnedActive"
+                  :key="s.id"
+                  :session="s"
+                  state="active"
+                />
               </ul>
             </section>
 
@@ -293,14 +307,23 @@ function onNewSession() {
                   >
                     <h3 class="sb-section-label label">{{ g.label }}</h3>
                     <ul class="sb-session-list">
-                      <SidebarSessionRow v-for="s in g.rows" :key="s.id" :session="s" state="active" />
+                      <SidebarSessionRow
+                        v-for="s in g.rows"
+                        :key="s.id"
+                        :session="s"
+                        state="active"
+                      />
                     </ul>
                   </div>
                 </div>
                 <p v-if="showEmptyHint" class="sb-empty-hint" data-testid="sidebar-empty-hint">
                   No sessions yet. Click + New session above.
                 </p>
-                <p v-else-if="showEmptyActiveHint" class="sb-empty-hint" data-testid="sidebar-empty-active">
+                <p
+                  v-else-if="showEmptyActiveHint"
+                  class="sb-empty-hint"
+                  data-testid="sidebar-empty-active"
+                >
                   No active sessions. Check the Ended tab.
                 </p>
               </template>
@@ -308,11 +331,7 @@ function onNewSession() {
           </template>
 
           <!-- ENDED view: activity buckets, no pinning -->
-          <section
-            v-else
-            class="sb-section sb-section--ended"
-            data-testid="sidebar-section-ended"
-          >
+          <section v-else class="sb-section sb-section--ended" data-testid="sidebar-section-ended">
             <div
               v-for="g in endedGroups"
               :key="g.key"
@@ -427,8 +446,12 @@ function onNewSession() {
 }
 
 @keyframes sb-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .sb-header {
@@ -470,7 +493,9 @@ function onNewSession() {
   color: var(--color-text-muted);
   cursor: pointer;
   font-size: 0.875rem;
-  transition: background var(--motion-fast) ease, color var(--motion-fast) ease;
+  transition:
+    background var(--motion-fast) ease,
+    color var(--motion-fast) ease;
 }
 
 .sb-toggle:hover {
@@ -508,12 +533,13 @@ function onNewSession() {
   border: none;
   border-radius: var(--radius-pill);
   cursor: pointer;
-  box-shadow: var(--shadow-pop);
-  transition: transform var(--motion-fast) ease, box-shadow var(--motion-fast) ease;
+  transition:
+    filter var(--motion-fast) ease,
+    background var(--motion-fast) ease;
 }
 
 .sb-new-session:hover {
-  transform: translateY(-1px);
+  filter: brightness(1.08);
 }
 
 .sb-new-session:focus-visible {
@@ -628,7 +654,11 @@ function onNewSession() {
   cursor: pointer;
   text-decoration: none;
   font-size: 1rem;
-  transition: background var(--motion-fast) ease, color var(--motion-fast) ease, border-color var(--motion-fast) ease, transform var(--motion-fast) ease;
+  transition:
+    background var(--motion-fast) ease,
+    color var(--motion-fast) ease,
+    border-color var(--motion-fast) ease,
+    transform var(--motion-fast) ease;
 }
 
 .sb-icon:hover {
@@ -692,7 +722,10 @@ function onNewSession() {
   font-size: var(--fs-caption);
   font-weight: 600;
   cursor: pointer;
-  transition: background var(--motion-fast) ease, color var(--motion-fast) ease, border-color var(--motion-fast) ease;
+  transition:
+    background var(--motion-fast) ease,
+    color var(--motion-fast) ease,
+    border-color var(--motion-fast) ease;
 }
 
 .sb-status-btn:hover {
@@ -715,7 +748,13 @@ function onNewSession() {
   color: var(--color-accent-text);
 }
 
-.sb-group { margin-bottom: 0.75rem; }
-.sb-group + .sb-group { margin-top: 0.25rem; }
-.sb-section--pinned .sb-section-label { color: var(--color-accent-text); }
+.sb-group {
+  margin-bottom: 0.75rem;
+}
+.sb-group + .sb-group {
+  margin-top: 0.25rem;
+}
+.sb-section--pinned .sb-section-label {
+  color: var(--color-accent-text);
+}
 </style>

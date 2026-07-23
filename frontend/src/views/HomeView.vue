@@ -197,7 +197,6 @@ async function expandReview() {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-card);
-  box-shadow: var(--shadow-pop);
 }
 
 .mode-title {
@@ -249,19 +248,17 @@ async function expandReview() {
   font-weight: 600;
   font-size: 0.9375rem;
   cursor: pointer;
-  box-shadow: var(--shadow-pop);
   transition:
-    transform var(--motion-fast) var(--motion-bounce),
-    box-shadow var(--motion-fast) ease;
+    filter var(--motion-fast) ease,
+    background var(--motion-fast) ease;
 }
 
 .cta-primary:hover {
-  transform: translateY(-2px);
+  filter: brightness(1.08);
 }
 
 .cta-primary:active {
-  transform: translateY(4px);
-  box-shadow: var(--shadow-pop-pressed);
+  filter: brightness(0.95);
 }
 
 .cta-primary:focus-visible {
