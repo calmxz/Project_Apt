@@ -8,6 +8,7 @@ import { useSidebar } from '@/composables/useSidebar.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useSessionStore } from '@/stores/session.js'
 import { useSessionGroups } from '@/composables/useSessionGroups.js'
+import { getReviewQueue } from '@/services/reviewApi.js'
 import Logo from '@/components/Logo.vue'
 import SidebarSessionRow from './SidebarSessionRow.vue'
 import SidebarSkeletonList from './SidebarSkeletonList.vue'
@@ -96,6 +97,8 @@ const showSkeleton = computed(() => loading.value && !sessions.value.length)
 
 const showEmptyHint = computed(() => !loading.value && !searching.value && !sessions.value.length)
 
+const reviewTotal = ref(0)
+
 const showEmptyActiveHint = computed(
   () =>
     !loading.value &&
@@ -111,6 +114,14 @@ const showEmptyActiveHint = computed(
 onMounted(async () => {
   if (isAuthenticated.value && !sessions.value.length) {
     await sessionStore.listSessions().catch(() => {})
+  }
+  if (isAuthenticated.value) {
+    // Badge count only; silent - a sidebar badge must never toast.
+    getReviewQueue({ limit: 1, offset: 0 }, { silent: true })
+      .then((q) => {
+        reviewTotal.value = q?.total || 0
+      })
+      .catch(() => {})
   }
 })
 
@@ -208,6 +219,18 @@ function onNewSession() {
         <span v-if="isExpanded">New session</span>
       </button>
     </div>
+
+    <RouterLink
+      v-if="isExpanded && reviewTotal > 0"
+      to="/review"
+      class="sb-review"
+      data-testid="sidebar-review"
+      @click="closeDrawer"
+    >
+      <i class="pi pi-history" aria-hidden="true" />
+      <span>Review</span>
+      <span class="sb-review-count">{{ reviewTotal }}</span>
+    </RouterLink>
 
     <div v-if="isExpanded" class="sb-search">
       <i class="pi pi-search" aria-hidden="true" />
@@ -756,5 +779,42 @@ function onNewSession() {
 }
 .sb-section--pinned .sb-section-label {
   color: var(--color-accent-text);
+}
+
+.sb-review {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.25rem 0.75rem 0;
+  padding: 0.4375rem 0.75rem;
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition:
+    background var(--motion-fast) ease,
+    color var(--motion-fast) ease;
+}
+
+.sb-review:hover {
+  background: var(--color-surface-soft);
+  color: var(--color-text);
+}
+
+.sb-review:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: -2px;
+}
+
+.sb-review-count {
+  margin-left: auto;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-accent-text);
+  background: var(--color-accent-soft);
+  border-radius: var(--radius-pill);
+  padding: 0.0625rem 0.4375rem;
 }
 </style>

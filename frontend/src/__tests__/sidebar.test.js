@@ -13,6 +13,10 @@ const showSuccess = vi.fn()
 vi.mock('@/composables/useToast.js', () => ({
   useToast: () => ({ showError: vi.fn(), showWarn: vi.fn(), showSuccess }),
 }))
+const apiReviewQueue = vi.fn()
+vi.mock('@/services/reviewApi.js', () => ({
+  getReviewQueue: (...args) => apiReviewQueue(...args),
+}))
 
 import Sidebar from '@/components/sidebar/Sidebar.vue'
 import { useSessionStore } from '@/stores/session.js'
@@ -23,6 +27,15 @@ function setViewport(w) {
   Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: w })
   sidebarTest._setViewport(w)
 }
+
+// File-wide default so every describe block that mounts Sidebar while
+// authenticated (triggering the review-queue fetch in onMounted) gets a
+// resolved promise instead of an unmocked vi.fn() undefined return.
+// Individual review-entry tests override this per case.
+beforeEach(() => {
+  apiReviewQueue.mockReset()
+  apiReviewQueue.mockResolvedValue({ items: [], total: 0, limit: 1, offset: 0 })
+})
 
 describe('Sidebar.vue — session list rendering', () => {
   let wrapper
@@ -826,6 +839,61 @@ describe('Sidebar.vue — mount fetch', () => {
     wrapper = mount(Sidebar)
     await flushPromises()
     expect(listSpy).not.toHaveBeenCalled()
+  })
+})
+
+describe('Sidebar.vue — review entry', () => {
+  let wrapper
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    routerPush.mockClear()
+    localStorage.clear()
+    setViewport(1400)
+    sidebarTest._setExpanded(true)
+    routeRef.params = {}
+    routeRef.fullPath = '/'
+    // Review-queue badge fetch is gated on isAuthenticated, same signal the
+    // sessions fetch already uses (see "mount fetch" describe above).
+    const auth = useAuthStore()
+    auth.session = { user: { id: 'u-1' }, access_token: 't' }
+    // Sessions fetch runs before the review-queue fetch in onMounted; stub it
+    // so the unrelated real network call doesn't delay/interfere with the
+    // review assertions (mirrors the "mount fetch" describe's pattern).
+    const store = useSessionStore()
+    vi.spyOn(store, 'listSessions').mockResolvedValue([])
+  })
+  afterEach(() => wrapper?.unmount())
+
+  it('shows the review entry with a count when concepts are due', async () => {
+    apiReviewQueue.mockResolvedValue({ items: [], total: 13, limit: 1, offset: 0 })
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    const entry = wrapper.get('[data-testid="sidebar-review"]')
+    expect(entry.text()).toContain('Review')
+    expect(entry.text()).toContain('13')
+    expect(apiReviewQueue).toHaveBeenCalledWith({ limit: 1, offset: 0 }, { silent: true })
+  })
+
+  it('hides the review entry when nothing is due', async () => {
+    apiReviewQueue.mockResolvedValue({ items: [], total: 0, limit: 1, offset: 0 })
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sidebar-review"]').exists()).toBe(false)
+  })
+
+  it('hides the review entry when the fetch fails', async () => {
+    apiReviewQueue.mockRejectedValue(new Error('boom'))
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sidebar-review"]').exists()).toBe(false)
+  })
+
+  it('hides the review entry in icon-rail (collapsed) mode even with a count due', async () => {
+    sidebarTest._setExpanded(false)
+    apiReviewQueue.mockResolvedValue({ items: [], total: 13, limit: 1, offset: 0 })
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sidebar-review"]').exists()).toBe(false)
   })
 })
 
