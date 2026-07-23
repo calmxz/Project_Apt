@@ -164,104 +164,7 @@ describe('Sidebar.vue — session list rendering', () => {
     expect(btn.attributes('aria-current')).toBe('page')
   })
 
-  it('renders chips and a compact meta line in each row', async () => {
-    const store = useSessionStore()
-    store.sessions = [
-      {
-        id: 'a1',
-        topic: 'Glycolysis',
-        created_at: new Date().toISOString(),
-        last_activity_at: new Date().toISOString(),
-        ended_at: null,
-        message_count: 4,
-        progress: { focus_target_gap: 'ATP yield', mastered_count: 0 },
-        last_message_preview: null,
-      },
-    ]
-    wrapper = mount(Sidebar)
-    await flushPromises()
-    const row = wrapper.find('[data-testid="sidebar-row-a1"]')
-    expect(row.find('.sb-row-chips').text()).toContain('ATP yield')
-    expect(row.find('.sb-row-desc').exists()).toBe(false)
-    expect(row.find('.sb-row-meta').text()).toBe('4 msgs · now')
-  })
-
-  it('signal-poor row renders no chips and never prose', async () => {
-    const store = useSessionStore()
-    store.sessions = [
-      {
-        id: 'a9',
-        topic: 'Mitosis',
-        created_at: new Date().toISOString(),
-        last_activity_at: new Date().toISOString(),
-        ended_at: null,
-        message_count: 4,
-        progress: { focus_target_gap: null, mastered_count: 0 },
-        last_message_preview: 'That is correct! You listed all four stages.',
-      },
-    ]
-    wrapper = mount(Sidebar)
-    await flushPromises()
-    const row = wrapper.find('[data-testid="sidebar-row-a9"]')
-    expect(row.find('.sb-row-chips').exists()).toBe(false)
-    expect(row.text()).not.toContain('That is correct!')
-  })
-
-  it('ended row follows the same chips rule — summary prose never renders', async () => {
-    const store = useSessionStore()
-    store.sessions = [
-      {
-        id: 'e1',
-        topic: 'Krebs',
-        created_at: new Date().toISOString(),
-        last_activity_at: new Date().toISOString(),
-        ended_at: new Date().toISOString(),
-        message_count: 9,
-        progress: { focus_target_gap: null, mastered_count: 2 },
-        last_session_summary: '[auto] Covered the Krebs cycle',
-      },
-    ]
-    wrapper = mount(Sidebar)
-    await flushPromises()
-    await wrapper.find('[data-testid="sidebar-status-ended"]').trigger('click')
-    const row = wrapper.find('[data-testid="sidebar-row-e1"]')
-    expect(row.find('.sb-row-chips [data-testid="chip-mastered"]').text()).toContain('2')
-    expect(row.text()).not.toContain('Covered the Krebs cycle')
-  })
-
-  it('aria-describedby lists chips id then meta id when chips exist, meta only otherwise', async () => {
-    const store = useSessionStore()
-    store.sessions = [
-      {
-        id: 'a1',
-        topic: 'Glycolysis',
-        created_at: new Date().toISOString(),
-        last_activity_at: new Date().toISOString(),
-        ended_at: null,
-        message_count: 4,
-        progress: { focus_target_gap: 'ATP yield', mastered_count: 0 },
-        last_message_preview: null,
-      },
-      {
-        id: 'a9',
-        topic: 'Mitosis',
-        created_at: new Date().toISOString(),
-        last_activity_at: new Date().toISOString(),
-        ended_at: null,
-        message_count: 4,
-        progress: { focus_target_gap: null, mastered_count: 0 },
-        last_message_preview: null,
-      },
-    ]
-    wrapper = mount(Sidebar)
-    await flushPromises()
-    const richBtn = wrapper.get('[data-testid="sidebar-row-a1"] [data-testid="sidebar-row-open"]')
-    expect(richBtn.attributes('aria-describedby')).toBe('sb-row-chips-a1 sb-row-meta-a1')
-    const sparseBtn = wrapper.get('[data-testid="sidebar-row-a9"] [data-testid="sidebar-row-open"]')
-    expect(sparseBtn.attributes('aria-describedby')).toBe('sb-row-meta-a9')
-  })
-
-  it('collapsed tooltip is built from chip labels', async () => {
+  it('collapsed tooltip is the plain session topic', async () => {
     sidebarTest._setExpanded(false)
     const store = useSessionStore()
     store.sessions = [
@@ -271,15 +174,12 @@ describe('Sidebar.vue — session list rendering', () => {
         created_at: new Date().toISOString(),
         last_activity_at: new Date().toISOString(),
         ended_at: null,
-        message_count: 4,
-        progress: { focus_target_gap: 'ATP yield', mastered_count: 2 },
-        last_message_preview: null,
       },
     ]
     wrapper = mount(Sidebar)
     await flushPromises()
     const btn = wrapper.get('[data-testid="sidebar-row-a1"] [data-testid="sidebar-row-open"]')
-    expect(btn.attributes('title')).toBe('Glycolysis — Focus: ATP yield, 2 mastered')
+    expect(btn.attributes('title')).toBe('Glycolysis')
   })
 
   it('highlights the current session row', async () => {
@@ -322,18 +222,26 @@ describe('Sidebar.vue — session list rendering', () => {
     expect(wrapper.find('[data-testid="sidebar-search-empty"]').exists()).toBe(true)
   })
 
-  it('renders date-group headers for active sessions', async () => {
+  it('renders active sessions as one flat list without date group labels', async () => {
     const store = useSessionStore()
     const now = new Date()
     const weekAgo = new Date(now.getTime() - 3 * 86400000)
+    const older = new Date(now.getTime() - 20 * 86400000)
     store.sessions = [
-      { id: 'a1', topic: 'Today one', created_at: now.toISOString(), ended_at: null },
-      { id: 'a2', topic: 'Week one', created_at: weekAgo.toISOString(), ended_at: null },
+      { id: 'a1', topic: 'Big-O', created_at: now.toISOString(), ended_at: null },
+      { id: 'a2', topic: 'Trees', created_at: weekAgo.toISOString(), ended_at: null },
+      { id: 'a3', topic: 'Graphs', created_at: older.toISOString(), ended_at: null },
     ]
     wrapper = mount(Sidebar)
     await flushPromises()
-    expect(wrapper.find('[data-testid="sidebar-group-today"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="sidebar-group-week"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid^="sidebar-group-"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('This week')
+    expect(wrapper.text()).not.toContain('Older')
+    // all rows still present
+    expect(wrapper.findAll('[data-testid="sidebar-row-open"]').length).toBeGreaterThan(0)
+    expect(wrapper.find('[data-testid="sidebar-row-a1"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sidebar-row-a2"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sidebar-row-a3"]').exists()).toBe(true)
   })
 
   it('renders the pinned mini-group when a session is pinned', async () => {

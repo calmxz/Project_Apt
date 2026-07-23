@@ -88,7 +88,7 @@ onBeforeUnmount(() => {
 })
 
 const searchQuery = ref('')
-const { searching, filteredFlat, matchCount, pinnedActive, activeGroups, endedGroups, endedRows } =
+const { searching, filteredFlat, matchCount, pinnedActive, activeGroups, endedRows } =
   useSessionGroups(sessions, searchQuery, ref(null)) // null => Date.now() captured at setup time
 
 const activeFlat = computed(() => activeGroups.value.flatMap((g) => g.rows))
@@ -322,22 +322,14 @@ function onNewSession() {
               <SidebarSkeletonList v-if="showSkeleton" :count="3" />
               <template v-else>
                 <div data-testid="sidebar-quick-group">
-                  <div
-                    v-for="g in activeGroups"
-                    :key="g.key"
-                    class="sb-group"
-                    :data-testid="`sidebar-group-${g.key}`"
-                  >
-                    <h3 class="sb-section-label label">{{ g.label }}</h3>
-                    <ul class="sb-session-list">
-                      <SidebarSessionRow
-                        v-for="s in g.rows"
-                        :key="s.id"
-                        :session="s"
-                        state="active"
-                      />
-                    </ul>
-                  </div>
+                  <ul v-if="activeFlat.length" class="sb-session-list">
+                    <SidebarSessionRow
+                      v-for="s in activeFlat"
+                      :key="s.id"
+                      :session="s"
+                      state="active"
+                    />
+                  </ul>
                 </div>
                 <p v-if="showEmptyHint" class="sb-empty-hint" data-testid="sidebar-empty-hint">
                   No sessions yet. Click + New session above.
@@ -353,20 +345,12 @@ function onNewSession() {
             </section>
           </template>
 
-          <!-- ENDED view: activity buckets, no pinning -->
+          <!-- ENDED view: flat recency-sorted list, no pinning -->
           <section v-else class="sb-section sb-section--ended" data-testid="sidebar-section-ended">
-            <div
-              v-for="g in endedGroups"
-              :key="g.key"
-              class="sb-group"
-              :data-testid="`sidebar-ended-group-${g.key}`"
-            >
-              <h3 class="sb-section-label label">{{ g.label }}</h3>
-              <ul class="sb-session-list">
-                <SidebarSessionRow v-for="s in g.rows" :key="s.id" :session="s" state="ended" />
-              </ul>
-            </div>
-            <p v-if="!endedGroups.length" class="sb-empty-hint" data-testid="sidebar-ended-empty">
+            <ul v-if="endedRows.length" class="sb-session-list">
+              <SidebarSessionRow v-for="s in endedRows" :key="s.id" :session="s" state="ended" />
+            </ul>
+            <p v-if="!endedRows.length" class="sb-empty-hint" data-testid="sidebar-ended-empty">
               No ended sessions yet.
             </p>
           </section>
@@ -771,12 +755,6 @@ function onNewSession() {
   color: var(--color-accent-text);
 }
 
-.sb-group {
-  margin-bottom: 0.75rem;
-}
-.sb-group + .sb-group {
-  margin-top: 0.25rem;
-}
 .sb-section--pinned .sb-section-label {
   color: var(--color-accent-text);
 }
