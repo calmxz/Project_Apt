@@ -49,6 +49,7 @@
       <span class="skel-block" />
       <span class="skel-block skel-short" />
     </div>
+    <span v-if="loading" class="sr-only" role="status">Loading</span>
     <p v-else-if="error" class="error" data-testid="sprof-error">{{ error }}</p>
 
     <template v-else-if="data">
@@ -862,5 +863,17 @@ onMounted(load)
   50% {
     opacity: 0.35;
   }
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 </style>

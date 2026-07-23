@@ -180,6 +180,7 @@ describe('AggregateProfileView', () => {
 
     expect(wrapper.find('[data-testid="agg-loading"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="agg-loading"]').classes()).toContain('skel')
+    expect(wrapper.find('[role="status"]').exists()).toBe(true)
 
     resolveProfile(nonEmptyAggregatePayload())
   })
