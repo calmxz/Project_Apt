@@ -2,10 +2,8 @@
   <section class="new-session">
     <div class="hero">
       <span class="folio">begin</span>
-      <h1 class="hero-title">What do you want to learn?</h1>
-      <p class="hero-lede">
-        Type one topic. The tutor adapts to what you already know and where you get stuck.
-      </p>
+      <h1 class="hero-title">Start a session</h1>
+      <p class="hero-lede">One topic per session. The tutor adapts to you.</p>
     </div>
 
     <div class="form">
@@ -21,8 +19,7 @@
           @keydown.enter="onEnter"
         />
         <p class="help">
-          To continue an ended topic, use "Continue topic" on its card in the Sessions library — the
-          tutor keeps your profile. Reopening from the sidebar picks up the same session instead.
+          Continuing an ended topic? Use "Continue topic" on its card in the Sessions library.
         </p>
       </div>
 
