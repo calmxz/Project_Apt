@@ -29,9 +29,7 @@ function nonEmptyAggregatePayload() {
       { concept: 'joins', count: 3, first_seen_session_id: 's1' },
       { concept: 'select', count: 1, first_seen_session_id: 's2' },
     ],
-    combined_confirmed_gaps: [
-      { concept: 'window-fns', count: 2, first_seen_session_id: 's1' },
-    ],
+    combined_confirmed_gaps: [{ concept: 'window-fns', count: 2, first_seen_session_id: 's1' }],
     knowledge_level_distribution: { beginner: 2, intermediate: 1, advanced: 0, unknown: 0 },
     recent_topics: [
       { id: 's3', topic: 'sql joins', created_at: new Date().toISOString(), ended_at: null },
@@ -100,9 +98,7 @@ describe('AggregateProfileView', () => {
 
   it('shows error banner when the API throws', async () => {
     seedUser()
-    vi.spyOn(profileApi, 'getAggregateProfile').mockRejectedValue(
-      new Error('boom'),
-    )
+    vi.spyOn(profileApi, 'getAggregateProfile').mockRejectedValue(new Error('boom'))
 
     const wrapper = mount(AggregateProfileView, { global: { stubs } })
     await flushPromises()
@@ -168,5 +164,23 @@ describe('AggregateProfileView', () => {
 
     expect(wrapper.find('[data-testid="agg-error"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="usage-panel"]').exists()).toBe(false)
+  })
+
+  it('displays skeleton loading state during initial fetch', async () => {
+    seedUser()
+    let resolveProfile
+    const profilePromise = new Promise((resolve) => {
+      resolveProfile = resolve
+    })
+    vi.spyOn(profileApi, 'getAggregateProfile').mockReturnValue(profilePromise)
+    vi.spyOn(profileApi, 'getUsageSummary').mockReturnValue(new Promise(() => {}))
+
+    const wrapper = mount(AggregateProfileView, { global: { stubs } })
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.find('[data-testid="agg-loading"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="agg-loading"]').classes()).toContain('skel')
+
+    resolveProfile(nonEmptyAggregatePayload())
   })
 })

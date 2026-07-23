@@ -44,7 +44,11 @@
 
     <GapPickerDialog v-model:visible="gapPickerOpen" :gaps="gapNames" @select="goReview" />
 
-    <p v-if="loading" class="muted" data-testid="sprof-loading">Loading...</p>
+    <div v-if="loading" class="skel" data-testid="sprof-loading" aria-hidden="true">
+      <span class="skel-block skel-row-tall" />
+      <span class="skel-block" />
+      <span class="skel-block skel-short" />
+    </div>
     <p v-else-if="error" class="error" data-testid="sprof-error">{{ error }}</p>
 
     <template v-else-if="data">
@@ -827,5 +831,36 @@ onMounted(load)
   border-radius: var(--radius-lg);
   color: var(--color-error-text);
   font-size: 0.875rem;
+}
+
+.skel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.skel-block {
+  height: 1.25rem;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-soft);
+  animation: skel-pulse 1.4s ease-in-out infinite;
+}
+
+.skel-row-tall {
+  height: 5.5rem;
+}
+
+.skel-short {
+  width: 55%;
+}
+
+@keyframes skel-pulse {
+  0%,
+  100% {
+    opacity: 0.65;
+  }
+  50% {
+    opacity: 0.35;
+  }
 }
 </style>

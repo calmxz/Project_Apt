@@ -11,7 +11,11 @@
       </div>
     </header>
 
-    <p v-if="loading" class="muted" data-testid="agg-loading">Loading...</p>
+    <div v-if="loading" class="skel" data-testid="agg-loading" aria-hidden="true">
+      <span class="skel-block skel-row-tall" />
+      <span class="skel-block" />
+      <span class="skel-block skel-short" />
+    </div>
     <p v-else-if="error" class="error" data-testid="agg-error">{{ error }}</p>
 
     <template v-else-if="data">
@@ -628,5 +632,36 @@ onMounted(load)
 .recent-row:hover .recent-arrow {
   color: var(--color-accent-text);
   transform: translateX(3px);
+}
+
+.skel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.skel-block {
+  height: 1.25rem;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-soft);
+  animation: skel-pulse 1.4s ease-in-out infinite;
+}
+
+.skel-row-tall {
+  height: 5.5rem;
+}
+
+.skel-short {
+  width: 55%;
+}
+
+@keyframes skel-pulse {
+  0%,
+  100% {
+    opacity: 0.65;
+  }
+  50% {
+    opacity: 0.35;
+  }
 }
 </style>
