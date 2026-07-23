@@ -147,5 +147,10 @@ only lose their `translateY` and `--motion-bounce`.
   assertions replace group-label assertions.
 - Playwright: repo-wide grep for every removed/renamed `data-testid` before commit;
   update e2e specs that reference `home-review-*` or removed sidebar meta.
-- Visual: manual pass over Home, /new, session chat, /review, Profile in light and
-  dark themes (live-gate, post-merge).
+- Visual: after implementation, Claude verifies its own work live via the
+  claude-in-chrome browser tools against the dev server — screenshot Home, /new,
+  session chat, /review, and Profile in dark and light themes and confirm each
+  spec item visually (no coral shadows, flat buttons, review entry present,
+  title-only sidebar rows, composer neutral at rest). Findings feed a fix pass
+  before the work is declared done.
+- Manual user pass remains the final live-gate post-merge.
