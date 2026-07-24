@@ -36,9 +36,7 @@
         />
       </div>
 
-      <p v-if="mismatch" class="hint" data-testid="reset-mismatch">
-        Passwords do not match.
-      </p>
+      <p v-if="mismatch" class="hint" data-testid="reset-mismatch">Passwords do not match.</p>
       <p v-if="error" class="error" data-testid="reset-error">{{ error }}</p>
       <p v-if="error" class="swap">
         Link expired?
@@ -193,8 +191,7 @@ async function submit() {
   font-weight: 600;
   font-size: 0.9375rem;
   cursor: pointer;
-  box-shadow: var(--shadow-pop);
-  transition: transform var(--motion-fast) var(--motion-bounce);
+  transition: filter var(--motion-fast) ease;
 }
 
 .cta:disabled {
@@ -204,7 +201,7 @@ async function submit() {
 }
 
 .cta:not(:disabled):hover {
-  transform: translateY(-1px);
+  filter: brightness(1.08);
 }
 
 .actions {

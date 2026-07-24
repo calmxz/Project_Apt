@@ -71,11 +71,7 @@
 
   /* Shadows — chunky press-down */
   --shadow-paper: 0 1px 0 rgba(20, 24, 38, 0.04), 0 2px 8px -2px rgba(20, 24, 38, 0.06);
-  --shadow-lift: 0 4px 0 0 var(--ink-200), 0 10px 20px -8px rgba(20, 24, 38, 0.18);
-  /* Ledge is 2 steps darker than the button face so the chunky press-down depth
-     survives the AA change (filled CTAs are now coral-700 via --color-accent-strong). */
-  --shadow-pop: 0 6px 0 0 var(--accent-coral-900), 0 12px 24px -10px rgba(255, 107, 92, 0.35);
-  --shadow-pop-pressed: 0 2px 0 0 var(--accent-coral-900);
+  --shadow-lift: 0 10px 20px -8px rgba(20, 24, 38, 0.18);
 
   /* Decorative gradients */
   --gradient-spark: linear-gradient(135deg, #ff6b5c 0%, #ff8f7c 100%);
@@ -154,9 +150,7 @@
   --color-stub-heading: var(--ink-100);
 
   --shadow-paper: 0 1px 0 rgba(0, 0, 0, 0.3), 0 2px 8px -2px rgba(0, 0, 0, 0.5);
-  --shadow-lift: 0 4px 0 0 #2a3050, 0 16px 36px -16px rgba(0, 0, 0, 0.6);
-  --shadow-pop: 0 6px 0 0 var(--accent-coral-900), 0 14px 28px -10px rgba(255, 107, 92, 0.45);
-  --shadow-pop-pressed: 0 2px 0 0 var(--accent-coral-900);
+  --shadow-lift: 0 16px 36px -16px rgba(0, 0, 0, 0.6);
 
   --signal-success: #34d77b;
   --signal-error: #ff6b6b;
@@ -191,9 +185,7 @@
     --color-stub-heading: var(--ink-100);
 
     --shadow-paper: 0 1px 0 rgba(0, 0, 0, 0.3), 0 2px 8px -2px rgba(0, 0, 0, 0.5);
-    --shadow-lift: 0 4px 0 0 #2a3050, 0 16px 36px -16px rgba(0, 0, 0, 0.6);
-    --shadow-pop: 0 6px 0 0 var(--accent-coral-900), 0 14px 28px -10px rgba(255, 107, 92, 0.45);
-    --shadow-pop-pressed: 0 2px 0 0 var(--accent-coral-900);
+    --shadow-lift: 0 16px 36px -16px rgba(0, 0, 0, 0.6);
 
     --signal-success: #34d77b;
     --signal-error: #ff6b6b;

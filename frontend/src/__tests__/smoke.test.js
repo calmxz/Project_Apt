@@ -21,6 +21,6 @@ describe('frontend smoke', () => {
         },
       },
     })
-    expect(wrapper.text()).toContain('New lesson')
+    expect(wrapper.text()).toContain('What do you want to learn?')
   })
 })

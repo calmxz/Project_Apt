@@ -2,10 +2,8 @@
   <section class="new-session">
     <div class="hero">
       <span class="folio">begin</span>
-      <h1 class="hero-title">What do you want to learn?</h1>
-      <p class="hero-lede">
-        Type one topic. The tutor adapts to what you already know and where you get stuck.
-      </p>
+      <h1 class="hero-title">Start a session</h1>
+      <p class="hero-lede">One topic per session. The tutor adapts to you.</p>
     </div>
 
     <div class="form">
@@ -21,8 +19,7 @@
           @keydown.enter="onEnter"
         />
         <p class="help">
-          To continue an ended topic, use "Continue topic" on its card in the Sessions library — the
-          tutor keeps your profile. Reopening from the sidebar picks up the same session instead.
+          Continuing an ended topic? Use "Continue topic" on its card in the Sessions library.
         </p>
       </div>
 
@@ -535,14 +532,11 @@ async function submit() {
   font-weight: 600;
   font-size: 0.8125rem;
   cursor: pointer;
-  transition:
-    filter var(--motion-fast) ease,
-    transform var(--motion-fast) var(--motion-bounce);
+  transition: filter var(--motion-fast) ease;
 }
 
 .warn-action:hover {
   filter: brightness(1.08);
-  transform: translateY(-1px);
 }
 
 .error {
@@ -565,14 +559,11 @@ async function submit() {
   font-weight: 600;
   font-size: 0.8125rem;
   cursor: pointer;
-  transition:
-    filter var(--motion-fast) ease,
-    transform var(--motion-fast) var(--motion-bounce);
+  transition: filter var(--motion-fast) ease;
 }
 
 .open-existing:hover {
   filter: brightness(1.08);
-  transform: translateY(-1px);
 }
 
 .cta-primary {
@@ -589,20 +580,17 @@ async function submit() {
   font-weight: 600;
   font-size: 1rem;
   cursor: pointer;
-  box-shadow: var(--shadow-pop);
   transition:
-    transform var(--motion-fast) var(--motion-bounce),
-    box-shadow var(--motion-fast) ease,
+    filter var(--motion-fast) ease,
     opacity var(--motion-fast) ease;
 }
 
 .cta-primary:hover:not(:disabled) {
-  transform: translateY(-2px);
+  filter: brightness(1.08);
 }
 
 .cta-primary:active:not(:disabled) {
-  transform: translateY(4px);
-  box-shadow: var(--shadow-pop-pressed);
+  filter: brightness(0.95);
 }
 
 .cta-primary:disabled {
