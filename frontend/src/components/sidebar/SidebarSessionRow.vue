@@ -1,8 +1,6 @@
 <script setup>
 import { computed, nextTick, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { cardChips, railMeta } from '@/utils/sessionCard.js'
-import SessionChips from '../SessionChips.vue'
 import { useSidebar } from '@/composables/useSidebar.js'
 import { useSessionStore } from '@/stores/session.js'
 import { useToast } from '@/composables/useToast.js'
@@ -29,23 +27,7 @@ const inputEl = ref(null)
 const isCurrent = computed(() => route.params.id === props.session.id)
 const isCollapsed = computed(() => mode.value === 'collapsed')
 
-const chips = computed(() => cardChips(props.session))
-const meta = computed(() => railMeta(props.session))
-
-const chipsId = computed(() => `sb-row-chips-${props.session.id}`)
-const metaId = computed(() => `sb-row-meta-${props.session.id}`)
-const describedBy = computed(() => {
-  const ids = []
-  if (chips.value.length) ids.push(chipsId.value)
-  ids.push(metaId.value)
-  return ids.join(' ')
-})
-
-const tooltip = computed(() => {
-  const topic = props.session.topic || 'Untitled'
-  const parts = chips.value.map((c) => (c.type === 'focus' ? `Focus: ${c.label}` : c.label))
-  return parts.length ? `${topic} — ${parts.join(', ')}` : topic
-})
+const tooltip = computed(() => props.session.topic || 'Untitled')
 
 function openSession() {
   closeDrawer()
@@ -169,7 +151,6 @@ function commitRenameFromKey() {
       class="sb-row-button"
       :aria-current="isCurrent ? 'page' : undefined"
       :aria-label="`Open session: ${session.topic || 'Untitled'}`"
-      :aria-describedby="!isCollapsed && !renaming ? describedBy : undefined"
       :title="isCollapsed ? tooltip : ''"
       data-testid="sidebar-row-open"
       @click="openSession"
@@ -197,14 +178,6 @@ function commitRenameFromKey() {
           />
           {{ session.topic || 'Untitled' }}
         </span>
-        <SessionChips
-          v-if="chips.length && !renaming"
-          :id="chipsId"
-          class="sb-row-chips"
-          :chips="chips"
-          variant="rail"
-        />
-        <span v-if="!renaming" :id="metaId" class="sb-row-meta">{{ meta }}</span>
       </span>
     </button>
     <SidebarRowMenu
@@ -320,26 +293,8 @@ function commitRenameFromKey() {
   font-weight: 400;
 }
 
-.sb-row-chips {
-  margin-top: 0.0625rem;
-}
-
-.sb-row--ended .sb-row-chips {
-  opacity: 0.75;
-}
-
 .sb-row--current .sb-row-topic {
   font-weight: 600;
-}
-
-.sb-row-meta {
-  font-family: var(--font-sans);
-  font-size: var(--fs-caption);
-  color: var(--color-text-faint);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 1.2;
 }
 
 .sb-row--collapsed {

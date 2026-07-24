@@ -29,5 +29,4 @@
   border-radius: var(--radius-pill);
   padding: 0.625rem 1.5rem;
   font-weight: 600;
-  box-shadow: var(--shadow-pop);
 }

@@ -13,6 +13,10 @@ const showSuccess = vi.fn()
 vi.mock('@/composables/useToast.js', () => ({
   useToast: () => ({ showError: vi.fn(), showWarn: vi.fn(), showSuccess }),
 }))
+const apiReviewQueue = vi.fn()
+vi.mock('@/services/reviewApi.js', () => ({
+  getReviewQueue: (...args) => apiReviewQueue(...args),
+}))
 
 import Sidebar from '@/components/sidebar/Sidebar.vue'
 import { useSessionStore } from '@/stores/session.js'
@@ -23,6 +27,15 @@ function setViewport(w) {
   Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: w })
   sidebarTest._setViewport(w)
 }
+
+// File-wide default so every describe block that mounts Sidebar while
+// authenticated (triggering the review-queue fetch in onMounted) gets a
+// resolved promise instead of an unmocked vi.fn() undefined return.
+// Individual review-entry tests override this per case.
+beforeEach(() => {
+  apiReviewQueue.mockReset()
+  apiReviewQueue.mockResolvedValue({ items: [], total: 0, limit: 1, offset: 0 })
+})
 
 describe('Sidebar.vue — session list rendering', () => {
   let wrapper
@@ -151,104 +164,7 @@ describe('Sidebar.vue — session list rendering', () => {
     expect(btn.attributes('aria-current')).toBe('page')
   })
 
-  it('renders chips and a compact meta line in each row', async () => {
-    const store = useSessionStore()
-    store.sessions = [
-      {
-        id: 'a1',
-        topic: 'Glycolysis',
-        created_at: new Date().toISOString(),
-        last_activity_at: new Date().toISOString(),
-        ended_at: null,
-        message_count: 4,
-        progress: { focus_target_gap: 'ATP yield', mastered_count: 0 },
-        last_message_preview: null,
-      },
-    ]
-    wrapper = mount(Sidebar)
-    await flushPromises()
-    const row = wrapper.find('[data-testid="sidebar-row-a1"]')
-    expect(row.find('.sb-row-chips').text()).toContain('ATP yield')
-    expect(row.find('.sb-row-desc').exists()).toBe(false)
-    expect(row.find('.sb-row-meta').text()).toBe('4 msgs · now')
-  })
-
-  it('signal-poor row renders no chips and never prose', async () => {
-    const store = useSessionStore()
-    store.sessions = [
-      {
-        id: 'a9',
-        topic: 'Mitosis',
-        created_at: new Date().toISOString(),
-        last_activity_at: new Date().toISOString(),
-        ended_at: null,
-        message_count: 4,
-        progress: { focus_target_gap: null, mastered_count: 0 },
-        last_message_preview: 'That is correct! You listed all four stages.',
-      },
-    ]
-    wrapper = mount(Sidebar)
-    await flushPromises()
-    const row = wrapper.find('[data-testid="sidebar-row-a9"]')
-    expect(row.find('.sb-row-chips').exists()).toBe(false)
-    expect(row.text()).not.toContain('That is correct!')
-  })
-
-  it('ended row follows the same chips rule — summary prose never renders', async () => {
-    const store = useSessionStore()
-    store.sessions = [
-      {
-        id: 'e1',
-        topic: 'Krebs',
-        created_at: new Date().toISOString(),
-        last_activity_at: new Date().toISOString(),
-        ended_at: new Date().toISOString(),
-        message_count: 9,
-        progress: { focus_target_gap: null, mastered_count: 2 },
-        last_session_summary: '[auto] Covered the Krebs cycle',
-      },
-    ]
-    wrapper = mount(Sidebar)
-    await flushPromises()
-    await wrapper.find('[data-testid="sidebar-status-ended"]').trigger('click')
-    const row = wrapper.find('[data-testid="sidebar-row-e1"]')
-    expect(row.find('.sb-row-chips [data-testid="chip-mastered"]').text()).toContain('2')
-    expect(row.text()).not.toContain('Covered the Krebs cycle')
-  })
-
-  it('aria-describedby lists chips id then meta id when chips exist, meta only otherwise', async () => {
-    const store = useSessionStore()
-    store.sessions = [
-      {
-        id: 'a1',
-        topic: 'Glycolysis',
-        created_at: new Date().toISOString(),
-        last_activity_at: new Date().toISOString(),
-        ended_at: null,
-        message_count: 4,
-        progress: { focus_target_gap: 'ATP yield', mastered_count: 0 },
-        last_message_preview: null,
-      },
-      {
-        id: 'a9',
-        topic: 'Mitosis',
-        created_at: new Date().toISOString(),
-        last_activity_at: new Date().toISOString(),
-        ended_at: null,
-        message_count: 4,
-        progress: { focus_target_gap: null, mastered_count: 0 },
-        last_message_preview: null,
-      },
-    ]
-    wrapper = mount(Sidebar)
-    await flushPromises()
-    const richBtn = wrapper.get('[data-testid="sidebar-row-a1"] [data-testid="sidebar-row-open"]')
-    expect(richBtn.attributes('aria-describedby')).toBe('sb-row-chips-a1 sb-row-meta-a1')
-    const sparseBtn = wrapper.get('[data-testid="sidebar-row-a9"] [data-testid="sidebar-row-open"]')
-    expect(sparseBtn.attributes('aria-describedby')).toBe('sb-row-meta-a9')
-  })
-
-  it('collapsed tooltip is built from chip labels', async () => {
+  it('collapsed tooltip is the plain session topic', async () => {
     sidebarTest._setExpanded(false)
     const store = useSessionStore()
     store.sessions = [
@@ -258,15 +174,12 @@ describe('Sidebar.vue — session list rendering', () => {
         created_at: new Date().toISOString(),
         last_activity_at: new Date().toISOString(),
         ended_at: null,
-        message_count: 4,
-        progress: { focus_target_gap: 'ATP yield', mastered_count: 2 },
-        last_message_preview: null,
       },
     ]
     wrapper = mount(Sidebar)
     await flushPromises()
     const btn = wrapper.get('[data-testid="sidebar-row-a1"] [data-testid="sidebar-row-open"]')
-    expect(btn.attributes('title')).toBe('Glycolysis — Focus: ATP yield, 2 mastered')
+    expect(btn.attributes('title')).toBe('Glycolysis')
   })
 
   it('highlights the current session row', async () => {
@@ -309,18 +222,26 @@ describe('Sidebar.vue — session list rendering', () => {
     expect(wrapper.find('[data-testid="sidebar-search-empty"]').exists()).toBe(true)
   })
 
-  it('renders date-group headers for active sessions', async () => {
+  it('renders active sessions as one flat list without date group labels', async () => {
     const store = useSessionStore()
     const now = new Date()
     const weekAgo = new Date(now.getTime() - 3 * 86400000)
+    const older = new Date(now.getTime() - 20 * 86400000)
     store.sessions = [
-      { id: 'a1', topic: 'Today one', created_at: now.toISOString(), ended_at: null },
-      { id: 'a2', topic: 'Week one', created_at: weekAgo.toISOString(), ended_at: null },
+      { id: 'a1', topic: 'Big-O', created_at: now.toISOString(), ended_at: null },
+      { id: 'a2', topic: 'Trees', created_at: weekAgo.toISOString(), ended_at: null },
+      { id: 'a3', topic: 'Graphs', created_at: older.toISOString(), ended_at: null },
     ]
     wrapper = mount(Sidebar)
     await flushPromises()
-    expect(wrapper.find('[data-testid="sidebar-group-today"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="sidebar-group-week"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid^="sidebar-group-"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('This week')
+    expect(wrapper.text()).not.toContain('Older')
+    // all rows still present
+    expect(wrapper.findAll('[data-testid="sidebar-row-open"]').length).toBeGreaterThan(0)
+    expect(wrapper.find('[data-testid="sidebar-row-a1"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sidebar-row-a2"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sidebar-row-a3"]').exists()).toBe(true)
   })
 
   it('renders the pinned mini-group when a session is pinned', async () => {
@@ -826,6 +747,61 @@ describe('Sidebar.vue — mount fetch', () => {
     wrapper = mount(Sidebar)
     await flushPromises()
     expect(listSpy).not.toHaveBeenCalled()
+  })
+})
+
+describe('Sidebar.vue — review entry', () => {
+  let wrapper
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    routerPush.mockClear()
+    localStorage.clear()
+    setViewport(1400)
+    sidebarTest._setExpanded(true)
+    routeRef.params = {}
+    routeRef.fullPath = '/'
+    // Review-queue badge fetch is gated on isAuthenticated, same signal the
+    // sessions fetch already uses (see "mount fetch" describe above).
+    const auth = useAuthStore()
+    auth.session = { user: { id: 'u-1' }, access_token: 't' }
+    // Sessions fetch runs before the review-queue fetch in onMounted; stub it
+    // so the unrelated real network call doesn't delay/interfere with the
+    // review assertions (mirrors the "mount fetch" describe's pattern).
+    const store = useSessionStore()
+    vi.spyOn(store, 'listSessions').mockResolvedValue([])
+  })
+  afterEach(() => wrapper?.unmount())
+
+  it('shows the review entry with a count when concepts are due', async () => {
+    apiReviewQueue.mockResolvedValue({ items: [], total: 13, limit: 1, offset: 0 })
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    const entry = wrapper.get('[data-testid="sidebar-review"]')
+    expect(entry.text()).toContain('Review')
+    expect(entry.text()).toContain('13')
+    expect(apiReviewQueue).toHaveBeenCalledWith({ limit: 1, offset: 0 }, { silent: true })
+  })
+
+  it('hides the review entry when nothing is due', async () => {
+    apiReviewQueue.mockResolvedValue({ items: [], total: 0, limit: 1, offset: 0 })
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sidebar-review"]').exists()).toBe(false)
+  })
+
+  it('hides the review entry when the fetch fails', async () => {
+    apiReviewQueue.mockRejectedValue(new Error('boom'))
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sidebar-review"]').exists()).toBe(false)
+  })
+
+  it('hides the review entry in icon-rail (collapsed) mode even with a count due', async () => {
+    sidebarTest._setExpanded(false)
+    apiReviewQueue.mockResolvedValue({ items: [], total: 13, limit: 1, offset: 0 })
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sidebar-review"]').exists()).toBe(false)
   })
 })
 

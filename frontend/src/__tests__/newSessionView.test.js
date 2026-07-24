@@ -12,9 +12,7 @@ const uploadDocument = vi.fn()
 vi.mock('@/services/uploadApi.js', () => ({
   uploadDocument: (...a) => uploadDocument(...a),
   validateFile: (file) =>
-    file.name.endsWith('.exe')
-      ? { ok: false, reason: 'not supported' }
-      : { ok: true },
+    file.name.endsWith('.exe') ? { ok: false, reason: 'not supported' } : { ok: true },
   ACCEPT_ATTR: '.pdf,.pptx,.txt,.md',
 }))
 
@@ -39,7 +37,7 @@ describe('NewSessionView', () => {
 
   it('renders hero copy and quick picks', () => {
     const wrapper = mountView()
-    expect(wrapper.text()).toContain('What do you want to learn?')
+    expect(wrapper.text()).toContain('Start a session')
     expect(wrapper.text()).toContain('Recursion')
     expect(wrapper.text()).toContain('CSS grid')
   })
@@ -55,17 +53,13 @@ describe('NewSessionView', () => {
     vi.spyOn(store, 'listSessions').mockResolvedValue([])
     const wrapper = mountView()
     await wrapper.get('[data-testid="new-topic"]').setValue('Calculus')
-    expect(
-      wrapper.get('[data-testid="new-submit"]').attributes('disabled'),
-    ).toBeUndefined()
+    expect(wrapper.get('[data-testid="new-submit"]').attributes('disabled')).toBeUndefined()
   })
 
   it('clicking a quick pick fills topic', async () => {
     const wrapper = mountView()
     await wrapper.findAll('.quick-pick')[0].trigger('click')
-    expect(wrapper.get('[data-testid="new-topic"]').element.value).toBe(
-      'Recursion',
-    )
+    expect(wrapper.get('[data-testid="new-topic"]').element.value).toBe('Recursion')
   })
 
   it('lists sessions on mount when none cached', async () => {
@@ -95,9 +89,7 @@ describe('NewSessionView', () => {
     const wrapper = mountView()
     await wrapper.get('[data-testid="new-topic"]').setValue('Calculus')
     expect(wrapper.find('[data-testid="new-active-warn"]').exists()).toBe(true)
-    expect(
-      wrapper.get('[data-testid="new-submit"]').attributes('disabled'),
-    ).toBeDefined()
+    expect(wrapper.get('[data-testid="new-submit"]').attributes('disabled')).toBeDefined()
   })
 
   it('open existing routes to that session', async () => {

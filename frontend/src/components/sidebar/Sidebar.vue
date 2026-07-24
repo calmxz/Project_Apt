@@ -8,6 +8,7 @@ import { useSidebar } from '@/composables/useSidebar.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useSessionStore } from '@/stores/session.js'
 import { useSessionGroups } from '@/composables/useSessionGroups.js'
+import { getReviewQueue } from '@/services/reviewApi.js'
 import Logo from '@/components/Logo.vue'
 import SidebarSessionRow from './SidebarSessionRow.vue'
 import SidebarSkeletonList from './SidebarSkeletonList.vue'
@@ -87,16 +88,16 @@ onBeforeUnmount(() => {
 })
 
 const searchQuery = ref('')
-const { searching, filteredFlat, matchCount, pinnedActive, activeGroups, endedGroups, endedRows } =
+const { searching, filteredFlat, matchCount, pinnedActive, activeGroups, endedRows } =
   useSessionGroups(sessions, searchQuery, ref(null)) // null => Date.now() captured at setup time
 
 const activeFlat = computed(() => activeGroups.value.flatMap((g) => g.rows))
 
 const showSkeleton = computed(() => loading.value && !sessions.value.length)
 
-const showEmptyHint = computed(
-  () => !loading.value && !searching.value && !sessions.value.length,
-)
+const showEmptyHint = computed(() => !loading.value && !searching.value && !sessions.value.length)
+
+const reviewTotal = ref(0)
 
 const showEmptyActiveHint = computed(
   () =>
@@ -114,6 +115,14 @@ onMounted(async () => {
   if (isAuthenticated.value && !sessions.value.length) {
     await sessionStore.listSessions().catch(() => {})
   }
+  if (isAuthenticated.value) {
+    // Badge count only; silent - a sidebar badge must never toast.
+    getReviewQueue({ limit: 1, offset: 0 }, { silent: true })
+      .then((q) => {
+        reviewTotal.value = q?.total || 0
+      })
+      .catch(() => {})
+  }
 })
 
 // Scroll the active session row into view on route change.
@@ -122,9 +131,7 @@ watch(
   async () => {
     await nextTick()
     if (!listEl.value) return
-    const target = listEl.value.querySelector(
-      `[data-session-id="${route.params.id}"]`,
-    )
+    const target = listEl.value.querySelector(`[data-session-id="${route.params.id}"]`)
     target?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   },
 )
@@ -213,6 +220,18 @@ function onNewSession() {
       </button>
     </div>
 
+    <RouterLink
+      v-if="isExpanded && reviewTotal > 0"
+      to="/review"
+      class="sb-review"
+      data-testid="sidebar-review"
+      @click="closeDrawer"
+    >
+      <i class="pi pi-history" aria-hidden="true" />
+      <span>Review</span>
+      <span class="sb-review-count">{{ reviewTotal }}</span>
+    </RouterLink>
+
     <div v-if="isExpanded" class="sb-search">
       <i class="pi pi-search" aria-hidden="true" />
       <input
@@ -242,14 +261,21 @@ function onNewSession() {
         @click="statusFilter = t.key"
       >
         {{ t.label }}
-        <span v-if="t.key === 'ended' && endedRows.length" class="sb-section-count">({{ endedRows.length }})</span>
+        <span v-if="t.key === 'ended' && endedRows.length" class="sb-section-count"
+          >({{ endedRows.length }})</span
+        >
       </button>
     </div>
 
     <nav ref="listEl" class="sb-list-wrap" aria-label="Sessions">
       <template v-if="isExpanded">
         <template v-if="searching">
-          <p class="sb-search-count label" data-testid="sidebar-search-count" aria-live="polite" aria-atomic="true">
+          <p
+            class="sb-search-count label"
+            data-testid="sidebar-search-count"
+            aria-live="polite"
+            aria-atomic="true"
+          >
             {{ matchCount }} {{ matchCount === 1 ? 'match' : 'matches' }}
           </p>
           <ul v-if="filteredFlat.length" class="sb-session-list">
@@ -260,7 +286,13 @@ function onNewSession() {
               :state="s.ended_at ? 'ended' : 'active'"
             />
           </ul>
-          <p v-else class="sb-empty-hint" data-testid="sidebar-search-empty" aria-live="polite" aria-atomic="true">
+          <p
+            v-else
+            class="sb-empty-hint"
+            data-testid="sidebar-search-empty"
+            aria-live="polite"
+            aria-atomic="true"
+          >
             No sessions match "{{ searchQuery }}".
           </p>
         </template>
@@ -277,7 +309,12 @@ function onNewSession() {
                 <span class="sb-section-count">({{ pinnedActive.length }})</span>
               </h3>
               <ul class="sb-session-list">
-                <SidebarSessionRow v-for="s in pinnedActive" :key="s.id" :session="s" state="active" />
+                <SidebarSessionRow
+                  v-for="s in pinnedActive"
+                  :key="s.id"
+                  :session="s"
+                  state="active"
+                />
               </ul>
             </section>
 
@@ -285,46 +322,35 @@ function onNewSession() {
               <SidebarSkeletonList v-if="showSkeleton" :count="3" />
               <template v-else>
                 <div data-testid="sidebar-quick-group">
-                  <div
-                    v-for="g in activeGroups"
-                    :key="g.key"
-                    class="sb-group"
-                    :data-testid="`sidebar-group-${g.key}`"
-                  >
-                    <h3 class="sb-section-label label">{{ g.label }}</h3>
-                    <ul class="sb-session-list">
-                      <SidebarSessionRow v-for="s in g.rows" :key="s.id" :session="s" state="active" />
-                    </ul>
-                  </div>
+                  <ul v-if="activeFlat.length" class="sb-session-list">
+                    <SidebarSessionRow
+                      v-for="s in activeFlat"
+                      :key="s.id"
+                      :session="s"
+                      state="active"
+                    />
+                  </ul>
                 </div>
                 <p v-if="showEmptyHint" class="sb-empty-hint" data-testid="sidebar-empty-hint">
                   No sessions yet. Click + New session above.
                 </p>
-                <p v-else-if="showEmptyActiveHint" class="sb-empty-hint" data-testid="sidebar-empty-active">
+                <p
+                  v-else-if="showEmptyActiveHint"
+                  class="sb-empty-hint"
+                  data-testid="sidebar-empty-active"
+                >
                   No active sessions. Check the Ended tab.
                 </p>
               </template>
             </section>
           </template>
 
-          <!-- ENDED view: activity buckets, no pinning -->
-          <section
-            v-else
-            class="sb-section sb-section--ended"
-            data-testid="sidebar-section-ended"
-          >
-            <div
-              v-for="g in endedGroups"
-              :key="g.key"
-              class="sb-group"
-              :data-testid="`sidebar-ended-group-${g.key}`"
-            >
-              <h3 class="sb-section-label label">{{ g.label }}</h3>
-              <ul class="sb-session-list">
-                <SidebarSessionRow v-for="s in g.rows" :key="s.id" :session="s" state="ended" />
-              </ul>
-            </div>
-            <p v-if="!endedGroups.length" class="sb-empty-hint" data-testid="sidebar-ended-empty">
+          <!-- ENDED view: flat recency-sorted list, no pinning -->
+          <section v-else class="sb-section sb-section--ended" data-testid="sidebar-section-ended">
+            <ul v-if="endedRows.length" class="sb-session-list">
+              <SidebarSessionRow v-for="s in endedRows" :key="s.id" :session="s" state="ended" />
+            </ul>
+            <p v-if="!endedRows.length" class="sb-empty-hint" data-testid="sidebar-ended-empty">
               No ended sessions yet.
             </p>
           </section>
@@ -427,8 +453,12 @@ function onNewSession() {
 }
 
 @keyframes sb-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .sb-header {
@@ -470,7 +500,9 @@ function onNewSession() {
   color: var(--color-text-muted);
   cursor: pointer;
   font-size: 0.875rem;
-  transition: background var(--motion-fast) ease, color var(--motion-fast) ease;
+  transition:
+    background var(--motion-fast) ease,
+    color var(--motion-fast) ease;
 }
 
 .sb-toggle:hover {
@@ -508,12 +540,13 @@ function onNewSession() {
   border: none;
   border-radius: var(--radius-pill);
   cursor: pointer;
-  box-shadow: var(--shadow-pop);
-  transition: transform var(--motion-fast) ease, box-shadow var(--motion-fast) ease;
+  transition:
+    filter var(--motion-fast) ease,
+    background var(--motion-fast) ease;
 }
 
 .sb-new-session:hover {
-  transform: translateY(-1px);
+  filter: brightness(1.08);
 }
 
 .sb-new-session:focus-visible {
@@ -628,7 +661,11 @@ function onNewSession() {
   cursor: pointer;
   text-decoration: none;
   font-size: 1rem;
-  transition: background var(--motion-fast) ease, color var(--motion-fast) ease, border-color var(--motion-fast) ease, transform var(--motion-fast) ease;
+  transition:
+    background var(--motion-fast) ease,
+    color var(--motion-fast) ease,
+    border-color var(--motion-fast) ease,
+    transform var(--motion-fast) ease;
 }
 
 .sb-icon:hover {
@@ -692,7 +729,10 @@ function onNewSession() {
   font-size: var(--fs-caption);
   font-weight: 600;
   cursor: pointer;
-  transition: background var(--motion-fast) ease, color var(--motion-fast) ease, border-color var(--motion-fast) ease;
+  transition:
+    background var(--motion-fast) ease,
+    color var(--motion-fast) ease,
+    border-color var(--motion-fast) ease;
 }
 
 .sb-status-btn:hover {
@@ -715,7 +755,44 @@ function onNewSession() {
   color: var(--color-accent-text);
 }
 
-.sb-group { margin-bottom: 0.75rem; }
-.sb-group + .sb-group { margin-top: 0.25rem; }
-.sb-section--pinned .sb-section-label { color: var(--color-accent-text); }
+.sb-section--pinned .sb-section-label {
+  color: var(--color-accent-text);
+}
+
+.sb-review {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.25rem 0.75rem 0;
+  padding: 0.4375rem 0.75rem;
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition:
+    background var(--motion-fast) ease,
+    color var(--motion-fast) ease;
+}
+
+.sb-review:hover {
+  background: var(--color-surface-soft);
+  color: var(--color-text);
+}
+
+.sb-review:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: -2px;
+}
+
+.sb-review-count {
+  margin-left: auto;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-accent-text);
+  background: var(--color-accent-soft);
+  border-radius: var(--radius-pill);
+  padding: 0.0625rem 0.4375rem;
+}
 </style>
