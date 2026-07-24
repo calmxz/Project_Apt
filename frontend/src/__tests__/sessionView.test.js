@@ -630,6 +630,45 @@ describe('SessionView', () => {
     expect(bannerRefresh).toHaveBeenCalled()
   })
 
+  // A poll started in session A must not paint A's status into session B after
+  // a sidebar switch (same route component instance, no remount), and must not
+  // leave B's attach button locked behind A's in-flight upload.
+  it('a session switch invalidates an in-flight upload poll', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async (id) => {
+      setupSession({ id })
+    })
+    validateFile.mockReturnValue({ ok: true })
+    uploadDocument.mockResolvedValue({ document_id: 'doc-1' })
+    let resolveStatus
+    getUploadStatus.mockImplementation(
+      () =>
+        new Promise((res) => {
+          resolveStatus = res
+        }),
+    )
+    const wrapper = mountView({ id: 's1' })
+    await flushPromises()
+    const file = new File(['pdf-bytes'], 'notes.pdf', { type: 'application/pdf' })
+    const input = wrapper.get('[data-testid="session-upload-input"]')
+    Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
+    await input.trigger('change')
+    await flushPromises() // upload resolved; first status poll still pending
+
+    await wrapper.setProps({ id: 's2' }) // switch sessions mid-ingestion
+    await flushPromises()
+
+    // B must not inherit A's upload lock while the stale poll is still pending.
+    expect(wrapper.findComponent(Composer).props('uploading')).toBe(false)
+
+    resolveStatus({ status: 'ready' }) // the superseded poll resolves late
+    await flushPromises()
+
+    // The stale result must not paint A's status banner into B.
+    expect(wrapper.find('[data-testid="upload-status-ready"]').exists()).toBe(false)
+    expect(wrapper.findComponent(Composer).props('uploading')).toBe(false)
+  })
+
   // I-09: the 415 (and friends) carry an actionable server message - prefer
   // it over the generic friendlyError copy.
   it('upload failure surfaces the backend detail message when present', async () => {

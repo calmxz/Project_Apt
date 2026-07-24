@@ -195,6 +195,11 @@ const messagesEl = ref(null)
 const composerRef = ref(null)
 const uploading = ref(false)
 const uploadStatus = ref(null)
+// Same generation-counter idiom as ReferenceStatusBanner: /session/:id reuses
+// this component instance across sidebar switches, so an in-flight upload poll
+// from the previous session must not write uploadStatus/uploading after the id
+// changes. Bumped by the props.id watcher; every write after an await checks it.
+let uploadGen = 0
 const lastError = ref(null)
 const referenceBannerRef = ref(null)
 
@@ -396,7 +401,13 @@ onMounted(() => loadCurrent(props.id))
 watch(
   () => props.id,
   (id) => {
-    if (id) loadCurrent(id)
+    if (!id) return
+    // Invalidate any in-flight upload/poll from the previous session and clear
+    // its banner/lock so the new session never shows or inherits them.
+    uploadGen += 1
+    uploading.value = false
+    uploadStatus.value = null
+    loadCurrent(id)
   },
 )
 
@@ -485,12 +496,16 @@ async function onAttachFile(file) {
   }
   uploading.value = true
   uploadStatus.value = { kind: 'pending', text: `Uploading ${file.name}...` }
+  const gen = uploadGen
   try {
     const resp = await uploadDocument({ sessionId: props.id, file })
+    if (gen !== uploadGen) return
     referenceBannerRef.value?.refresh?.()
-    await pollUploadStatus(resp.document_id, file.name)
+    await pollUploadStatus(resp.document_id, file.name, gen)
+    if (gen !== uploadGen) return
     referenceBannerRef.value?.refresh?.()
   } catch (e) {
+    if (gen !== uploadGen) return
     // I-09: the 415 (and friends) carry an actionable server message -
     // prefer it over the generic friendlyError copy.
     const serverMsg = e?.body?.detail?.message
@@ -499,22 +514,26 @@ async function onAttachFile(file) {
       text: `Upload failed: ${serverMsg || friendlyError(e)}`,
     }
   } finally {
-    uploading.value = false
+    // The watcher already reset uploading for the new session; a stale finally
+    // must not clobber a newer upload's uploading=true either.
+    if (gen === uploadGen) uploading.value = false
   }
 }
 
-async function pollUploadStatus(documentId, filename) {
+async function pollUploadStatus(documentId, filename, gen) {
   for (let i = 0; i < 30; i += 1) {
     let s
     try {
       s = await getUploadStatus(documentId)
     } catch (e) {
+      if (gen !== uploadGen) return
       uploadStatus.value = {
         kind: 'failed',
         text: `Upload status unavailable: ${friendlyError(e)}`,
       }
       return
     }
+    if (gen !== uploadGen) return
     if (s.status === 'ready') {
       uploadStatus.value = { kind: 'ready', text: `${filename} is ready. Ask a question about it.` }
       return
@@ -527,6 +546,7 @@ async function pollUploadStatus(documentId, filename) {
       return
     }
     await new Promise((r) => setTimeout(r, 1000))
+    if (gen !== uploadGen) return
   }
   uploadStatus.value = {
     kind: 'pending',
