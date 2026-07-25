@@ -973,5 +973,40 @@ describe('SessionView', () => {
       await flushPromises()
       expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(false)
     })
+
+    it('a session switch invalidates an in-flight level PATCH', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async (id) => {
+        setupSession({ id })
+      })
+      getSessionProfile.mockImplementation((id) =>
+        id === 's1'
+          ? Promise.resolve({ profile: { knowledge_level: null }, etag: 't1' })
+          : Promise.resolve({ profile: { knowledge_level: null }, etag: 't3' }),
+      )
+      let resolvePatch
+      patchProfile.mockImplementation(
+        () =>
+          new Promise((res) => {
+            resolvePatch = res
+          }),
+      )
+      const wrapper = mountView({ id: 's1' })
+      await flushPromises()
+      await wrapper.get('[data-testid="diag-level-advanced"]').trigger('click')
+      await flushPromises() // PATCH sent from s1, still pending
+
+      await wrapper.setProps({ id: 's2' }) // switch sessions mid-PATCH
+      await flushPromises()
+
+      // s2's own fetch shows the card (its knowledge_level is null too).
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(true)
+
+      resolvePatch({ profile: { knowledge_level: 'advanced' }, etag: 't2' }) // stale s1 PATCH resolves late
+      await flushPromises()
+
+      // The stale PATCH response must not clobber s2's freshly-fetched profile.
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(true)
+    })
   })
 })

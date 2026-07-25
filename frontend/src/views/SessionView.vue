@@ -527,18 +527,27 @@ async function onDiagQuiz() {
 }
 
 async function onDiagLevel(level) {
+  // Same reuse-across-switches hazard as uploadGen (see comment above): this
+  // component instance survives a session switch, so a PATCH started before
+  // the switch must not write the new session's diagProfile/diagError when it
+  // resolves late.
+  const id = props.id
   const etag = diagProfile.value?.etag
   if (!etag) return
   diagError.value = ''
   try {
     const res = await patchProfile(props.id, { knowledge_level: level }, etag)
+    if (id !== props.id) return // stale response from a previous session
     diagProfile.value = { profile: res.profile, etag: res.etag }
   } catch (e) {
     if (e?.status === 412) {
       // Concurrent write (e.g. a quiz just graded). Refetch; if the level is
-      // now set the card hides itself via showDiagnosticCard.
-      await loadDiagProfile(props.id)
+      // now set the card hides itself via showDiagnosticCard. loadDiagProfile
+      // has its own stale-response guard, so this is safe even if the
+      // session has since switched.
+      await loadDiagProfile(id)
     } else {
+      if (id !== props.id) return // stale response from a previous session
       diagError.value = 'Could not save your level. Try again.'
     }
   }
