@@ -543,10 +543,12 @@ async function retryLastMessage() {
 
 async function onDiagQuiz() {
   if (!canSend.value) return
+  const id = props.id
   diagError.value = ''
   try {
     await store.sendMessageStreaming({ text: 'Quiz me to gauge my level' })
   } catch {
+    if (id !== props.id) return // stale response from a previous session
     // F6: surface on the card, like the level path, instead of the generic
     // session error banner -- a card failure should read as a card failure.
     diagError.value = 'Could not start the quiz. Try again.'
@@ -601,7 +603,7 @@ async function onDiagLevel(level) {
       diagError.value = 'Could not save your level. Try again.'
     }
   } finally {
-    diagLevelBusy.value = false
+    if (id === props.id) diagLevelBusy.value = false
   }
 }
 

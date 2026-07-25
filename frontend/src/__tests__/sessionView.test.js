@@ -1009,6 +1009,51 @@ describe('SessionView', () => {
       expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(true)
     })
 
+    // Re-review finding: onDiagLevel's finally must not clear diagLevelBusy
+    // for a stale (previous-session) PATCH resolving after a same-session
+    // PATCH is already in flight, else the double-PATCH window (F5) reopens.
+    it('a stale PATCH resolving late does not clobber a newer same-session PATCH busy-guard', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async (id) => {
+        setupSession({ id })
+      })
+      getSessionProfile.mockImplementation((id) =>
+        id === 's1'
+          ? Promise.resolve({ profile: { knowledge_level: null }, etag: 't1' })
+          : Promise.resolve({ profile: { knowledge_level: null }, etag: 't3' }),
+      )
+      const resolvers = []
+      patchProfile.mockImplementation(
+        () =>
+          new Promise((res, rej) => {
+            resolvers.push({ res, rej })
+          }),
+      )
+      const wrapper = mountView({ id: 's1' })
+      await flushPromises()
+      await wrapper.get('[data-testid="diag-level-advanced"]').trigger('click')
+      await flushPromises() // PATCH_A sent from s1, still pending
+
+      await wrapper.setProps({ id: 's2' }) // switch sessions mid-PATCH
+      await flushPromises()
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(true)
+
+      await wrapper.get('[data-testid="diag-level-advanced"]').trigger('click')
+      await flushPromises() // PATCH_B sent from s2, still pending
+      expect(patchProfile).toHaveBeenCalledTimes(2)
+
+      resolvers[0].res({ profile: { knowledge_level: 'advanced' }, etag: 't2' }) // stale PATCH_A resolves late
+      await flushPromises()
+
+      // Click level again on s2 while PATCH_B is still in flight. A correctly
+      // session-guarded finally must leave diagLevelBusy true (busy belongs
+      // to s2's own pending PATCH_B), so this third click must be blocked.
+      await wrapper.get('[data-testid="diag-level-advanced"]').trigger('click')
+      await flushPromises()
+
+      expect(patchProfile).toHaveBeenCalledTimes(2)
+    })
+
     // F4: the card must never paint over the skeleton (or flash) before the
     // session detail has resolved, even if the best-effort profile fetch
     // (which is not gated on loadSession) comes back with a null level.
