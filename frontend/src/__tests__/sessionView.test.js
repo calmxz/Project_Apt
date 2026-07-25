@@ -1008,5 +1008,156 @@ describe('SessionView', () => {
       // The stale PATCH response must not clobber s2's freshly-fetched profile.
       expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(true)
     })
+
+    // F4: the card must never paint over the skeleton (or flash) before the
+    // session detail has resolved, even if the best-effort profile fetch
+    // (which is not gated on loadSession) comes back with a null level.
+    it('does not show the card while detail is loading (F4)', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(() => new Promise(() => {}))
+      store.detailLoading = true
+      getSessionProfile.mockResolvedValue({ profile: { knowledge_level: null }, etag: 't1' })
+      const wrapper = mountView({ id: 's1' })
+      await flushPromises()
+      expect(wrapper.find('[data-testid="session-messages-skeleton"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(false)
+    })
+
+    // F2: a conversational level declaration (agent-side update_topic_profile
+    // during the turn) is only visible to us via a refetch. Once a tutor turn
+    // finishes (stream goes back to idle), refetch so the card hides itself
+    // instead of lingering with a stale null level.
+    it('refetches the profile when a tutor turn completes and hides the card if the level is now set (F2)', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      getSessionProfile.mockResolvedValueOnce({ profile: { knowledge_level: null }, etag: 't1' })
+      const wrapper = mountView()
+      await flushPromises()
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(true)
+      expect(getSessionProfile).toHaveBeenCalledTimes(1)
+
+      getSessionProfile.mockResolvedValueOnce({
+        profile: { knowledge_level: 'intermediate' },
+        etag: 't2',
+      })
+      store.streamState = 'streaming'
+      await nextTick()
+      store.streamState = 'idle'
+      await flushPromises()
+
+      expect(getSessionProfile).toHaveBeenCalledTimes(2)
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(false)
+    })
+
+    it('does not refetch on stream idle when the card is dismissed (F2)', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      getSessionProfile.mockResolvedValueOnce({ profile: { knowledge_level: null }, etag: 't1' })
+      const wrapper = mountView()
+      await flushPromises()
+      await wrapper.get('[data-testid="diag-dismiss"]').trigger('click')
+      await flushPromises()
+      expect(getSessionProfile).toHaveBeenCalledTimes(1)
+
+      store.streamState = 'streaming'
+      await nextTick()
+      store.streamState = 'idle'
+      await flushPromises()
+
+      expect(getSessionProfile).toHaveBeenCalledTimes(1)
+    })
+
+    // F3: a 412 can be a stale-etag false alarm rather than a real conflict.
+    // If the refetch shows the level is STILL unset, retry the PATCH once
+    // with the fresh etag rather than silently dropping the user's click.
+    it('412 with a still-null refetch retries the PATCH once and hides the card on success (F3)', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      getSessionProfile.mockResolvedValueOnce({ profile: { knowledge_level: null }, etag: 't1' })
+      patchProfile.mockRejectedValueOnce(Object.assign(new Error('precondition'), { status: 412 }))
+      getSessionProfile.mockResolvedValueOnce({ profile: { knowledge_level: null }, etag: 't2' })
+      patchProfile.mockResolvedValueOnce({ profile: { knowledge_level: 'beginner' }, etag: 't3' })
+      const wrapper = mountView()
+      await flushPromises()
+      await wrapper.get('[data-testid="diag-level-beginner"]').trigger('click')
+      await flushPromises()
+
+      expect(patchProfile).toHaveBeenCalledTimes(2)
+      expect(patchProfile).toHaveBeenNthCalledWith(2, 's1', { knowledge_level: 'beginner' }, 't2')
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(false)
+      expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    })
+
+    it('412 retry failure surfaces the inline save error (F3)', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      getSessionProfile.mockResolvedValueOnce({ profile: { knowledge_level: null }, etag: 't1' })
+      patchProfile.mockRejectedValueOnce(Object.assign(new Error('precondition'), { status: 412 }))
+      getSessionProfile.mockResolvedValueOnce({ profile: { knowledge_level: null }, etag: 't2' })
+      patchProfile.mockRejectedValueOnce(new Error('network down'))
+      const wrapper = mountView()
+      await flushPromises()
+      await wrapper.get('[data-testid="diag-level-beginner"]').trigger('click')
+      await flushPromises()
+
+      expect(patchProfile).toHaveBeenCalledTimes(2)
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(true)
+      expect(wrapper.get('[role="alert"]').text()).toBe('Could not save your level. Try again.')
+    })
+
+    // F5: a rapid second click before the first PATCH resolves must not fire
+    // a second PATCH with the same (now-stale) etag.
+    it('a rapid second level click does not fire a second PATCH (F5)', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      getSessionProfile.mockResolvedValueOnce({ profile: { knowledge_level: null }, etag: 't1' })
+      let resolvePatch
+      patchProfile.mockImplementation(
+        () =>
+          new Promise((res) => {
+            resolvePatch = res
+          }),
+      )
+      const wrapper = mountView()
+      await flushPromises()
+      const btn = wrapper.get('[data-testid="diag-level-beginner"]')
+      btn.trigger('click')
+      btn.trigger('click')
+      await flushPromises()
+
+      expect(patchProfile).toHaveBeenCalledTimes(1)
+      resolvePatch({ profile: { knowledge_level: 'beginner' }, etag: 't2' })
+      await flushPromises()
+    })
+
+    // F6: quiz-start failures must surface on the card (diagError), matching
+    // the level path, instead of the generic session error banner.
+    it('quiz failures surface an inline card error instead of the session error banner (F6)', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      getSessionProfile.mockResolvedValueOnce({ profile: { knowledge_level: null }, etag: 't1' })
+      vi.spyOn(store, 'sendMessageStreaming').mockRejectedValue(new Error('boom'))
+      const wrapper = mountView()
+      await flushPromises()
+      await wrapper.get('[data-testid="diag-quiz"]').trigger('click')
+      await flushPromises()
+
+      expect(wrapper.find('[data-testid="session-error"]').exists()).toBe(false)
+      expect(wrapper.get('[data-testid="diagnostic-consent-card"] [role="alert"]').text()).toBe(
+        'Could not start the quiz. Try again.',
+      )
+    })
   })
 })

@@ -116,7 +116,7 @@
 
       <DiagnosticConsentCard
         v-if="showDiagnosticCard"
-        :busy="store.streamState !== 'idle' || !canSend"
+        :busy="store.streamState !== 'idle' || !canSend || diagLevelBusy"
         :error="diagError"
         @quiz="onDiagQuiz"
         @level="onDiagLevel"
@@ -221,6 +221,10 @@ const referenceBannerRef = ref(null)
 const diagProfile = ref(null)
 const diagDismissed = ref(false)
 const diagError = ref('')
+// F5: guards onDiagLevel's async body against a rapid second click firing a
+// second PATCH with the same (soon-to-be-stale) etag. Folded into the card's
+// busy binding so the buttons visually disable too.
+const diagLevelBusy = ref(false)
 
 const showDiagnosticCard = computed(() =>
   Boolean(
@@ -230,7 +234,8 @@ const showDiagnosticCard = computed(() =>
     !diagDismissed.value &&
     !isEnded.value &&
     !resuming.value &&
-    !notFound.value,
+    !notFound.value &&
+    !store.detailLoading,
   ),
 )
 
@@ -255,6 +260,25 @@ watch(
   (next, prev) => {
     if (prev === 'idle' && next !== 'idle') streamAnnouncement.value = 'Tutor is replying.'
     else if (prev !== 'idle' && next === 'idle') streamAnnouncement.value = 'Reply finished.'
+  },
+)
+
+// F2: the agent may have conversationally recorded a declared level
+// (update_topic_profile) during the turn -- that only becomes visible to us
+// via a refetch. Once the tutor's turn finishes, refetch so the card hides
+// itself and the cached etag stays fresh, instead of lingering with a stale
+// null level until the next explicit reload.
+watch(
+  () => store.streamState,
+  (next, prev) => {
+    if (prev === 'idle' || next !== 'idle') return
+    if (
+      diagProfile.value &&
+      diagProfile.value.profile?.knowledge_level == null &&
+      !diagDismissed.value
+    ) {
+      loadDiagProfile(props.id)
+    }
   },
 )
 
@@ -409,6 +433,7 @@ async function loadCurrent(id) {
   diagProfile.value = null
   diagDismissed.value = false
   diagError.value = ''
+  diagLevelBusy.value = false
   loadDiagProfile(id) // deliberately not awaited: card is best-effort
   const startedAt = import.meta.env.DEV ? performance.now() : 0
   try {
@@ -521,12 +546,17 @@ async function onDiagQuiz() {
   diagError.value = ''
   try {
     await store.sendMessageStreaming({ text: 'Quiz me to gauge my level' })
-  } catch (e) {
-    lastError.value = e
+  } catch {
+    // F6: surface on the card, like the level path, instead of the generic
+    // session error banner -- a card failure should read as a card failure.
+    diagError.value = 'Could not start the quiz. Try again.'
   }
 }
 
 async function onDiagLevel(level) {
+  // F5: a rapid second click before the first PATCH resolves must not fire a
+  // second PATCH with the same (soon-to-be-stale) etag.
+  if (diagLevelBusy.value) return
   // Same reuse-across-switches hazard as uploadGen (see comment above): this
   // component instance survives a session switch, so a PATCH started before
   // the switch must not write the new session's diagProfile/diagError when it
@@ -534,9 +564,10 @@ async function onDiagLevel(level) {
   const id = props.id
   const etag = diagProfile.value?.etag
   if (!etag) return
+  diagLevelBusy.value = true
   diagError.value = ''
   try {
-    const res = await patchProfile(props.id, { knowledge_level: level }, etag)
+    const res = await patchProfile(id, { knowledge_level: level }, etag)
     if (id !== props.id) return // stale response from a previous session
     diagProfile.value = { profile: res.profile, etag: res.etag }
   } catch (e) {
@@ -546,10 +577,31 @@ async function onDiagLevel(level) {
       // has its own stale-response guard, so this is safe even if the
       // session has since switched.
       await loadDiagProfile(id)
+      if (id !== props.id) return // stale response from a previous session
+      if (diagProfile.value == null) {
+        // The refetch itself failed (loadDiagProfile sets it to null on
+        // error) -- distinct from "refetch succeeded, level still null".
+        diagError.value = 'Could not save your level. Try again.'
+      } else if (diagProfile.value.profile?.knowledge_level == null) {
+        // Refetch shows the level is STILL unset: the 412 was a stale-etag
+        // false alarm, not a real conflicting write. Retry once with the
+        // fresh etag so the original click is not silently swallowed.
+        const freshEtag = diagProfile.value.etag
+        try {
+          const retryRes = await patchProfile(id, { knowledge_level: level }, freshEtag)
+          if (id !== props.id) return // stale response from a previous session
+          diagProfile.value = { profile: retryRes.profile, etag: retryRes.etag }
+        } catch {
+          if (id !== props.id) return // stale response from a previous session
+          diagError.value = 'Could not save your level. Try again.'
+        }
+      }
     } else {
       if (id !== props.id) return // stale response from a previous session
       diagError.value = 'Could not save your level. Try again.'
     }
+  } finally {
+    diagLevelBusy.value = false
   }
 }
 

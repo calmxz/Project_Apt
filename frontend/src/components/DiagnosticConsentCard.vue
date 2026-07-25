@@ -90,6 +90,35 @@ const LABELS = { beginner: 'Beginner', intermediate: 'Intermediate', advanced: '
   flex-wrap: wrap;
   gap: 0.5rem;
 }
+.diag-quiz,
+.diag-level {
+  background: var(--color-surface, transparent);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 0.6rem);
+  padding: 0.5rem 0.9rem;
+  color: var(--color-text);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+.diag-quiz:not(:disabled):hover,
+.diag-level:not(:disabled):hover {
+  border-color: var(--color-accent);
+}
+.diag-quiz:not(:disabled):focus-visible,
+.diag-level:not(:disabled):focus-visible {
+  border-color: var(--color-accent);
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+}
+.diag-quiz:disabled,
+.diag-level:disabled {
+  opacity: 0.55;
+  cursor: default;
+  pointer-events: none;
+}
 .diag-error {
   margin: 0.5rem 0 0;
   font-size: 0.85rem;
