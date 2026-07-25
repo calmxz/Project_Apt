@@ -114,6 +114,15 @@
         @done="onDoneCheck"
       />
 
+      <DiagnosticConsentCard
+        v-if="showDiagnosticCard"
+        :busy="store.streamState !== 'idle' || !canSend"
+        :error="diagError"
+        @quiz="onDiagQuiz"
+        @level="onDiagLevel"
+        @dismiss="diagDismissed = true"
+      />
+
       <Composer
         v-if="!isEnded"
         ref="composerRef"
@@ -162,6 +171,7 @@ import CapBanners from '../components/chat/CapBanners.vue'
 import ChatEmptyState from '../components/chat/EmptyState.vue'
 import CheckQuestion from '../components/chat/CheckQuestion.vue'
 import Composer from '../components/chat/Composer.vue'
+import DiagnosticConsentCard from '../components/DiagnosticConsentCard.vue'
 import GapPickerDialog from '../components/GapPickerDialog.vue'
 import MessageList from '../components/chat/MessageList.vue'
 import MessageListSkeleton from '../components/chat/MessageListSkeleton.vue'
@@ -173,6 +183,7 @@ import { friendlyError } from '../lib/errors.js'
 import { useSessionStore } from '../stores/session.js'
 import { useToast } from '../composables/useToast.js'
 import { costBus } from '../services/costBus.js'
+import { getSessionProfile, patchProfile } from '../services/profileApi.js'
 import { getUploadStatus, uploadDocument, validateFile } from '../services/uploadApi.js'
 import { formatShortDateTime } from '../utils/formatDate.js'
 
@@ -202,6 +213,36 @@ const uploadStatus = ref(null)
 let uploadGen = 0
 const lastError = ref(null)
 const referenceBannerRef = ref(null)
+
+// Diagnostic consent card (spec 2026-07-25-diagnostic-consent-design.md).
+// diagProfile holds the latest GET /profile/:id payload ({ profile, etag });
+// null means not loaded or load failed - the card simply does not render,
+// the tutor's conversational offer is the fallback.
+const diagProfile = ref(null)
+const diagDismissed = ref(false)
+const diagError = ref('')
+
+const showDiagnosticCard = computed(() =>
+  Boolean(
+    diagProfile.value &&
+    diagProfile.value.profile?.knowledge_level == null &&
+    !store.pendingCheck &&
+    !diagDismissed.value &&
+    !isEnded.value &&
+    !resuming.value &&
+    !notFound.value,
+  ),
+)
+
+async function loadDiagProfile(id) {
+  try {
+    const data = await getSessionProfile(id)
+    if (id !== props.id) return // stale response from a previous session
+    diagProfile.value = data
+  } catch {
+    if (id === props.id) diagProfile.value = null
+  }
+}
 
 // F-18: a live region over the token-streaming bubble spams SRs with every
 // mutation. Announce discrete transitions instead. The store's stream state
@@ -365,6 +406,10 @@ async function loadCurrent(id) {
   // loadSession entry. loadCurrent only runs on mount + id-change, so a same-
   // session send-error stays retryable.
   lastError.value = null
+  diagProfile.value = null
+  diagDismissed.value = false
+  diagError.value = ''
+  loadDiagProfile(id) // deliberately not awaited: card is best-effort
   const startedAt = import.meta.env.DEV ? performance.now() : 0
   try {
     await store.loadSession(id)
@@ -469,6 +514,34 @@ async function retryLastMessage() {
   if (!lastSentText.value) return
   draft.value = lastSentText.value
   await send()
+}
+
+async function onDiagQuiz() {
+  if (!canSend.value) return
+  diagError.value = ''
+  try {
+    await store.sendMessageStreaming({ text: 'Quiz me to gauge my level' })
+  } catch (e) {
+    lastError.value = e
+  }
+}
+
+async function onDiagLevel(level) {
+  const etag = diagProfile.value?.etag
+  if (!etag) return
+  diagError.value = ''
+  try {
+    const res = await patchProfile(props.id, { knowledge_level: level }, etag)
+    diagProfile.value = { profile: res.profile, etag: res.etag }
+  } catch (e) {
+    if (e?.status === 412) {
+      // Concurrent write (e.g. a quiz just graded). Refetch; if the level is
+      // now set the card hides itself via showDiagnosticCard.
+      await loadDiagProfile(props.id)
+    } else {
+      diagError.value = 'Could not save your level. Try again.'
+    }
+  }
 }
 
 // End is triggered from the sidebar row context menu (S2). When the store
@@ -627,6 +700,9 @@ async function onSkipCheck() {
 async function onDoneCheck() {
   try {
     await store.completeCheck()
+    // A graded diagnostic sets knowledge_level server-side; refetch so the
+    // card stays gone (showDiagnosticCard) instead of reappearing stale.
+    await loadDiagProfile(props.id)
   } catch (e) {
     lastError.value = e
   }

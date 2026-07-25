@@ -9,6 +9,7 @@ import SessionEndedBanner from '@/components/SessionEndedBanner.vue'
 import CheckQuestion from '@/components/chat/CheckQuestion.vue'
 import Composer from '@/components/chat/Composer.vue'
 import { useSessionStore } from '@/stores/session.js'
+import { getSessionProfile, patchProfile } from '@/services/profileApi.js'
 
 const push = vi.fn()
 // Writes the mutation back into the shared mock route so the query-strip
@@ -38,6 +39,11 @@ vi.mock('@/services/uploadApi.js', () => ({
   validateFile: (...args) => validateFile(...args),
   getUploadStatus: (...args) => getUploadStatus(...args),
   MAX_UPLOAD_BYTES: 25 * 1024 * 1024,
+}))
+
+vi.mock('@/services/profileApi.js', () => ({
+  getSessionProfile: vi.fn(),
+  patchProfile: vi.fn(),
 }))
 
 const stubs = {
@@ -103,6 +109,8 @@ describe('SessionView', () => {
     bannerRefresh.mockReset()
     validateFile.mockReset()
     getUploadStatus.mockReset()
+    getSessionProfile.mockReset()
+    patchProfile.mockReset()
   })
 
   it('renders 404 state when loadSession 404s', async () => {
@@ -869,5 +877,101 @@ describe('SessionView', () => {
     store.streamState = 'idle'
     await nextTick()
     expect(region.text()).toBe('Reply finished.')
+  })
+
+  describe('diagnostic consent card', () => {
+    it('shows the card when knowledge_level is null and no check is pending', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      getSessionProfile.mockResolvedValue({ profile: { knowledge_level: null }, etag: 't1' })
+      const wrapper = mountView()
+      await flushPromises()
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(true)
+    })
+
+    it('hides the card when knowledge_level is set', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      getSessionProfile.mockResolvedValue({ profile: { knowledge_level: 'beginner' }, etag: 't1' })
+      const wrapper = mountView()
+      await flushPromises()
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(false)
+    })
+
+    it('hides the card while a check batch is open', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      store.pendingCheck = { gap: 'g', total: 1, currentIndex: 0, viewIndex: 0, items: [] }
+      getSessionProfile.mockResolvedValue({ profile: { knowledge_level: null }, etag: 't1' })
+      const wrapper = mountView()
+      await flushPromises()
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(false)
+    })
+
+    it('quiz button sends the canned message through the store', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      const sendSpy = vi.spyOn(store, 'sendMessageStreaming').mockResolvedValue()
+      getSessionProfile.mockResolvedValue({ profile: { knowledge_level: null }, etag: 't1' })
+      const wrapper = mountView()
+      await flushPromises()
+      await wrapper.get('[data-testid="diag-quiz"]').trigger('click')
+      await flushPromises()
+      expect(sendSpy).toHaveBeenCalledWith({ text: 'Quiz me to gauge my level' })
+    })
+
+    it('level button PATCHes the profile with the etag and hides the card', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      getSessionProfile.mockResolvedValue({ profile: { knowledge_level: null }, etag: 't1' })
+      patchProfile.mockResolvedValue({ profile: { knowledge_level: 'advanced' }, etag: 't2' })
+      const wrapper = mountView()
+      await flushPromises()
+      await wrapper.get('[data-testid="diag-level-advanced"]').trigger('click')
+      await flushPromises()
+      expect(patchProfile).toHaveBeenCalledWith('s1', { knowledge_level: 'advanced' }, 't1')
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(false)
+    })
+
+    it('412 on PATCH refetches the profile and hides the card if the level is now set', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      getSessionProfile.mockResolvedValueOnce({ profile: { knowledge_level: null }, etag: 't1' })
+      patchProfile.mockRejectedValue(Object.assign(new Error('precondition'), { status: 412 }))
+      getSessionProfile.mockResolvedValueOnce({
+        profile: { knowledge_level: 'beginner' },
+        etag: 't2',
+      })
+      const wrapper = mountView()
+      await flushPromises()
+      await wrapper.get('[data-testid="diag-level-beginner"]').trigger('click')
+      await flushPromises()
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(false)
+    })
+
+    it('dismiss hides the card locally', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      getSessionProfile.mockResolvedValue({ profile: { knowledge_level: null }, etag: 't1' })
+      const wrapper = mountView()
+      await flushPromises()
+      await wrapper.get('[data-testid="diag-dismiss"]').trigger('click')
+      await flushPromises()
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(false)
+    })
   })
 })
