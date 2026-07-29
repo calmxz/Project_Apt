@@ -665,15 +665,33 @@ describe('session store — streaming', () => {
     expect(s.endedTotal).toBe(2)
   })
 
-  it('continueTopic only counts the new session when the prior is not known locally (already ended, the normal case)', async () => {
+  it('continueTopic only counts the new session when the prior row is observably already ended (the normal case)', async () => {
     sessionsApi.createSession.mockResolvedValueOnce({ id: 'new-1', topic: 'Calculus' })
     const s = useSessionStore()
-    s.sessions = [] // prior not in the loaded window - continueTopic is only offered on ended rows
+    // Prior is outside the loaded window, but the caller hands over the row it
+    // rendered (library page / sidebar ended tab) and that row says "ended" --
+    // an observation, so no active->ended transition is counted.
+    s.sessions = []
     s.activeTotal = 3
     s.endedTotal = 1
-    await s.continueTopic({ id: 'old-1', topic: 'Calculus' })
+    await s.continueTopic({ id: 'old-1', topic: 'Calculus', ended_at: '2026-01-01T00:00:00Z' })
     expect(s.activeTotal).toBe(4)
     expect(s.endedTotal).toBe(1)
+  })
+
+  it('continueTopic counts the prior transition when the caller-held row is observably still active, even outside the window', async () => {
+    sessionsApi.createSession.mockResolvedValueOnce({ id: 'new-1', topic: 'Calculus' })
+    const s = useSessionStore()
+    s.sessions = [] // outside the loaded 20+20 window
+    s.activeTotal = 3
+    s.endedTotal = 1
+    const prior = { id: 'old-1', topic: 'Calculus', ended_at: null }
+    await s.continueTopic(prior)
+    // net: +1 for the new session, -1 for the prior leaving active = unchanged
+    expect(s.activeTotal).toBe(3)
+    expect(s.endedTotal).toBe(2)
+    // the caller's row is patched too, so whatever rendered it shows ended
+    expect(prior.ended_at).toBeTruthy()
   })
 
   it('sendMessageStreaming rejects without an active session', async () => {
@@ -937,5 +955,124 @@ describe('session store — streaming', () => {
     s.abortController = { abort }
     await s.loadSession('s1')
     expect(abort).not.toHaveBeenCalled()
+  })
+})
+
+// The sidebar renders `searchRows` directly, and those rows routinely
+// describe sessions outside the 20+20 `sessions` window. A mutating action
+// that patched only `sessions` would leave the rendered row untouched -- and
+// since the server treats end/reopen as idempotent (200 on replay), the user
+// would re-fire the action and skew the totals mirror on every retry.
+describe('session store - search rows are first-class mutation targets', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+  })
+
+  it('endSession patches a search row for a session outside the loaded window', async () => {
+    sessionsApi.endSession.mockResolvedValueOnce({ ended_at: '2026-01-01', summary: null })
+    const s = useSessionStore()
+    s.sessions = []
+    s.searchRows = [{ id: 'out-1', topic: 'Glycolysis', ended_at: null }]
+    await s.endSession('out-1')
+    expect(s.searchRows[0].ended_at).toBe('2026-01-01')
+  })
+
+  it('a replayed endSession on an already-ended search row does not move the totals twice', async () => {
+    sessionsApi.endSession.mockResolvedValue({ ended_at: '2026-01-01', summary: null })
+    const s = useSessionStore()
+    s.sessions = []
+    s.searchRows = [{ id: 'out-1', topic: 'Glycolysis', ended_at: null }]
+    s.activeTotal = 5
+    s.endedTotal = 2
+    await s.endSession('out-1')
+    expect(s.activeTotal).toBe(4)
+    expect(s.endedTotal).toBe(3)
+    // Replay: the server answers 200 again (F-30 idempotent end), but the row
+    // is now observably ended, so the transition must not be counted again.
+    await s.endSession('out-1')
+    expect(s.activeTotal).toBe(4)
+    expect(s.endedTotal).toBe(3)
+  })
+
+  it('reopenSession patches a search row and does not move the totals twice on replay', async () => {
+    sessionsApi.reopenSession.mockResolvedValue({ ok: true })
+    const s = useSessionStore()
+    s.sessions = []
+    s.searchRows = [{ id: 'out-1', topic: 'Glycolysis', ended_at: '2026-01-01' }]
+    s.activeTotal = 2
+    s.endedTotal = 5
+    await s.reopenSession('out-1')
+    expect(s.searchRows[0].ended_at).toBeNull()
+    expect(s.activeTotal).toBe(3)
+    expect(s.endedTotal).toBe(4)
+    await s.reopenSession('out-1')
+    expect(s.activeTotal).toBe(3)
+    expect(s.endedTotal).toBe(4)
+  })
+
+  it('renameSession patches a search row and rolls it back on failure', async () => {
+    const s = useSessionStore()
+    s.sessions = []
+    s.searchRows = [{ id: 'out-1', topic: 'Old name', ended_at: null }]
+    let reject
+    sessionsApi.renameSession.mockReturnValue(
+      new Promise((_, r) => {
+        reject = r
+      }),
+    )
+    const p = s.renameSession('out-1', 'New name').catch(() => {})
+    // Optimistic patch must land on the search row BEFORE the API settles --
+    // this is what proves the row a user sees actually updates, not just that
+    // a failure rolls back to a value indistinguishable from untouched.
+    expect(s.searchRows[0].topic).toBe('New name')
+    reject(new Error('nope'))
+    await p
+    expect(s.searchRows[0].topic).toBe('Old name')
+  })
+
+  it('renameSession rolls each held copy back to its own previous value', async () => {
+    const s = useSessionStore()
+    // The window copy and the search copy can legitimately disagree (the search
+    // response is fresher). A single shared `prev` would corrupt one of them.
+    s.sessions = [{ id: 'out-1', topic: 'Window name', ended_at: null }]
+    s.searchRows = [{ id: 'out-1', topic: 'Search name', ended_at: null }]
+    let reject
+    sessionsApi.renameSession.mockReturnValue(
+      new Promise((_, r) => {
+        reject = r
+      }),
+    )
+    const p = s.renameSession('out-1', 'New name').catch(() => {})
+    expect(s.sessions[0].topic).toBe('New name')
+    expect(s.searchRows[0].topic).toBe('New name')
+    reject(new Error('nope'))
+    await p
+    expect(s.sessions[0].topic).toBe('Window name')
+    expect(s.searchRows[0].topic).toBe('Search name')
+  })
+
+  it('setPinned patches a search row and rolls it back on failure', async () => {
+    const s = useSessionStore()
+    s.sessions = []
+    s.searchRows = [{ id: 'out-1', topic: 'X', ended_at: null, pinned: false }]
+    let reject
+    sessionsApi.setPinned.mockReturnValue(
+      new Promise((_, r) => {
+        reject = r
+      }),
+    )
+    const p = s.setPinned('out-1', true).catch(() => {})
+    expect(s.searchRows[0].pinned).toBe(true)
+    reject(new Error('nope'))
+    await p
+    expect(s.searchRows[0].pinned).toBe(false)
+  })
+
+  it('reset() clears searchRows', () => {
+    const s = useSessionStore()
+    s.searchRows = [{ id: 'out-1', topic: 'X', ended_at: null }]
+    s.reset()
+    expect(s.searchRows).toEqual([])
   })
 })

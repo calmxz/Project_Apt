@@ -541,6 +541,97 @@ describe('sidebar server-side search', () => {
     expect(showWarn).not.toHaveBeenCalled()
   })
 
+  // Search results describe sessions that are routinely OUTSIDE the store's
+  // 20+20 window. A row action must still be visible on the rendered row --
+  // otherwise nothing appears to happen, the user retries, and the server's
+  // idempotent end/reopen replays 200 while the totals mirror skews again.
+  it('reflects an End taken on a search row for a session outside the loaded window', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'a1', topic: 'Big-O', created_at: new Date().toISOString(), ended_at: null },
+    ]
+    store.activeTotal = 40
+    store.endedTotal = 0
+    apiGetSessionLibrary.mockResolvedValue({
+      items: [{ id: 'out1', topic: 'Glycolysis', ended_at: null, pinned: false }],
+      total: 1,
+    })
+    const api = await import('@/services/sessionsApi.js')
+    const endSpy = vi
+      .spyOn(api, 'endSession')
+      .mockResolvedValue({ ended_at: '2026-05-21T10:00:00Z', summary: null })
+    try {
+      wrapper = mount(Sidebar, { attachTo: document.body })
+      await flushPromises()
+      await wrapper.find('[data-testid="sidebar-search"]').setValue('gly')
+      await vi.advanceTimersByTimeAsync(250)
+      await flushPromises()
+      expect(store.sessions.some((s) => s.id === 'out1')).toBe(false)
+      expect(wrapper.find('[data-session-id="out1"]').classes()).not.toContain('sb-row--ended')
+
+      await wrapper
+        .find('[data-session-id="out1"] [data-testid="sidebar-row-menu-trigger"]')
+        .trigger('click')
+      await wrapper.find('[data-testid="sidebar-row-menu-end"]').trigger('click')
+      await flushPromises()
+
+      expect(endSpy).toHaveBeenCalledWith('out1')
+      expect(wrapper.find('[data-session-id="out1"]').classes()).toContain('sb-row--ended')
+      expect(store.activeTotal).toBe(39)
+      expect(store.endedTotal).toBe(1)
+      // End is no longer offered on a row the user can see is ended, so the
+      // repeat-click loop is closed at the UI as well as in the store.
+      await wrapper
+        .find('[data-session-id="out1"] [data-testid="sidebar-row-menu-trigger"]')
+        .trigger('click')
+      expect(wrapper.find('[data-testid="sidebar-row-menu-end"]').exists()).toBe(false)
+    } finally {
+      endSpy.mockRestore()
+    }
+  })
+
+  // Search is scoped to the current tab (status: statusFilter), so the tab
+  // toggle is the only control that widens the scope. Hiding it while
+  // searching leaves "No sessions match" with no way to look elsewhere.
+  it('keeps the status toggle visible while searching and re-fires the search when the tab changes', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'a1', topic: 'Big-O', created_at: new Date().toISOString(), ended_at: null },
+    ]
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    await wrapper.find('[data-testid="sidebar-search"]').setValue('gly')
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+    const endedTab = wrapper.find('[data-testid="sidebar-status-ended"]')
+    expect(endedTab.exists()).toBe(true)
+
+    apiGetSessionLibrary.mockClear()
+    await endedTab.trigger('click')
+    // The re-fire goes through the same debounce as a keystroke, not an
+    // unguarded immediate fetch.
+    await vi.advanceTimersByTimeAsync(249)
+    expect(apiGetSessionLibrary).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1)
+    expect(apiGetSessionLibrary).toHaveBeenCalledWith(
+      { status: 'ended', q: 'gly', sort: 'last_activity', limit: 20, offset: 0 },
+      { silent: true },
+    )
+  })
+
+  it('switching tabs with an empty query does not fire a search', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'a1', topic: 'Big-O', created_at: new Date().toISOString(), ended_at: null },
+    ]
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    apiGetSessionLibrary.mockClear()
+    await wrapper.find('[data-testid="sidebar-status-ended"]').trigger('click')
+    await vi.advanceTimersByTimeAsync(250)
+    expect(apiGetSessionLibrary).not.toHaveBeenCalled()
+  })
+
   it('does not throw when unmounted mid-debounce', async () => {
     const store = useSessionStore()
     store.sessions = [
@@ -1362,5 +1453,47 @@ describe('sidebar 20-row cap and View all links', () => {
     expect(store.endedTotal).toBe(1)
     const endedTab = wrapper.find('[data-testid="sidebar-status-ended"]')
     expect(endedTab.text()).toContain('(1)')
+  })
+
+  it('the pinned section header reports the capped rendered count, not the uncapped list length', async () => {
+    const store = useSessionStore()
+    store.sessions = makeActiveSessions(25, { pinned: true, prefix: 'p' })
+    store.activeTotal = 25
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(
+      wrapper.findAll('[data-testid="sidebar-section-pinned"] [data-session-id]'),
+    ).toHaveLength(20)
+    expect(
+      wrapper.find('[data-testid="sidebar-section-pinned"] .sb-section-count').text(),
+    ).toContain('20')
+  })
+
+  // The totals are a local mirror: createSession bumps activeTotal without
+  // pushing into the (windowed) `sessions` array, so a brand-new account sits
+  // at activeTotal=1 with zero rows. Offering "View all 1 sessions" directly
+  // under "No sessions yet" is the first-run path, and the two statements
+  // contradict each other.
+  it('never offers the active View all link while no rows are rendered', async () => {
+    const store = useSessionStore()
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    // Exactly what createSession does on a fresh account.
+    store.activeTotal = 1
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sidebar-empty-hint"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sidebar-view-all-active"]').exists()).toBe(false)
+  })
+
+  it('never offers the ended View all link while no ended rows are rendered', async () => {
+    const store = useSessionStore()
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    // e.g. ending a session that was outside the loaded ended window.
+    store.endedTotal = 1
+    await flushPromises()
+    await wrapper.find('[data-testid="sidebar-status-ended"]').trigger('click')
+    expect(wrapper.find('[data-testid="sidebar-ended-empty"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sidebar-view-all-ended"]').exists()).toBe(false)
   })
 })

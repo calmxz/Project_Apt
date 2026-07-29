@@ -20,7 +20,7 @@ const route = useRoute()
 const authStore = useAuthStore()
 const { isAuthenticated } = storeToRefs(authStore)
 const sessionStore = useSessionStore()
-const { sessions, loading, activeTotal, endedTotal } = storeToRefs(sessionStore)
+const { sessions, loading, activeTotal, endedTotal, searchRows } = storeToRefs(sessionStore)
 
 const listEl = ref(null)
 const asideEl = ref(null)
@@ -102,20 +102,25 @@ const SIDEBAR_CAP = 20
 
 // Search queries the library endpoint server-side (the store only holds a
 // SIDEBAR_CAP-windowed slice, so client-side filtering of `sessions` could
-// silently miss matches outside that window). Results live in local state
-// only -- the store's `sessions` array is never written by search.
-const searchResults = ref([])
+// silently miss matches outside that window). Results live in the store's
+// `searchRows` (not the sidebar's own local state) because the rows are
+// rendered directly and routinely describe sessions outside the `sessions`
+// window -- see session.js for why every mutating action must be able to
+// patch them. The store's `sessions` array is never written by search.
 const searchTotal = ref(0)
 const searchLoading = ref(false)
 let searchTimer = null
 let _searchSeq = 0
 
-watch(searchQuery, (raw) => {
+// Scoped to the current tab (status: statusFilter). Re-runs on a tab change
+// too, through the same debounce/sequence-guard path as a keystroke, so the
+// tab toggle can widen a search's scope without an unguarded fetch.
+watch([searchQuery, statusFilter], ([raw]) => {
   if (searchTimer) clearTimeout(searchTimer)
   const q = (raw || '').trim()
   if (!q) {
     _searchSeq++ // invalidate any in-flight response
-    searchResults.value = []
+    searchRows.value = []
     searchTotal.value = 0
     searchLoading.value = false
     return
@@ -130,11 +135,11 @@ watch(searchQuery, (raw) => {
         { silent: true },
       )
       if (seq !== _searchSeq) return // stale response; a newer query owns the state
-      searchResults.value = page.items
+      searchRows.value = page.items
       searchTotal.value = page.total
     } catch {
       if (seq !== _searchSeq) return
-      searchResults.value = []
+      searchRows.value = []
       searchTotal.value = 0
     } finally {
       if (seq === _searchSeq) searchLoading.value = false
@@ -148,7 +153,7 @@ watch(searchQuery, (raw) => {
 // query. The previous query's rows stay visible underneath (see template) --
 // only the link/total, which would be actively wrong, is hidden.
 const showViewAllSearch = computed(
-  () => !searchLoading.value && searchTotal.value > searchResults.value.length,
+  () => !searchLoading.value && searchTotal.value > searchRows.value.length,
 )
 
 // Pinned rows render first and count toward the cap; server's pinned_activity
@@ -164,8 +169,16 @@ const cappedEndedRows = computed(() => endedRows.value.slice(0, SIDEBAR_CAP))
 const activeRendered = computed(
   () => cappedPinnedActive.value.length + cappedActiveFlat.value.length,
 )
-const showViewAllActive = computed(() => activeTotal.value > activeRendered.value)
-const showViewAllEnded = computed(() => endedTotal.value > cappedEndedRows.value.length)
+// Gated on rendered rows > 0: createSession bumps activeTotal without
+// pushing into the (windowed) `sessions` array, so a fresh account can sit
+// at activeTotal=1 with zero rendered rows. Without this guard the sidebar
+// would show "No sessions yet" and "View all 1 sessions" at once.
+const showViewAllActive = computed(
+  () => activeRendered.value > 0 && activeTotal.value > activeRendered.value,
+)
+const showViewAllEnded = computed(
+  () => cappedEndedRows.value.length > 0 && endedTotal.value > cappedEndedRows.value.length,
+)
 
 const showSkeleton = computed(() => loading.value && !sessions.value.length)
 
@@ -319,7 +332,7 @@ function onNewSession() {
     </div>
 
     <div
-      v-if="isExpanded && !searching"
+      v-if="isExpanded"
       class="sb-status-toggle"
       role="group"
       aria-label="Filter sessions by status"
@@ -355,9 +368,9 @@ function onNewSession() {
               >{{ searchTotal }} {{ searchTotal === 1 ? 'match' : 'matches' }}</template
             >
           </p>
-          <ul v-if="searchResults.length" class="sb-session-list">
+          <ul v-if="searchRows.length" class="sb-session-list">
             <SidebarSessionRow
-              v-for="s in searchResults"
+              v-for="s in searchRows"
               :key="s.id"
               :session="s"
               :state="s.ended_at ? 'ended' : 'active'"
@@ -389,13 +402,13 @@ function onNewSession() {
           <!-- ACTIVE view: pinned mini-group + session activity buckets -->
           <template v-if="statusFilter === 'active'">
             <section
-              v-if="pinnedActive.length"
+              v-if="cappedPinnedActive.length"
               class="sb-section sb-section--pinned"
               data-testid="sidebar-section-pinned"
             >
               <h3 class="sb-section-label label">
                 <i class="pi pi-bookmark-fill" aria-hidden="true" /> Pinned
-                <span class="sb-section-count">({{ pinnedActive.length }})</span>
+                <span class="sb-section-count">({{ cappedPinnedActive.length }})</span>
               </h3>
               <ul class="sb-session-list">
                 <SidebarSessionRow
