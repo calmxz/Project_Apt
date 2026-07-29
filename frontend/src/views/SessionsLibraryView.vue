@@ -37,10 +37,18 @@ const loading = ref(false)
 const error = ref(null)
 
 // Controls, seeded from the route query (produced by the sidebar's "View
-// all" links -- Tasks 3-4).
+// all" links -- Tasks 3-4). Vue Router does not remount this component on
+// a query-only navigation to the same route, so the same validation is
+// re-run by the watcher below whenever the query changes post-mount.
 const VALID_STATUSES = ['all', 'active', 'ended']
-const status = ref(VALID_STATUSES.includes(route.query.status) ? route.query.status : 'all')
-const q = ref(typeof route.query.q === 'string' ? route.query.q : '')
+function statusFromQuery(query) {
+  return VALID_STATUSES.includes(query.status) ? query.status : 'all'
+}
+function qFromQuery(query) {
+  return typeof query.q === 'string' ? query.q : ''
+}
+const status = ref(statusFromQuery(route.query))
+const q = ref(qFromQuery(route.query))
 const sort = ref('last_activity')
 
 let _loadSeq = 0
@@ -77,10 +85,22 @@ const STATUSES = [
   { key: 'ended', label: 'Ended' },
 ]
 
+// Keeps the URL in sync with the in-page controls so a stale URL can never
+// mask a later sidebar link whose target query happens to match it (see
+// the route-query watcher below). `sort` is deliberately excluded -- it is
+// not a route query param.
+function syncRouteQuery() {
+  const nextQuery = { ...route.query, status: status.value }
+  if (q.value) nextQuery.q = q.value
+  else delete nextQuery.q
+  Promise.resolve(router.replace({ query: nextQuery })).catch(() => {})
+}
+
 function setStatus(next) {
   status.value = next
   offset.value = 0
   load()
+  syncRouteQuery()
 }
 
 function onSortChange() {
@@ -94,8 +114,27 @@ function onSearchInput() {
   searchTimer = setTimeout(() => {
     offset.value = 0
     load()
+    syncRouteQuery()
   }, 250)
 }
+
+// Re-seeds status/q when the query changes on an already-mounted instance
+// (e.g. a sidebar "View all" link clicked while already on this page --
+// Vue Router does not remount on a query-only navigation to the same
+// route). Guarded so that syncRouteQuery() above -- which changes the same
+// query keys -- never triggers a redundant second load.
+watch(
+  () => [route.query.status, route.query.q],
+  () => {
+    const nextStatus = statusFromQuery(route.query)
+    const nextQ = qFromQuery(route.query)
+    if (nextStatus === status.value && nextQ === q.value) return
+    status.value = nextStatus
+    q.value = nextQ
+    offset.value = 0
+    load()
+  },
+)
 
 function loadMore() {
   if (loading.value || error.value) return

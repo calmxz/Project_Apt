@@ -1,11 +1,32 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { reactive } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 const push = vi.fn()
-let mockRouteQuery = {}
+// Reactive so watch(() => route.query...) inside the component actually
+// re-fires when a test mutates a property post-mount (simulating a
+// same-route query navigation). replace() mimics real router behavior by
+// mutating this object in place, so tests can exercise the component's
+// own URL-sync -> route-watcher loop, not just a fresh-mount seed.
+//
+// Reassigned (not just cleared) fresh in beforeEach: vue-test-utils does
+// not auto-unmount prior wrappers, so a component from an earlier test can
+// still be alive with a live watch() on this object. Mutating a single
+// persistent object would re-trigger every leaked watcher from every
+// earlier test (they all share the one global getSessionLibrary mock),
+// inflating the call count nondeterministically. A fresh object per test
+// means only the current test's component instance is subscribed to it.
+let mockRouteQuery = reactive({})
+const replace = vi.fn((to) => {
+  if (to?.query) {
+    for (const k of Object.keys(mockRouteQuery)) delete mockRouteQuery[k]
+    Object.assign(mockRouteQuery, to.query)
+  }
+  return Promise.resolve()
+})
 vi.mock('vue-router', () => ({
-  useRouter: () => ({ push }),
+  useRouter: () => ({ push, replace }),
   useRoute: () => ({ query: mockRouteQuery }),
   RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
 }))
@@ -65,7 +86,8 @@ describe('SessionsLibraryView', () => {
     setActivePinia(createPinia())
     push.mockClear()
     sessionsApi.getSessionLibrary.mockReset()
-    mockRouteQuery = {}
+    replace.mockClear()
+    mockRouteQuery = reactive({})
     MockIntersectionObserver.instances = []
     vi.stubGlobal('IntersectionObserver', MockIntersectionObserver)
   })
@@ -160,6 +182,11 @@ describe('SessionsLibraryView', () => {
     expect(sessionsApi.getSessionLibrary).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'ended', offset: 0 }),
     )
+    // No-double-fetch guard: setStatus also syncs the URL (router.replace),
+    // which in a real router reactively updates route.query and could
+    // re-trigger the route-query watcher. A single click must still
+    // produce exactly one fetchLibrary call.
+    expect(sessionsApi.getSessionLibrary).toHaveBeenCalledTimes(1)
   })
 
   it('uses a toggle-group (role=group + aria-pressed), not an incomplete tabs contract', async () => {
@@ -564,7 +591,7 @@ describe('SessionsLibraryView', () => {
 
   describe('route query init', () => {
     it('seeds status and q from the route query on mount', async () => {
-      mockRouteQuery = { status: 'ended', q: 'gly' }
+      Object.assign(mockRouteQuery, { status: 'ended', q: 'gly' })
       sessionsApi.getSessionLibrary.mockResolvedValue(
         page([item('a', { ended_at: '2026-06-02T00:00:00Z' })]),
       )
@@ -581,7 +608,7 @@ describe('SessionsLibraryView', () => {
     })
 
     it('ignores an invalid status query value', async () => {
-      mockRouteQuery = { status: 'garbage' }
+      Object.assign(mockRouteQuery, { status: 'garbage' })
       sessionsApi.getSessionLibrary.mockResolvedValue(page([item('a')]))
       mount(SessionsLibraryView, { global: { stubs } })
       await flushPromises()
@@ -589,6 +616,114 @@ describe('SessionsLibraryView', () => {
       expect(sessionsApi.getSessionLibrary).toHaveBeenCalledWith(
         expect.objectContaining({ status: 'all' }),
       )
+    })
+  })
+
+  // Vue Router does not remount this component on a query-only navigation
+  // to the same matched route (e.g. clicking a sidebar "View all" link
+  // while already on /sessions). These tests mutate the route query on an
+  // already-mounted instance -- not a fresh mount -- to prove the page
+  // actually reacts.
+  describe('route query sync while mounted', () => {
+    it('a status query change refetches with the new status, resets offset, and replaces the list', async () => {
+      const page1Items = Array.from({ length: 20 }, (_, i) => item(`s${i + 1}`))
+      sessionsApi.getSessionLibrary.mockResolvedValueOnce(page(page1Items, { total: 45 }))
+      const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+      await flushPromises()
+      // Advance offset via an append so the offset:0 reset below is a real
+      // assertion, not a no-op because offset was already 0.
+      const page2Items = Array.from({ length: 20 }, (_, i) => item(`s${i + 21}`))
+      sessionsApi.getSessionLibrary.mockResolvedValueOnce(
+        page(page2Items, { total: 45, offset: 20 }),
+      )
+      MockIntersectionObserver.instances.at(-1).trigger(true)
+      await flushPromises()
+      expect(wrapper.findAll('[data-testid^="library-card-"]')).toHaveLength(40)
+
+      sessionsApi.getSessionLibrary.mockClear()
+      sessionsApi.getSessionLibrary.mockResolvedValueOnce(
+        page([item('e1', { ended_at: '2026-06-02T00:00:00Z' })], { total: 1 }),
+      )
+      mockRouteQuery.status = 'ended'
+      await flushPromises()
+
+      expect(sessionsApi.getSessionLibrary).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'ended', offset: 0 }),
+      )
+      expect(wrapper.findAll('[data-testid^="library-card-"]')).toHaveLength(1)
+      expect(wrapper.find('[data-testid="library-card-s1"]').exists()).toBe(false)
+      expect(wrapper.get('[data-testid="library-filter-ended"]').attributes('aria-pressed')).toBe(
+        'true',
+      )
+    })
+
+    it('a q query change refetches with the new q and updates the search input', async () => {
+      sessionsApi.getSessionLibrary.mockResolvedValueOnce(page([item('a')], { total: 1 }))
+      const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+      await flushPromises()
+
+      sessionsApi.getSessionLibrary.mockClear()
+      sessionsApi.getSessionLibrary.mockResolvedValueOnce(page([item('b')], { total: 1 }))
+      mockRouteQuery.q = 'gly'
+      await flushPromises()
+
+      expect(sessionsApi.getSessionLibrary).toHaveBeenCalledWith(
+        expect.objectContaining({ q: 'gly', offset: 0 }),
+      )
+      expect(wrapper.get('[data-testid="library-search"]').element.value).toBe('gly')
+    })
+
+    it('an invalid status arriving by query change falls back to all', async () => {
+      Object.assign(mockRouteQuery, { status: 'ended' })
+      sessionsApi.getSessionLibrary.mockResolvedValueOnce(
+        page([item('e1', { ended_at: '2026-06-02T00:00:00Z' })], { total: 1 }),
+      )
+      const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+      await flushPromises()
+
+      sessionsApi.getSessionLibrary.mockClear()
+      sessionsApi.getSessionLibrary.mockResolvedValueOnce(page([item('a')], { total: 1 }))
+      mockRouteQuery.status = 'garbage'
+      await flushPromises()
+
+      expect(sessionsApi.getSessionLibrary).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'all', offset: 0 }),
+      )
+      expect(wrapper.get('[data-testid="library-filter-all"]').attributes('aria-pressed')).toBe(
+        'true',
+      )
+    })
+
+    it('a query change arriving mid-append drops the stale append settle (F-15 interleaving)', async () => {
+      sessionsApi.getSessionLibrary.mockResolvedValueOnce(page([item('a')], { total: 45 }))
+      const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+      await flushPromises()
+
+      let resolveAppend
+      sessionsApi.getSessionLibrary.mockReturnValueOnce(
+        new Promise((r) => {
+          resolveAppend = r
+        }),
+      )
+      MockIntersectionObserver.instances.at(-1).trigger(true) // append at offset 1, in flight
+
+      let resolveQueryChange
+      sessionsApi.getSessionLibrary.mockReturnValueOnce(
+        new Promise((r) => {
+          resolveQueryChange = r
+        }),
+      )
+      mockRouteQuery.status = 'ended'
+      await flushPromises()
+
+      resolveQueryChange(page([item('e1', { ended_at: '2026-06-02T00:00:00Z' })], { total: 1 }))
+      await flushPromises()
+      resolveAppend(page([item('stale')], { total: 45, offset: 1 }))
+      await flushPromises()
+
+      expect(wrapper.find('[data-testid="library-card-e1"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="library-card-stale"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="library-card-a"]').exists()).toBe(false)
     })
   })
 })
