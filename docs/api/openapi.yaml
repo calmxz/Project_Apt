@@ -159,7 +159,7 @@ paths:
         - in: query
           name: sort
           required: false
-          schema: { type: string, enum: [last_activity, created, topic], default: last_activity }
+          schema: { type: string, enum: [last_activity, created, topic, pinned_activity], default: last_activity }
         - in: query
           name: limit
           required: false

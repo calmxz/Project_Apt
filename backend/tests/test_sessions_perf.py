@@ -145,8 +145,9 @@ def test_list_sessions_preview_skips_non_space_whitespace(client, db_session, se
     assert item["last_message_preview"] == "real answer here"
 
 
-def _seed_simple(db, sid, topic, ended=False, activity=None, created=None):
+def _seed_simple(db, sid, topic, ended=False, activity=None, created=None, pinned=False):
     sess = SessionModel(id=sid, user_id=USER_ID, topic=topic, topic_profile_json="{}",
+                        pinned=pinned,
                         ended_at=(datetime(2026, 6, 2, tzinfo=timezone.utc) if ended else None))
     # Pin created_at when given so last_activity fallback (created_at when a
     # session has no messages) is deterministic instead of defaulting to the
@@ -196,6 +197,50 @@ def test_library_sort_last_activity(client, db_session, seeded_user):
     ids = [i["id"] for i in r.json()["items"]]
     # The session touched most recently sorts first.
     assert ids[0] == "lib_old_created_recent_active"
+
+
+def test_library_sort_pinned_activity_pins_first(client, db_session, seeded_user):
+    base = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    # Unpinned but far more recently active than the pinned row.
+    _seed_simple(db_session, "pa_unpinned_recent", "A",
+                 created=base, activity=base + timedelta(days=20))
+    # Pinned, stale activity: must still sort first.
+    _seed_simple(db_session, "pa_pinned_stale", "B",
+                 created=base, activity=base + timedelta(days=1), pinned=True)
+    r = client.get(f"/api/sessions/library?sort=pinned_activity&user_id={USER_ID}")
+    assert r.status_code == 200, r.text
+    ids = [i["id"] for i in r.json()["items"]]
+    assert ids == ["pa_pinned_stale", "pa_unpinned_recent"]
+
+
+def test_library_sort_pinned_activity_orders_by_activity_within_groups(client, db_session, seeded_user):
+    base = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    _seed_simple(db_session, "pa_p_old", "P old", created=base,
+                 activity=base + timedelta(days=1), pinned=True)
+    _seed_simple(db_session, "pa_p_new", "P new", created=base,
+                 activity=base + timedelta(days=2), pinned=True)
+    _seed_simple(db_session, "pa_u_old", "U old", created=base,
+                 activity=base + timedelta(days=3))
+    _seed_simple(db_session, "pa_u_new", "U new", created=base,
+                 activity=base + timedelta(days=4))
+    r = client.get(f"/api/sessions/library?sort=pinned_activity&user_id={USER_ID}")
+    assert r.status_code == 200, r.text
+    ids = [i["id"] for i in r.json()["items"]]
+    assert ids == ["pa_p_new", "pa_p_old", "pa_u_new", "pa_u_old"]
+
+
+def test_library_sort_pinned_activity_respects_status_and_limit(client, db_session, seeded_user):
+    base = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    _seed_simple(db_session, "pa_active_pinned", "AP", created=base, pinned=True)
+    _seed_simple(db_session, "pa_active_plain", "AA", created=base + timedelta(days=1))
+    _seed_simple(db_session, "pa_ended", "E", created=base + timedelta(days=2), ended=True)
+    r = client.get(
+        f"/api/sessions/library?sort=pinned_activity&status=active&limit=1&user_id={USER_ID}"
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["total"] == 2  # ended row excluded from total
+    assert [i["id"] for i in body["items"]] == ["pa_active_pinned"]
 
 
 def test_library_route_not_shadowed_by_session_id(client, db_session, seeded_user):
