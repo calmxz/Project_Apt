@@ -163,6 +163,56 @@ describe('session store', () => {
     expect(s.currentSession.ended_at).toBeNull()
   })
 
+  it('createSession increments activeTotal (a fresh session is always active)', async () => {
+    sessionsApi.createSession.mockResolvedValueOnce({ id: 's2', topic: 't' })
+    const s = useSessionStore()
+    s.activeTotal = 3
+    await s.createSession({ topic: 't', seedMode: 'fresh' })
+    expect(s.activeTotal).toBe(4)
+  })
+
+  it('endSession moves the total from active to ended unconditionally, even when the session is outside the loaded window', async () => {
+    sessionsApi.endSession.mockResolvedValueOnce({ ended_at: '2026-01-01', summary: null })
+    const s = useSessionStore()
+    s.activeTotal = 5
+    s.endedTotal = 2
+    s.sessions = [] // session not in the loaded 20+20 window
+    await s.endSession('outside-window-1')
+    expect(s.activeTotal).toBe(4)
+    expect(s.endedTotal).toBe(3)
+  })
+
+  it('endSession clamps activeTotal at zero instead of going negative', async () => {
+    sessionsApi.endSession.mockResolvedValueOnce({ ended_at: '2026-01-01', summary: null })
+    const s = useSessionStore()
+    s.activeTotal = 0
+    s.endedTotal = 0
+    await s.endSession('s1')
+    expect(s.activeTotal).toBe(0)
+    expect(s.endedTotal).toBe(1)
+  })
+
+  it('reopenSession moves the total from ended to active unconditionally, even when the session is outside the loaded window', async () => {
+    sessionsApi.reopenSession.mockResolvedValueOnce({ ok: true })
+    const s = useSessionStore()
+    s.activeTotal = 2
+    s.endedTotal = 5
+    s.sessions = [] // session not in the loaded 20+20 window
+    await s.reopenSession('outside-window-1')
+    expect(s.activeTotal).toBe(3)
+    expect(s.endedTotal).toBe(4)
+  })
+
+  it('reopenSession clamps endedTotal at zero instead of going negative', async () => {
+    sessionsApi.reopenSession.mockResolvedValueOnce({ ok: true })
+    const s = useSessionStore()
+    s.activeTotal = 0
+    s.endedTotal = 0
+    await s.reopenSession('s1')
+    expect(s.activeTotal).toBe(1)
+    expect(s.endedTotal).toBe(0)
+  })
+
   it('reopen 409 duplicate_topic exposes the conflicting session id', async () => {
     const store = useSessionStore()
     sessionsApi.reopenSession.mockRejectedValue(
@@ -601,6 +651,29 @@ describe('session store — streaming', () => {
     })
     expect(created.id).toBe('new-1')
     expect(s.sessions.find((x) => x.id === 'old-1').ended_at).toBeTruthy()
+  })
+
+  it('continueTopic moves the prior total from active to ended when the prior was locally known active', async () => {
+    sessionsApi.createSession.mockResolvedValueOnce({ id: 'new-1', topic: 'Calculus' })
+    const s = useSessionStore()
+    s.sessions = [{ id: 'old-1', topic: 'Calculus', ended_at: null }]
+    s.activeTotal = 3 // includes old-1
+    s.endedTotal = 1
+    await s.continueTopic({ id: 'old-1', topic: 'Calculus' })
+    // net: +1 for the new session, -1 for the prior leaving active = unchanged
+    expect(s.activeTotal).toBe(3)
+    expect(s.endedTotal).toBe(2)
+  })
+
+  it('continueTopic only counts the new session when the prior is not known locally (already ended, the normal case)', async () => {
+    sessionsApi.createSession.mockResolvedValueOnce({ id: 'new-1', topic: 'Calculus' })
+    const s = useSessionStore()
+    s.sessions = [] // prior not in the loaded window - continueTopic is only offered on ended rows
+    s.activeTotal = 3
+    s.endedTotal = 1
+    await s.continueTopic({ id: 'old-1', topic: 'Calculus' })
+    expect(s.activeTotal).toBe(4)
+    expect(s.endedTotal).toBe(1)
   })
 
   it('sendMessageStreaming rejects without an active session', async () => {

@@ -128,6 +128,10 @@ export const useSessionStore = defineStore('session', () => {
         seedMode,
         priorSessionId,
       })
+      // A freshly created session is always active server-side; count it
+      // unconditionally even though it isn't added to the (windowed)
+      // `sessions` list here.
+      activeTotal.value += 1
       currentSession.value = created
       currentSessionId.value = created.id
       messages.value = []
@@ -246,6 +250,11 @@ export const useSessionStore = defineStore('session', () => {
       }
       const idx = sessions.value.findIndex((s) => s.id === id)
       if (idx !== -1) sessions.value[idx].ended_at = resp.ended_at
+      // Totals count server-side rows regardless of whether this session is
+      // in the loaded (windowed) `sessions` list, so this must not sit
+      // inside the `idx !== -1` guard above.
+      activeTotal.value = Math.max(0, activeTotal.value - 1)
+      endedTotal.value += 1
       const summary = resp?.summary
       pendingSummary.value = {
         sessionId: id,
@@ -279,6 +288,10 @@ export const useSessionStore = defineStore('session', () => {
       }
       const idx = sessions.value.findIndex((s) => s.id === sessionId)
       if (idx !== -1) sessions.value[idx].ended_at = null
+      // Same reasoning as endSession: totals track server truth, not the
+      // loaded window, so this must not sit inside the `idx !== -1` guard.
+      endedTotal.value = Math.max(0, endedTotal.value - 1)
+      activeTotal.value += 1
       return resp
     } catch (e) {
       // I-05: the contract hands over the conflicting session id - surface
@@ -306,11 +319,24 @@ export const useSessionStore = defineStore('session', () => {
       // Backend auto-ends the prior session on resume-create; reflect it
       // locally so ended-state UI updates without a refetch.
       const idx = sessions.value.findIndex((x) => x.id === prior.id)
+      const priorWasActive =
+        (idx !== -1 && !sessions.value[idx].ended_at) ||
+        (currentSession.value?.id === prior.id && !currentSession.value.ended_at)
       if (idx !== -1 && !sessions.value[idx].ended_at) {
         sessions.value[idx].ended_at = new Date().toISOString()
       }
       if (currentSession.value?.id === prior.id && !currentSession.value.ended_at) {
         currentSession.value.ended_at = new Date().toISOString()
+      }
+      // The new session is always active. The prior only moves active ->
+      // ended in the totals when we can actually see locally that it was
+      // still active - continueTopic is only ever offered on already-ended
+      // rows in the UI, so in the normal case the prior is already counted
+      // in endedTotal and there is no transition to apply here.
+      activeTotal.value += 1
+      if (priorWasActive) {
+        activeTotal.value = Math.max(0, activeTotal.value - 1)
+        endedTotal.value += 1
       }
       currentSession.value = created
       currentSessionId.value = created.id

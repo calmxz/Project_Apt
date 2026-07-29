@@ -96,13 +96,18 @@ const activeFlat = computed(() => activeGroups.value.flatMap((g) => g.rows))
 const SIDEBAR_CAP = 20
 
 // Pinned rows render first and count toward the cap; server's pinned_activity
-// sort already guarantees pinned rows are inside the fetched page.
+// sort already guarantees pinned rows are inside the fetched page. Pinned
+// itself is also sliced to the cap so >20 pinned rows can never push the
+// component's total render past SIDEBAR_CAP on their own.
+const cappedPinnedActive = computed(() => pinnedActive.value.slice(0, SIDEBAR_CAP))
 const cappedActiveFlat = computed(() =>
-  activeFlat.value.slice(0, Math.max(0, SIDEBAR_CAP - pinnedActive.value.length)),
+  activeFlat.value.slice(0, Math.max(0, SIDEBAR_CAP - cappedPinnedActive.value.length)),
 )
 const cappedEndedRows = computed(() => endedRows.value.slice(0, SIDEBAR_CAP))
 
-const activeRendered = computed(() => pinnedActive.value.length + cappedActiveFlat.value.length)
+const activeRendered = computed(
+  () => cappedPinnedActive.value.length + cappedActiveFlat.value.length,
+)
 const showViewAllActive = computed(() => activeTotal.value > activeRendered.value)
 const showViewAllEnded = computed(() => endedTotal.value > cappedEndedRows.value.length)
 
@@ -323,7 +328,7 @@ function onNewSession() {
               </h3>
               <ul class="sb-session-list">
                 <SidebarSessionRow
-                  v-for="s in pinnedActive"
+                  v-for="s in cappedPinnedActive"
                   :key="s.id"
                   :session="s"
                   state="active"
@@ -402,7 +407,7 @@ function onNewSession() {
       <template v-else>
         <ul v-if="sessions.length" class="sb-session-list sb-session-list--collapsed">
           <SidebarSessionRow
-            v-for="s in [...pinnedActive, ...cappedActiveFlat, ...cappedEndedRows]"
+            v-for="s in [...cappedPinnedActive, ...cappedActiveFlat, ...cappedEndedRows]"
             :key="s.id"
             :session="s"
             :state="s.ended_at ? 'ended' : 'active'"

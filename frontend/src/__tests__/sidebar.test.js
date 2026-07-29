@@ -987,6 +987,37 @@ describe('sidebar 20-row cap and View all links', () => {
     const viewAll = wrapper.find('[data-testid="sidebar-view-all-active"]')
     expect(viewAll.exists()).toBe(true)
     expect(viewAll.text()).toContain('View all 28 sessions')
+    const viewAllComponent = wrapper
+      .findAllComponents(MockRouterLink)
+      .find((c) => c.attributes('data-testid') === 'sidebar-view-all-active')
+    expect(viewAllComponent.props('to')).toEqual({
+      name: 'sessions-library',
+      query: { status: 'active' },
+    })
+  })
+
+  it('caps pinned rows themselves at 20, leaving no room for unpinned rows', async () => {
+    const store = useSessionStore()
+    const pinnedRows = makeActiveSessions(25, { pinned: true, prefix: 'p' })
+    const unpinnedRows = makeActiveSessions(5, { pinned: false, prefix: 'u' })
+    store.sessions = [...pinnedRows, ...unpinnedRows]
+    store.activeTotal = 30
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(
+      wrapper.findAll('[data-testid="sidebar-section-pinned"] [data-session-id]'),
+    ).toHaveLength(20)
+    expect(wrapper.findAll('[data-testid="sidebar-quick-group"] [data-session-id]')).toHaveLength(0)
+  })
+
+  it('caps the collapsed icon rail at 20 pinned rows too', async () => {
+    sidebarTest._setExpanded(false)
+    const store = useSessionStore()
+    store.sessions = makeActiveSessions(25, { pinned: true, prefix: 'p' })
+    store.activeTotal = 25
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(wrapper.findAll('.sb-session-list--collapsed [data-session-id]')).toHaveLength(20)
   })
 
   it('caps the ended tab at 20 and links with status=ended', async () => {
@@ -1028,5 +1059,38 @@ describe('sidebar 20-row cap and View all links', () => {
     await flushPromises()
     const endedTab = wrapper.find('[data-testid="sidebar-status-ended"]')
     expect(endedTab.text()).toContain('(40)')
+  })
+
+  it('ending a session from the sidebar updates the Ended badge and View all counts immediately, without a refetch', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      {
+        id: 'a1',
+        topic: 'Big-O',
+        created_at: '2026-05-20T10:00:00Z',
+        ended_at: null,
+        pinned: false,
+      },
+    ]
+    store.activeTotal = 1
+    store.endedTotal = 0
+    const api = await import('@/services/sessionsApi.js')
+    vi.spyOn(api, 'endSession').mockResolvedValue({
+      ended_at: '2026-05-21T10:00:00Z',
+      summary: null,
+    })
+    const listSpy = vi.spyOn(store, 'listSessions')
+    wrapper = mount(Sidebar, { attachTo: document.body })
+    await flushPromises()
+    await wrapper
+      .find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]')
+      .trigger('click')
+    await wrapper.find('[data-testid="sidebar-row-menu-end"]').trigger('click')
+    await flushPromises()
+    expect(listSpy).not.toHaveBeenCalled()
+    expect(store.activeTotal).toBe(0)
+    expect(store.endedTotal).toBe(1)
+    const endedTab = wrapper.find('[data-testid="sidebar-status-ended"]')
+    expect(endedTab.text()).toContain('(1)')
   })
 })
