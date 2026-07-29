@@ -3,8 +3,10 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 const push = vi.fn()
+let mockRouteQuery = {}
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push }),
+  useRoute: () => ({ query: mockRouteQuery }),
   RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
 }))
 
@@ -36,11 +38,36 @@ function item(id, over = {}) {
   }
 }
 
+class MockIntersectionObserver {
+  static instances = []
+  constructor(cb, options) {
+    this.cb = cb
+    this.options = options
+    this.observed = new Set()
+    MockIntersectionObserver.instances.push(this)
+  }
+  observe(el) {
+    this.observed.add(el)
+  }
+  unobserve(el) {
+    this.observed.delete(el)
+  }
+  disconnect() {
+    this.observed.clear()
+  }
+  trigger(isIntersecting = true) {
+    this.cb([{ isIntersecting }])
+  }
+}
+
 describe('SessionsLibraryView', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     push.mockClear()
     sessionsApi.getSessionLibrary.mockReset()
+    mockRouteQuery = {}
+    MockIntersectionObserver.instances = []
+    vi.stubGlobal('IntersectionObserver', MockIntersectionObserver)
   })
 
   it('renders rich cards from the library page', async () => {
@@ -195,48 +222,9 @@ describe('SessionsLibraryView', () => {
     vi.useRealTimers()
   })
 
-  it('Next advances offset by limit and refetches; Prev goes back', async () => {
+  it('covers the Untitled topic fallback', async () => {
     sessionsApi.getSessionLibrary.mockResolvedValue(
-      page([item('a')], { total: 45, limit: 20, offset: 0 }),
-    )
-    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
-    await flushPromises()
-
-    sessionsApi.getSessionLibrary.mockClear()
-    sessionsApi.getSessionLibrary.mockResolvedValue(
-      page([item('b')], { total: 45, limit: 20, offset: 20 }),
-    )
-    await wrapper.get('[data-testid="library-next"]').trigger('click')
-    await flushPromises()
-    expect(sessionsApi.getSessionLibrary).toHaveBeenCalledWith(
-      expect.objectContaining({ offset: 20 }),
-    )
-
-    sessionsApi.getSessionLibrary.mockClear()
-    sessionsApi.getSessionLibrary.mockResolvedValue(
-      page([item('a')], { total: 45, limit: 20, offset: 0 }),
-    )
-    await wrapper.get('[data-testid="library-prev"]').trigger('click')
-    await flushPromises()
-    expect(sessionsApi.getSessionLibrary).toHaveBeenCalledWith(
-      expect.objectContaining({ offset: 0 }),
-    )
-  })
-
-  it('disables Next on the last page', async () => {
-    sessionsApi.getSessionLibrary.mockResolvedValue(
-      page([item('a')], { total: 10, limit: 20, offset: 0 }),
-    )
-    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
-    await flushPromises()
-    expect(wrapper.get('[data-testid="library-next"]').attributes('disabled')).toBeDefined()
-    expect(wrapper.get('[data-testid="library-prev"]').attributes('disabled')).toBeDefined()
-  })
-
-  it('covers Untitled topic and the empty 0-of-0 range', async () => {
-    // total:0 with one item exercises both `topic || 'Untitled'` and rangeLabel '0 of 0'.
-    sessionsApi.getSessionLibrary.mockResolvedValue(
-      page([item('a', { topic: '' })], { total: 0, limit: 20, offset: 0 }),
+      page([item('a', { topic: '' })], { total: 1, limit: 20, offset: 0 }),
     )
     const wrapper = mount(SessionsLibraryView, { global: { stubs } })
     await flushPromises()
@@ -401,5 +389,187 @@ describe('SessionsLibraryView', () => {
     const wrapper = mount(SessionsLibraryView, { global: { stubs } })
     await flushPromises()
     expect(wrapper.get('[data-testid="library-continue-z"]').text()).toBe('Continue topic')
+  })
+
+  describe('infinite scroll', () => {
+    const lastObserver = () => MockIntersectionObserver.instances.at(-1)
+
+    it('appends the next page when the sentinel intersects', async () => {
+      const page1Items = Array.from({ length: 20 }, (_, i) => item(`s${i + 1}`))
+      sessionsApi.getSessionLibrary.mockResolvedValueOnce(page(page1Items, { total: 45 }))
+      const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+      await flushPromises()
+      expect(wrapper.findAll('[data-testid^="library-card-"]')).toHaveLength(20)
+
+      const page2Items = Array.from({ length: 20 }, (_, i) => item(`s${i + 21}`))
+      sessionsApi.getSessionLibrary.mockResolvedValueOnce(
+        page(page2Items, { total: 45, offset: 20 }),
+      )
+      lastObserver().trigger(true)
+      await flushPromises()
+
+      expect(sessionsApi.getSessionLibrary).toHaveBeenCalledWith(
+        expect.objectContaining({ offset: 20 }),
+      )
+      expect(wrapper.findAll('[data-testid^="library-card-"]')).toHaveLength(40)
+      expect(wrapper.find('[data-testid="library-card-s1"]').exists()).toBe(true)
+    })
+
+    it('does not fetch once all items are loaded', async () => {
+      sessionsApi.getSessionLibrary.mockResolvedValueOnce(
+        page([item('a'), item('b')], { total: 2 }),
+      )
+      mount(SessionsLibraryView, { global: { stubs } })
+      await flushPromises()
+
+      sessionsApi.getSessionLibrary.mockClear()
+      lastObserver().trigger(true)
+      await flushPromises()
+      expect(sessionsApi.getSessionLibrary).not.toHaveBeenCalled()
+    })
+
+    it('does not double-fetch while a page is in flight', async () => {
+      sessionsApi.getSessionLibrary.mockResolvedValueOnce(page([item('a')], { total: 45 }))
+      mount(SessionsLibraryView, { global: { stubs } })
+      await flushPromises()
+
+      sessionsApi.getSessionLibrary.mockClear()
+      let resolveAppend
+      sessionsApi.getSessionLibrary.mockReturnValueOnce(
+        new Promise((r) => {
+          resolveAppend = r
+        }),
+      )
+      lastObserver().trigger(true)
+      lastObserver().trigger(true)
+      await flushPromises()
+      expect(sessionsApi.getSessionLibrary).toHaveBeenCalledTimes(1)
+
+      resolveAppend(page([item('b')], { total: 45, offset: 1 }))
+      await flushPromises()
+    })
+
+    it('filter change clears the list and refetches from offset 0', async () => {
+      const page1Items = Array.from({ length: 20 }, (_, i) => item(`s${i + 1}`))
+      sessionsApi.getSessionLibrary.mockResolvedValueOnce(page(page1Items, { total: 45 }))
+      const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+      await flushPromises()
+
+      const page2Items = Array.from({ length: 20 }, (_, i) => item(`s${i + 21}`))
+      sessionsApi.getSessionLibrary.mockResolvedValueOnce(
+        page(page2Items, { total: 45, offset: 20 }),
+      )
+      lastObserver().trigger(true)
+      await flushPromises()
+      expect(wrapper.findAll('[data-testid^="library-card-"]')).toHaveLength(40)
+
+      sessionsApi.getSessionLibrary.mockClear()
+      sessionsApi.getSessionLibrary.mockResolvedValueOnce(
+        page([item('e1', { ended_at: '2026-06-02T00:00:00Z' })], { total: 1 }),
+      )
+      await wrapper.get('[data-testid="library-filter-ended"]').trigger('click')
+      await flushPromises()
+
+      expect(sessionsApi.getSessionLibrary).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'ended', offset: 0 }),
+      )
+      expect(wrapper.findAll('[data-testid^="library-card-"]')).toHaveLength(1)
+      expect(wrapper.find('[data-testid="library-card-s1"]').exists()).toBe(false)
+    })
+
+    it('append error shows retry and pauses; retry resumes', async () => {
+      sessionsApi.getSessionLibrary.mockResolvedValueOnce(page([item('a')], { total: 45 }))
+      const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+      await flushPromises()
+
+      sessionsApi.getSessionLibrary.mockRejectedValueOnce(new Error('append failed'))
+      lastObserver().trigger(true)
+      await flushPromises()
+      expect(wrapper.find('[data-testid="library-retry"]').exists()).toBe(true)
+
+      sessionsApi.getSessionLibrary.mockClear()
+      lastObserver().trigger(true)
+      await flushPromises()
+      expect(sessionsApi.getSessionLibrary).not.toHaveBeenCalled()
+
+      sessionsApi.getSessionLibrary.mockResolvedValueOnce(
+        page([item('b')], { total: 45, offset: 1 }),
+      )
+      await wrapper.get('[data-testid="library-retry"]').trigger('click')
+      await flushPromises()
+      expect(sessionsApi.getSessionLibrary).toHaveBeenCalledWith(
+        expect.objectContaining({ offset: 1 }),
+      )
+      expect(wrapper.find('[data-testid="library-retry"]').exists()).toBe(false)
+    })
+
+    it('stale response is dropped (race guard)', async () => {
+      sessionsApi.getSessionLibrary.mockResolvedValueOnce(page([item('a')], { total: 45 }))
+      const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+      await flushPromises()
+
+      let resolveAppend
+      sessionsApi.getSessionLibrary.mockReturnValueOnce(
+        new Promise((r) => {
+          resolveAppend = r
+        }),
+      )
+      lastObserver().trigger(true) // starts an append at offset 1
+
+      let resolveFilter
+      sessionsApi.getSessionLibrary.mockReturnValueOnce(
+        new Promise((r) => {
+          resolveFilter = r
+        }),
+      )
+      await wrapper.get('[data-testid="library-filter-ended"]').trigger('click')
+
+      resolveFilter(page([item('e1', { ended_at: '2026-06-02T00:00:00Z' })], { total: 1 }))
+      await flushPromises()
+      resolveAppend(page([item('stale')], { total: 45, offset: 1 }))
+      await flushPromises()
+
+      expect(wrapper.find('[data-testid="library-card-e1"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="library-card-stale"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="library-card-a"]').exists()).toBe(false)
+    })
+
+    it('pager is gone', async () => {
+      sessionsApi.getSessionLibrary.mockResolvedValue(page([item('a')]))
+      const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+      await flushPromises()
+      expect(wrapper.find('[data-testid="library-prev"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="library-next"]').exists()).toBe(false)
+    })
+  })
+
+  describe('route query init', () => {
+    it('seeds status and q from the route query on mount', async () => {
+      mockRouteQuery = { status: 'ended', q: 'gly' }
+      sessionsApi.getSessionLibrary.mockResolvedValue(
+        page([item('a', { ended_at: '2026-06-02T00:00:00Z' })]),
+      )
+      const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+      await flushPromises()
+
+      expect(sessionsApi.getSessionLibrary).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'ended', q: 'gly', offset: 0 }),
+      )
+      expect(wrapper.get('[data-testid="library-filter-ended"]').attributes('aria-pressed')).toBe(
+        'true',
+      )
+      expect(wrapper.get('[data-testid="library-search"]').element.value).toBe('gly')
+    })
+
+    it('ignores an invalid status query value', async () => {
+      mockRouteQuery = { status: 'garbage' }
+      sessionsApi.getSessionLibrary.mockResolvedValue(page([item('a')]))
+      mount(SessionsLibraryView, { global: { stubs } })
+      await flushPromises()
+
+      expect(sessionsApi.getSessionLibrary).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'all' }),
+      )
+    })
   })
 })
