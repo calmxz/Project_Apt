@@ -142,7 +142,14 @@ watch(searchQuery, (raw) => {
   }, 250)
 })
 
-const showViewAllSearch = computed(() => searchTotal.value > searchResults.value.length)
+// Gated on !searchLoading: while a newer query is in flight, searchTotal
+// still reflects the PREVIOUS query's total. Showing the link during that
+// window would pair a stale total with the freshly typed q in its route
+// query. The previous query's rows stay visible underneath (see template) --
+// only the link/total, which would be actively wrong, is hidden.
+const showViewAllSearch = computed(
+  () => !searchLoading.value && searchTotal.value > searchResults.value.length,
+)
 
 // Pinned rows render first and count toward the cap; server's pinned_activity
 // sort already guarantees pinned rows are inside the fetched page. Pinned

@@ -10,8 +10,10 @@ vi.mock('vue-router', () => ({
   useRoute: () => routeRef,
 }))
 const showSuccess = vi.fn()
+const showError = vi.fn()
+const showWarn = vi.fn()
 vi.mock('@/composables/useToast.js', () => ({
-  useToast: () => ({ showError: vi.fn(), showWarn: vi.fn(), showSuccess }),
+  useToast: () => ({ showError, showWarn, showSuccess }),
 }))
 const apiReviewQueue = vi.fn()
 vi.mock('@/services/reviewApi.js', () => ({
@@ -325,6 +327,9 @@ describe('sidebar server-side search', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     routerPush.mockClear()
+    showSuccess.mockClear()
+    showError.mockClear()
+    showWarn.mockClear()
     localStorage.clear()
     setViewport(1400) // desktop expanded
     sidebarTest._setExpanded(true)
@@ -409,6 +414,61 @@ describe('sidebar server-side search', () => {
     })
   })
 
+  it('hides View all while a newer query is in flight, so the stale total never pairs with the fresh query', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'a1', topic: 'Big-O', created_at: new Date().toISOString(), ended_at: null },
+    ]
+    let resolveA
+    let resolveAb
+    apiGetSessionLibrary.mockImplementation((params) => {
+      if (params.q === 'a') return new Promise((resolve) => (resolveA = resolve))
+      if (params.q === 'ab') return new Promise((resolve) => (resolveAb = resolve))
+      return Promise.resolve({ items: [], total: 0 })
+    })
+    wrapper = mount(Sidebar)
+    await flushPromises()
+
+    // Settle the first query: total 5, 2 rows -> View all is visible.
+    await wrapper.find('[data-testid="sidebar-search"]').setValue('a')
+    await vi.advanceTimersByTimeAsync(250)
+    resolveA({
+      items: [
+        { id: 'r1', topic: 'Apple', ended_at: null },
+        { id: 'r2', topic: 'Ant', ended_at: null },
+      ],
+      total: 5,
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sidebar-view-all-search"]').exists()).toBe(true)
+
+    // Type a further character -- a newer query is now in flight.
+    await wrapper.find('[data-testid="sidebar-search"]').setValue('ab')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sidebar-search-count"]').text()).toContain('Searching')
+    // The stale total (5) must not render a link -- it would pair "View all 5
+    // matches" with a route query.q of 'ab', describing two different searches.
+    expect(wrapper.find('[data-testid="sidebar-view-all-search"]').exists()).toBe(false)
+    // Previous query's rows stay visible underneath the loading state.
+    expect(wrapper.find('[data-testid="sidebar-row-r1"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sidebar-row-r2"]').exists()).toBe(true)
+
+    // Resolve the new query: the link returns paired with the correct total and q.
+    await vi.advanceTimersByTimeAsync(250)
+    resolveAb({ items: [{ id: 'r3', topic: 'Ability', ended_at: null }], total: 9 })
+    await flushPromises()
+    const viewAll = wrapper.find('[data-testid="sidebar-view-all-search"]')
+    expect(viewAll.exists()).toBe(true)
+    expect(viewAll.text()).toContain('9')
+    const viewAllComponent = wrapper
+      .findAllComponents(MockRouterLink)
+      .find((c) => c.attributes('data-testid') === 'sidebar-view-all-search')
+    expect(viewAllComponent.props('to')).toEqual({
+      name: 'sessions-library',
+      query: { status: 'active', q: 'ab' },
+    })
+  })
+
   it('drops stale responses (later query wins)', async () => {
     const store = useSessionStore()
     store.sessions = [
@@ -474,7 +534,11 @@ describe('sidebar server-side search', () => {
     await vi.advanceTimersByTimeAsync(250)
     await flushPromises()
     expect(wrapper.find('[data-testid="sidebar-search-empty"]').exists()).toBe(true)
+    // A failed sidebar search must raise no toast at all (not success, not
+    // error, not warn) -- errors render silently as zero matches.
     expect(showSuccess).not.toHaveBeenCalled()
+    expect(showError).not.toHaveBeenCalled()
+    expect(showWarn).not.toHaveBeenCalled()
   })
 
   it('does not throw when unmounted mid-debounce', async () => {
