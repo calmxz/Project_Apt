@@ -19,7 +19,7 @@ const route = useRoute()
 const authStore = useAuthStore()
 const { isAuthenticated } = storeToRefs(authStore)
 const sessionStore = useSessionStore()
-const { sessions, loading } = storeToRefs(sessionStore)
+const { sessions, loading, activeTotal, endedTotal } = storeToRefs(sessionStore)
 
 const listEl = ref(null)
 const asideEl = ref(null)
@@ -92,6 +92,19 @@ const { searching, filteredFlat, matchCount, pinnedActive, activeGroups, endedRo
   useSessionGroups(sessions, searchQuery, ref(null)) // null => Date.now() captured at setup time
 
 const activeFlat = computed(() => activeGroups.value.flatMap((g) => g.rows))
+
+const SIDEBAR_CAP = 20
+
+// Pinned rows render first and count toward the cap; server's pinned_activity
+// sort already guarantees pinned rows are inside the fetched page.
+const cappedActiveFlat = computed(() =>
+  activeFlat.value.slice(0, Math.max(0, SIDEBAR_CAP - pinnedActive.value.length)),
+)
+const cappedEndedRows = computed(() => endedRows.value.slice(0, SIDEBAR_CAP))
+
+const activeRendered = computed(() => pinnedActive.value.length + cappedActiveFlat.value.length)
+const showViewAllActive = computed(() => activeTotal.value > activeRendered.value)
+const showViewAllEnded = computed(() => endedTotal.value > cappedEndedRows.value.length)
 
 const showSkeleton = computed(() => loading.value && !sessions.value.length)
 
@@ -261,8 +274,8 @@ function onNewSession() {
         @click="statusFilter = t.key"
       >
         {{ t.label }}
-        <span v-if="t.key === 'ended' && endedRows.length" class="sb-section-count"
-          >({{ endedRows.length }})</span
+        <span v-if="t.key === 'ended' && endedTotal" class="sb-section-count"
+          >({{ endedTotal }})</span
         >
       </button>
     </div>
@@ -322,9 +335,9 @@ function onNewSession() {
               <SidebarSkeletonList v-if="showSkeleton" :count="3" />
               <template v-else>
                 <div data-testid="sidebar-quick-group">
-                  <ul v-if="activeFlat.length" class="sb-session-list">
+                  <ul v-if="cappedActiveFlat.length" class="sb-session-list">
                     <SidebarSessionRow
-                      v-for="s in activeFlat"
+                      v-for="s in cappedActiveFlat"
                       :key="s.id"
                       :session="s"
                       state="active"
@@ -343,16 +356,44 @@ function onNewSession() {
                 </p>
               </template>
             </section>
+
+            <RouterLink
+              v-if="showViewAllActive"
+              class="sb-view-all"
+              :to="{ name: 'sessions-library', query: { status: 'active' } }"
+              data-testid="sidebar-view-all-active"
+              @click="closeDrawer"
+            >
+              View all {{ activeTotal }} sessions
+            </RouterLink>
           </template>
 
           <!-- ENDED view: flat recency-sorted list, no pinning -->
           <section v-else class="sb-section sb-section--ended" data-testid="sidebar-section-ended">
-            <ul v-if="endedRows.length" class="sb-session-list">
-              <SidebarSessionRow v-for="s in endedRows" :key="s.id" :session="s" state="ended" />
+            <ul v-if="cappedEndedRows.length" class="sb-session-list">
+              <SidebarSessionRow
+                v-for="s in cappedEndedRows"
+                :key="s.id"
+                :session="s"
+                state="ended"
+              />
             </ul>
-            <p v-if="!endedRows.length" class="sb-empty-hint" data-testid="sidebar-ended-empty">
+            <p
+              v-if="!cappedEndedRows.length"
+              class="sb-empty-hint"
+              data-testid="sidebar-ended-empty"
+            >
               No ended sessions yet.
             </p>
+            <RouterLink
+              v-if="showViewAllEnded"
+              class="sb-view-all"
+              :to="{ name: 'sessions-library', query: { status: 'ended' } }"
+              data-testid="sidebar-view-all-ended"
+              @click="closeDrawer"
+            >
+              View all {{ endedTotal }} sessions
+            </RouterLink>
           </section>
         </template>
       </template>
@@ -361,7 +402,7 @@ function onNewSession() {
       <template v-else>
         <ul v-if="sessions.length" class="sb-session-list sb-session-list--collapsed">
           <SidebarSessionRow
-            v-for="s in [...pinnedActive, ...activeFlat, ...endedRows]"
+            v-for="s in [...pinnedActive, ...cappedActiveFlat, ...cappedEndedRows]"
             :key="s.id"
             :session="s"
             :state="s.ended_at ? 'ended' : 'active'"
@@ -618,6 +659,27 @@ function onNewSession() {
   padding: 0.5rem 0.75rem;
   margin: 0;
   line-height: 1.4;
+}
+
+.sb-view-all {
+  display: block;
+  padding: 0.375rem 0.75rem;
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  color: var(--color-accent-text);
+  text-decoration: none;
+  border-radius: var(--radius-md);
+}
+
+.sb-view-all:hover {
+  background: var(--color-surface-soft);
+  text-decoration: underline;
+}
+
+.sb-view-all:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: -2px;
 }
 
 .sb-rail {

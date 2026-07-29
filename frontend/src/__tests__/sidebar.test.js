@@ -22,6 +22,7 @@ import Sidebar from '@/components/sidebar/Sidebar.vue'
 import { useSessionStore } from '@/stores/session.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useSidebar, __test__ as sidebarTest } from '@/composables/useSidebar.js'
+import { RouterLink as MockRouterLink } from 'vue-router'
 
 function setViewport(w) {
   Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: w })
@@ -91,6 +92,8 @@ describe('Sidebar.vue — session list rendering', () => {
         ended_at: '2026-05-18T10:00:00Z',
       },
     ]
+    // Badge reads the store's server-side total, not the loaded row count.
+    store.endedTotal = 1
     wrapper = mount(Sidebar)
     await flushPromises()
     // Default view is Active: the ended row is behind the Ended tab, not visible yet.
@@ -926,5 +929,104 @@ describe('Sidebar.vue — header states', () => {
     const close = wrapper.find('[data-testid="sidebar-drawer-close"]')
     expect(close.exists()).toBe(true)
     expect(close.classes()).toContain('sb-toggle--end')
+  })
+})
+
+// Builds N active sessions with descending activity so ordering is deterministic
+// (most-recent first) when the component slices down to the cap.
+function makeActiveSessions(count, { pinned = false, prefix = 'u' } = {}) {
+  const now = Date.now()
+  return Array.from({ length: count }, (_, i) => ({
+    id: `${prefix}${i}`,
+    topic: `${prefix}${i}`,
+    created_at: new Date(now - i * 1000).toISOString(),
+    last_activity_at: new Date(now - i * 1000).toISOString(),
+    ended_at: null,
+    pinned,
+  }))
+}
+
+function makeEndedSessions(count) {
+  const now = Date.now()
+  return Array.from({ length: count }, (_, i) => ({
+    id: `e${i}`,
+    topic: `e${i}`,
+    created_at: new Date(now - i * 1000).toISOString(),
+    last_activity_at: new Date(now - i * 1000).toISOString(),
+    ended_at: new Date(now - i * 1000).toISOString(),
+  }))
+}
+
+describe('sidebar 20-row cap and View all links', () => {
+  let wrapper
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    routerPush.mockClear()
+    localStorage.clear()
+    setViewport(1400) // desktop expanded
+    sidebarTest._setExpanded(true)
+    routeRef.params = {}
+    routeRef.fullPath = '/'
+  })
+  afterEach(() => wrapper?.unmount())
+
+  it('renders at most 20 active rows (pinned count toward the cap)', async () => {
+    const store = useSessionStore()
+    const pinnedRows = makeActiveSessions(3, { pinned: true, prefix: 'p' })
+    const unpinnedRows = makeActiveSessions(25, { pinned: false, prefix: 'u' })
+    store.sessions = [...pinnedRows, ...unpinnedRows]
+    store.activeTotal = 28
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(
+      wrapper.findAll('[data-testid="sidebar-section-pinned"] [data-session-id]'),
+    ).toHaveLength(3)
+    expect(wrapper.findAll('[data-testid="sidebar-quick-group"] [data-session-id]')).toHaveLength(
+      17,
+    )
+    const viewAll = wrapper.find('[data-testid="sidebar-view-all-active"]')
+    expect(viewAll.exists()).toBe(true)
+    expect(viewAll.text()).toContain('View all 28 sessions')
+  })
+
+  it('caps the ended tab at 20 and links with status=ended', async () => {
+    const store = useSessionStore()
+    store.sessions = makeEndedSessions(22)
+    store.endedTotal = 40
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    await wrapper.find('[data-testid="sidebar-status-ended"]').trigger('click')
+    expect(wrapper.findAll('[data-testid="sidebar-section-ended"] [data-session-id]')).toHaveLength(
+      20,
+    )
+    const viewAll = wrapper.find('[data-testid="sidebar-view-all-ended"]')
+    expect(viewAll.exists()).toBe(true)
+    expect(viewAll.text()).toContain('40')
+    const viewAllComponent = wrapper
+      .findAllComponents(MockRouterLink)
+      .find((c) => c.attributes('data-testid') === 'sidebar-view-all-ended')
+    expect(viewAllComponent.props('to')).toEqual({
+      name: 'sessions-library',
+      query: { status: 'ended' },
+    })
+  })
+
+  it('hides View all when the tab total fits the rendered rows', async () => {
+    const store = useSessionStore()
+    store.sessions = makeActiveSessions(5)
+    store.activeTotal = 5
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sidebar-view-all-active"]').exists()).toBe(false)
+  })
+
+  it('ended tab badge shows the server total, not the loaded count', async () => {
+    const store = useSessionStore()
+    store.sessions = makeEndedSessions(20)
+    store.endedTotal = 40
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    const endedTab = wrapper.find('[data-testid="sidebar-status-ended"]')
+    expect(endedTab.text()).toContain('(40)')
   })
 })
