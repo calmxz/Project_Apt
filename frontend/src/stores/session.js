@@ -12,6 +12,10 @@ export const useSessionStore = defineStore('session', () => {
   const currentSessionId = ref(null)
   const currentSession = ref(null)
   const sessions = ref([])
+  // Server-capped sidebar page size; totals let the UI say "View all N".
+  const SIDEBAR_PAGE_LIMIT = 20
+  const activeTotal = ref(0)
+  const endedTotal = ref(0)
   const messages = ref([])
   const loading = ref(false)
   const detailLoading = ref(false)
@@ -80,7 +84,29 @@ export const useSessionStore = defineStore('session', () => {
       loading.value = true
       error.value = null
       try {
-        sessions.value = await sessionsApi.listSessions()
+        // Boot-path fire-and-forget (HomeView + Sidebar onMounted) — silent for
+        // the same reason the old listSessions wrapper was (U-05): a background
+        // load must never toast.
+        const [activePage, endedPage] = await Promise.all([
+          sessionsApi.getSessionLibrary(
+            { status: 'active', sort: 'pinned_activity', limit: SIDEBAR_PAGE_LIMIT, offset: 0 },
+            { silent: true },
+          ),
+          sessionsApi.getSessionLibrary(
+            { status: 'ended', sort: 'last_activity', limit: SIDEBAR_PAGE_LIMIT, offset: 0 },
+            { silent: true },
+          ),
+        ])
+        const seen = new Set()
+        const merged = []
+        for (const item of [...activePage.items, ...endedPage.items]) {
+          if (seen.has(item.id)) continue
+          seen.add(item.id)
+          merged.push(item)
+        }
+        sessions.value = merged
+        activeTotal.value = activePage.total
+        endedTotal.value = endedPage.total
         return sessions.value
       } catch (e) {
         _setError(e)
@@ -745,6 +771,8 @@ export const useSessionStore = defineStore('session', () => {
     currentSessionId.value = null
     currentSession.value = null
     sessions.value = []
+    activeTotal.value = 0
+    endedTotal.value = 0
     messages.value = []
     error.value = null
     dailyCapInfo.value = null
@@ -762,6 +790,8 @@ export const useSessionStore = defineStore('session', () => {
     currentSessionId,
     currentSession,
     sessions,
+    activeTotal,
+    endedTotal,
     messages,
     loading,
     detailLoading,

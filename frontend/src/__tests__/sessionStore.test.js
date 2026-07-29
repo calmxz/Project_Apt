@@ -14,6 +14,7 @@ vi.mock('@/services/sessionsApi.js', () => ({
 
 import { useSessionStore } from '@/stores/session.js'
 import * as sessionsApi from '@/services/sessionsApi.js'
+import { getSessionLibrary } from '@/services/sessionsApi.js'
 import * as streamSvc from '@/services/chatStreamService.js'
 import { ERR_DAILY_CAP_REACHED, ERR_DAILY_COST_CAP_REACHED } from '@/lib/errorCodes.js'
 
@@ -32,7 +33,9 @@ describe('session store', () => {
   })
 
   it('listSessions populates and clears loading/error', async () => {
-    sessionsApi.listSessions.mockResolvedValueOnce([{ id: 's1' }])
+    sessionsApi.getSessionLibrary
+      .mockResolvedValueOnce({ items: [{ id: 's1' }], total: 1, limit: 20, offset: 0 })
+      .mockResolvedValueOnce({ items: [], total: 0, limit: 20, offset: 0 })
     const s = useSessionStore()
     const out = await s.listSessions('u1')
     expect(out).toEqual([{ id: 's1' }])
@@ -41,7 +44,7 @@ describe('session store', () => {
   })
 
   it('listSessions surfaces error and rethrows', async () => {
-    sessionsApi.listSessions.mockRejectedValueOnce(new Error('nope'))
+    sessionsApi.getSessionLibrary.mockRejectedValueOnce(new Error('nope'))
     const s = useSessionStore()
     await expect(s.listSessions('u1')).rejects.toThrow('nope')
     expect(s.error).toBe('nope')
@@ -187,43 +190,55 @@ describe('session store', () => {
   })
 
   it('listSessions de-dupes concurrent calls into one network request', async () => {
-    let resolve
-    sessionsApi.listSessions.mockImplementationOnce(
-      () =>
-        new Promise((r) => {
-          resolve = r
-        }),
-    )
+    let resolveActive, resolveEnded
+    sessionsApi.getSessionLibrary
+      .mockImplementationOnce(
+        () =>
+          new Promise((r) => {
+            resolveActive = r
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((r) => {
+            resolveEnded = r
+          }),
+      )
     const s = useSessionStore()
     const p1 = s.listSessions()
     const p2 = s.listSessions()
-    resolve([{ id: 's1' }])
+    resolveActive({ items: [{ id: 's1' }], total: 1, limit: 20, offset: 0 })
+    resolveEnded({ items: [], total: 0, limit: 20, offset: 0 })
     const [r1, r2] = await Promise.all([p1, p2])
-    expect(sessionsApi.listSessions).toHaveBeenCalledTimes(1)
+    expect(sessionsApi.getSessionLibrary).toHaveBeenCalledTimes(2)
     expect(r1).toEqual([{ id: 's1' }])
     expect(r2).toEqual([{ id: 's1' }])
     expect(s.detailLoading).toBe(false)
   })
 
   it('listSessions refetches after a failed request (error path clears inflight key)', async () => {
-    sessionsApi.listSessions
+    sessionsApi.getSessionLibrary
       .mockRejectedValueOnce(new Error('network'))
-      .mockResolvedValueOnce([{ id: 'b' }])
+      .mockRejectedValueOnce(new Error('network'))
+      .mockResolvedValueOnce({ items: [{ id: 'b' }], total: 1, limit: 20, offset: 0 })
+      .mockResolvedValueOnce({ items: [], total: 0, limit: 20, offset: 0 })
     const s = useSessionStore()
     await expect(s.listSessions()).rejects.toThrow('network')
     const out = await s.listSessions()
-    expect(sessionsApi.listSessions).toHaveBeenCalledTimes(2)
+    expect(sessionsApi.getSessionLibrary).toHaveBeenCalledTimes(4)
     expect(out).toEqual([{ id: 'b' }])
   })
 
   it('listSessions refetches after the in-flight request settles (no retained cache)', async () => {
-    sessionsApi.listSessions
-      .mockResolvedValueOnce([{ id: 'a' }])
-      .mockResolvedValueOnce([{ id: 'b' }])
+    sessionsApi.getSessionLibrary
+      .mockResolvedValueOnce({ items: [{ id: 'a' }], total: 1, limit: 20, offset: 0 })
+      .mockResolvedValueOnce({ items: [], total: 0, limit: 20, offset: 0 })
+      .mockResolvedValueOnce({ items: [{ id: 'b' }], total: 1, limit: 20, offset: 0 })
+      .mockResolvedValueOnce({ items: [], total: 0, limit: 20, offset: 0 })
     const s = useSessionStore()
     await s.listSessions()
     await s.listSessions()
-    expect(sessionsApi.listSessions).toHaveBeenCalledTimes(2)
+    expect(sessionsApi.getSessionLibrary).toHaveBeenCalledTimes(4)
     expect(s.sessions).toEqual([{ id: 'b' }])
   })
 
@@ -364,6 +379,68 @@ describe('session store', () => {
     resolveC({ id: 'C', messages: [] })
     await pC
     expect(store.detailLoading).toBe(false)
+  })
+})
+
+describe('listSessions via library endpoint', () => {
+  let store
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    store = useSessionStore()
+  })
+
+  it('fetches active (pinned_activity) and ended (last_activity) pages, silent, merged in order', async () => {
+    getSessionLibrary
+      .mockResolvedValueOnce({
+        items: [{ id: 'a1' }, { id: 'a2' }],
+        total: 30,
+        limit: 20,
+        offset: 0,
+      })
+      .mockResolvedValueOnce({ items: [{ id: 'e1' }], total: 25, limit: 20, offset: 0 })
+    await store.listSessions()
+    expect(getSessionLibrary).toHaveBeenCalledWith(
+      { status: 'active', sort: 'pinned_activity', limit: 20, offset: 0 },
+      { silent: true },
+    )
+    expect(getSessionLibrary).toHaveBeenCalledWith(
+      { status: 'ended', sort: 'last_activity', limit: 20, offset: 0 },
+      { silent: true },
+    )
+    expect(store.sessions.map((s) => s.id)).toEqual(['a1', 'a2', 'e1'])
+    expect(store.activeTotal).toBe(30)
+    expect(store.endedTotal).toBe(25)
+  })
+
+  it('dedupes by id when a session appears in both pages', async () => {
+    getSessionLibrary
+      .mockResolvedValueOnce({ items: [{ id: 'x' }], total: 1, limit: 20, offset: 0 })
+      .mockResolvedValueOnce({ items: [{ id: 'x' }, { id: 'e1' }], total: 2, limit: 20, offset: 0 })
+    await store.listSessions()
+    expect(store.sessions.map((s) => s.id)).toEqual(['x', 'e1'])
+  })
+
+  it('de-dupes concurrent calls through the same in-flight promise', async () => {
+    getSessionLibrary.mockResolvedValue({ items: [], total: 0, limit: 20, offset: 0 })
+    const p1 = store.listSessions()
+    const p2 = store.listSessions()
+    // Pinia wraps every promise-returning action in a fresh .then() chain
+    // (pinia 3.0.4 wrapAction), so p1 !== p2 by construction even when both
+    // callers share one in-flight fetch. Assert the shared resolution instead.
+    expect(await p1).toBe(await p2)
+    expect(getSessionLibrary).toHaveBeenCalledTimes(2) // one active + one ended, not four
+  })
+
+  it('reset() clears totals', async () => {
+    getSessionLibrary
+      .mockResolvedValueOnce({ items: [], total: 7, limit: 20, offset: 0 })
+      .mockResolvedValueOnce({ items: [], total: 3, limit: 20, offset: 0 })
+    await store.listSessions()
+    store.reset()
+    expect(store.activeTotal).toBe(0)
+    expect(store.endedTotal).toBe(0)
   })
 })
 
