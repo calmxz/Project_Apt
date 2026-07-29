@@ -9,6 +9,7 @@ import { useAuthStore } from '@/stores/auth.js'
 import { useSessionStore } from '@/stores/session.js'
 import { useSessionGroups } from '@/composables/useSessionGroups.js'
 import { getReviewQueue } from '@/services/reviewApi.js'
+import * as sessionsApi from '@/services/sessionsApi.js'
 import Logo from '@/components/Logo.vue'
 import SidebarSessionRow from './SidebarSessionRow.vue'
 import SidebarSkeletonList from './SidebarSkeletonList.vue'
@@ -85,15 +86,63 @@ onBeforeUnmount(() => {
   if (typeof document !== 'undefined') {
     document.removeEventListener('keydown', onTrapKeydown, true)
   }
+  clearTimeout(searchTimer)
 })
 
 const searchQuery = ref('')
-const { searching, filteredFlat, matchCount, pinnedActive, activeGroups, endedRows } =
-  useSessionGroups(sessions, searchQuery, ref(null)) // null => Date.now() captured at setup time
+const { searching, pinnedActive, activeGroups, endedRows } = useSessionGroups(
+  sessions,
+  searchQuery,
+  ref(null), // null => Date.now() captured at setup time
+)
 
 const activeFlat = computed(() => activeGroups.value.flatMap((g) => g.rows))
 
 const SIDEBAR_CAP = 20
+
+// Search queries the library endpoint server-side (the store only holds a
+// SIDEBAR_CAP-windowed slice, so client-side filtering of `sessions` could
+// silently miss matches outside that window). Results live in local state
+// only -- the store's `sessions` array is never written by search.
+const searchResults = ref([])
+const searchTotal = ref(0)
+const searchLoading = ref(false)
+let searchTimer = null
+let _searchSeq = 0
+
+watch(searchQuery, (raw) => {
+  if (searchTimer) clearTimeout(searchTimer)
+  const q = (raw || '').trim()
+  if (!q) {
+    _searchSeq++ // invalidate any in-flight response
+    searchResults.value = []
+    searchTotal.value = 0
+    searchLoading.value = false
+    return
+  }
+  searchLoading.value = true
+  searchTimer = setTimeout(async () => {
+    const seq = ++_searchSeq
+    try {
+      // silent: a sidebar search must never toast; errors render as zero matches
+      const page = await sessionsApi.getSessionLibrary(
+        { status: statusFilter.value, q, sort: 'last_activity', limit: SIDEBAR_CAP, offset: 0 },
+        { silent: true },
+      )
+      if (seq !== _searchSeq) return // stale response; a newer query owns the state
+      searchResults.value = page.items
+      searchTotal.value = page.total
+    } catch {
+      if (seq !== _searchSeq) return
+      searchResults.value = []
+      searchTotal.value = 0
+    } finally {
+      if (seq === _searchSeq) searchLoading.value = false
+    }
+  }, 250)
+})
+
+const showViewAllSearch = computed(() => searchTotal.value > searchResults.value.length)
 
 // Pinned rows render first and count toward the cap; server's pinned_activity
 // sort already guarantees pinned rows are inside the fetched page. Pinned
@@ -294,18 +343,21 @@ function onNewSession() {
             aria-live="polite"
             aria-atomic="true"
           >
-            {{ matchCount }} {{ matchCount === 1 ? 'match' : 'matches' }}
+            <template v-if="searchLoading">Searching...</template>
+            <template v-else
+              >{{ searchTotal }} {{ searchTotal === 1 ? 'match' : 'matches' }}</template
+            >
           </p>
-          <ul v-if="filteredFlat.length" class="sb-session-list">
+          <ul v-if="searchResults.length" class="sb-session-list">
             <SidebarSessionRow
-              v-for="s in filteredFlat"
+              v-for="s in searchResults"
               :key="s.id"
               :session="s"
               :state="s.ended_at ? 'ended' : 'active'"
             />
           </ul>
           <p
-            v-else
+            v-else-if="!searchLoading"
             class="sb-empty-hint"
             data-testid="sidebar-search-empty"
             aria-live="polite"
@@ -313,6 +365,18 @@ function onNewSession() {
           >
             No sessions match "{{ searchQuery }}".
           </p>
+          <RouterLink
+            v-if="showViewAllSearch"
+            class="sb-view-all"
+            :to="{
+              name: 'sessions-library',
+              query: { status: statusFilter, q: searchQuery.trim() },
+            }"
+            data-testid="sidebar-view-all-search"
+            @click="closeDrawer"
+          >
+            View all {{ searchTotal }} matches
+          </RouterLink>
         </template>
         <template v-else>
           <!-- ACTIVE view: pinned mini-group + session activity buckets -->

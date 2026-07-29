@@ -17,6 +17,14 @@ const apiReviewQueue = vi.fn()
 vi.mock('@/services/reviewApi.js', () => ({
   getReviewQueue: (...args) => apiReviewQueue(...args),
 }))
+const apiGetSessionLibrary = vi.fn()
+vi.mock('@/services/sessionsApi.js', async (importOriginal) => {
+  const actual = await importOriginal()
+  return {
+    ...actual,
+    getSessionLibrary: (...args) => apiGetSessionLibrary(...args),
+  }
+})
 
 import Sidebar from '@/components/sidebar/Sidebar.vue'
 import { useSessionStore } from '@/stores/session.js'
@@ -36,6 +44,8 @@ function setViewport(w) {
 beforeEach(() => {
   apiReviewQueue.mockReset()
   apiReviewQueue.mockResolvedValue({ items: [], total: 0, limit: 1, offset: 0 })
+  apiGetSessionLibrary.mockReset()
+  apiGetSessionLibrary.mockResolvedValue({ items: [], total: 0, limit: 20, offset: 0 })
 })
 
 describe('Sidebar.vue — session list rendering', () => {
@@ -199,30 +209,52 @@ describe('Sidebar.vue — session list rendering', () => {
   })
 
   it('filters sessions via the search input and shows a match count', async () => {
-    const store = useSessionStore()
-    store.sessions = [
-      { id: 'a1', topic: 'Photosynthesis', created_at: new Date().toISOString(), ended_at: null },
-      { id: 'a2', topic: 'Big-O notation', created_at: new Date().toISOString(), ended_at: null },
-    ]
-    wrapper = mount(Sidebar)
-    await flushPromises()
-    await wrapper.find('[data-testid="sidebar-search"]').setValue('photo')
-    await flushPromises()
-    expect(wrapper.find('[data-testid="sidebar-row-a1"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="sidebar-row-a2"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="sidebar-search-count"]').text()).toContain('1')
+    vi.useFakeTimers()
+    try {
+      const store = useSessionStore()
+      store.sessions = [
+        {
+          id: 'a1',
+          topic: 'Photosynthesis',
+          created_at: new Date().toISOString(),
+          ended_at: null,
+        },
+        { id: 'a2', topic: 'Big-O notation', created_at: new Date().toISOString(), ended_at: null },
+      ]
+      apiGetSessionLibrary.mockResolvedValue({
+        items: [{ id: 'a1', topic: 'Photosynthesis', ended_at: null }],
+        total: 1,
+      })
+      wrapper = mount(Sidebar)
+      await flushPromises()
+      await wrapper.find('[data-testid="sidebar-search"]').setValue('photo')
+      await vi.advanceTimersByTimeAsync(250)
+      await flushPromises()
+      expect(wrapper.find('[data-testid="sidebar-row-a1"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="sidebar-row-a2"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="sidebar-search-count"]').text()).toContain('1')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('shows a no-match hint when search matches nothing', async () => {
-    const store = useSessionStore()
-    store.sessions = [
-      { id: 'a1', topic: 'Photosynthesis', created_at: new Date().toISOString(), ended_at: null },
-    ]
-    wrapper = mount(Sidebar)
-    await flushPromises()
-    await wrapper.find('[data-testid="sidebar-search"]').setValue('zzz')
-    await flushPromises()
-    expect(wrapper.find('[data-testid="sidebar-search-empty"]').exists()).toBe(true)
+    vi.useFakeTimers()
+    try {
+      const store = useSessionStore()
+      store.sessions = [
+        { id: 'a1', topic: 'Photosynthesis', created_at: new Date().toISOString(), ended_at: null },
+      ]
+      apiGetSessionLibrary.mockResolvedValue({ items: [], total: 0 })
+      wrapper = mount(Sidebar)
+      await flushPromises()
+      await wrapper.find('[data-testid="sidebar-search"]').setValue('zzz')
+      await vi.advanceTimersByTimeAsync(250)
+      await flushPromises()
+      expect(wrapper.find('[data-testid="sidebar-search-empty"]').exists()).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('renders active sessions as one flat list without date group labels', async () => {
@@ -285,6 +317,180 @@ describe('Sidebar.vue — session list rendering', () => {
     expect(wrapper.find('[data-testid="sidebar-search"]').exists()).toBe(false)
     // collapsed rail must show the session row — fails before Fix 1 because searching stays true
     expect(wrapper.find('[data-testid="sidebar-row-a1"]').exists()).toBe(true)
+  })
+})
+
+describe('sidebar server-side search', () => {
+  let wrapper
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    routerPush.mockClear()
+    localStorage.clear()
+    setViewport(1400) // desktop expanded
+    sidebarTest._setExpanded(true)
+    routeRef.params = {}
+    routeRef.fullPath = '/'
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    wrapper?.unmount()
+    vi.useRealTimers()
+  })
+
+  it('debounces 250ms then queries the library endpoint scoped to the current tab', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'a1', topic: 'Big-O', created_at: new Date().toISOString(), ended_at: null },
+    ]
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    await wrapper.find('[data-testid="sidebar-search"]').setValue('gly')
+    await vi.advanceTimersByTimeAsync(249)
+    expect(apiGetSessionLibrary).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1)
+    expect(apiGetSessionLibrary).toHaveBeenCalledWith(
+      { status: 'active', q: 'gly', sort: 'last_activity', limit: 20, offset: 0 },
+      { silent: true },
+    )
+  })
+
+  it('renders server results and total; store sessions array untouched', async () => {
+    const store = useSessionStore()
+    const seeded = [
+      { id: 'a1', topic: 'Big-O', created_at: new Date().toISOString(), ended_at: null },
+    ]
+    store.sessions = seeded
+    apiGetSessionLibrary.mockResolvedValue({
+      items: [
+        { id: 'r1', topic: 'Glycolysis', ended_at: null },
+        { id: 'r2', topic: 'Glycogen', ended_at: null },
+      ],
+      total: 12,
+    })
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    await wrapper.find('[data-testid="sidebar-search"]').setValue('gly')
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sidebar-row-r1"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sidebar-row-r2"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sidebar-search-count"]').text()).toContain('12')
+    // Content (not identity, since Vue wraps assigned arrays in a reactive
+    // proxy) must still equal the original seeded value -- search must never
+    // write the store's `sessions` array.
+    expect(store.sessions).toEqual(seeded)
+  })
+
+  it('shows View all with the query when total exceeds results', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'a1', topic: 'Big-O', created_at: new Date().toISOString(), ended_at: null },
+    ]
+    apiGetSessionLibrary.mockResolvedValue({
+      items: [
+        { id: 'r1', topic: 'Glycolysis', ended_at: null },
+        { id: 'r2', topic: 'Glycogen', ended_at: null },
+      ],
+      total: 12,
+    })
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    await wrapper.find('[data-testid="sidebar-search"]').setValue('gly')
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+    const viewAll = wrapper.find('[data-testid="sidebar-view-all-search"]')
+    expect(viewAll.exists()).toBe(true)
+    const viewAllComponent = wrapper
+      .findAllComponents(MockRouterLink)
+      .find((c) => c.attributes('data-testid') === 'sidebar-view-all-search')
+    expect(viewAllComponent.props('to')).toEqual({
+      name: 'sessions-library',
+      query: { status: 'active', q: 'gly' },
+    })
+  })
+
+  it('drops stale responses (later query wins)', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'a1', topic: 'Big-O', created_at: new Date().toISOString(), ended_at: null },
+    ]
+    let resolveAa
+    let resolveBb
+    apiGetSessionLibrary.mockImplementation((params) => {
+      if (params.q === 'aa') return new Promise((resolve) => (resolveAa = resolve))
+      if (params.q === 'bb') return new Promise((resolve) => (resolveBb = resolve))
+      return Promise.resolve({ items: [], total: 0 })
+    })
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    // Type 'aa' and advance a full debounce cycle so its request genuinely
+    // fires and is in flight BEFORE 'bb' is typed. If both were typed
+    // back-to-back, the watch's own clearTimeout on every keystroke would
+    // mean 'aa' is never issued at all -- this test would then pass with the
+    // _searchSeq guards deleted, proving nothing about the guard.
+    await wrapper.find('[data-testid="sidebar-search"]').setValue('aa')
+    await vi.advanceTimersByTimeAsync(250)
+    await wrapper.find('[data-testid="sidebar-search"]').setValue('bb')
+    await vi.advanceTimersByTimeAsync(250)
+    expect(apiGetSessionLibrary).toHaveBeenCalledTimes(2)
+
+    // Resolve 'aa' (the stale request) AFTER 'bb' (the current request).
+    resolveBb({ items: [{ id: 'bb1', topic: 'bb result', ended_at: null }], total: 1 })
+    await flushPromises()
+    resolveAa({ items: [{ id: 'aa1', topic: 'aa result', ended_at: null }], total: 1 })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="sidebar-row-bb1"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sidebar-row-aa1"]').exists()).toBe(false)
+  })
+
+  it('clearing the query restores the tab view without a fetch', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'a1', topic: 'Big-O', created_at: new Date().toISOString(), ended_at: null },
+    ]
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    await wrapper.find('[data-testid="sidebar-search"]').setValue('gly')
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+    apiGetSessionLibrary.mockClear()
+    await wrapper.find('[data-testid="sidebar-search"]').setValue('')
+    await flushPromises()
+    expect(apiGetSessionLibrary).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="sidebar-section-active"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sidebar-row-a1"]').exists()).toBe(true)
+  })
+
+  it('renders zero matches silently (no toast) when the library fetch errors', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'a1', topic: 'Big-O', created_at: new Date().toISOString(), ended_at: null },
+    ]
+    apiGetSessionLibrary.mockRejectedValue(new Error('boom'))
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    await wrapper.find('[data-testid="sidebar-search"]').setValue('gly')
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sidebar-search-empty"]').exists()).toBe(true)
+    expect(showSuccess).not.toHaveBeenCalled()
+  })
+
+  it('does not throw when unmounted mid-debounce', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'a1', topic: 'Big-O', created_at: new Date().toISOString(), ended_at: null },
+    ]
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    await wrapper.find('[data-testid="sidebar-search"]').setValue('gly')
+    wrapper.unmount()
+    wrapper = null
+    // The pending debounce timer must be cleared on unmount; advancing past
+    // it must not call the (now-orphaned) endpoint or throw.
+    await vi.advanceTimersByTimeAsync(250)
+    expect(apiGetSessionLibrary).not.toHaveBeenCalled()
   })
 })
 
