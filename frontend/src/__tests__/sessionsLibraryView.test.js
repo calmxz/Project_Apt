@@ -400,6 +400,9 @@ describe('SessionsLibraryView', () => {
       const wrapper = mount(SessionsLibraryView, { global: { stubs } })
       await flushPromises()
       expect(wrapper.findAll('[data-testid^="library-card-"]')).toHaveLength(20)
+      expect(
+        lastObserver().observed.has(wrapper.get('[data-testid="library-sentinel"]').element),
+      ).toBe(true)
 
       const page2Items = Array.from({ length: 20 }, (_, i) => item(`s${i + 21}`))
       sessionsApi.getSessionLibrary.mockResolvedValueOnce(
@@ -540,6 +543,22 @@ describe('SessionsLibraryView', () => {
       await flushPromises()
       expect(wrapper.find('[data-testid="library-prev"]').exists()).toBe(false)
       expect(wrapper.find('[data-testid="library-next"]').exists()).toBe(false)
+    })
+
+    it('unobserves the sentinel when it unmounts (filter change to an empty result set)', async () => {
+      sessionsApi.getSessionLibrary.mockResolvedValueOnce(page([item('a')], { total: 1 }))
+      const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+      await flushPromises()
+      const sentinel = wrapper.get('[data-testid="library-sentinel"]').element
+      expect(lastObserver().observed.has(sentinel)).toBe(true)
+
+      sessionsApi.getSessionLibrary.mockResolvedValueOnce(page([], { total: 0 }))
+      await wrapper.get('[data-testid="library-filter-ended"]').trigger('click')
+      await flushPromises()
+
+      expect(wrapper.find('[data-testid="library-sentinel"]').exists()).toBe(false)
+      expect(lastObserver().observed.has(sentinel)).toBe(false)
+      expect(lastObserver().observed.size).toBe(0)
     })
   })
 
