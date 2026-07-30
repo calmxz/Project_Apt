@@ -25,6 +25,12 @@ export const getSessionLibrary = (params, opts) => apiGet('/sessions/library', p
 
 export const getSession = (sessionId) => apiGet(`/sessions/${sessionId}`)
 
+// P3: SessionView shows its own inline error/loading for the "load earlier"
+// button; silent stops the errorBus double-toast (same opt-out pattern as
+// skipCheck/answerCheck below).
+export const getSessionMessages = (sessionId, params = {}) =>
+  apiGet(`/sessions/${sessionId}/messages`, params, { silent: true })
+
 export const endSession = (sessionId) => apiPost(`/sessions/${sessionId}/end`, {})
 
 export const reopenSession = (sessionId) => apiPost(`/sessions/${sessionId}/reopen`, {})

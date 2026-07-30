@@ -8,6 +8,32 @@ import { friendlyError } from '../lib/errors.js'
 import { mapCapError } from '../lib/capErrors.js'
 import { createDeltaBatcher } from '../lib/deltaBatcher.js'
 
+function toUiMessage(m) {
+  return {
+    role: m.role,
+    content: m.content,
+    message_id: m.id,
+    citations: m.citations || [],
+    created_at: m.created_at,
+    status: m.status,
+    check_batch: m.check_batch
+      ? {
+          gap: m.check_batch.gap,
+          total: m.check_batch.total,
+          items: (m.check_batch.items || []).map((it) => ({
+            question: it.question,
+            options: it.options || [],
+            status: it.status,
+            selectedIndex: it.selected_index,
+            correctIndex: it.correct_index,
+            correct: it.correct,
+            explanation: it.explanation,
+          })),
+        }
+      : null,
+  }
+}
+
 export const useSessionStore = defineStore('session', () => {
   const currentSessionId = ref(null)
   const currentSession = ref(null)
@@ -36,6 +62,10 @@ export const useSessionStore = defineStore('session', () => {
   const activeTotal = ref(0)
   const endedTotal = ref(0)
   const messages = ref([])
+  // P3: pagination for the last-30 transcript window loadSession returns.
+  const hasMoreMessages = ref(false)
+  const loadingEarlier = ref(false)
+  const loadEarlierError = ref(null)
   const loading = ref(false)
   const detailLoading = ref(false)
   const error = ref(null)
@@ -212,29 +242,9 @@ export const useSessionStore = defineStore('session', () => {
         if (_latestRequestedId !== id) return s // superseded by a newer load; drop the write
         currentSession.value = s
         currentSessionId.value = s.id
-        messages.value = (s.messages || []).map((m) => ({
-          role: m.role,
-          content: m.content,
-          message_id: m.id,
-          citations: m.citations || [],
-          created_at: m.created_at,
-          status: m.status,
-          check_batch: m.check_batch
-            ? {
-                gap: m.check_batch.gap,
-                total: m.check_batch.total,
-                items: (m.check_batch.items || []).map((it) => ({
-                  question: it.question,
-                  options: it.options || [],
-                  status: it.status,
-                  selectedIndex: it.selected_index,
-                  correctIndex: it.correct_index,
-                  correct: it.correct,
-                  explanation: it.explanation,
-                })),
-              }
-            : null,
-        }))
+        messages.value = (s.messages || []).map(toUiMessage)
+        hasMoreMessages.value = !!s.has_more_messages
+        loadEarlierError.value = null
         pendingCheck.value = s.pending_check
           ? {
               gap: s.pending_check.gap,
@@ -272,6 +282,26 @@ export const useSessionStore = defineStore('session', () => {
     })()
     _inflight.set(id, p)
     return p
+  }
+
+  async function loadEarlierMessages() {
+    if (loadingEarlier.value || !hasMoreMessages.value) return
+    const oldest = messages.value[0]?.message_id
+    const sid = currentSessionId.value
+    if (oldest == null || !sid) return
+    loadingEarlier.value = true
+    loadEarlierError.value = null
+    try {
+      const page = await sessionsApi.getSessionMessages(sid, { before: oldest })
+      // A navigation may have swapped sessions while the page was in flight.
+      if (currentSessionId.value !== sid) return
+      messages.value = [...(page.items || []).map(toUiMessage), ...messages.value]
+      hasMoreMessages.value = !!page.has_more
+    } catch (e) {
+      loadEarlierError.value = e?.message || 'Failed to load earlier messages'
+    } finally {
+      loadingEarlier.value = false
+    }
   }
 
   function clearDailyCap() {
@@ -863,6 +893,9 @@ export const useSessionStore = defineStore('session', () => {
     activeTotal.value = 0
     endedTotal.value = 0
     messages.value = []
+    hasMoreMessages.value = false
+    loadingEarlier.value = false
+    loadEarlierError.value = null
     error.value = null
     dailyCapInfo.value = null
     costCapInfo.value = null
@@ -883,6 +916,9 @@ export const useSessionStore = defineStore('session', () => {
     activeTotal,
     endedTotal,
     messages,
+    hasMoreMessages,
+    loadingEarlier,
+    loadEarlierError,
     loading,
     detailLoading,
     error,
@@ -903,6 +939,7 @@ export const useSessionStore = defineStore('session', () => {
     listSessions,
     createSession,
     loadSession,
+    loadEarlierMessages,
     endSession,
     reopenSession,
     continueTopic,
