@@ -1,6 +1,6 @@
 """TDD: GET /api/sessions/lookup — case-insensitive exact topic match."""
 
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from contracts import ConceptEntry, TopicProfile
 from db.models import Session as SessionModel, User
