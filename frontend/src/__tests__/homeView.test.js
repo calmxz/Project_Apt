@@ -116,45 +116,105 @@ describe('HomeView', () => {
     expect(wrapper.text()).not.toContain('Due for review')
   })
 
-  it('New lesson creates a session then navigates', async () => {
+  it('New lesson: no match shows the level picker instead of creating immediately', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'listSessions').mockResolvedValue([])
+    vi.spyOn(store, 'lookupTopic').mockResolvedValue({ active_match: null, ended_match: null })
+    const createSpy = vi.spyOn(store, 'createSession').mockResolvedValue({ id: 'sess1' })
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-testid="home-quick-topic"]').setValue('Recursion')
+    await wrapper.get('[data-testid="home-quick-go"]').trigger('click')
+    await flushPromises()
+    expect(createSpy).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="start-level-quiz"]').exists()).toBe(true)
+  })
+
+  it('level chip creates with declaredLevel and navigates', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'listSessions').mockResolvedValue([])
+    vi.spyOn(store, 'lookupTopic').mockResolvedValue({ active_match: null, ended_match: null })
     vi.spyOn(store, 'createSession').mockResolvedValue({ id: 'sess1' })
     const wrapper = mountView()
     await flushPromises()
     await wrapper.get('[data-testid="home-quick-topic"]').setValue('Recursion')
     await wrapper.get('[data-testid="home-quick-go"]').trigger('click')
     await flushPromises()
-    expect(store.createSession).toHaveBeenCalledWith({
-      topic: 'Recursion',
-      seedMode: 'fresh',
-      priorSessionId: null,
-    })
+    await wrapper.get('[data-testid="start-level-beginner"]').trigger('click')
+    await flushPromises()
+    expect(store.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        topic: 'Recursion',
+        seedMode: 'fresh',
+        priorSessionId: null,
+        declaredLevel: 'beginner',
+      }),
+    )
     expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'sess1' } })
   })
 
-  it('New lesson navigates to the existing session on server-side 409 duplicate_topic', async () => {
+  it('quiz chip navigates with quiz query', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    vi.spyOn(store, 'createSession').mockRejectedValue({
-      status: 409,
-      body: { detail: { code: 'duplicate_topic', session_id: 'sess-existing' } },
-    })
+    vi.spyOn(store, 'lookupTopic').mockResolvedValue({ active_match: null, ended_match: null })
+    vi.spyOn(store, 'createSession').mockResolvedValue({ id: 'sess1' })
     const wrapper = mountView()
     await flushPromises()
     await wrapper.get('[data-testid="home-quick-topic"]').setValue('Recursion')
     await wrapper.get('[data-testid="home-quick-go"]').trigger('click')
     await flushPromises()
-    expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'sess-existing' } })
+    await wrapper.get('[data-testid="start-level-quiz"]').trigger('click')
+    await flushPromises()
+    expect(push).toHaveBeenCalledWith({
+      name: 'session',
+      params: { id: 'sess1' },
+      query: { quiz: '1' },
+    })
   })
 
-  it('double-invoking startQuick while createSession is pending only calls the store once (F-45)', async () => {
+  it('active match shows intercept with open-existing', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    let resolveCreate
-    const createSpy = vi.spyOn(store, 'createSession').mockReturnValue(
+    vi.spyOn(store, 'lookupTopic').mockResolvedValue({
+      active_match: { session_id: 'a1', title: 'CSS' },
+      ended_match: null,
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-testid="home-quick-topic"]').setValue('CSS')
+    await wrapper.get('[data-testid="home-quick-go"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="intercept-open-existing"]').exists()).toBe(true)
+    await wrapper.get('[data-testid="intercept-open-existing"]').trigger('click')
+    expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'a1' } })
+  })
+
+  it('ended match continue resumes', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'listSessions').mockResolvedValue([])
+    vi.spyOn(store, 'lookupTopic').mockResolvedValue({
+      active_match: null,
+      ended_match: { session_id: 'e1', title: 'CSS', gap_count: 1 },
+    })
+    vi.spyOn(store, 'continueTopic').mockResolvedValue({ id: 'r1' })
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-testid="home-quick-topic"]').setValue('CSS')
+    await wrapper.get('[data-testid="home-quick-go"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="intercept-continue"]').trigger('click')
+    await flushPromises()
+    expect(store.continueTopic).toHaveBeenCalled()
+    expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'r1' } })
+  })
+
+  it('double-invoking start-quick while lookup is pending only calls lookupTopic once', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'listSessions').mockResolvedValue([])
+    let resolveLookup
+    const lookupSpy = vi.spyOn(store, 'lookupTopic').mockReturnValue(
       new Promise((resolve) => {
-        resolveCreate = resolve
+        resolveLookup = resolve
       }),
     )
     const wrapper = mountView()
@@ -162,10 +222,10 @@ describe('HomeView', () => {
     await wrapper.get('[data-testid="home-quick-topic"]').setValue('Recursion')
     await wrapper.get('[data-testid="home-quick-go"]').trigger('click')
     await wrapper.get('[data-testid="home-quick-go"]').trigger('click')
-    expect(createSpy).toHaveBeenCalledTimes(1)
-    resolveCreate({ id: 'sess1' })
+    expect(lookupSpy).toHaveBeenCalledTimes(1)
+    resolveLookup({ active_match: null, ended_match: null })
     await flushPromises()
-    expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'sess1' } })
+    expect(wrapper.find('[data-testid="start-level-quiz"]').exists()).toBe(true)
   })
 
   it('does not render the dupe banner or recent feed (relocated)', async () => {
