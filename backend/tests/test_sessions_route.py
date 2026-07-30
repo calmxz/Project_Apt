@@ -755,3 +755,51 @@ def test_resume_create_abandons_prior_open_batch(client, db_session, session_wit
     assert check_question_service.get_pending_check(db_session, prior.id) is None
     db_session.refresh(prior)
     assert prior.ended_at is not None
+
+
+def _seed_session_with_messages(db_session, session_id, count):
+    from db.models import ChatMessage
+
+    db_session.add(
+        SessionModel(
+            id=session_id,
+            user_id=USER_ID,
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    for i in range(count):
+        db_session.add(ChatMessage(session_id=session_id, role="user", content=f"m{i}"))
+    db_session.commit()
+
+
+def test_get_session_caps_messages_to_last_30(client, db_session, seeded_user):
+    _seed_session_with_messages(db_session, "s_window", 31)
+
+    r = client.get(f"/api/sessions/s_window?user_id={USER_ID}")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert len(body["messages"]) == 30
+    assert body["has_more_messages"] is True
+    # Oldest message (m0) dropped; order stays ascending.
+    assert body["messages"][0]["content"] == "m1"
+    assert body["messages"][-1]["content"] == "m30"
+
+
+def test_get_session_small_transcript_returns_all_and_has_more_false(client, db_session, seeded_user):
+    _seed_session_with_messages(db_session, "s_small", 2)
+
+    r = client.get(f"/api/sessions/s_small?user_id={USER_ID}")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert len(body["messages"]) == 2
+    assert body["has_more_messages"] is False
+
+
+def test_get_session_exactly_30_has_more_false(client, db_session, seeded_user):
+    _seed_session_with_messages(db_session, "s_exact", 30)
+
+    r = client.get(f"/api/sessions/s_exact?user_id={USER_ID}")
+    body = r.json()
+    assert len(body["messages"]) == 30
+    assert body["has_more_messages"] is False
