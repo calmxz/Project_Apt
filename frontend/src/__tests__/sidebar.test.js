@@ -1133,8 +1133,19 @@ describe('Sidebar.vue — review entry', () => {
     // review assertions (mirrors the "mount fetch" describe's pattern).
     const store = useSessionStore()
     vi.spyOn(store, 'listSessions').mockResolvedValue([])
+    // Badge fetch is deferred via runWhenIdle; stub requestIdleCallback to
+    // run synchronously so the existing badge assertions still hold.
+    globalThis.requestIdleCallback = (cb) => {
+      cb()
+      return 1
+    }
+    globalThis.cancelIdleCallback = () => {}
   })
-  afterEach(() => wrapper?.unmount())
+  afterEach(() => {
+    wrapper?.unmount()
+    delete globalThis.requestIdleCallback
+    delete globalThis.cancelIdleCallback
+  })
 
   it('shows the review entry with a count when concepts are due', async () => {
     apiReviewQueue.mockResolvedValue({ items: [], total: 13, limit: 1, offset: 0 })
@@ -1166,6 +1177,30 @@ describe('Sidebar.vue — review entry', () => {
     wrapper = mount(Sidebar)
     await flushPromises()
     expect(wrapper.find('[data-testid="sidebar-review"]').exists()).toBe(false)
+  })
+
+  it('does not fetch the badge before the idle callback runs', async () => {
+    let idleCb
+    globalThis.requestIdleCallback = (cb) => {
+      idleCb = cb
+      return 1
+    }
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(apiReviewQueue).not.toHaveBeenCalled()
+    idleCb()
+    await flushPromises()
+    expect(apiReviewQueue).toHaveBeenCalledWith({ limit: 1, offset: 0 }, { silent: true })
+  })
+
+  it('unmount cancels the pending idle badge fetch', async () => {
+    globalThis.requestIdleCallback = () => 1
+    const cancelSpy = vi.fn()
+    globalThis.cancelIdleCallback = cancelSpy
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    wrapper.unmount()
+    expect(cancelSpy).toHaveBeenCalledWith(1)
   })
 })
 
