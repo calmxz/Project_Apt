@@ -119,8 +119,15 @@ router.beforeEach(async (to) => {
   if (auth.isAuthenticated && !user.hydrated) {
     // F-46: onboarding truth lives on the server; the localStorage snapshot
     // is only a warm cache. Await one hydrate so a new device does not
-    // force-route an existing user to onboarding.
-    await user.hydrateFromServer()
+    // force-route an existing user to onboarding. When the snapshot already
+    // says onboarding is complete, the answer cannot get worse by waiting --
+    // render immediately and refresh in the background instead of spending a
+    // full round trip on the first paint.
+    if (user.onboardingComplete) {
+      user.hydrateFromServer()
+    } else {
+      await user.hydrateFromServer()
+    }
   }
   if (
     auth.isAuthenticated &&
