@@ -220,7 +220,6 @@ function commitRenameFromKey() {
 
 .sb-row--current {
   background: var(--color-accent-soft);
-  box-shadow: inset 3px 0 0 var(--color-accent);
 }
 
 .sb-row--current:hover {
