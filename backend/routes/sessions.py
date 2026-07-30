@@ -24,6 +24,7 @@ from contracts import (
     Citation,
     DocumentStatus,
     Message,
+    MessagePage,
     SessionCreateRequest,
     SessionDetail,
     SessionEndResponse,
@@ -361,6 +362,25 @@ def get_session(
         pinned=row.pinned,
         pending_check=check_question_service.public_view(pc),
     )
+
+
+@router.get("/sessions/{session_id}/messages", response_model=MessagePage)
+def get_session_messages(
+    session_id: str,
+    before: int = Query(..., description="Exclusive message-id cursor"),
+    limit: int = Query(30, ge=1, le=100),
+    user_id: str = Depends(current_user_id),
+    db: Session = Depends(get_db),
+):
+    row = db.get(SessionModel, session_id)
+    if row is None or row.user_id != user_id:
+        raise HTTPException(status_code=404, detail="session not found")
+    # Same open-batch recap suppression as get_session: if the open check
+    # message ever lands in an older page, the live card still owns it.
+    pc = check_question_service.get_pending_check(db, row.id)
+    open_msg_id = pc.get("message_id") if pc else None
+    items, has_more = _load_messages(db, row.id, open_msg_id, before=before, limit=limit)
+    return MessagePage(items=items, has_more=has_more)
 
 
 def _claim_end(db: Session, session_id: str) -> bool:
