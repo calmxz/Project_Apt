@@ -3,12 +3,17 @@ import { apiGet, apiPost, apiPatch } from './apiClient.js'
 // Paths are relative to VITE_API_BASE_URL which already includes the /api
 // prefix. user_id is no longer carried in any payload — the backend resolves
 // it from the Authorization: Bearer <jwt> header.
-export const createSession = ({ topic, seedMode, priorSessionId }) =>
+export const createSession = ({ topic, seedMode, priorSessionId, declaredLevel }) =>
   apiPost('/sessions', {
     topic,
     seed_mode: seedMode,
     prior_session_id: priorSessionId ?? null,
+    declared_level: declaredLevel ?? null,
   })
+
+// Start-page prior-topic intercept lookup; silent since a failed lookup must
+// never block session creation or surface an error toast.
+export const lookupTopic = (topic) => apiGet('/sessions/lookup', { topic }, { silent: true })
 
 // U-05: every current caller (HomeView, Sidebar, NewSessionView) fires this
 // from onMounted as a fire-and-forget background load -- none is a

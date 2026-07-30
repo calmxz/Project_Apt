@@ -202,7 +202,7 @@ export const useSessionStore = defineStore('session', () => {
     return p
   }
 
-  async function createSession({ topic, seedMode, priorSessionId } = {}) {
+  async function createSession({ topic, seedMode, priorSessionId, declaredLevel } = {}) {
     loading.value = true
     error.value = null
     try {
@@ -210,6 +210,7 @@ export const useSessionStore = defineStore('session', () => {
         topic,
         seedMode,
         priorSessionId,
+        declaredLevel,
       })
       // A freshly created session is always active server-side; count it
       // unconditionally even though it isn't added to the (windowed)
@@ -223,6 +224,15 @@ export const useSessionStore = defineStore('session', () => {
       _setError(e)
     } finally {
       loading.value = false
+    }
+  }
+
+  async function lookupTopic(topic) {
+    // Start-page enhancement: failure must never block session creation.
+    try {
+      return await sessionsApi.lookupTopic(topic)
+    } catch {
+      return null
     }
   }
 
@@ -780,7 +790,12 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  async function sendMessageStreaming({ text, reviewGaps = false, reviewGap = null }) {
+  async function sendMessageStreaming({
+    text,
+    reviewGaps = false,
+    reviewGap = null,
+    diagnosticAccepted = false,
+  }) {
     if (!currentSessionId.value) throw new Error('no active session')
     const trimmed = (text || '').trim()
     if (!trimmed) return null
@@ -803,6 +818,7 @@ export const useSessionStore = defineStore('session', () => {
         message: trimmed,
         reviewGaps,
         reviewGap,
+        diagnosticAccepted,
         signal: ctrl.signal,
         onEvent: ({ event, data }) => {
           sawAnyEvent = true
@@ -938,6 +954,7 @@ export const useSessionStore = defineStore('session', () => {
     clearFollowupNotice,
     listSessions,
     createSession,
+    lookupTopic,
     loadSession,
     loadEarlierMessages,
     endSession,

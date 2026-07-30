@@ -11,6 +11,7 @@ vi.mock('@/services/sessionsApi.js', () => ({
   getSessionLibrary: vi.fn(),
   renameSession: vi.fn(),
   setPinned: vi.fn(),
+  lookupTopic: vi.fn(),
 }))
 
 import { useSessionStore } from '@/stores/session.js'
@@ -1153,6 +1154,43 @@ describe('session store - search rows are first-class mutation targets', () => {
       expect(store.loadEarlierError).toBeTruthy()
       expect(store.messages).toHaveLength(1)
       expect(store.hasMoreMessages).toBe(true)
+    })
+  })
+
+  describe('lookupTopic', () => {
+    it('returns lookup payload', async () => {
+      sessionsApi.lookupTopic.mockResolvedValue({
+        active_match: null,
+        ended_match: { session_id: 'e1' },
+      })
+      const store = useSessionStore()
+      const res = await store.lookupTopic('css')
+      expect(sessionsApi.lookupTopic).toHaveBeenCalledWith('css')
+      expect(res.ended_match.session_id).toBe('e1')
+    })
+
+    it('returns null on failure without setting store error', async () => {
+      sessionsApi.lookupTopic.mockRejectedValue(new Error('boom'))
+      const store = useSessionStore()
+      const res = await store.lookupTopic('css')
+      expect(res).toBeNull()
+      expect(store.error).toBeNull()
+    })
+  })
+
+  describe('createSession declaredLevel', () => {
+    it('passes declared_level through', async () => {
+      sessionsApi.createSession.mockResolvedValue({ id: 'n1' })
+      const store = useSessionStore()
+      await store.createSession({
+        topic: 't',
+        seedMode: 'fresh',
+        priorSessionId: null,
+        declaredLevel: 'advanced',
+      })
+      expect(sessionsApi.createSession).toHaveBeenCalledWith(
+        expect.objectContaining({ declaredLevel: 'advanced' }),
+      )
     })
   })
 })
