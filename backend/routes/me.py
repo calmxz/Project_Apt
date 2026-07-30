@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from contracts import MePatchRequest, MeResponse
 from db.database import get_db
+from db.models import User
 from services.auth import accepted_terms_from_request, current_user_id
 from services.user_service import ensure_user
 
@@ -27,10 +28,14 @@ def get_me(
     user_id: str = Depends(current_user_id),
     db: Session = Depends(get_db),
 ):
-    user = ensure_user(
-        db, user_id, accepted_terms=accepted_terms_from_request(request)
-    )
-    db.commit()
+    # Steady-state GET is a pure read on the render-blocking boot path; only
+    # the first-ever call for a user needs the create + COMMIT round trip.
+    user = db.get(User, user_id)
+    if user is None:
+        user = ensure_user(
+            db, user_id, accepted_terms=accepted_terms_from_request(request)
+        )
+        db.commit()
     return _to_response(user)
 
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import router from '@/router/index.js'
 import { useAuthStore } from '@/stores/auth.js'
@@ -122,6 +122,36 @@ describe('router', () => {
     // guard entirely, which would defeat this test.
     await router.push('/settings') // must not throw
     expect(router.currentRoute.value.name).toBe('login')
+  })
+
+  it('does not block navigation on server hydrate when snapshot says onboarding complete', async () => {
+    setAuth(true)
+    const user = useUserStore()
+    user.onboardingComplete = true
+    user.hydrated = false
+    // A hanging hydrate must not hang navigation: the localStorage snapshot
+    // already answers the onboarding question, so the server refresh is
+    // background-only.
+    const spy = vi.spyOn(user, 'hydrateFromServer').mockReturnValue(new Promise(() => {}))
+    const push = router.push({ name: 'settings' })
+    await new Promise((r) => setTimeout(r, 0))
+    expect(spy).toHaveBeenCalled()
+    expect(router.currentRoute.value.name).toBe('settings')
+    await push.catch(() => {})
+  })
+
+  it('still awaits hydrate when no snapshot marks onboarding complete (F-46)', async () => {
+    setAuth(true)
+    const user = useUserStore()
+    user.onboardingComplete = false
+    user.hydrated = false
+    const spy = vi.spyOn(user, 'hydrateFromServer').mockImplementation(async () => {
+      user.onboardingComplete = true
+      user.hydrated = true
+    })
+    await router.push({ name: 'settings' })
+    expect(spy).toHaveBeenCalled()
+    expect(router.currentRoute.value.name).toBe('settings')
   })
 
   it('focuses #main-content after push navigation', async () => {

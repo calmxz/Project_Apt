@@ -1,6 +1,24 @@
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import event as _sa_event
+
 from db.models import LearningEvent, Session as SessionModel, User
+
+
+@contextmanager
+def count_queries(db):
+    bind = db.get_bind()
+    state = {"n": 0}
+
+    def _before(conn, cursor, statement, params, context, executemany):
+        state["n"] += 1
+
+    _sa_event.listen(bind, "before_cursor_execute", _before)
+    try:
+        yield state
+    finally:
+        _sa_event.remove(bind, "before_cursor_execute", _before)
 
 T0 = datetime(2026, 7, 1, 12, 0, 0, tzinfo=timezone.utc)
 
@@ -61,6 +79,23 @@ def test_not_yet_due_concept_excluded(client, db_session):
     )
     r = client.get("/api/review/queue")
     assert r.json()["total"] == 0
+
+
+def test_queue_query_count_constant_in_session_count(client, db_session):
+    # The evidence map must be built from one batched session fetch, not one
+    # profile load per distinct session (N+1 on every sidebar boot).
+    _seed_session(db_session, session_id="qc1", topic="t-qc1")
+    _seed_event(db_session, "qc1", "g-qc1", False, T0)
+    with count_queries(db_session) as q1:
+        assert client.get("/api/review/queue").status_code == 200
+
+    for n in range(2, 6):
+        _seed_session(db_session, session_id=f"qc{n}", topic=f"t-qc{n}")
+        _seed_event(db_session, f"qc{n}", f"g-qc{n}", False, T0)
+    with count_queries(db_session) as q5:
+        assert client.get("/api/review/queue").status_code == 200
+
+    assert q5["n"] == q1["n"], f"N+1: 1-session={q1['n']} vs 5-session={q5['n']}"
 
 
 def test_cross_session_aggregation_and_pagination(client, db_session):

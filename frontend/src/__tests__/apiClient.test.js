@@ -149,6 +149,37 @@ describe('apiClient', () => {
     expect(init.headers['authorization']).toBe('Bearer fresh-tok')
   })
 
+  function makeJwt(expSeconds) {
+    const b64 = (obj) =>
+      btoa(JSON.stringify(obj)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+    return `${b64({ alg: 'none' })}.${b64({ exp: expSeconds })}.sig`
+  }
+
+  it('reuses the cached store token without getSession when far from expiry', async () => {
+    const store = useAuthStore()
+    const tok = makeJwt(Math.floor(Date.now() / 1000) + 3600)
+    store.session = { access_token: tok, user: { id: 'u1' } }
+    fetchMock.mockResolvedValue(new Response('{}', { status: 200 }))
+    await apiGet('/ping')
+    expect(globalThis.__supabaseAuthStub.getSession).not.toHaveBeenCalled()
+    const [, init] = fetchMock.mock.calls[0]
+    expect(init.headers['authorization']).toBe(`Bearer ${tok}`)
+  })
+
+  it('goes through getSession when the cached token is near expiry', async () => {
+    const store = useAuthStore()
+    const tok = makeJwt(Math.floor(Date.now() / 1000) + 10) // inside 60s margin
+    store.session = { access_token: tok, user: { id: 'u1' } }
+    globalThis.__supabaseAuthStub.getSession.mockResolvedValueOnce({
+      data: { session: { access_token: 'fresh-tok', user: { id: 'u1' } } },
+    })
+    fetchMock.mockResolvedValue(new Response('{}', { status: 200 }))
+    await apiGet('/ping')
+    expect(globalThis.__supabaseAuthStub.getSession).toHaveBeenCalled()
+    const [, init] = fetchMock.mock.calls[0]
+    expect(init.headers['authorization']).toBe('Bearer fresh-tok')
+  })
+
   it('falls back to the store token when getSession fails', async () => {
     const store = useAuthStore()
     store.session = { access_token: 'store-tok', user: { id: 'u1' } }
