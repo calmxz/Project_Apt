@@ -5,6 +5,7 @@ vi.mock('@/services/sessionsApi.js', () => ({
   listSessions: vi.fn(),
   createSession: vi.fn(),
   getSession: vi.fn(),
+  getSessionMessages: vi.fn(),
   endSession: vi.fn(),
   reopenSession: vi.fn(),
   getSessionLibrary: vi.fn(),
@@ -1074,5 +1075,84 @@ describe('session store - search rows are first-class mutation targets', () => {
     s.searchRows = [{ id: 'out-1', topic: 'X', ended_at: null }]
     s.reset()
     expect(s.searchRows).toEqual([])
+  })
+
+  describe('loadEarlierMessages', () => {
+    it('prepends the older page and updates hasMoreMessages', async () => {
+      sessionsApi.getSession.mockResolvedValue({
+        id: 's1',
+        messages: [
+          {
+            id: 50,
+            role: 'user',
+            content: 'newest',
+            citations: [],
+            created_at: 'now',
+            status: null,
+            check_batch: null,
+          },
+        ],
+        has_more_messages: true,
+        pending_check: null,
+      })
+      const store = useSessionStore()
+      await store.loadSession('s1')
+      expect(store.hasMoreMessages).toBe(true)
+
+      sessionsApi.getSessionMessages.mockResolvedValue({
+        items: [
+          {
+            id: 20,
+            role: 'assistant',
+            content: 'older',
+            citations: [],
+            created_at: 'then',
+            status: null,
+            check_batch: null,
+          },
+        ],
+        has_more: false,
+      })
+      await store.loadEarlierMessages()
+
+      expect(sessionsApi.getSessionMessages).toHaveBeenCalledWith('s1', { before: 50 })
+      expect(store.messages.map((m) => m.message_id)).toEqual([20, 50])
+      expect(store.hasMoreMessages).toBe(false)
+      expect(store.loadingEarlier).toBe(false)
+    })
+
+    it('is a no-op when hasMoreMessages is false', async () => {
+      const store = useSessionStore()
+      await store.loadEarlierMessages()
+      expect(sessionsApi.getSessionMessages).not.toHaveBeenCalled()
+    })
+
+    it('records an inline error and keeps messages on failure', async () => {
+      sessionsApi.getSession.mockResolvedValue({
+        id: 's1',
+        messages: [
+          {
+            id: 50,
+            role: 'user',
+            content: 'newest',
+            citations: [],
+            created_at: 'now',
+            status: null,
+            check_batch: null,
+          },
+        ],
+        has_more_messages: true,
+        pending_check: null,
+      })
+      const store = useSessionStore()
+      await store.loadSession('s1')
+
+      sessionsApi.getSessionMessages.mockRejectedValue(new Error('boom'))
+      await store.loadEarlierMessages()
+
+      expect(store.loadEarlierError).toBeTruthy()
+      expect(store.messages).toHaveLength(1)
+      expect(store.hasMoreMessages).toBe(true)
+    })
   })
 })

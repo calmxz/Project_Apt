@@ -74,6 +74,7 @@ function setupSession({
   messages = [],
   dailyCap = null,
   confirmedGaps = [],
+  hasMoreMessages = false,
 } = {}) {
   const store = useSessionStore()
   store.currentSession = {
@@ -90,6 +91,7 @@ function setupSession({
   }
   store.currentSessionId = id
   store.messages = messages
+  store.hasMoreMessages = hasMoreMessages
   if (dailyCap) store.dailyCapInfo = dailyCap
   return store
 }
@@ -1233,6 +1235,68 @@ describe('SessionView', () => {
       expect(wrapper.get('[data-testid="diagnostic-consent-card"] [role="alert"]').text()).toBe(
         'Could not start the quiz. Try again.',
       )
+    })
+  })
+
+  describe('load earlier messages', () => {
+    // setupSession() alone leaves store.detailLoading true until the real
+    // (unmocked) loadSession fetch settles, which is exactly what every other
+    // describe block in this file avoids by driving setupSession through a
+    // loadSession spy. Do the same here so these assertions run against the
+    // loaded (v-else) branch deterministically instead of racing a live fetch.
+    it('shows the button only when hasMoreMessages', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession({
+          id: 's1',
+          messages: [{ role: 'user', content: 'hi', message_id: 9 }],
+          hasMoreMessages: true,
+        })
+      })
+      const wrapper = mountView()
+      await flushPromises()
+      expect(wrapper.find('[data-testid="load-earlier"]').exists()).toBe(true)
+    })
+
+    it('hides the button when history is exhausted', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession({ id: 's1', messages: [{ role: 'user', content: 'hi', message_id: 9 }] })
+      })
+      const wrapper = mountView()
+      await flushPromises()
+      expect(wrapper.find('[data-testid="load-earlier"]').exists()).toBe(false)
+    })
+
+    it('click calls store.loadEarlierMessages and disables while pending', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession({
+          id: 's1',
+          messages: [{ role: 'user', content: 'hi', message_id: 9 }],
+          hasMoreMessages: true,
+        })
+      })
+      const spy = vi.spyOn(store, 'loadEarlierMessages').mockResolvedValue()
+      const wrapper = mountView()
+      await flushPromises()
+      await wrapper.get('[data-testid="load-earlier"]').trigger('click')
+      expect(spy).toHaveBeenCalled()
+    })
+
+    it('shows retry copy when the page fetch failed', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession({
+          id: 's1',
+          messages: [{ role: 'user', content: 'hi', message_id: 9 }],
+          hasMoreMessages: true,
+        })
+        store.loadEarlierError = 'boom'
+      })
+      const wrapper = mountView()
+      await flushPromises()
+      expect(wrapper.get('[data-testid="load-earlier"]').text()).toMatch(/retry/i)
     })
   })
 })

@@ -24,6 +24,7 @@ from contracts import (
     Citation,
     DocumentStatus,
     Message,
+    MessagePage,
     SessionCreateRequest,
     SessionDetail,
     SessionEndResponse,
@@ -210,12 +211,21 @@ def list_sessions(
     return _enrich_list_items(db, rows)
 
 
-def _load_messages(db: Session, session_id: str, open_message_id: int | None = None) -> list[Message]:
-    rows = db.execute(
-        select(ChatMessage)
-        .where(ChatMessage.session_id == session_id)
-        .order_by(ChatMessage.created_at.asc(), ChatMessage.id.asc())
-    ).scalars().all()
+def _load_messages(
+    db: Session,
+    session_id: str,
+    open_message_id: int | None = None,
+    before: int | None = None,
+    limit: int = 30,
+) -> tuple[list[Message], bool]:
+    q = select(ChatMessage).where(ChatMessage.session_id == session_id)
+    if before is not None:
+        q = q.where(ChatMessage.id < before)
+    window = list(
+        db.execute(q.order_by(ChatMessage.id.desc()).limit(limit + 1)).scalars().all()
+    )
+    has_more = len(window) > limit
+    rows = list(reversed(window[:limit]))
     # Preload LearningEvents once iff some message may need reconstruction
     # (no persisted check_batch_json and not the open message). Avoids the
     # former per-item N+1 entirely; skipped when every batch is persisted.
@@ -255,7 +265,7 @@ def _load_messages(db: Session, session_id: str, open_message_id: int | None = N
                 status=m.status,
             )
         )
-    return out
+    return out, has_more
 
 
 def _build_end_summary(db: Session, session_id: str, text: str) -> SessionEndSummary:
@@ -338,6 +348,7 @@ def get_session(
     # path, or a narrow race). When None, suppression below cannot fire; the
     # read-time backfill is best-effort and any co-render window is transient.
     open_msg_id = pc.get("message_id") if pc else None
+    messages, has_more = _load_messages(db, row.id, open_msg_id)
     return SessionDetail(
         id=row.id,
         user_id=row.user_id,
@@ -346,10 +357,30 @@ def get_session(
         created_at=_aware_utc(row.created_at),
         ended_at=_aware_utc(row.ended_at),
         ingestion_status=documents_service.session_ingestion_status(db, row.id),
-        messages=_load_messages(db, row.id, open_msg_id),
+        messages=messages,
+        has_more_messages=has_more,
         pinned=row.pinned,
         pending_check=check_question_service.public_view(pc),
     )
+
+
+@router.get("/sessions/{session_id}/messages", response_model=MessagePage)
+def get_session_messages(
+    session_id: str,
+    before: int = Query(..., description="Exclusive message-id cursor"),
+    limit: int = Query(30, ge=1, le=100),
+    user_id: str = Depends(current_user_id),
+    db: Session = Depends(get_db),
+):
+    row = db.get(SessionModel, session_id)
+    if row is None or row.user_id != user_id:
+        raise HTTPException(status_code=404, detail="session not found")
+    # Same open-batch recap suppression as get_session: if the open check
+    # message ever lands in an older page, the live card still owns it.
+    pc = check_question_service.get_pending_check(db, row.id)
+    open_msg_id = pc.get("message_id") if pc else None
+    items, has_more = _load_messages(db, row.id, open_msg_id, before=before, limit=limit)
+    return MessagePage(items=items, has_more=has_more)
 
 
 def _claim_end(db: Session, session_id: str) -> bool:

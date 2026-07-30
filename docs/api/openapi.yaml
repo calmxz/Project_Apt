@@ -311,6 +311,36 @@ paths:
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
+  /api/sessions/{session_id}/messages:
+    get:
+      tags: [sessions]
+      summary: Older transcript messages before a cursor, ascending.
+      operationId: getSessionMessages
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - in: query
+          name: before
+          required: true
+          description: Exclusive cursor; returns messages with id < before.
+          schema: { type: integer }
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer, default: 30, minimum: 1, maximum: 100 }
+      responses:
+        "200":
+          description: One page of older messages.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessagePage"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
   /api/sessions/{session_id}/end:
     post:
       tags: [sessions]
@@ -1184,8 +1214,8 @@ components:
     SessionDetail:
       type: object
       additionalProperties: false
-      required: [id, user_id, topic, topic_profile, created_at, messages]
-      description: SessionResponse plus full message transcript.
+      required: [id, user_id, topic, topic_profile, created_at, messages, has_more_messages]
+      description: SessionResponse plus the newest window of the message transcript.
       properties:
         id:                { type: string }
         user_id:           { type: string }
@@ -1207,6 +1237,7 @@ components:
         messages:
           type: array
           items: { $ref: "#/components/schemas/Message" }
+        has_more_messages: { type: boolean }
 
     SessionLibraryPage:
       type: object
@@ -1220,6 +1251,17 @@ components:
         total:  { type: integer }
         limit:  { type: integer }
         offset: { type: integer }
+
+    MessagePage:
+      type: object
+      additionalProperties: false
+      required: [items, has_more]
+      description: One page of older transcript messages, ascending order.
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Message" }
+        has_more: { type: boolean }
 
     ReviewQueueItem:
       type: object

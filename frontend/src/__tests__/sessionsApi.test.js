@@ -18,6 +18,15 @@ describe('sessionsApi check operations', () => {
     expect(apiGet).toHaveBeenCalledWith('/sessions/library', { status: 'active' }, { silent: true })
   })
 
+  it('getSessionMessages calls apiGet with silent:true (inline error UI, never a toast)', async () => {
+    await sessionsApi.getSessionMessages('s1', { before: 5, limit: 30 })
+    expect(apiGet).toHaveBeenCalledWith(
+      '/sessions/s1/messages',
+      { before: 5, limit: 30 },
+      { silent: true },
+    )
+  })
+
   it('answerCheck and skipCheck opt out of the errorBus toast', async () => {
     // Test answerCheck calls apiPost with { silent: true } as third argument
     await answerCheck('s1', 0, 2)

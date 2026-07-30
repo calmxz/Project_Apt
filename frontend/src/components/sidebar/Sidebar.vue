@@ -10,6 +10,7 @@ import { useSessionStore } from '@/stores/session.js'
 import { useSessionGroups } from '@/composables/useSessionGroups.js'
 import { getReviewQueue } from '@/services/reviewApi.js'
 import * as sessionsApi from '@/services/sessionsApi.js'
+import { runWhenIdle } from '@/utils/idle.js'
 import Logo from '@/components/Logo.vue'
 import SidebarSessionRow from './SidebarSessionRow.vue'
 import SidebarSkeletonList from './SidebarSkeletonList.vue'
@@ -30,6 +31,7 @@ const STATUS_TABS = [
   { key: 'ended', label: 'Ended' },
 ]
 let lastFocused = null
+let cancelIdleBadge = null
 
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
@@ -87,6 +89,7 @@ onBeforeUnmount(() => {
     document.removeEventListener('keydown', onTrapKeydown, true)
   }
   clearTimeout(searchTimer)
+  cancelIdleBadge?.()
 })
 
 const searchQuery = ref('')
@@ -204,11 +207,15 @@ onMounted(async () => {
   }
   if (isAuthenticated.value) {
     // Badge count only; silent - a sidebar badge must never toast.
-    getReviewQueue({ limit: 1, offset: 0 }, { silent: true })
-      .then((q) => {
-        reviewTotal.value = q?.total || 0
-      })
-      .catch(() => {})
+    // Deferred to browser idle so it never competes with first paint.
+    cancelIdleBadge = runWhenIdle(() => {
+      if (!isAuthenticated.value) return
+      getReviewQueue({ limit: 1, offset: 0 }, { silent: true })
+        .then((q) => {
+          reviewTotal.value = q?.total || 0
+        })
+        .catch(() => {})
+    })
   }
 })
 

@@ -338,7 +338,7 @@ class Message(BaseModel):
 
 class SessionDetail(BaseModel):
     """
-    SessionResponse plus full message transcript.
+    SessionResponse plus the newest window of the message transcript.
     """
 
     model_config = ConfigDict(
@@ -354,6 +354,7 @@ class SessionDetail(BaseModel):
     pinned: bool | None = False
     pending_check: PendingCheck | None = None
     messages: list[Message]
+    has_more_messages: bool
 
 
 class SessionLibraryPage(BaseModel):
@@ -368,6 +369,18 @@ class SessionLibraryPage(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class MessagePage(BaseModel):
+    """
+    One page of older transcript messages, ascending order.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    items: list[Message]
+    has_more: bool
 
 
 class ReviewQueueItem(BaseModel):

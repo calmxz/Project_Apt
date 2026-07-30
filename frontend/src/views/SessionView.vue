@@ -42,6 +42,20 @@
       >
         <MessageListSkeleton v-if="store.detailLoading" />
         <template v-else>
+          <button
+            v-if="store.hasMoreMessages && store.messages.length"
+            type="button"
+            class="load-earlier"
+            data-testid="load-earlier"
+            :disabled="store.loadingEarlier"
+            @click="onLoadEarlier"
+          >
+            <template v-if="store.loadingEarlier">Loading…</template>
+            <template v-else-if="store.loadEarlierError"
+              >Could not load earlier messages — retry</template
+            >
+            <template v-else>Load earlier messages</template>
+          </button>
           <ChatEmptyState
             v-if="!store.messages.length"
             :archived="isEnded"
@@ -420,7 +434,33 @@ function scrollToBottom() {
   })
 }
 
-watch([() => store.messages.length, awaitingResponse], () => scrollToBottom())
+// True from the moment a "load earlier" click starts until its scroll-offset
+// restore lands. The autoscroll watcher below fires when store.messages.length
+// changes (prepend included) - without this guard it would yank the view back
+// to the bottom right after older messages are spliced in. store.loadingEarlier
+// is already false by the time the watcher flushes (it's cleared before the
+// awaited nextTick below resolves), so it can't do this job - this local flag
+// is the whole point.
+const prepending = ref(false)
+
+async function onLoadEarlier() {
+  const el = messagesEl.value
+  const prevHeight = el ? el.scrollHeight : 0
+  const prevTop = el ? el.scrollTop : 0
+  prepending.value = true
+  try {
+    await store.loadEarlierMessages()
+    await nextTick()
+    if (el) el.scrollTop = prevTop + (el.scrollHeight - prevHeight)
+  } finally {
+    prepending.value = false
+  }
+}
+
+watch([() => store.messages.length, awaitingResponse], () => {
+  if (prepending.value) return
+  scrollToBottom()
+})
 
 async function loadCurrent(id) {
   // Reset per-load so navigating away from a 404 session clears the state.
@@ -886,6 +926,35 @@ function goHome() {
 }
 .messages::-webkit-scrollbar-thumb:hover {
   background: var(--color-text-faint);
+}
+
+.load-earlier {
+  align-self: stretch;
+  width: 100%;
+  flex: 0 0 auto;
+  background: transparent;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  padding: 0.4rem 0.75rem;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: background var(--motion-fast) ease;
+}
+
+.load-earlier:hover:not(:disabled) {
+  background: var(--color-surface-soft);
+}
+
+.load-earlier:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+}
+
+.load-earlier:disabled {
+  cursor: default;
+  opacity: 0.7;
 }
 
 .messages.is-empty {
