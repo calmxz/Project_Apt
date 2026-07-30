@@ -8,14 +8,17 @@ export function useStartFlow({ store, router, beforeNavigate }) {
   const interceptMatch = ref(null)
   const interceptKind = ref(null) // 'active' | 'ended' | null
   const topic = ref('')
+  let generation = 0
 
   async function begin(rawTopic) {
     const trimmed = (rawTopic || '').trim()
     if (!trimmed || busy.value) return
     topic.value = trimmed
     busy.value = true
+    const gen = generation
     try {
       const res = await store.lookupTopic(trimmed)
+      if (gen !== generation) return
       if (res?.active_match) {
         interceptMatch.value = res.active_match
         interceptKind.value = 'active'
@@ -43,6 +46,7 @@ export function useStartFlow({ store, router, beforeNavigate }) {
       const created = await store.continueTopic({
         id: interceptMatch.value.session_id,
         topic: interceptMatch.value.title,
+        ended_at: interceptMatch.value.ended_at,
       })
       if (created) router.push({ name: 'session', params: { id: created.id } })
     } finally {
@@ -88,6 +92,7 @@ export function useStartFlow({ store, router, beforeNavigate }) {
   const skipLevel = () => _create()
 
   function cancel() {
+    generation += 1
     stage.value = 'idle'
     interceptMatch.value = null
     interceptKind.value = null

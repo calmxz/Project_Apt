@@ -205,5 +205,20 @@ describe('NewSessionView', () => {
       expect(wrapper.find('[data-testid="start-intercept"]').exists()).toBe(true)
       expect(wrapper.find('[data-testid="new-active-warn"]').exists()).toBe(false)
     })
+
+    it('editing the topic after the level picker is shown resets the flow', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'listSessions').mockResolvedValue([])
+      vi.spyOn(store, 'lookupTopic').mockResolvedValue({ active_match: null, ended_match: null })
+      const wrapper = mountView()
+      await wrapper.get('[data-testid="new-topic"]').setValue('Calculus')
+      await wrapper.get('[data-testid="new-submit"]').trigger('click')
+      await flushPromises()
+      expect(wrapper.find('[data-testid="start-level-skip"]').exists()).toBe(true)
+
+      await wrapper.get('[data-testid="new-topic"]').setValue('Calculus II')
+      await flushPromises()
+      expect(wrapper.find('[data-testid="start-level-skip"]').exists()).toBe(false)
+    })
   })
 })

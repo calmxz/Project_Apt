@@ -115,7 +115,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 import StartLevelPicker from '../components/start/StartLevelPicker.vue'
@@ -163,6 +163,8 @@ const {
   skipLevel,
   cancel,
 } = useStartFlow({ store, router, beforeNavigate: uploadPending })
+
+watch(topic, () => cancel())
 
 const quickPicks = [
   'Recursion',

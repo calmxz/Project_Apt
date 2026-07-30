@@ -48,7 +48,12 @@ describe('useStartFlow', () => {
     const store = makeStore({
       lookupTopic: vi.fn().mockResolvedValue({
         active_match: null,
-        ended_match: { session_id: 'e1', title: 'CSS', gap_count: 2 },
+        ended_match: {
+          session_id: 'e1',
+          title: 'CSS',
+          gap_count: 2,
+          ended_at: '2026-07-29T00:00:00Z',
+        },
       }),
     })
     const flow = useStartFlow({ store, router })
@@ -56,7 +61,7 @@ describe('useStartFlow', () => {
     expect(flow.interceptKind.value).toBe('ended')
     await flow.continuePrior()
     expect(store.continueTopic).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'e1', topic: 'CSS' }),
+      expect.objectContaining({ id: 'e1', topic: 'CSS', ended_at: '2026-07-29T00:00:00Z' }),
     )
     expect(router.push).toHaveBeenCalledWith({ name: 'session', params: { id: 'res1' } })
   })
@@ -143,6 +148,20 @@ describe('useStartFlow', () => {
     const flow = useStartFlow({ store: makeStore(), router })
     await flow.begin('t')
     flow.cancel()
+    expect(flow.stage.value).toBe('idle')
+  })
+
+  it('cancel during an in-flight begin() prevents the stale resolution from setting stage', async () => {
+    let resolveLookup
+    const lookupPromise = new Promise((resolve) => {
+      resolveLookup = resolve
+    })
+    const store = makeStore({ lookupTopic: vi.fn().mockReturnValue(lookupPromise) })
+    const flow = useStartFlow({ store, router })
+    const beginPromise = flow.begin('old topic')
+    flow.cancel()
+    resolveLookup({ active_match: null, ended_match: null })
+    await beginPromise
     expect(flow.stage.value).toBe('idle')
   })
 })
