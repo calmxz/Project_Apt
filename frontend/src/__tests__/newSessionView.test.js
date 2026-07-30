@@ -81,80 +81,17 @@ describe('NewSessionView', () => {
     expect(listSpy).not.toHaveBeenCalled()
   })
 
-  it('warns + offers open when active session on topic exists', async () => {
-    const store = useSessionStore()
-    store.sessions = [
-      { id: 'sess-123', topic: 'Calculus', ended_at: null, created_at: new Date().toISOString() },
-    ]
-    const wrapper = mountView()
-    await wrapper.get('[data-testid="new-topic"]').setValue('Calculus')
-    expect(wrapper.find('[data-testid="new-active-warn"]').exists()).toBe(true)
-    expect(wrapper.get('[data-testid="new-submit"]').attributes('disabled')).toBeDefined()
-  })
-
-  it('open existing routes to that session', async () => {
-    const store = useSessionStore()
-    store.sessions = [
-      { id: 'sess-abc', topic: 'Calculus', ended_at: null, created_at: new Date().toISOString() },
-    ]
-    const wrapper = mountView()
-    await wrapper.get('[data-testid="new-topic"]').setValue('Calculus')
-    await wrapper.get('[data-testid="new-open-existing"]').trigger('click')
-    expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'sess-abc' } })
-  })
-
-  it('submit creates session and routes to it', async () => {
-    const store = useSessionStore()
-    vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    vi.spyOn(store, 'createSession').mockResolvedValue({ id: 'new-1' })
-    const wrapper = mountView()
-    await flushPromises()
-    await wrapper.get('[data-testid="new-topic"]').setValue('Calculus')
-    await wrapper.get('[data-testid="new-submit"]').trigger('click')
-    await flushPromises()
-    expect(store.createSession).toHaveBeenCalledWith({
-      topic: 'Calculus',
-      seedMode: 'fresh',
-      priorSessionId: null,
-    })
-    expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'new-1' } })
-  })
-
-  it('submit shows error on createSession rejection', async () => {
-    const store = useSessionStore()
-    vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    vi.spyOn(store, 'createSession').mockRejectedValue(new Error('boom'))
-    const wrapper = mountView()
-    await wrapper.get('[data-testid="new-topic"]').setValue('Calculus')
-    await wrapper.get('[data-testid="new-submit"]').trigger('click')
-    await flushPromises()
-    expect(wrapper.get('[data-testid="new-error"]').text()).toBe('boom')
-  })
-
-  it('shows open-existing-session button on server-side 409 duplicate_topic', async () => {
-    const store = useSessionStore()
-    vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    vi.spyOn(store, 'createSession').mockRejectedValue({
-      status: 409,
-      body: { detail: { code: 'duplicate_topic', session_id: 's-1' } },
-    })
-    const wrapper = mountView()
-    await wrapper.get('[data-testid="new-topic"]').setValue('Calculus')
-    await wrapper.get('[data-testid="new-submit"]').trigger('click')
-    await flushPromises()
-    expect(wrapper.find('[data-testid="open-existing-session"]').exists()).toBe(true)
-    await wrapper.get('[data-testid="open-existing-session"]').trigger('click')
-    expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 's-1' } })
-  })
-
   it('enter key submits when valid', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'listSessions').mockResolvedValue([])
+    vi.spyOn(store, 'lookupTopic').mockResolvedValue({ active_match: null, ended_match: null })
     vi.spyOn(store, 'createSession').mockResolvedValue({ id: 'new-2' })
     const wrapper = mountView()
     await flushPromises()
     await wrapper.get('[data-testid="new-topic"]').setValue('Calculus')
     await wrapper.get('[data-testid="new-topic"]').trigger('keydown.enter')
+    await flushPromises()
+    await wrapper.get('[data-testid="start-level-skip"]').trigger('click')
     await flushPromises()
     expect(store.createSession).toHaveBeenCalled()
     expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'new-2' } })
@@ -173,31 +110,16 @@ describe('NewSessionView', () => {
     expect(wrapper.get('[data-testid="new-file-errors"]').text()).toMatch(/not supported/i)
   })
 
-  it('submit uploads attached files then routes to the session', async () => {
-    const store = useSessionStore()
-    vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    vi.spyOn(store, 'createSession').mockResolvedValue({ id: 'new-9' })
-    const wrapper = mountView()
-    await flushPromises()
-    await wrapper.get('[data-testid="new-topic"]').setValue('Calculus')
-    const input = wrapper.get('[data-testid="new-file-input"]')
-    const f = new File(['a'], 'ref.pdf', { type: 'application/pdf' })
-    Object.defineProperty(input.element, 'files', { value: [f], configurable: true })
-    await input.trigger('change')
-    await wrapper.get('[data-testid="new-submit"]').trigger('click')
-    await flushPromises()
-    expect(store.createSession).toHaveBeenCalled()
-    expect(uploadDocument).toHaveBeenCalledWith({ sessionId: 'new-9', file: f })
-    expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'new-9' } })
-  })
-
   it('still routes when no files are attached', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'listSessions').mockResolvedValue([])
+    vi.spyOn(store, 'lookupTopic').mockResolvedValue({ active_match: null, ended_match: null })
     vi.spyOn(store, 'createSession').mockResolvedValue({ id: 'new-10' })
     const wrapper = mountView()
     await wrapper.get('[data-testid="new-topic"]').setValue('Calculus')
     await wrapper.get('[data-testid="new-submit"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="start-level-skip"]').trigger('click')
     await flushPromises()
     expect(uploadDocument).not.toHaveBeenCalled()
     expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'new-10' } })
@@ -206,6 +128,7 @@ describe('NewSessionView', () => {
   it('shows a soft warning but still routes when an upload fails', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'listSessions').mockResolvedValue([])
+    vi.spyOn(store, 'lookupTopic').mockResolvedValue({ active_match: null, ended_match: null })
     vi.spyOn(store, 'createSession').mockResolvedValue({ id: 'new-11' })
     uploadDocument.mockRejectedValue(new Error('boom'))
     const wrapper = mountView()
@@ -216,6 +139,8 @@ describe('NewSessionView', () => {
     await input.trigger('change')
     await wrapper.get('[data-testid="new-submit"]').trigger('click')
     await flushPromises()
+    await wrapper.get('[data-testid="start-level-skip"]').trigger('click')
+    await flushPromises()
     expect(wrapper.get('[data-testid="new-file-errors"]').text()).toMatch(/failed to upload/i)
     expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'new-11' } })
   })
@@ -223,5 +148,62 @@ describe('NewSessionView', () => {
   it('does not render a back button', () => {
     const wrapper = mountView()
     expect(wrapper.find('[data-testid="back"]').exists()).toBe(false)
+  })
+
+  describe('smart start on /new', () => {
+    it('start with no match shows level picker, keeps files pending', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'listSessions').mockResolvedValue([])
+      vi.spyOn(store, 'lookupTopic').mockResolvedValue({ active_match: null, ended_match: null })
+      const createSpy = vi.spyOn(store, 'createSession').mockResolvedValue({ id: 'n1' })
+      const wrapper = mountView()
+      await wrapper.get('[data-testid="new-topic"]').setValue('Calculus')
+      const input = wrapper.get('[data-testid="new-file-input"]')
+      const f = new File(['a'], 'ref.pdf', { type: 'application/pdf' })
+      Object.defineProperty(input.element, 'files', { value: [f], configurable: true })
+      await input.trigger('change')
+      await wrapper.get('[data-testid="new-submit"]').trigger('click')
+      await flushPromises()
+      expect(wrapper.find('[data-testid="start-level-skip"]').exists()).toBe(true)
+      expect(createSpy).not.toHaveBeenCalled()
+      expect(wrapper.findAll('[data-testid="new-file-chip"]')).toHaveLength(1)
+    })
+
+    it('level chip creates then uploads attached files then navigates', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'listSessions').mockResolvedValue([])
+      vi.spyOn(store, 'lookupTopic').mockResolvedValue({ active_match: null, ended_match: null })
+      const createSpy = vi.spyOn(store, 'createSession').mockResolvedValue({ id: 'n1' })
+      const wrapper = mountView()
+      await wrapper.get('[data-testid="new-topic"]').setValue('Calculus')
+      const input = wrapper.get('[data-testid="new-file-input"]')
+      const f = new File(['a'], 'ref.pdf', { type: 'application/pdf' })
+      Object.defineProperty(input.element, 'files', { value: [f], configurable: true })
+      await input.trigger('change')
+      await wrapper.get('[data-testid="new-submit"]').trigger('click')
+      await flushPromises()
+      await wrapper.get('[data-testid="start-level-intermediate"]').trigger('click')
+      await flushPromises()
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ topic: 'Calculus', declaredLevel: 'intermediate' }),
+      )
+      expect(uploadDocument).toHaveBeenCalledWith({ sessionId: 'n1', file: f })
+      expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'n1' } })
+    })
+
+    it('active match shows shared intercept, not the old warn block', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'listSessions').mockResolvedValue([])
+      vi.spyOn(store, 'lookupTopic').mockResolvedValue({
+        active_match: { session_id: 'a1', title: 'Calculus' },
+        ended_match: null,
+      })
+      const wrapper = mountView()
+      await wrapper.get('[data-testid="new-topic"]').setValue('Calculus')
+      await wrapper.get('[data-testid="new-submit"]').trigger('click')
+      await flushPromises()
+      expect(wrapper.find('[data-testid="start-intercept"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="new-active-warn"]').exists()).toBe(false)
+    })
   })
 })

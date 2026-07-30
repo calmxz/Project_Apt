@@ -123,6 +123,22 @@ describe('useStartFlow', () => {
     expect(flow.interceptMatch.value.session_id).toBe('a9')
   })
 
+  it('awaits beforeNavigate hook between create and push', async () => {
+    const order = []
+    const store = makeStore({
+      createSession: vi.fn().mockImplementation(async () => {
+        order.push('create')
+        return { id: 'n1' }
+      }),
+    })
+    const beforeNavigate = vi.fn().mockImplementation(async () => order.push('hook'))
+    const flow = useStartFlow({ store, router, beforeNavigate })
+    await flow.begin('t')
+    await flow.skipLevel()
+    expect(order).toEqual(['create', 'hook'])
+    expect(router.push).toHaveBeenCalled()
+  })
+
   it('cancel returns to idle', async () => {
     const flow = useStartFlow({ store: makeStore(), router })
     await flow.begin('t')

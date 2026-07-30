@@ -2,7 +2,7 @@ import { ref } from 'vue'
 
 // State machine for the start pages: lookup -> intercept -> level -> create.
 // Lookup is an enhancement: any failure falls through to the level picker.
-export function useStartFlow({ store, router }) {
+export function useStartFlow({ store, router, beforeNavigate }) {
   const stage = ref('idle') // 'idle' | 'intercept' | 'level'
   const busy = ref(false)
   const interceptMatch = ref(null)
@@ -65,6 +65,7 @@ export function useStartFlow({ store, router }) {
         declaredLevel,
       })
       if (!created) return
+      if (beforeNavigate) await beforeNavigate(created)
       const route = { name: 'session', params: { id: created.id } }
       if (quiz) route.query = { quiz: '1' }
       router.push(route)
