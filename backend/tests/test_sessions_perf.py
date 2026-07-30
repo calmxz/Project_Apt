@@ -40,6 +40,11 @@ def test_perf_indexes_declared_on_models():
     le_index_cols = {tuple(c.name for c in ix.columns) for ix in le.indexes}
     assert ("session_id", "created_at") in cm_index_cols
     assert ("session_id",) in le_index_cols
+    # documents.session_id is filtered on every GET /sessions/{id} via
+    # session_ingestion_status; without an index it is a sequential scan.
+    doc = Base.metadata.tables["documents"]
+    doc_index_cols = {tuple(c.name for c in ix.columns) for ix in doc.indexes}
+    assert ("session_id",) in doc_index_cols
 
 
 USER_ID = "u1"
@@ -241,6 +246,42 @@ def test_library_sort_pinned_activity_respects_status_and_limit(client, db_sessi
     body = r.json()
     assert body["total"] == 2  # ended row excluded from total
     assert [i["id"] for i in body["items"]] == ["pa_active_pinned"]
+
+
+@contextmanager
+def capture_statements(db):
+    bind = db.get_bind()
+    stmts = []
+
+    def _before(conn, cursor, statement, params, context, executemany):
+        stmts.append(statement)
+
+    _sa_event.listen(bind, "before_cursor_execute", _before)
+    try:
+        yield stmts
+    finally:
+        _sa_event.remove(bind, "before_cursor_execute", _before)
+
+
+def test_library_last_activity_aggregate_scoped_to_user(client, db_session, seeded_user):
+    # The max(created_at) GROUP BY subquery must not aggregate the entire
+    # chat_messages table (every user's messages) just to sort one user's
+    # library page. The outer query always mentions user_id once (its own
+    # WHERE); the scoped subquery adds a second occurrence.
+    base = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    _seed_simple(db_session, "scope_a", "A", activity=base)
+    with capture_statements(db_session) as stmts:
+        r = client.get(f"/api/sessions/library?sort=last_activity&user_id={USER_ID}")
+    assert r.status_code == 200, r.text
+    # The sort query is the one that coalesces the aggregate with created_at.
+    agg = next(
+        s for s in stmts
+        if "max(" in s.lower() and "group by" in s.lower() and "coalesce" in s.lower()
+    )
+    # Look inside the joined aggregate subquery itself: it must restrict
+    # chat_messages to this user's sessions rather than scanning all rows.
+    inner = agg.lower().split("join (", 1)[1].rsplit(") as", 1)[0]
+    assert "user_id" in inner, agg
 
 
 def test_library_route_not_shadowed_by_session_id(client, db_session, seeded_user):

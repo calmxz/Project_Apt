@@ -90,6 +90,21 @@ def _patch(**kw) -> UpdateTopicProfileArgs:
     return UpdateTopicProfileArgs(**kw)
 
 
+def test_knowledge_level_without_evidence_rejected(session_row, ctx, db_session):
+    # F-39 guard: level-only patch with no evidence_type must fail loudly and
+    # leave the level unset (this untested branch was the diagnostic-repeat
+    # loop's server half).
+    result = profile_service.apply_patch(
+        db_session,
+        ctx,
+        _patch(knowledge_level="beginner", evidence_type=None),
+    )
+    assert result.ok is False
+    assert "evidence_type" in (result.error or "")
+    profile = profile_service.load_profile(db_session, SESSION_ID)
+    assert profile.knowledge_level is None
+
+
 def test_declared_mastery_promotes(session_row, ctx, db_session):
     result = profile_service.apply_patch(
         db_session, ctx, _patch(add_mastered_concept="joins", evidence_type="declared")

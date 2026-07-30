@@ -555,6 +555,20 @@ async function onDiagQuiz() {
   }
 }
 
+// The card's PATCH writes the level out-of-band of the conversation, so the
+// transcript would otherwise end with the tutor's own unanswered offer -- which
+// makes the model re-ask it next turn. Close the loop with a normal user
+// message. Best-effort: the level is already saved deterministically, so a
+// send failure is not surfaced on the card.
+async function sendLevelDeclaration(level) {
+  if (!canSend.value) return
+  try {
+    await store.sendMessageStreaming({ text: `I'd say my level is ${level}.` })
+  } catch {
+    /* level already persisted; DIAGNOSTIC flips OFF regardless */
+  }
+}
+
 async function onDiagLevel(level) {
   // F5: a rapid second click before the first PATCH resolves must not fire a
   // second PATCH with the same (soon-to-be-stale) etag.
@@ -572,6 +586,7 @@ async function onDiagLevel(level) {
     const res = await patchProfile(id, { knowledge_level: level }, etag)
     if (id !== props.id) return // stale response from a previous session
     diagProfile.value = { profile: res.profile, etag: res.etag }
+    await sendLevelDeclaration(level)
   } catch (e) {
     if (e?.status === 412) {
       // Concurrent write (e.g. a quiz just graded). Refetch; if the level is
@@ -593,6 +608,7 @@ async function onDiagLevel(level) {
           const retryRes = await patchProfile(id, { knowledge_level: level }, freshEtag)
           if (id !== props.id) return // stale response from a previous session
           diagProfile.value = { profile: retryRes.profile, etag: retryRes.etag }
+          await sendLevelDeclaration(level)
         } catch {
           if (id !== props.id) return // stale response from a previous session
           diagError.value = 'Could not save your level. Try again.'

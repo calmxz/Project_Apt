@@ -4,6 +4,9 @@ import MarkdownIt from 'markdown-it'
 // Microsoft-maintained with the same md.use(plugin, kaTeXOptions) API. Its
 // default export is double-wrapped across Node/Vite interop, hence the unwrap.
 import mdKatexImport from '@vscode/markdown-it-katex'
+// KaTeX CSS rides this async chunk (only lazy routes import the renderer),
+// keeping its webfont family out of the entry bundle on /login.
+import 'katex/dist/katex.min.css'
 import hljs from 'highlight.js/lib/core'
 import python from 'highlight.js/lib/languages/python'
 import javascript from 'highlight.js/lib/languages/javascript'
@@ -57,7 +60,9 @@ function build() {
     ((tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options))
   md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
     const existing = tokens[idx].attrGet('rel') || ''
-    const merged = [...new Set([...existing.split(/\s+/), 'noopener', 'nofollow'].filter(Boolean))].join(' ')
+    const merged = [
+      ...new Set([...existing.split(/\s+/), 'noopener', 'nofollow'].filter(Boolean)),
+    ].join(' ')
     tokens[idx].attrSet('rel', merged)
     return defaultLinkOpen(tokens, idx, options, env, self)
   }

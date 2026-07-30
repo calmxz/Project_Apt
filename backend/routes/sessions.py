@@ -298,6 +298,13 @@ def list_session_library(
                 ChatMessage.session_id.label("sid"),
                 func.max(ChatMessage.created_at).label("la"),
             )
+            # Without this the aggregate scans every user's messages (a
+            # whole-table GROUP BY) just to sort one user's page.
+            .where(
+                ChatMessage.session_id.in_(
+                    select(SessionModel.id).where(SessionModel.user_id == user_id)
+                )
+            )
             .group_by(ChatMessage.session_id)
             .subquery()
         )
