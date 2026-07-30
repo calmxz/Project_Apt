@@ -40,6 +40,11 @@ def test_perf_indexes_declared_on_models():
     le_index_cols = {tuple(c.name for c in ix.columns) for ix in le.indexes}
     assert ("session_id", "created_at") in cm_index_cols
     assert ("session_id",) in le_index_cols
+    # documents.session_id is filtered on every GET /sessions/{id} via
+    # session_ingestion_status; without an index it is a sequential scan.
+    doc = Base.metadata.tables["documents"]
+    doc_index_cols = {tuple(c.name for c in ix.columns) for ix in doc.indexes}
+    assert ("session_id",) in doc_index_cols
 
 
 USER_ID = "u1"
