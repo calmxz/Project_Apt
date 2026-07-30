@@ -32,6 +32,8 @@ from contracts import (
     SessionIngestionStatus,
     SessionLibraryPage,
     SessionListItem,
+    SessionLookupResult,
+    SessionMatch,
     SessionResponse,
     SessionUpdateRequest,
     ToolCallRecord,
@@ -332,6 +334,52 @@ def list_session_library(
         limit=limit,
         offset=offset,
     )
+
+
+@router.get("/sessions/lookup", response_model=SessionLookupResult)
+def lookup_sessions_by_topic(
+    topic: str = Query(..., max_length=200),
+    user_id: str = Depends(current_user_id),
+    db: Session = Depends(get_db),
+):
+    """Case-insensitive exact-match lookup used by the start pages.
+
+    Active match wins; ended match (most recently ended) only when no
+    active session matches. Read-only.
+    """
+    normalized = topic.strip().lower()
+    if not normalized:
+        return SessionLookupResult()
+
+    def _to_match(row: SessionModel) -> SessionMatch:
+        profile = TopicProfile.model_validate_json(row.topic_profile_json)
+        return SessionMatch(
+            session_id=row.id,
+            title=row.topic,
+            ended_at=row.ended_at,
+            gap_count=len(profile.confirmed_gaps),
+            knowledge_level=profile.knowledge_level,
+        )
+
+    base = db.query(SessionModel).filter(
+        SessionModel.user_id == user_id,
+        func.lower(func.trim(SessionModel.topic)) == normalized,
+    )
+    active = (
+        base.filter(SessionModel.ended_at.is_(None))
+        .order_by(SessionModel.created_at.desc())
+        .first()
+    )
+    if active is not None:
+        return SessionLookupResult(active_match=_to_match(active))
+    ended = (
+        base.filter(SessionModel.ended_at.is_not(None))
+        .order_by(SessionModel.ended_at.desc())
+        .first()
+    )
+    if ended is not None:
+        return SessionLookupResult(ended_match=_to_match(ended))
+    return SessionLookupResult()
 
 
 @router.get("/sessions/{session_id}", response_model=SessionDetail)
