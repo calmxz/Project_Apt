@@ -18,7 +18,10 @@ from config import settings
 # Set in Step 2 from the measured baseline (printed value * 1.10, rounded up
 # to the nearest 100). Do not raise casually: an increase here means every
 # turn got more expensive.
-TOKEN_BUDGET = 6800
+# Re-baselined 2026-07-30 (smart-start Task 4): IMMUTABLE_RULES grew by the
+# DIAGNOSTIC ACCEPTED bullet (spec-required). Measured 6829 -> 6829*1.10 ->
+# 7600.
+TOKEN_BUDGET = 7600
 
 
 def _assembled_turn():
