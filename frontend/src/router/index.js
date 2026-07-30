@@ -2,6 +2,11 @@ import { createRouter, createWebHistory } from 'vue-router'
 
 import { useAuthStore } from '../stores/auth.js'
 import { useUserStore } from '../stores/user.js'
+import {
+  start as progressStart,
+  finish as progressFinish,
+  fail as progressFail,
+} from '../services/routeProgress.js'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -93,6 +98,10 @@ const router = createRouter({
   ],
 })
 
+router.beforeEach(() => {
+  progressStart()
+})
+
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
   // If auth store hasn't booted yet (first navigation in tests/dev), do it
@@ -149,6 +158,14 @@ router.afterEach((to, from, failure) => {
   if (failure || !from.name) return
   if (typeof document === 'undefined') return
   document.getElementById('main-content')?.focus()
+})
+
+router.afterEach(() => {
+  progressFinish()
+})
+
+router.onError(() => {
+  progressFail()
 })
 
 export default router

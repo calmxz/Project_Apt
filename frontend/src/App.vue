@@ -9,6 +9,7 @@ import { errorBus } from './services/errorBus.js'
 import { friendlyError } from './lib/errors.js'
 import Sidebar from './components/sidebar/Sidebar.vue'
 import SidebarMobileTopStrip from './components/sidebar/SidebarMobileTopStrip.vue'
+import RouteProgressBar from './components/RouteProgressBar.vue'
 
 const { showError } = useToast()
 const route = useRoute()
@@ -51,6 +52,7 @@ onBeforeUnmount(() => errorBus.removeEventListener('api-error', onApiError))
 </script>
 
 <template>
+  <RouteProgressBar />
   <div v-if="showShell" class="shell">
     <a class="skip-link" href="#main-content" data-testid="skip-link"> Skip to main content </a>
     <Sidebar />
