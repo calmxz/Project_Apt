@@ -11,7 +11,30 @@ import { createDeltaBatcher } from '../lib/deltaBatcher.js'
 export const useSessionStore = defineStore('session', () => {
   const currentSessionId = ref(null)
   const currentSession = ref(null)
+  // NOT the full corpus: a SIDEBAR_PAGE_LIMIT-sized window per status
+  // (20 active + 20 ended), refilled only by listSessions().
   const sessions = ref([])
+  // The sidebar's server-side search results. Owned by the store rather than
+  // by Sidebar.vue because the sidebar RENDERS these row objects directly and
+  // they routinely describe sessions outside the `sessions` window: every
+  // mutating action below must be able to patch them, or an action taken on a
+  // search row would update nothing the user can see.
+  const searchRows = ref([])
+  // Server-capped sidebar page size; totals let the UI say "View all N".
+  const SIDEBAR_PAGE_LIMIT = 20
+  // activeTotal / endedTotal are a LOCAL MIRROR of the server's per-status
+  // counts. They are NOT derived from `sessions` (which is only a window) and
+  // they are reconciled with the server in exactly two places: listSessions()
+  // and reset(). Every listSessions() call site is mount-time (HomeView,
+  // NewSessionView, Sidebar onMounted) and nothing refetches after a mutation
+  // -- deliberately, since a refetch costs a round-trip and re-sorts the
+  // sidebar under the user mid-action. So any transition a mutating action
+  // fails to mirror here persists for the life of the page.
+  // CONTRACT for any new action that moves a session between active and
+  // ended: it must move these too, using the shared rule documented on
+  // _observedRows() below.
+  const activeTotal = ref(0)
+  const endedTotal = ref(0)
   const messages = ref([])
   const loading = ref(false)
   const detailLoading = ref(false)
@@ -57,6 +80,34 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
+  // Every locally-held object that represents session `id`: the sidebar
+  // window, the sidebar's server-side search results, and the open session
+  // detail. `extra` lets a caller add the row it is itself holding and
+  // rendering (continueTopic's `prior`, which the library page draws from its
+  // own items array the store never sees). Together these are the ONLY
+  // observations the store has of a session's active/ended state.
+  //
+  // SHARED TOTALS RULE (endSession / reopenSession / continueTopic):
+  //   move the totals unless EVERY observed copy already shows the target
+  //   state -- in that case the transition was counted when it first
+  //   happened. With nothing observed we cannot see the state at all, so we
+  //   count the transition rather than guess it away: the row is simply
+  //   outside every loaded window, and its server-side count still moved.
+  // This is what makes a replay harmless. The server treats end and reopen as
+  // idempotent (200 on replay, backend/routes/sessions.py), and because every
+  // row the UI can act on is observed, a second call finds the row already in
+  // the target state and leaves the totals alone.
+  function _observedRows(id, extra = null) {
+    const held = []
+    const i = sessions.value.findIndex((s) => s.id === id)
+    if (i !== -1) held.push(sessions.value[i])
+    const j = searchRows.value.findIndex((s) => s.id === id)
+    if (j !== -1) held.push(searchRows.value[j])
+    if (currentSession.value?.id === id) held.push(currentSession.value)
+    if (extra && extra.id === id && !held.includes(extra)) held.push(extra)
+    return held
+  }
+
   // Route a backend cap envelope (HTTP 429 detail or SSE error payload)
   // into the cap-banner refs. Unknown codes are a no-op.
   function _applyCapError(detail) {
@@ -80,7 +131,35 @@ export const useSessionStore = defineStore('session', () => {
       loading.value = true
       error.value = null
       try {
-        sessions.value = await sessionsApi.listSessions()
+        // Boot-path fire-and-forget (HomeView + Sidebar onMounted) — silent for
+        // the same reason the old listSessions wrapper was (U-05): a background
+        // load must never toast.
+        const [activePage, endedPage] = await Promise.all([
+          sessionsApi.getSessionLibrary(
+            { status: 'active', sort: 'pinned_activity', limit: SIDEBAR_PAGE_LIMIT, offset: 0 },
+            { silent: true },
+          ),
+          sessionsApi.getSessionLibrary(
+            { status: 'ended', sort: 'last_activity', limit: SIDEBAR_PAGE_LIMIT, offset: 0 },
+            { silent: true },
+          ),
+        ])
+        // DECISION: Promise.all is all-or-nothing -- if either page's request
+        // rejects, the other page's already-resolved items/total are discarded
+        // and sessions/activeTotal/endedTotal are left at their stale pre-call
+        // values (the catch block below only records the error). Accepted:
+        // a half-merged window (only one status populated) is worse UX than a
+        // stale-but-consistent one, and the caller can retry.
+        const seen = new Set()
+        const merged = []
+        for (const item of [...activePage.items, ...endedPage.items]) {
+          if (seen.has(item.id)) continue
+          seen.add(item.id)
+          merged.push(item)
+        }
+        sessions.value = merged
+        activeTotal.value = activePage.total
+        endedTotal.value = endedPage.total
         return sessions.value
       } catch (e) {
         _setError(e)
@@ -102,6 +181,10 @@ export const useSessionStore = defineStore('session', () => {
         seedMode,
         priorSessionId,
       })
+      // A freshly created session is always active server-side; count it
+      // unconditionally even though it isn't added to the (windowed)
+      // `sessions` list here.
+      activeTotal.value += 1
       currentSession.value = created
       currentSessionId.value = created.id
       messages.value = []
@@ -207,19 +290,29 @@ export const useSessionStore = defineStore('session', () => {
     try {
       const resp = await sessionsApi.endSession(id)
       const summaryText = resp?.summary?.text ?? ''
-      if (currentSession.value && currentSession.value.id === id) {
-        currentSession.value.ended_at = resp.ended_at
-        if (resp?.summary?.kind === 'summary') {
-          // F-54: only a real summary belongs in the profile; the
-          // no_exchanges display sentence is UI copy, not profile state.
-          currentSession.value.topic_profile = {
-            ...currentSession.value.topic_profile,
-            last_session_summary: summaryText,
-          }
+      // Snapshot the observation BEFORE patching anything: once a copy's
+      // ended_at is written it reads as "already ended" and would silently
+      // swallow the totals transition below. See _observedRows for the
+      // shared rule this implements.
+      const observed = _observedRows(id)
+      const alreadyEnded = observed.length > 0 && observed.every((r) => r.ended_at)
+      for (const r of observed) r.ended_at = resp.ended_at
+      if (
+        currentSession.value &&
+        currentSession.value.id === id &&
+        resp?.summary?.kind === 'summary'
+      ) {
+        // F-54: only a real summary belongs in the profile; the
+        // no_exchanges display sentence is UI copy, not profile state.
+        currentSession.value.topic_profile = {
+          ...currentSession.value.topic_profile,
+          last_session_summary: summaryText,
         }
       }
-      const idx = sessions.value.findIndex((s) => s.id === id)
-      if (idx !== -1) sessions.value[idx].ended_at = resp.ended_at
+      if (!alreadyEnded) {
+        activeTotal.value = Math.max(0, activeTotal.value - 1)
+        endedTotal.value += 1
+      }
       const summary = resp?.summary
       pendingSummary.value = {
         sessionId: id,
@@ -248,11 +341,14 @@ export const useSessionStore = defineStore('session', () => {
     duplicateReopen.value = null
     try {
       const resp = await sessionsApi.reopenSession(sessionId)
-      if (currentSession.value && currentSession.value.id === sessionId) {
-        currentSession.value.ended_at = null
+      // Same reasoning as endSession: snapshot before patching.
+      const observed = _observedRows(sessionId)
+      const alreadyActive = observed.length > 0 && observed.every((r) => !r.ended_at)
+      for (const r of observed) r.ended_at = null
+      if (!alreadyActive) {
+        endedTotal.value = Math.max(0, endedTotal.value - 1)
+        activeTotal.value += 1
       }
-      const idx = sessions.value.findIndex((s) => s.id === sessionId)
-      if (idx !== -1) sessions.value[idx].ended_at = null
       return resp
     } catch (e) {
       // I-05: the contract hands over the conflicting session id - surface
@@ -278,13 +374,26 @@ export const useSessionStore = defineStore('session', () => {
         priorSessionId: prior.id,
       })
       // Backend auto-ends the prior session on resume-create; reflect it
-      // locally so ended-state UI updates without a refetch.
-      const idx = sessions.value.findIndex((x) => x.id === prior.id)
-      if (idx !== -1 && !sessions.value[idx].ended_at) {
-        sessions.value[idx].ended_at = new Date().toISOString()
+      // locally so ended-state UI updates without a refetch. Same
+      // SHARED TOTALS RULE as endSession/reopenSession -- `prior` is exactly
+      // the `extra` observation the rule was built for: the row the caller
+      // itself rendered (e.g. an ended-tab row, or a library-page item)
+      // outside the loaded window.
+      const observed = _observedRows(prior.id, prior)
+      const alreadyEnded = observed.length > 0 && observed.every((r) => r.ended_at)
+      if (!alreadyEnded) {
+        const endedAt = new Date().toISOString()
+        for (const r of observed) r.ended_at = endedAt
       }
-      if (currentSession.value?.id === prior.id && !currentSession.value.ended_at) {
-        currentSession.value.ended_at = new Date().toISOString()
+      // The new session is always active. The prior only moves active ->
+      // ended in the totals when it was NOT already observed as ended -
+      // continueTopic is only ever offered on already-ended rows in the UI,
+      // so in the normal case the prior is already counted in endedTotal
+      // and there is no transition to apply here.
+      activeTotal.value += 1
+      if (!alreadyEnded) {
+        activeTotal.value = Math.max(0, activeTotal.value - 1)
+        endedTotal.value += 1
       }
       currentSession.value = created
       currentSessionId.value = created.id
@@ -299,15 +408,20 @@ export const useSessionStore = defineStore('session', () => {
 
   async function renameSession(id, topic) {
     error.value = null
-    const idx = sessions.value.findIndex((s) => s.id === id)
-    const prev = idx !== -1 ? sessions.value[idx].topic : null
-    if (idx !== -1) sessions.value[idx].topic = topic
-    if (currentSession.value?.id === id) currentSession.value.topic = topic
+    // Every observed copy is a mutation target -- a search row can be the
+    // only rendered copy of a session outside the loaded window. Each copy
+    // rolls back to its OWN previous value (not a shared `prev`): the window
+    // copy and the search copy can legitimately disagree, e.g. the search
+    // response is fresher.
+    const observed = _observedRows(id)
+    const prevs = observed.map((r) => r.topic)
+    for (const r of observed) r.topic = topic
     try {
       return await sessionsApi.renameSession(id, topic)
     } catch (e) {
-      if (idx !== -1) sessions.value[idx].topic = prev
-      if (currentSession.value?.id === id) currentSession.value.topic = prev
+      observed.forEach((r, i) => {
+        r.topic = prevs[i]
+      })
       // F-07: background action - rollback and rethrow, but never write the
       // global error (it unmounts unrelated screens). Callers toast.
       throw e
@@ -316,15 +430,15 @@ export const useSessionStore = defineStore('session', () => {
 
   async function setPinned(id, pinned) {
     error.value = null
-    const idx = sessions.value.findIndex((s) => s.id === id)
-    const prev = idx !== -1 ? sessions.value[idx].pinned : null
-    if (idx !== -1) sessions.value[idx].pinned = pinned
-    if (currentSession.value?.id === id) currentSession.value.pinned = pinned
+    const observed = _observedRows(id)
+    const prevs = observed.map((r) => r.pinned)
+    for (const r of observed) r.pinned = pinned
     try {
       return await sessionsApi.setPinned(id, pinned)
     } catch (e) {
-      if (idx !== -1) sessions.value[idx].pinned = prev
-      if (currentSession.value?.id === id) currentSession.value.pinned = prev
+      observed.forEach((r, i) => {
+        r.pinned = prevs[i]
+      })
       // F-07: background action - rollback and rethrow, but never write the
       // global error (it unmounts unrelated screens). Callers toast.
       throw e
@@ -745,6 +859,9 @@ export const useSessionStore = defineStore('session', () => {
     currentSessionId.value = null
     currentSession.value = null
     sessions.value = []
+    searchRows.value = []
+    activeTotal.value = 0
+    endedTotal.value = 0
     messages.value = []
     error.value = null
     dailyCapInfo.value = null
@@ -762,6 +879,9 @@ export const useSessionStore = defineStore('session', () => {
     currentSessionId,
     currentSession,
     sessions,
+    searchRows,
+    activeTotal,
+    endedTotal,
     messages,
     loading,
     detailLoading,

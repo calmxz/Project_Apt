@@ -47,7 +47,9 @@ const startBusy = ref(false)
 onMounted(() => {
   // U-05: boot-path load - failure is handled locally (store error state),
   // so a transient backend hiccup must not toast on Home's very first mount.
-  // sessionsApi.listSessions() is silent unconditionally.
+  // Silence is threaded through explicitly via { silent: true } on the
+  // getSessionLibrary calls inside listSessions() (session.js), not by any
+  // unconditional silence in the (unused) sessionsApi.listSessions export.
   store.listSessions().catch(() => {})
 })
 

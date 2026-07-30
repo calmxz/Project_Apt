@@ -270,7 +270,7 @@ def _build_end_summary(db: Session, session_id: str, text: str) -> SessionEndSum
 def list_session_library(
     status: Literal["all", "active", "ended"] = "all",
     q: str | None = None,
-    sort: Literal["last_activity", "created", "topic"] = "last_activity",
+    sort: Literal["last_activity", "created", "topic", "pinned_activity"] = "last_activity",
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     user_id: str = Depends(current_user_id),
@@ -292,7 +292,7 @@ def list_session_library(
         ordered = base.order_by(SessionModel.created_at.desc(), SessionModel.id.desc())
     elif sort == "topic":
         ordered = base.order_by(SessionModel.topic.asc(), SessionModel.id.asc())
-    else:  # last_activity: order by max(message.created_at), falling back to created_at
+    else:  # last_activity / pinned_activity: order by max(message.created_at), falling back to created_at
         last_act_sub = (
             select(
                 ChatMessage.session_id.label("sid"),
@@ -301,10 +301,12 @@ def list_session_library(
             .group_by(ChatMessage.session_id)
             .subquery()
         )
-        ordered = (
-            base.outerjoin(last_act_sub, last_act_sub.c.sid == SessionModel.id)
-            .order_by(func.coalesce(last_act_sub.c.la, SessionModel.created_at).desc(), SessionModel.id.desc())
-        )
+        activity_desc = func.coalesce(last_act_sub.c.la, SessionModel.created_at).desc()
+        joined = base.outerjoin(last_act_sub, last_act_sub.c.sid == SessionModel.id)
+        if sort == "pinned_activity":
+            ordered = joined.order_by(SessionModel.pinned.desc(), activity_desc, SessionModel.id.desc())
+        else:
+            ordered = joined.order_by(activity_desc, SessionModel.id.desc())
 
     rows = db.execute(ordered.limit(limit).offset(offset)).scalars().all()
     return SessionLibraryPage(

@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as apiClient from '../services/apiClient.js'
+import { apiGet } from '../services/apiClient.js'
+import * as sessionsApi from '../services/sessionsApi.js'
 import { answerCheck, skipCheck } from '../services/sessionsApi.js'
 
 vi.mock('../services/apiClient.js')
@@ -10,6 +12,11 @@ describe('sessionsApi check operations', () => {
     apiClient.apiPost.mockResolvedValue({ correct: true })
   })
   afterEach(() => vi.restoreAllMocks())
+
+  it('getSessionLibrary forwards opts to apiGet (silent boot loads)', async () => {
+    await sessionsApi.getSessionLibrary({ status: 'active' }, { silent: true })
+    expect(apiGet).toHaveBeenCalledWith('/sessions/library', { status: 'active' }, { silent: true })
+  })
 
   it('answerCheck and skipCheck opt out of the errorBus toast', async () => {
     // Test answerCheck calls apiPost with { silent: true } as third argument

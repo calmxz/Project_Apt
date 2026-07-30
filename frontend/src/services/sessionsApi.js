@@ -20,8 +20,8 @@ export const createSession = ({ topic, seedMode, priorSessionId }) =>
 export const listSessions = () => apiGet('/sessions', undefined, { silent: true })
 
 // params: { status?: 'all'|'active'|'ended', q?: string,
-//           sort?: 'last_activity'|'created'|'topic', limit?: number, offset?: number }
-export const getSessionLibrary = (params) => apiGet('/sessions/library', params)
+//           sort?: 'last_activity'|'created'|'topic'|'pinned_activity', limit?: number, offset?: number }
+export const getSessionLibrary = (params, opts) => apiGet('/sessions/library', params, opts)
 
 export const getSession = (sessionId) => apiGet(`/sessions/${sessionId}`)
 

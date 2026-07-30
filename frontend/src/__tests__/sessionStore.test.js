@@ -14,6 +14,7 @@ vi.mock('@/services/sessionsApi.js', () => ({
 
 import { useSessionStore } from '@/stores/session.js'
 import * as sessionsApi from '@/services/sessionsApi.js'
+import { getSessionLibrary } from '@/services/sessionsApi.js'
 import * as streamSvc from '@/services/chatStreamService.js'
 import { ERR_DAILY_CAP_REACHED, ERR_DAILY_COST_CAP_REACHED } from '@/lib/errorCodes.js'
 
@@ -32,7 +33,9 @@ describe('session store', () => {
   })
 
   it('listSessions populates and clears loading/error', async () => {
-    sessionsApi.listSessions.mockResolvedValueOnce([{ id: 's1' }])
+    sessionsApi.getSessionLibrary
+      .mockResolvedValueOnce({ items: [{ id: 's1' }], total: 1, limit: 20, offset: 0 })
+      .mockResolvedValueOnce({ items: [], total: 0, limit: 20, offset: 0 })
     const s = useSessionStore()
     const out = await s.listSessions('u1')
     expect(out).toEqual([{ id: 's1' }])
@@ -41,7 +44,7 @@ describe('session store', () => {
   })
 
   it('listSessions surfaces error and rethrows', async () => {
-    sessionsApi.listSessions.mockRejectedValueOnce(new Error('nope'))
+    sessionsApi.getSessionLibrary.mockRejectedValueOnce(new Error('nope'))
     const s = useSessionStore()
     await expect(s.listSessions('u1')).rejects.toThrow('nope')
     expect(s.error).toBe('nope')
@@ -160,6 +163,56 @@ describe('session store', () => {
     expect(s.currentSession.ended_at).toBeNull()
   })
 
+  it('createSession increments activeTotal (a fresh session is always active)', async () => {
+    sessionsApi.createSession.mockResolvedValueOnce({ id: 's2', topic: 't' })
+    const s = useSessionStore()
+    s.activeTotal = 3
+    await s.createSession({ topic: 't', seedMode: 'fresh' })
+    expect(s.activeTotal).toBe(4)
+  })
+
+  it('endSession moves the total from active to ended unconditionally, even when the session is outside the loaded window', async () => {
+    sessionsApi.endSession.mockResolvedValueOnce({ ended_at: '2026-01-01', summary: null })
+    const s = useSessionStore()
+    s.activeTotal = 5
+    s.endedTotal = 2
+    s.sessions = [] // session not in the loaded 20+20 window
+    await s.endSession('outside-window-1')
+    expect(s.activeTotal).toBe(4)
+    expect(s.endedTotal).toBe(3)
+  })
+
+  it('endSession clamps activeTotal at zero instead of going negative', async () => {
+    sessionsApi.endSession.mockResolvedValueOnce({ ended_at: '2026-01-01', summary: null })
+    const s = useSessionStore()
+    s.activeTotal = 0
+    s.endedTotal = 0
+    await s.endSession('s1')
+    expect(s.activeTotal).toBe(0)
+    expect(s.endedTotal).toBe(1)
+  })
+
+  it('reopenSession moves the total from ended to active unconditionally, even when the session is outside the loaded window', async () => {
+    sessionsApi.reopenSession.mockResolvedValueOnce({ ok: true })
+    const s = useSessionStore()
+    s.activeTotal = 2
+    s.endedTotal = 5
+    s.sessions = [] // session not in the loaded 20+20 window
+    await s.reopenSession('outside-window-1')
+    expect(s.activeTotal).toBe(3)
+    expect(s.endedTotal).toBe(4)
+  })
+
+  it('reopenSession clamps endedTotal at zero instead of going negative', async () => {
+    sessionsApi.reopenSession.mockResolvedValueOnce({ ok: true })
+    const s = useSessionStore()
+    s.activeTotal = 0
+    s.endedTotal = 0
+    await s.reopenSession('s1')
+    expect(s.activeTotal).toBe(1)
+    expect(s.endedTotal).toBe(0)
+  })
+
   it('reopen 409 duplicate_topic exposes the conflicting session id', async () => {
     const store = useSessionStore()
     sessionsApi.reopenSession.mockRejectedValue(
@@ -187,43 +240,55 @@ describe('session store', () => {
   })
 
   it('listSessions de-dupes concurrent calls into one network request', async () => {
-    let resolve
-    sessionsApi.listSessions.mockImplementationOnce(
-      () =>
-        new Promise((r) => {
-          resolve = r
-        }),
-    )
+    let resolveActive, resolveEnded
+    sessionsApi.getSessionLibrary
+      .mockImplementationOnce(
+        () =>
+          new Promise((r) => {
+            resolveActive = r
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((r) => {
+            resolveEnded = r
+          }),
+      )
     const s = useSessionStore()
     const p1 = s.listSessions()
     const p2 = s.listSessions()
-    resolve([{ id: 's1' }])
+    resolveActive({ items: [{ id: 's1' }], total: 1, limit: 20, offset: 0 })
+    resolveEnded({ items: [], total: 0, limit: 20, offset: 0 })
     const [r1, r2] = await Promise.all([p1, p2])
-    expect(sessionsApi.listSessions).toHaveBeenCalledTimes(1)
+    expect(sessionsApi.getSessionLibrary).toHaveBeenCalledTimes(2)
     expect(r1).toEqual([{ id: 's1' }])
     expect(r2).toEqual([{ id: 's1' }])
     expect(s.detailLoading).toBe(false)
   })
 
   it('listSessions refetches after a failed request (error path clears inflight key)', async () => {
-    sessionsApi.listSessions
+    sessionsApi.getSessionLibrary
       .mockRejectedValueOnce(new Error('network'))
-      .mockResolvedValueOnce([{ id: 'b' }])
+      .mockRejectedValueOnce(new Error('network'))
+      .mockResolvedValueOnce({ items: [{ id: 'b' }], total: 1, limit: 20, offset: 0 })
+      .mockResolvedValueOnce({ items: [], total: 0, limit: 20, offset: 0 })
     const s = useSessionStore()
     await expect(s.listSessions()).rejects.toThrow('network')
     const out = await s.listSessions()
-    expect(sessionsApi.listSessions).toHaveBeenCalledTimes(2)
+    expect(sessionsApi.getSessionLibrary).toHaveBeenCalledTimes(4)
     expect(out).toEqual([{ id: 'b' }])
   })
 
   it('listSessions refetches after the in-flight request settles (no retained cache)', async () => {
-    sessionsApi.listSessions
-      .mockResolvedValueOnce([{ id: 'a' }])
-      .mockResolvedValueOnce([{ id: 'b' }])
+    sessionsApi.getSessionLibrary
+      .mockResolvedValueOnce({ items: [{ id: 'a' }], total: 1, limit: 20, offset: 0 })
+      .mockResolvedValueOnce({ items: [], total: 0, limit: 20, offset: 0 })
+      .mockResolvedValueOnce({ items: [{ id: 'b' }], total: 1, limit: 20, offset: 0 })
+      .mockResolvedValueOnce({ items: [], total: 0, limit: 20, offset: 0 })
     const s = useSessionStore()
     await s.listSessions()
     await s.listSessions()
-    expect(sessionsApi.listSessions).toHaveBeenCalledTimes(2)
+    expect(sessionsApi.getSessionLibrary).toHaveBeenCalledTimes(4)
     expect(s.sessions).toEqual([{ id: 'b' }])
   })
 
@@ -364,6 +429,68 @@ describe('session store', () => {
     resolveC({ id: 'C', messages: [] })
     await pC
     expect(store.detailLoading).toBe(false)
+  })
+})
+
+describe('listSessions via library endpoint', () => {
+  let store
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    store = useSessionStore()
+  })
+
+  it('fetches active (pinned_activity) and ended (last_activity) pages, silent, merged in order', async () => {
+    getSessionLibrary
+      .mockResolvedValueOnce({
+        items: [{ id: 'a1' }, { id: 'a2' }],
+        total: 30,
+        limit: 20,
+        offset: 0,
+      })
+      .mockResolvedValueOnce({ items: [{ id: 'e1' }], total: 25, limit: 20, offset: 0 })
+    await store.listSessions()
+    expect(getSessionLibrary).toHaveBeenCalledWith(
+      { status: 'active', sort: 'pinned_activity', limit: 20, offset: 0 },
+      { silent: true },
+    )
+    expect(getSessionLibrary).toHaveBeenCalledWith(
+      { status: 'ended', sort: 'last_activity', limit: 20, offset: 0 },
+      { silent: true },
+    )
+    expect(store.sessions.map((s) => s.id)).toEqual(['a1', 'a2', 'e1'])
+    expect(store.activeTotal).toBe(30)
+    expect(store.endedTotal).toBe(25)
+  })
+
+  it('dedupes by id when a session appears in both pages', async () => {
+    getSessionLibrary
+      .mockResolvedValueOnce({ items: [{ id: 'x' }], total: 1, limit: 20, offset: 0 })
+      .mockResolvedValueOnce({ items: [{ id: 'x' }, { id: 'e1' }], total: 2, limit: 20, offset: 0 })
+    await store.listSessions()
+    expect(store.sessions.map((s) => s.id)).toEqual(['x', 'e1'])
+  })
+
+  it('de-dupes concurrent calls through the same in-flight promise', async () => {
+    getSessionLibrary.mockResolvedValue({ items: [], total: 0, limit: 20, offset: 0 })
+    const p1 = store.listSessions()
+    const p2 = store.listSessions()
+    // Pinia wraps every promise-returning action in a fresh .then() chain
+    // (pinia 3.0.4 wrapAction), so p1 !== p2 by construction even when both
+    // callers share one in-flight fetch. Assert the shared resolution instead.
+    expect(await p1).toBe(await p2)
+    expect(getSessionLibrary).toHaveBeenCalledTimes(2) // one active + one ended, not four
+  })
+
+  it('reset() clears totals', async () => {
+    getSessionLibrary
+      .mockResolvedValueOnce({ items: [], total: 7, limit: 20, offset: 0 })
+      .mockResolvedValueOnce({ items: [], total: 3, limit: 20, offset: 0 })
+    await store.listSessions()
+    store.reset()
+    expect(store.activeTotal).toBe(0)
+    expect(store.endedTotal).toBe(0)
   })
 })
 
@@ -524,6 +651,47 @@ describe('session store — streaming', () => {
     })
     expect(created.id).toBe('new-1')
     expect(s.sessions.find((x) => x.id === 'old-1').ended_at).toBeTruthy()
+  })
+
+  it('continueTopic moves the prior total from active to ended when the prior was locally known active', async () => {
+    sessionsApi.createSession.mockResolvedValueOnce({ id: 'new-1', topic: 'Calculus' })
+    const s = useSessionStore()
+    s.sessions = [{ id: 'old-1', topic: 'Calculus', ended_at: null }]
+    s.activeTotal = 3 // includes old-1
+    s.endedTotal = 1
+    await s.continueTopic({ id: 'old-1', topic: 'Calculus' })
+    // net: +1 for the new session, -1 for the prior leaving active = unchanged
+    expect(s.activeTotal).toBe(3)
+    expect(s.endedTotal).toBe(2)
+  })
+
+  it('continueTopic only counts the new session when the prior row is observably already ended (the normal case)', async () => {
+    sessionsApi.createSession.mockResolvedValueOnce({ id: 'new-1', topic: 'Calculus' })
+    const s = useSessionStore()
+    // Prior is outside the loaded window, but the caller hands over the row it
+    // rendered (library page / sidebar ended tab) and that row says "ended" --
+    // an observation, so no active->ended transition is counted.
+    s.sessions = []
+    s.activeTotal = 3
+    s.endedTotal = 1
+    await s.continueTopic({ id: 'old-1', topic: 'Calculus', ended_at: '2026-01-01T00:00:00Z' })
+    expect(s.activeTotal).toBe(4)
+    expect(s.endedTotal).toBe(1)
+  })
+
+  it('continueTopic counts the prior transition when the caller-held row is observably still active, even outside the window', async () => {
+    sessionsApi.createSession.mockResolvedValueOnce({ id: 'new-1', topic: 'Calculus' })
+    const s = useSessionStore()
+    s.sessions = [] // outside the loaded 20+20 window
+    s.activeTotal = 3
+    s.endedTotal = 1
+    const prior = { id: 'old-1', topic: 'Calculus', ended_at: null }
+    await s.continueTopic(prior)
+    // net: +1 for the new session, -1 for the prior leaving active = unchanged
+    expect(s.activeTotal).toBe(3)
+    expect(s.endedTotal).toBe(2)
+    // the caller's row is patched too, so whatever rendered it shows ended
+    expect(prior.ended_at).toBeTruthy()
   })
 
   it('sendMessageStreaming rejects without an active session', async () => {
@@ -787,5 +955,124 @@ describe('session store — streaming', () => {
     s.abortController = { abort }
     await s.loadSession('s1')
     expect(abort).not.toHaveBeenCalled()
+  })
+})
+
+// The sidebar renders `searchRows` directly, and those rows routinely
+// describe sessions outside the 20+20 `sessions` window. A mutating action
+// that patched only `sessions` would leave the rendered row untouched -- and
+// since the server treats end/reopen as idempotent (200 on replay), the user
+// would re-fire the action and skew the totals mirror on every retry.
+describe('session store - search rows are first-class mutation targets', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+  })
+
+  it('endSession patches a search row for a session outside the loaded window', async () => {
+    sessionsApi.endSession.mockResolvedValueOnce({ ended_at: '2026-01-01', summary: null })
+    const s = useSessionStore()
+    s.sessions = []
+    s.searchRows = [{ id: 'out-1', topic: 'Glycolysis', ended_at: null }]
+    await s.endSession('out-1')
+    expect(s.searchRows[0].ended_at).toBe('2026-01-01')
+  })
+
+  it('a replayed endSession on an already-ended search row does not move the totals twice', async () => {
+    sessionsApi.endSession.mockResolvedValue({ ended_at: '2026-01-01', summary: null })
+    const s = useSessionStore()
+    s.sessions = []
+    s.searchRows = [{ id: 'out-1', topic: 'Glycolysis', ended_at: null }]
+    s.activeTotal = 5
+    s.endedTotal = 2
+    await s.endSession('out-1')
+    expect(s.activeTotal).toBe(4)
+    expect(s.endedTotal).toBe(3)
+    // Replay: the server answers 200 again (F-30 idempotent end), but the row
+    // is now observably ended, so the transition must not be counted again.
+    await s.endSession('out-1')
+    expect(s.activeTotal).toBe(4)
+    expect(s.endedTotal).toBe(3)
+  })
+
+  it('reopenSession patches a search row and does not move the totals twice on replay', async () => {
+    sessionsApi.reopenSession.mockResolvedValue({ ok: true })
+    const s = useSessionStore()
+    s.sessions = []
+    s.searchRows = [{ id: 'out-1', topic: 'Glycolysis', ended_at: '2026-01-01' }]
+    s.activeTotal = 2
+    s.endedTotal = 5
+    await s.reopenSession('out-1')
+    expect(s.searchRows[0].ended_at).toBeNull()
+    expect(s.activeTotal).toBe(3)
+    expect(s.endedTotal).toBe(4)
+    await s.reopenSession('out-1')
+    expect(s.activeTotal).toBe(3)
+    expect(s.endedTotal).toBe(4)
+  })
+
+  it('renameSession patches a search row and rolls it back on failure', async () => {
+    const s = useSessionStore()
+    s.sessions = []
+    s.searchRows = [{ id: 'out-1', topic: 'Old name', ended_at: null }]
+    let reject
+    sessionsApi.renameSession.mockReturnValue(
+      new Promise((_, r) => {
+        reject = r
+      }),
+    )
+    const p = s.renameSession('out-1', 'New name').catch(() => {})
+    // Optimistic patch must land on the search row BEFORE the API settles --
+    // this is what proves the row a user sees actually updates, not just that
+    // a failure rolls back to a value indistinguishable from untouched.
+    expect(s.searchRows[0].topic).toBe('New name')
+    reject(new Error('nope'))
+    await p
+    expect(s.searchRows[0].topic).toBe('Old name')
+  })
+
+  it('renameSession rolls each held copy back to its own previous value', async () => {
+    const s = useSessionStore()
+    // The window copy and the search copy can legitimately disagree (the search
+    // response is fresher). A single shared `prev` would corrupt one of them.
+    s.sessions = [{ id: 'out-1', topic: 'Window name', ended_at: null }]
+    s.searchRows = [{ id: 'out-1', topic: 'Search name', ended_at: null }]
+    let reject
+    sessionsApi.renameSession.mockReturnValue(
+      new Promise((_, r) => {
+        reject = r
+      }),
+    )
+    const p = s.renameSession('out-1', 'New name').catch(() => {})
+    expect(s.sessions[0].topic).toBe('New name')
+    expect(s.searchRows[0].topic).toBe('New name')
+    reject(new Error('nope'))
+    await p
+    expect(s.sessions[0].topic).toBe('Window name')
+    expect(s.searchRows[0].topic).toBe('Search name')
+  })
+
+  it('setPinned patches a search row and rolls it back on failure', async () => {
+    const s = useSessionStore()
+    s.sessions = []
+    s.searchRows = [{ id: 'out-1', topic: 'X', ended_at: null, pinned: false }]
+    let reject
+    sessionsApi.setPinned.mockReturnValue(
+      new Promise((_, r) => {
+        reject = r
+      }),
+    )
+    const p = s.setPinned('out-1', true).catch(() => {})
+    expect(s.searchRows[0].pinned).toBe(true)
+    reject(new Error('nope'))
+    await p
+    expect(s.searchRows[0].pinned).toBe(false)
+  })
+
+  it('reset() clears searchRows', () => {
+    const s = useSessionStore()
+    s.searchRows = [{ id: 'out-1', topic: 'X', ended_at: null }]
+    s.reset()
+    expect(s.searchRows).toEqual([])
   })
 })

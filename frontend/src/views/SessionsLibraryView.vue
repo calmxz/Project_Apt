@@ -1,12 +1,13 @@
 <script setup>
-import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useSessionStore } from '@/stores/session.js'
 import { cardStory, cardChips, cardMeta } from '@/utils/sessionCard.js'
 import EmptyState from '@/components/EmptyState.vue'
 import SessionChips from '@/components/SessionChips.vue'
 
 const router = useRouter()
+const route = useRoute()
 const store = useSessionStore()
 
 // F-06: same guard/catch shape as HomeView.startReview (F-45) -- without
@@ -35,13 +36,23 @@ const offset = ref(0)
 const loading = ref(false)
 const error = ref(null)
 
-// Controls (wired in Task 7).
-const status = ref('all')
-const q = ref('')
+// Controls, seeded from the route query (produced by the sidebar's "View
+// all" links -- Tasks 3-4). Vue Router does not remount this component on
+// a query-only navigation to the same route, so the same validation is
+// re-run by the watcher below whenever the query changes post-mount.
+const VALID_STATUSES = ['all', 'active', 'ended']
+function statusFromQuery(query) {
+  return VALID_STATUSES.includes(query.status) ? query.status : 'all'
+}
+function qFromQuery(query) {
+  return typeof query.q === 'string' ? query.q : ''
+}
+const status = ref(statusFromQuery(route.query))
+const q = ref(qFromQuery(route.query))
 const sort = ref('last_activity')
 
 let _loadSeq = 0
-async function load() {
+async function load({ append = false } = {}) {
   // F-15: discard out-of-order settles - same discriminator idiom as the
   // session store's _latestRequestedId.
   const seq = ++_loadSeq
@@ -56,7 +67,7 @@ async function load() {
       offset: offset.value,
     })
     if (seq !== _loadSeq) return
-    items.value = page.items
+    items.value = append ? [...items.value, ...page.items] : page.items
     total.value = page.total
     limit.value = page.limit
     offset.value = page.offset
@@ -74,10 +85,22 @@ const STATUSES = [
   { key: 'ended', label: 'Ended' },
 ]
 
+// Keeps the URL in sync with the in-page controls so a stale URL can never
+// mask a later sidebar link whose target query happens to match it (see
+// the route-query watcher below). `sort` is deliberately excluded -- it is
+// not a route query param.
+function syncRouteQuery() {
+  const nextQuery = { ...route.query, status: status.value }
+  if (q.value) nextQuery.q = q.value
+  else delete nextQuery.q
+  Promise.resolve(router.replace({ query: nextQuery })).catch(() => {})
+}
+
 function setStatus(next) {
   status.value = next
   offset.value = 0
   load()
+  syncRouteQuery()
 }
 
 function onSortChange() {
@@ -91,31 +114,66 @@ function onSearchInput() {
   searchTimer = setTimeout(() => {
     offset.value = 0
     load()
+    syncRouteQuery()
   }, 250)
 }
 
-const hasPrev = computed(() => offset.value > 0)
-const hasNext = computed(() => offset.value + limit.value < total.value)
-const rangeLabel = computed(() => {
-  if (!total.value) return '0 of 0'
-  const start = offset.value + 1
-  const end = Math.min(offset.value + limit.value, total.value)
-  return `${start}-${end} of ${total.value}`
+// Re-seeds status/q when the query changes on an already-mounted instance
+// (e.g. a sidebar "View all" link clicked while already on this page --
+// Vue Router does not remount on a query-only navigation to the same
+// route). Guarded so that syncRouteQuery() above -- which changes the same
+// query keys -- never triggers a redundant second load.
+watch(
+  () => [route.query.status, route.query.q],
+  () => {
+    const nextStatus = statusFromQuery(route.query)
+    const nextQ = qFromQuery(route.query)
+    if (nextStatus === status.value && nextQ === q.value) return
+    status.value = nextStatus
+    q.value = nextQ
+    offset.value = 0
+    load()
+  },
+)
+
+function loadMore() {
+  if (loading.value || error.value) return
+  if (items.value.length >= total.value) return
+  offset.value = items.value.length
+  load({ append: true })
+}
+
+function retryLoad() {
+  error.value = null
+  loadMore()
+}
+
+const sentinelEl = ref(null)
+let observer = null
+
+onMounted(() => {
+  load()
+  observer = new IntersectionObserver(
+    (entries) => {
+      if (entries.some((e) => e.isIntersecting)) loadMore()
+    },
+    { rootMargin: '200px' },
+  )
 })
 
-function nextPage() {
-  if (!hasNext.value) return
-  offset.value += limit.value
-  load()
-}
-function prevPage() {
-  if (!hasPrev.value) return
-  offset.value = Math.max(0, offset.value - limit.value)
-  load()
-}
+// The sentinel is v-if'd with the list; (un)observe as it (un)mounts.
+watch(sentinelEl, (el, prev) => {
+  if (!observer) return
+  if (prev) observer.unobserve(prev)
+  if (el) observer.observe(el)
+})
 
-onMounted(load)
-onUnmounted(() => clearTimeout(searchTimer))
+onUnmounted(() => {
+  clearTimeout(searchTimer)
+  if (observer) observer.disconnect()
+  observer = null
+})
+
 defineExpose({ load }) // used by control/pagination tasks
 </script>
 
@@ -169,8 +227,10 @@ defineExpose({ load }) // used by control/pagination tasks
       </select>
     </div>
 
-    <p v-if="loading" class="muted" data-testid="library-loading">Loading...</p>
-    <p v-else-if="error" class="error" data-testid="library-error">{{ error }}</p>
+    <p v-if="loading && !items.length" class="muted" data-testid="library-loading">Loading...</p>
+    <p v-else-if="error && !items.length" class="error" data-testid="library-error">
+      {{ error }}
+    </p>
 
     <EmptyState
       v-else-if="!items.length"
@@ -180,7 +240,7 @@ defineExpose({ load }) // used by control/pagination tasks
       subtext="Try a different filter or start a new session."
     />
 
-    <ul v-else class="library-grid">
+    <ul v-else-if="items.length" class="library-grid">
       <li v-for="s in items" :key="s.id" class="library-card" :data-testid="`library-card-${s.id}`">
         <RouterLink class="library-card-link" :to="{ name: 'session', params: { id: s.id } }">
           <div class="library-card-head">
@@ -219,27 +279,23 @@ defineExpose({ load }) // used by control/pagination tasks
       </li>
     </ul>
 
-    <nav v-if="items.length" class="library-pager" aria-label="Pagination">
-      <button
-        type="button"
-        class="library-pg-btn"
-        data-testid="library-prev"
-        :disabled="!hasPrev"
-        @click="prevPage"
-      >
-        Prev
-      </button>
-      <span class="library-range">{{ rangeLabel }}</span>
-      <button
-        type="button"
-        class="library-pg-btn"
-        data-testid="library-next"
-        :disabled="!hasNext"
-        @click="nextPage"
-      >
-        Next
-      </button>
-    </nav>
+    <div
+      v-if="items.length"
+      ref="sentinelEl"
+      class="library-sentinel"
+      data-testid="library-sentinel"
+    >
+      <p v-if="loading" class="muted">Loading more...</p>
+      <template v-else-if="error">
+        <p class="error">{{ error }}</p>
+        <button type="button" class="library-pg-btn" data-testid="library-retry" @click="retryLoad">
+          Retry
+        </button>
+      </template>
+      <p v-else-if="items.length >= total" class="muted library-end">
+        {{ total }} {{ total === 1 ? 'session' : 'sessions' }}
+      </p>
+    </div>
   </main>
 </template>
 
@@ -469,12 +525,13 @@ defineExpose({ load }) // used by control/pagination tasks
   color: var(--color-error-text);
 }
 
-.library-pager {
+.library-sentinel {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-4);
+  gap: var(--space-3);
   margin-top: var(--space-6);
+  min-height: 2.5rem;
 }
 
 .library-pg-btn {
@@ -497,8 +554,7 @@ defineExpose({ load }) // used by control/pagination tasks
   cursor: not-allowed;
 }
 
-.library-range {
+.library-end {
   font-size: var(--fs-caption);
-  color: var(--color-text-muted);
 }
 </style>
