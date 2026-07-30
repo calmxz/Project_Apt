@@ -633,6 +633,13 @@ describe('SessionView', () => {
       reviewGap: 'b',
     })
     expect(sendSpy).toHaveBeenCalledTimes(1)
+    // quiz must be stripped even though it lost precedence -- otherwise a
+    // stale ?quiz=1 survives and fires unprompted on a later remount once
+    // review_gap is gone.
+    expect(replace).toHaveBeenCalledWith(
+      expect.objectContaining({ query: expect.objectContaining({ quiz: undefined }) }),
+    )
+    expect(route.query.quiz).toBeUndefined()
   })
 
   it('duplicateReopen renders a go-to-active-session link targeting the conflicting session', async () => {

@@ -826,9 +826,14 @@ async function handleReviewGapQuery() {
 // it. Call sites therefore invoke handleQuizQuery() before
 // handleReviewGapQuery().
 async function handleQuizQuery() {
-  if (route.query.review_gap) return
   if (!route.query.quiz) return
+  // Read review_gap precedence before stripping quiz -- see comment above --
+  // but always strip quiz regardless of the outcome. Otherwise a stale
+  // ?quiz=1 that lost to review_gap on this render survives in the URL and
+  // fires unprompted on a later remount/reload once review_gap is gone.
+  const yieldToReviewGap = !!route.query.review_gap
   router.replace({ query: { ...route.query, quiz: undefined } })
+  if (yieldToReviewGap) return
   if (!store.currentSession || store.currentSession.id !== props.id) return
   try {
     await store.sendMessageStreaming({
