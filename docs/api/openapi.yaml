@@ -180,6 +180,24 @@ paths:
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
+  /api/sessions/lookup:
+    get:
+      tags: [sessions]
+      summary: Case-insensitive exact-match lookup of the caller's sessions by topic.
+      operationId: lookupSessionsByTopic
+      parameters:
+        - in: query
+          name: topic
+          required: true
+          schema: { type: string, maxLength: 200 }
+      responses:
+        "200":
+          description: Lookup result. ended_match is only populated when there is no active match.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionLookupResult"
+
   /api/review/queue:
     get:
       tags: [review]
@@ -894,6 +912,36 @@ components:
           type: [string, "null"]
           default: null
 
+    SessionMatch:
+      type: object
+      additionalProperties: false
+      required: [session_id, title]
+      properties:
+        session_id: { type: string, maxLength: 64 }
+        title:      { type: string, maxLength: 200 }
+        ended_at:   { type: [string, "null"], format: date-time, default: null }
+        gap_count:  { type: integer, default: 0 }
+        knowledge_level:
+          oneOf:
+            - $ref: "#/components/schemas/KnowledgeLevel"
+            - type: "null"
+          default: null
+
+    SessionLookupResult:
+      type: object
+      additionalProperties: false
+      properties:
+        active_match:
+          oneOf:
+            - $ref: "#/components/schemas/SessionMatch"
+            - type: "null"
+          default: null
+        ended_match:
+          oneOf:
+            - $ref: "#/components/schemas/SessionMatch"
+            - type: "null"
+          default: null
+
     Citation:
       type: object
       additionalProperties: false
@@ -1115,6 +1163,7 @@ components:
         message:     { type: string, maxLength: 4000 }
         review_gaps: { type: boolean, default: false }
         review_gap:  { type: [string, "null"], default: null, maxLength: 200 }
+        diagnostic_accepted: { type: boolean, default: false }
 
     SessionCreateRequest:
       type: object
@@ -1124,6 +1173,11 @@ components:
         topic:             { type: string, maxLength: 200 }
         seed_mode:         { $ref: "#/components/schemas/SeedMode" }
         prior_session_id:  { type: [string, "null"], default: null, maxLength: 64 }
+        declared_level:
+          oneOf:
+            - $ref: "#/components/schemas/KnowledgeLevel"
+            - type: "null"
+          default: null
 
     SessionUpdateRequest:
       type: object

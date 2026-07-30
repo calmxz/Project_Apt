@@ -44,6 +44,25 @@ class TopicProfile(BaseModel):
     last_session_summary: str | None = None
 
 
+class SessionMatch(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    session_id: constr(max_length=64)
+    title: constr(max_length=200)
+    ended_at: datetime | None = None
+    gap_count: int | None = 0
+    knowledge_level: Literal["beginner", "intermediate", "advanced"] | None = None
+
+
+class SessionLookupResult(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    active_match: SessionMatch | None = None
+    ended_match: SessionMatch | None = None
+
+
 class Citation(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -254,6 +273,7 @@ class ChatRequest(BaseModel):
     message: constr(max_length=4000)
     review_gaps: bool | None = False
     review_gap: constr(max_length=200) | None = None
+    diagnostic_accepted: bool | None = False
 
 
 class SessionCreateRequest(BaseModel):
@@ -263,6 +283,7 @@ class SessionCreateRequest(BaseModel):
     topic: constr(max_length=200)
     seed_mode: Literal["fresh", "resume"]
     prior_session_id: constr(max_length=64) | None = None
+    declared_level: Literal["beginner", "intermediate", "advanced"] | None = None
 
 
 class SessionUpdateRequest(BaseModel):
