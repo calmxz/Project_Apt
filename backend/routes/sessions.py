@@ -138,6 +138,12 @@ async def create_session(
             status_code=400, detail="prior_session_id forbidden when seed_mode=fresh"
         )
 
+    if req.declared_level is not None and req.seed_mode == "resume":
+        raise HTTPException(
+            status_code=422,
+            detail="declared_level forbidden when seed_mode=resume",
+        )
+
     ensure_user(db, user_id, accepted_terms=accepted_terms_from_request(request))
 
     # Final-review fix: this check must run BEFORE the resume block below.
@@ -162,7 +168,7 @@ async def create_session(
         )
 
     new_id = uuid.uuid4().hex
-    profile_json = TopicProfile().model_dump_json()
+    profile_json = TopicProfile(knowledge_level=req.declared_level).model_dump_json()
 
     if req.seed_mode == "resume":
         prior = db.get(SessionModel, req.prior_session_id)
