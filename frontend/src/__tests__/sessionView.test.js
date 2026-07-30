@@ -943,6 +943,36 @@ describe('SessionView', () => {
       expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(false)
     })
 
+    it('level button also sends a declaration message so the tutor sees the answer', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      const sendSpy = vi.spyOn(store, 'sendMessageStreaming').mockResolvedValue()
+      getSessionProfile.mockResolvedValue({ profile: { knowledge_level: null }, etag: 't1' })
+      patchProfile.mockResolvedValue({ profile: { knowledge_level: 'advanced' }, etag: 't2' })
+      const wrapper = mountView()
+      await flushPromises()
+      await wrapper.get('[data-testid="diag-level-advanced"]').trigger('click')
+      await flushPromises()
+      expect(sendSpy).toHaveBeenCalledWith({ text: "I'd say my level is advanced." })
+    })
+
+    it('level button does not send a declaration message when the PATCH fails', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      const sendSpy = vi.spyOn(store, 'sendMessageStreaming').mockResolvedValue()
+      getSessionProfile.mockResolvedValue({ profile: { knowledge_level: null }, etag: 't1' })
+      patchProfile.mockRejectedValue(new Error('network down'))
+      const wrapper = mountView()
+      await flushPromises()
+      await wrapper.get('[data-testid="diag-level-beginner"]').trigger('click')
+      await flushPromises()
+      expect(sendSpy).not.toHaveBeenCalled()
+    })
+
     it('412 on PATCH refetches the profile and hides the card if the level is now set', async () => {
       const store = useSessionStore()
       vi.spyOn(store, 'loadSession').mockImplementation(async () => {
