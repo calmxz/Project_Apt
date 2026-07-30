@@ -23,26 +23,63 @@
           type="button"
           class="cta-primary"
           data-testid="home-quick-go"
-          :disabled="startBusy"
+          :disabled="busy"
           @click="startQuick"
         >
           <span>Start</span><i class="pi pi-arrow-right" aria-hidden="true" />
         </button>
       </div>
+      <StartTopicIntercept
+        v-if="stage === 'intercept'"
+        :match="interceptMatch"
+        :kind="interceptKind"
+        :busy="busy"
+        @open-existing="openExisting"
+        @continue-topic="continuePrior"
+        @start-fresh="startFresh"
+        @cancel="cancel"
+      />
+      <StartLevelPicker
+        v-else-if="stage === 'level'"
+        :busy="busy"
+        @select="pickLevel"
+        @quiz="pickQuiz"
+        @skip="skipLevel"
+      />
     </template>
   </section>
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+
+import StartLevelPicker from '../components/start/StartLevelPicker.vue'
+import StartTopicIntercept from '../components/start/StartTopicIntercept.vue'
+import { useStartFlow } from '../composables/useStartFlow.js'
 import { useSessionStore } from '../stores/session.js'
 import { friendlyError } from '../lib/errors.js'
 
 const router = useRouter()
 const store = useSessionStore()
 const quickTopic = ref('')
-const startBusy = ref(false)
+
+const {
+  stage,
+  busy,
+  interceptMatch,
+  interceptKind,
+  begin,
+  openExisting,
+  continuePrior,
+  startFresh,
+  pickLevel,
+  pickQuiz,
+  skipLevel,
+  cancel,
+} = useStartFlow({ store, router })
+
+watch(quickTopic, () => cancel())
 
 onMounted(() => {
   // U-05: boot-path load - failure is handled locally (store error state),
@@ -53,21 +90,8 @@ onMounted(() => {
   store.listSessions().catch(() => {})
 })
 
-async function startQuick() {
-  const topic = quickTopic.value.trim()
-  if (!topic || startBusy.value) return
-  startBusy.value = true
-  try {
-    const created = await store.createSession({ topic, seedMode: 'fresh', priorSessionId: null })
-    if (created) router.push({ name: 'session', params: { id: created.id } })
-  } catch (e) {
-    if (e?.status === 409 && e?.body?.detail?.code === 'duplicate_topic') {
-      router.push({ name: 'session', params: { id: e.body.detail.session_id } })
-    }
-    // other errors surface via store.error / friendlyError in the template
-  } finally {
-    startBusy.value = false
-  }
+function startQuick() {
+  begin(quickTopic.value)
 }
 </script>
 

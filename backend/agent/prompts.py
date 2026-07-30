@@ -123,6 +123,11 @@ KNOWLEDGE DIAGNOSTIC:
 - If the learner declines or ignores both options: teach beginner-friendly.
   Do not repeat the offer every turn; return to it only when it comes up
   naturally.
+- When DIAGNOSTIC is ACCEPTED, the learner already agreed to the quick check
+  before the session started. In this same turn call ask_check_questions with
+  exactly 3 multiple-choice items on the TOPIC at increasing difficulty
+  (easy, medium, hard). Do not offer the choice again and do not teach in
+  depth first.
 - After the level is known, continue teaching at that level.
 - When DIAGNOSTIC is OFF, follow the normal check-question protocol above.
 
@@ -232,7 +237,12 @@ def build_dynamic_context(state: dict) -> str:
     if prefetched:
         retrieval_label = "PROVIDED"
     diagnostic_required = bool(state.get("diagnostic_required", False))
-    diagnostic_label = "REQUIRED" if diagnostic_required else "OFF"
+    if diagnostic_required and state.get("diagnostic_accepted"):
+        diagnostic_label = "ACCEPTED"
+    elif diagnostic_required:
+        diagnostic_label = "REQUIRED"
+    else:
+        diagnostic_label = "OFF"
 
     pending_check = state.get("pending_check")
     if pending_check:

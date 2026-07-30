@@ -499,8 +499,14 @@ async function loadCurrent(id) {
   }
   if (!isEnded.value && !notFound.value) focusComposer()
   // Covers fresh navigation (new id, e.g. from ProfileView's "Review gaps"
-  // button) where the query is already present before the session loads.
-  if (!notFound.value) await handleReviewGapQuery()
+  // button, or the level-at-start picker's "Quiz me" chip) where the query
+  // is already present before the session loads. handleQuizQuery runs first
+  // so its review_gap precedence guard reads the query before
+  // handleReviewGapQuery strips it.
+  if (!notFound.value) {
+    await handleQuizQuery()
+    await handleReviewGapQuery()
+  }
 }
 
 onMounted(() => loadCurrent(props.id))
@@ -533,6 +539,16 @@ watch(
     if (!gap) return
     if (store.currentSession?.id !== props.id) return
     handleReviewGapQuery()
+  },
+)
+
+// Twin of the review_gap watcher above, for the smart-start quiz seed.
+watch(
+  () => route.query.quiz,
+  (quiz) => {
+    if (!quiz) return
+    if (store.currentSession?.id !== props.id) return
+    handleQuizQuery()
   },
 )
 
@@ -798,6 +814,35 @@ async function handleReviewGapQuery() {
   if (!gap) return
   router.replace({ query: { ...route.query, review_gap: undefined } })
   await sendReviewSeed(String(gap))
+}
+
+// Smart-start diagnostic quiz seed (?quiz=1, e.g. from the level-at-start
+// picker's "Quiz me" chip). Mirrors handleReviewGapQuery/sendReviewSeed
+// above. review_gap takes precedence when both params are present -- checked
+// here (not after handleReviewGapQuery runs) because router.replace()'s
+// query mutation is not guaranteed to be visible synchronously by the time
+// handleReviewGapQuery's await resolves, so this guard must read
+// route.query.review_gap before handleReviewGapQuery has a chance to strip
+// it. Call sites therefore invoke handleQuizQuery() before
+// handleReviewGapQuery().
+async function handleQuizQuery() {
+  if (!route.query.quiz) return
+  // Read review_gap precedence before stripping quiz -- see comment above --
+  // but always strip quiz regardless of the outcome. Otherwise a stale
+  // ?quiz=1 that lost to review_gap on this render survives in the URL and
+  // fires unprompted on a later remount/reload once review_gap is gone.
+  const yieldToReviewGap = !!route.query.review_gap
+  router.replace({ query: { ...route.query, quiz: undefined } })
+  if (yieldToReviewGap) return
+  if (!store.currentSession || store.currentSession.id !== props.id) return
+  try {
+    await store.sendMessageStreaming({
+      text: 'Quiz me so you can pitch this at the right level.',
+      diagnosticAccepted: true,
+    })
+  } catch {
+    // store.error already populated; consent card remains as fallback
+  }
 }
 
 async function onAnswerCheck(index) {

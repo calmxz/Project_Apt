@@ -803,3 +803,53 @@ def test_get_session_exactly_30_has_more_false(client, db_session, seeded_user):
     body = r.json()
     assert len(body["messages"]) == 30
     assert body["has_more_messages"] is False
+
+
+def test_post_fresh_with_declared_level_seeds_profile(client, seeded_user):
+    r = client.post(
+        "/api/sessions",
+        json={
+            "user_id": USER_ID,
+            "topic": "sql joins",
+            "seed_mode": "fresh",
+            "declared_level": "advanced",
+        },
+    )
+    assert r.status_code == 201, r.text
+    profile = TopicProfile.model_validate(r.json()["topic_profile"])
+    assert profile.knowledge_level == "advanced"
+
+
+def test_post_resume_with_declared_level_is_422(client, seeded_user, db_session):
+    from db.models import Session as SessionModel
+
+    db_session.add(
+        SessionModel(
+            id="prior1",
+            user_id=USER_ID,
+            topic="sql joins",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.commit()
+    r = client.post(
+        "/api/sessions",
+        json={
+            "user_id": USER_ID,
+            "topic": "sql joins",
+            "seed_mode": "resume",
+            "prior_session_id": "prior1",
+            "declared_level": "beginner",
+        },
+    )
+    assert r.status_code == 422, r.text
+
+
+def test_post_fresh_without_declared_level_unchanged(client, seeded_user):
+    r = client.post(
+        "/api/sessions",
+        json={"user_id": USER_ID, "topic": "plain topic", "seed_mode": "fresh"},
+    )
+    assert r.status_code == 201, r.text
+    profile = TopicProfile.model_validate(r.json()["topic_profile"])
+    assert profile.knowledge_level is None

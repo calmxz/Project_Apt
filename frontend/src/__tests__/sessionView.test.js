@@ -586,6 +586,62 @@ describe('SessionView', () => {
     expect(sendSpy).toHaveBeenCalledTimes(1)
   })
 
+  it('quiz=1 sends seeded diagnostic message and strips param', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession({ ended: false })
+    })
+    const sendSpy = vi.spyOn(store, 'sendMessageStreaming').mockResolvedValue()
+    route.query = { quiz: '1' }
+    mountView()
+    await flushPromises()
+    expect(sendSpy).toHaveBeenCalledWith({
+      text: 'Quiz me so you can pitch this at the right level.',
+      diagnosticAccepted: true,
+    })
+    expect(replace).toHaveBeenCalledWith({ query: { quiz: undefined } })
+    await nextTick()
+    await flushPromises()
+    expect(sendSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('quiz param ignored when session id mismatched', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      // currentSession stays unset (null) -- simulates a load that hasn't
+      // populated the store yet / a superseded load.
+    })
+    const sendSpy = vi.spyOn(store, 'sendMessageStreaming').mockResolvedValue()
+    route.query = { quiz: '1' }
+    mountView()
+    await flushPromises()
+    expect(sendSpy).not.toHaveBeenCalled()
+  })
+
+  it('review_gap query param wins when both review_gap and quiz are present', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession({ ended: false, confirmedGaps: ['b'] })
+    })
+    const sendSpy = vi.spyOn(store, 'sendMessageStreaming').mockResolvedValue()
+    route.query = { review_gap: 'b', quiz: '1' }
+    mountView()
+    await flushPromises()
+    expect(sendSpy).toHaveBeenCalledWith({
+      text: 'Review my gap: b',
+      reviewGaps: true,
+      reviewGap: 'b',
+    })
+    expect(sendSpy).toHaveBeenCalledTimes(1)
+    // quiz must be stripped even though it lost precedence -- otherwise a
+    // stale ?quiz=1 survives and fires unprompted on a later remount once
+    // review_gap is gone.
+    expect(replace).toHaveBeenCalledWith(
+      expect.objectContaining({ query: expect.objectContaining({ quiz: undefined }) }),
+    )
+    expect(route.query.quiz).toBeUndefined()
+  })
+
   it('duplicateReopen renders a go-to-active-session link targeting the conflicting session', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'loadSession').mockImplementation(async () => {
