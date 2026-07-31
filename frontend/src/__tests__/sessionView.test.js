@@ -113,6 +113,7 @@ describe('SessionView', () => {
     getUploadStatus.mockReset()
     getSessionProfile.mockReset()
     patchProfile.mockReset()
+    sessionStorage.clear()
   })
 
   it('renders 404 state when loadSession 404s', async () => {
@@ -1060,6 +1061,95 @@ describe('SessionView', () => {
       await wrapper.get('[data-testid="diag-dismiss"]').trigger('click')
       await flushPromises()
       expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(false)
+    })
+
+    // A conversational decline ("no thanks, just teach me") writes no level, so
+    // knowledge_level stays null forever and the card would otherwise render for
+    // the rest of the session. Two completed tutor turns with the level still
+    // null are treated as an implicit decline.
+    it('soft-dismisses the card after two completed tutor turns with a still-null level', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      getSessionProfile.mockResolvedValue({ profile: { knowledge_level: null }, etag: 't1' })
+      const wrapper = mountView()
+      await flushPromises()
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(true)
+
+      store.streamState = 'streaming'
+      await nextTick()
+      store.streamState = 'idle'
+      await nextTick()
+      await flushPromises()
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(true)
+
+      store.streamState = 'streaming'
+      await nextTick()
+      store.streamState = 'idle'
+      await nextTick()
+      await flushPromises()
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(false)
+    })
+
+    it('a session switch resets the soft-dismiss turn counter', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async (id) => {
+        setupSession({ id })
+      })
+      getSessionProfile.mockResolvedValue({ profile: { knowledge_level: null }, etag: 't1' })
+      const wrapper = mountView({ id: 's1' })
+      await flushPromises()
+
+      store.streamState = 'streaming'
+      await nextTick()
+      store.streamState = 'idle'
+      await nextTick()
+      await flushPromises()
+
+      await wrapper.setProps({ id: 's2' })
+      await flushPromises()
+
+      store.streamState = 'streaming'
+      await nextTick()
+      store.streamState = 'idle'
+      await nextTick()
+      await flushPromises()
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(true)
+    })
+
+    it('X-dismissal persists across a remount of the same session', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      getSessionProfile.mockResolvedValue({ profile: { knowledge_level: null }, etag: 't1' })
+      const first = mountView()
+      await flushPromises()
+      await first.get('[data-testid="diag-dismiss"]').trigger('click')
+      await flushPromises()
+      first.unmount()
+
+      const second = mountView()
+      await flushPromises()
+      expect(second.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(false)
+    })
+
+    it('a dismissal in one session does not hide the card in another', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async (id) => {
+        setupSession({ id })
+      })
+      getSessionProfile.mockResolvedValue({ profile: { knowledge_level: null }, etag: 't1' })
+      const first = mountView({ id: 's1' })
+      await flushPromises()
+      await first.get('[data-testid="diag-dismiss"]').trigger('click')
+      await flushPromises()
+      first.unmount()
+
+      const second = mountView({ id: 's2' })
+      await flushPromises()
+      expect(second.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(true)
     })
 
     it('a session switch invalidates an in-flight level PATCH', async () => {
