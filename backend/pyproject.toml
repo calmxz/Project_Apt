@@ -10,14 +10,14 @@ dependencies = [
     "fastapi>=0.120,<0.136.3",  # MAL-2026-4750: 0.136.3 flagged malicious by pip-audit (amazon-inspector)
     "uvicorn[standard]>=0.32",
     "sqlalchemy>=2.0,<3.0",
-    "pydantic>=2.7,<3.0",
+    "pydantic>=2.13.4,<3.0",
     "pydantic-settings>=2.14.2",
     "litellm>=1.85.1,<2.0",
     # litellm.completion() imports litellm.proxy.* -> orjson whenever `tools` is
     # passed, but only declares orjson under its [proxy] extra. Every tutor turn
     # passes tools, so without this the live chat path dies with
     # ModuleNotFoundError while the stubbed suite stays green. See tests/test_llm_deps.py.
-    "orjson>=3.10,<4.0",
+    "orjson>=3.11.9,<4.0",
     "python-dotenv>=1.2.2",
     "python-multipart>=0.0.18,<1.0",
     "pypdf>=6.10.2,<7.0",
@@ -25,16 +25,16 @@ dependencies = [
     "tiktoken>=0.13.0,<1.0",
     "snowballstemmer>=3.1.0,<4.0",
     "psycopg[binary]>=3.3.4,<4.0",
-    "pgvector>=0.3,<1.0",
+    "pgvector>=0.5.0,<1.0",
     "alembic>=1.18.4,<2.0",
     "pyjwt[crypto]>=2.13.0,<3.0",
     "httpx>=0.28.1,<1.0",
-    "boto3>=1.35,<2.0",
+    "boto3>=1.43.51,<2.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.3",
+    "pytest>=9.1.1",
     "pytest-asyncio>=0.24",
     "httpx>=0.28.1",
     "pytest-cov>=7.1.0",
