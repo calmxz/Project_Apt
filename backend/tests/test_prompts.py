@@ -149,6 +149,37 @@ def test_dynamic_context_rolling_summary_defaults_none():
     assert "ROLLING_SUMMARY: none" in out
 
 
+def test_diagnostic_block_offers_instead_of_forcing():
+    rules = prompts.IMMUTABLE_RULES
+    block = rules.split("KNOWLEDGE DIAGNOSTIC:")[1].split("REVIEW-GAPS MODE:")[0]
+    # force-fire language must be gone
+    assert "Do not teach or explain first" not in block
+    assert "before any teaching" not in block
+    # consent semantics must be present
+    assert "unprompted" in block
+    assert "offer" in block.lower()
+    assert "beginner / intermediate / advanced" in block
+    # both consent outcomes are wired to real tools
+    assert "ask_check_questions" in block
+    assert "update_topic_profile" in block
+    assert "declared" in block
+
+
+def test_diagnostic_first_reply_must_answer_before_offer():
+    # Live smoke (2026-07-31) caught the consent gate displacing the answer: a
+    # first-turn content question got "Welcome! ... would you prefer a quick
+    # 3-question check..." with zero content. The model over-weights the "do not
+    # teach in depth yet" prohibition and rounds "briefly address" down to a
+    # greeting. The answer obligation must be as imperative as the prohibition
+    # and explicitly forbid the offer-only reply.
+    rules = prompts.IMMUTABLE_RULES
+    block = rules.split("KNOWLEDGE DIAGNOSTIC:")[1].split("REVIEW-GAPS MODE:")[0]
+    low = block.lower()
+    assert "must contain" in low
+    assert "never instead of" in low
+    assert "incomplete" in low
+
+
 def test_system_prompt_prefix_is_byte_identical_across_turns():
     """Gemini's implicit prefix cache only helps if the prompt head never
     varies. All per-turn material must render strictly after IMMUTABLE_RULES.

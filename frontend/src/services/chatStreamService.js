@@ -72,7 +72,11 @@ async function _fetchSse(url, payload, { onEvent, signal, path }, _retried = fal
     if (resp.status === 401) await _onAuthExpired()
     const text = await resp.text().catch(() => '')
     let body
-    try { body = text ? JSON.parse(text) : null } catch { body = text }
+    try {
+      body = text ? JSON.parse(text) : null
+    } catch {
+      body = text
+    }
     throw new ApiError(resp.status, body, path)
   }
 
@@ -104,12 +108,25 @@ async function _fetchSse(url, payload, { onEvent, signal, path }, _retried = fal
   }
 }
 
-export async function streamChat({ sessionId, message, reviewGaps = false, reviewGap = null, onEvent, signal }) {
+export async function streamChat({
+  sessionId,
+  message,
+  reviewGaps = false,
+  reviewGap = null,
+  diagnosticAccepted = false,
+  onEvent,
+  signal,
+}) {
   const payload = { session_id: sessionId, message, review_gaps: reviewGaps }
   if (reviewGap) payload.review_gap = reviewGap
+  if (diagnosticAccepted) payload.diagnostic_accepted = true
   await _fetchSse(`${BASE_URL}/chat/stream`, payload, { onEvent, signal, path: '/chat/stream' })
 }
 
 export async function streamCheckComplete({ sessionId, onEvent, signal }) {
-  await _fetchSse(`${BASE_URL}/sessions/${sessionId}/check/complete`, {}, { onEvent, signal, path: '/check/complete' })
+  await _fetchSse(
+    `${BASE_URL}/sessions/${sessionId}/check/complete`,
+    {},
+    { onEvent, signal, path: '/check/complete' },
+  )
 }

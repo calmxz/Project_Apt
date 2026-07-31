@@ -10,19 +10,45 @@ vi.mock('vue-router', () => ({
   useRoute: () => routeRef,
 }))
 const showSuccess = vi.fn()
+const showError = vi.fn()
+const showWarn = vi.fn()
 vi.mock('@/composables/useToast.js', () => ({
-  useToast: () => ({ showError: vi.fn(), showWarn: vi.fn(), showSuccess }),
+  useToast: () => ({ showError, showWarn, showSuccess }),
 }))
+const apiReviewQueue = vi.fn()
+vi.mock('@/services/reviewApi.js', () => ({
+  getReviewQueue: (...args) => apiReviewQueue(...args),
+}))
+const apiGetSessionLibrary = vi.fn()
+vi.mock('@/services/sessionsApi.js', async (importOriginal) => {
+  const actual = await importOriginal()
+  return {
+    ...actual,
+    getSessionLibrary: (...args) => apiGetSessionLibrary(...args),
+  }
+})
 
 import Sidebar from '@/components/sidebar/Sidebar.vue'
 import { useSessionStore } from '@/stores/session.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useSidebar, __test__ as sidebarTest } from '@/composables/useSidebar.js'
+import { RouterLink as MockRouterLink } from 'vue-router'
 
 function setViewport(w) {
   Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: w })
   sidebarTest._setViewport(w)
 }
+
+// File-wide default so every describe block that mounts Sidebar while
+// authenticated (triggering the review-queue fetch in onMounted) gets a
+// resolved promise instead of an unmocked vi.fn() undefined return.
+// Individual review-entry tests override this per case.
+beforeEach(() => {
+  apiReviewQueue.mockReset()
+  apiReviewQueue.mockResolvedValue({ items: [], total: 0, limit: 1, offset: 0 })
+  apiGetSessionLibrary.mockReset()
+  apiGetSessionLibrary.mockResolvedValue({ items: [], total: 0, limit: 20, offset: 0 })
+})
 
 describe('Sidebar.vue — session list rendering', () => {
   let wrapper
@@ -78,6 +104,8 @@ describe('Sidebar.vue — session list rendering', () => {
         ended_at: '2026-05-18T10:00:00Z',
       },
     ]
+    // Badge reads the store's server-side total, not the loaded row count.
+    store.endedTotal = 1
     wrapper = mount(Sidebar)
     await flushPromises()
     // Default view is Active: the ended row is behind the Ended tab, not visible yet.
@@ -151,104 +179,7 @@ describe('Sidebar.vue — session list rendering', () => {
     expect(btn.attributes('aria-current')).toBe('page')
   })
 
-  it('renders chips and a compact meta line in each row', async () => {
-    const store = useSessionStore()
-    store.sessions = [
-      {
-        id: 'a1',
-        topic: 'Glycolysis',
-        created_at: new Date().toISOString(),
-        last_activity_at: new Date().toISOString(),
-        ended_at: null,
-        message_count: 4,
-        progress: { focus_target_gap: 'ATP yield', mastered_count: 0 },
-        last_message_preview: null,
-      },
-    ]
-    wrapper = mount(Sidebar)
-    await flushPromises()
-    const row = wrapper.find('[data-testid="sidebar-row-a1"]')
-    expect(row.find('.sb-row-chips').text()).toContain('ATP yield')
-    expect(row.find('.sb-row-desc').exists()).toBe(false)
-    expect(row.find('.sb-row-meta').text()).toBe('4 msgs · now')
-  })
-
-  it('signal-poor row renders no chips and never prose', async () => {
-    const store = useSessionStore()
-    store.sessions = [
-      {
-        id: 'a9',
-        topic: 'Mitosis',
-        created_at: new Date().toISOString(),
-        last_activity_at: new Date().toISOString(),
-        ended_at: null,
-        message_count: 4,
-        progress: { focus_target_gap: null, mastered_count: 0 },
-        last_message_preview: 'That is correct! You listed all four stages.',
-      },
-    ]
-    wrapper = mount(Sidebar)
-    await flushPromises()
-    const row = wrapper.find('[data-testid="sidebar-row-a9"]')
-    expect(row.find('.sb-row-chips').exists()).toBe(false)
-    expect(row.text()).not.toContain('That is correct!')
-  })
-
-  it('ended row follows the same chips rule — summary prose never renders', async () => {
-    const store = useSessionStore()
-    store.sessions = [
-      {
-        id: 'e1',
-        topic: 'Krebs',
-        created_at: new Date().toISOString(),
-        last_activity_at: new Date().toISOString(),
-        ended_at: new Date().toISOString(),
-        message_count: 9,
-        progress: { focus_target_gap: null, mastered_count: 2 },
-        last_session_summary: '[auto] Covered the Krebs cycle',
-      },
-    ]
-    wrapper = mount(Sidebar)
-    await flushPromises()
-    await wrapper.find('[data-testid="sidebar-status-ended"]').trigger('click')
-    const row = wrapper.find('[data-testid="sidebar-row-e1"]')
-    expect(row.find('.sb-row-chips [data-testid="chip-mastered"]').text()).toContain('2')
-    expect(row.text()).not.toContain('Covered the Krebs cycle')
-  })
-
-  it('aria-describedby lists chips id then meta id when chips exist, meta only otherwise', async () => {
-    const store = useSessionStore()
-    store.sessions = [
-      {
-        id: 'a1',
-        topic: 'Glycolysis',
-        created_at: new Date().toISOString(),
-        last_activity_at: new Date().toISOString(),
-        ended_at: null,
-        message_count: 4,
-        progress: { focus_target_gap: 'ATP yield', mastered_count: 0 },
-        last_message_preview: null,
-      },
-      {
-        id: 'a9',
-        topic: 'Mitosis',
-        created_at: new Date().toISOString(),
-        last_activity_at: new Date().toISOString(),
-        ended_at: null,
-        message_count: 4,
-        progress: { focus_target_gap: null, mastered_count: 0 },
-        last_message_preview: null,
-      },
-    ]
-    wrapper = mount(Sidebar)
-    await flushPromises()
-    const richBtn = wrapper.get('[data-testid="sidebar-row-a1"] [data-testid="sidebar-row-open"]')
-    expect(richBtn.attributes('aria-describedby')).toBe('sb-row-chips-a1 sb-row-meta-a1')
-    const sparseBtn = wrapper.get('[data-testid="sidebar-row-a9"] [data-testid="sidebar-row-open"]')
-    expect(sparseBtn.attributes('aria-describedby')).toBe('sb-row-meta-a9')
-  })
-
-  it('collapsed tooltip is built from chip labels', async () => {
+  it('collapsed tooltip is the plain session topic', async () => {
     sidebarTest._setExpanded(false)
     const store = useSessionStore()
     store.sessions = [
@@ -258,15 +189,12 @@ describe('Sidebar.vue — session list rendering', () => {
         created_at: new Date().toISOString(),
         last_activity_at: new Date().toISOString(),
         ended_at: null,
-        message_count: 4,
-        progress: { focus_target_gap: 'ATP yield', mastered_count: 2 },
-        last_message_preview: null,
       },
     ]
     wrapper = mount(Sidebar)
     await flushPromises()
     const btn = wrapper.get('[data-testid="sidebar-row-a1"] [data-testid="sidebar-row-open"]')
-    expect(btn.attributes('title')).toBe('Glycolysis — Focus: ATP yield, 2 mastered')
+    expect(btn.attributes('title')).toBe('Glycolysis')
   })
 
   it('highlights the current session row', async () => {
@@ -283,44 +211,74 @@ describe('Sidebar.vue — session list rendering', () => {
   })
 
   it('filters sessions via the search input and shows a match count', async () => {
-    const store = useSessionStore()
-    store.sessions = [
-      { id: 'a1', topic: 'Photosynthesis', created_at: new Date().toISOString(), ended_at: null },
-      { id: 'a2', topic: 'Big-O notation', created_at: new Date().toISOString(), ended_at: null },
-    ]
-    wrapper = mount(Sidebar)
-    await flushPromises()
-    await wrapper.find('[data-testid="sidebar-search"]').setValue('photo')
-    await flushPromises()
-    expect(wrapper.find('[data-testid="sidebar-row-a1"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="sidebar-row-a2"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="sidebar-search-count"]').text()).toContain('1')
+    vi.useFakeTimers()
+    try {
+      const store = useSessionStore()
+      store.sessions = [
+        {
+          id: 'a1',
+          topic: 'Photosynthesis',
+          created_at: new Date().toISOString(),
+          ended_at: null,
+        },
+        { id: 'a2', topic: 'Big-O notation', created_at: new Date().toISOString(), ended_at: null },
+      ]
+      apiGetSessionLibrary.mockResolvedValue({
+        items: [{ id: 'a1', topic: 'Photosynthesis', ended_at: null }],
+        total: 1,
+      })
+      wrapper = mount(Sidebar)
+      await flushPromises()
+      await wrapper.find('[data-testid="sidebar-search"]').setValue('photo')
+      await vi.advanceTimersByTimeAsync(250)
+      await flushPromises()
+      expect(wrapper.find('[data-testid="sidebar-row-a1"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="sidebar-row-a2"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="sidebar-search-count"]').text()).toContain('1')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('shows a no-match hint when search matches nothing', async () => {
-    const store = useSessionStore()
-    store.sessions = [
-      { id: 'a1', topic: 'Photosynthesis', created_at: new Date().toISOString(), ended_at: null },
-    ]
-    wrapper = mount(Sidebar)
-    await flushPromises()
-    await wrapper.find('[data-testid="sidebar-search"]').setValue('zzz')
-    await flushPromises()
-    expect(wrapper.find('[data-testid="sidebar-search-empty"]').exists()).toBe(true)
+    vi.useFakeTimers()
+    try {
+      const store = useSessionStore()
+      store.sessions = [
+        { id: 'a1', topic: 'Photosynthesis', created_at: new Date().toISOString(), ended_at: null },
+      ]
+      apiGetSessionLibrary.mockResolvedValue({ items: [], total: 0 })
+      wrapper = mount(Sidebar)
+      await flushPromises()
+      await wrapper.find('[data-testid="sidebar-search"]').setValue('zzz')
+      await vi.advanceTimersByTimeAsync(250)
+      await flushPromises()
+      expect(wrapper.find('[data-testid="sidebar-search-empty"]').exists()).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
-  it('renders date-group headers for active sessions', async () => {
+  it('renders active sessions as one flat list without date group labels', async () => {
     const store = useSessionStore()
     const now = new Date()
     const weekAgo = new Date(now.getTime() - 3 * 86400000)
+    const older = new Date(now.getTime() - 20 * 86400000)
     store.sessions = [
-      { id: 'a1', topic: 'Today one', created_at: now.toISOString(), ended_at: null },
-      { id: 'a2', topic: 'Week one', created_at: weekAgo.toISOString(), ended_at: null },
+      { id: 'a1', topic: 'Big-O', created_at: now.toISOString(), ended_at: null },
+      { id: 'a2', topic: 'Trees', created_at: weekAgo.toISOString(), ended_at: null },
+      { id: 'a3', topic: 'Graphs', created_at: older.toISOString(), ended_at: null },
     ]
     wrapper = mount(Sidebar)
     await flushPromises()
-    expect(wrapper.find('[data-testid="sidebar-group-today"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="sidebar-group-week"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid^="sidebar-group-"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('This week')
+    expect(wrapper.text()).not.toContain('Older')
+    // all rows still present
+    expect(wrapper.findAll('[data-testid="sidebar-row-open"]').length).toBeGreaterThan(0)
+    expect(wrapper.find('[data-testid="sidebar-row-a1"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sidebar-row-a2"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sidebar-row-a3"]').exists()).toBe(true)
   })
 
   it('renders the pinned mini-group when a session is pinned', async () => {
@@ -361,6 +319,333 @@ describe('Sidebar.vue — session list rendering', () => {
     expect(wrapper.find('[data-testid="sidebar-search"]').exists()).toBe(false)
     // collapsed rail must show the session row — fails before Fix 1 because searching stays true
     expect(wrapper.find('[data-testid="sidebar-row-a1"]').exists()).toBe(true)
+  })
+})
+
+describe('sidebar server-side search', () => {
+  let wrapper
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    routerPush.mockClear()
+    showSuccess.mockClear()
+    showError.mockClear()
+    showWarn.mockClear()
+    localStorage.clear()
+    setViewport(1400) // desktop expanded
+    sidebarTest._setExpanded(true)
+    routeRef.params = {}
+    routeRef.fullPath = '/'
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    wrapper?.unmount()
+    vi.useRealTimers()
+  })
+
+  it('debounces 250ms then queries the library endpoint scoped to the current tab', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'a1', topic: 'Big-O', created_at: new Date().toISOString(), ended_at: null },
+    ]
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    await wrapper.find('[data-testid="sidebar-search"]').setValue('gly')
+    await vi.advanceTimersByTimeAsync(249)
+    expect(apiGetSessionLibrary).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1)
+    expect(apiGetSessionLibrary).toHaveBeenCalledWith(
+      { status: 'active', q: 'gly', sort: 'last_activity', limit: 20, offset: 0 },
+      { silent: true },
+    )
+  })
+
+  it('renders server results and total; store sessions array untouched', async () => {
+    const store = useSessionStore()
+    const seeded = [
+      { id: 'a1', topic: 'Big-O', created_at: new Date().toISOString(), ended_at: null },
+    ]
+    store.sessions = seeded
+    apiGetSessionLibrary.mockResolvedValue({
+      items: [
+        { id: 'r1', topic: 'Glycolysis', ended_at: null },
+        { id: 'r2', topic: 'Glycogen', ended_at: null },
+      ],
+      total: 12,
+    })
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    await wrapper.find('[data-testid="sidebar-search"]').setValue('gly')
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sidebar-row-r1"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sidebar-row-r2"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sidebar-search-count"]').text()).toContain('12')
+    // Content (not identity, since Vue wraps assigned arrays in a reactive
+    // proxy) must still equal the original seeded value -- search must never
+    // write the store's `sessions` array.
+    expect(store.sessions).toEqual(seeded)
+  })
+
+  it('shows View all with the query when total exceeds results', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'a1', topic: 'Big-O', created_at: new Date().toISOString(), ended_at: null },
+    ]
+    apiGetSessionLibrary.mockResolvedValue({
+      items: [
+        { id: 'r1', topic: 'Glycolysis', ended_at: null },
+        { id: 'r2', topic: 'Glycogen', ended_at: null },
+      ],
+      total: 12,
+    })
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    await wrapper.find('[data-testid="sidebar-search"]').setValue('gly')
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+    const viewAll = wrapper.find('[data-testid="sidebar-view-all-search"]')
+    expect(viewAll.exists()).toBe(true)
+    const viewAllComponent = wrapper
+      .findAllComponents(MockRouterLink)
+      .find((c) => c.attributes('data-testid') === 'sidebar-view-all-search')
+    expect(viewAllComponent.props('to')).toEqual({
+      name: 'sessions-library',
+      query: { status: 'active', q: 'gly' },
+    })
+  })
+
+  it('hides View all while a newer query is in flight, so the stale total never pairs with the fresh query', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'a1', topic: 'Big-O', created_at: new Date().toISOString(), ended_at: null },
+    ]
+    let resolveA
+    let resolveAb
+    apiGetSessionLibrary.mockImplementation((params) => {
+      if (params.q === 'a') return new Promise((resolve) => (resolveA = resolve))
+      if (params.q === 'ab') return new Promise((resolve) => (resolveAb = resolve))
+      return Promise.resolve({ items: [], total: 0 })
+    })
+    wrapper = mount(Sidebar)
+    await flushPromises()
+
+    // Settle the first query: total 5, 2 rows -> View all is visible.
+    await wrapper.find('[data-testid="sidebar-search"]').setValue('a')
+    await vi.advanceTimersByTimeAsync(250)
+    resolveA({
+      items: [
+        { id: 'r1', topic: 'Apple', ended_at: null },
+        { id: 'r2', topic: 'Ant', ended_at: null },
+      ],
+      total: 5,
+    })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sidebar-view-all-search"]').exists()).toBe(true)
+
+    // Type a further character -- a newer query is now in flight.
+    await wrapper.find('[data-testid="sidebar-search"]').setValue('ab')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sidebar-search-count"]').text()).toContain('Searching')
+    // The stale total (5) must not render a link -- it would pair "View all 5
+    // matches" with a route query.q of 'ab', describing two different searches.
+    expect(wrapper.find('[data-testid="sidebar-view-all-search"]').exists()).toBe(false)
+    // Previous query's rows stay visible underneath the loading state.
+    expect(wrapper.find('[data-testid="sidebar-row-r1"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sidebar-row-r2"]').exists()).toBe(true)
+
+    // Resolve the new query: the link returns paired with the correct total and q.
+    await vi.advanceTimersByTimeAsync(250)
+    resolveAb({ items: [{ id: 'r3', topic: 'Ability', ended_at: null }], total: 9 })
+    await flushPromises()
+    const viewAll = wrapper.find('[data-testid="sidebar-view-all-search"]')
+    expect(viewAll.exists()).toBe(true)
+    expect(viewAll.text()).toContain('9')
+    const viewAllComponent = wrapper
+      .findAllComponents(MockRouterLink)
+      .find((c) => c.attributes('data-testid') === 'sidebar-view-all-search')
+    expect(viewAllComponent.props('to')).toEqual({
+      name: 'sessions-library',
+      query: { status: 'active', q: 'ab' },
+    })
+  })
+
+  it('drops stale responses (later query wins)', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'a1', topic: 'Big-O', created_at: new Date().toISOString(), ended_at: null },
+    ]
+    let resolveAa
+    let resolveBb
+    apiGetSessionLibrary.mockImplementation((params) => {
+      if (params.q === 'aa') return new Promise((resolve) => (resolveAa = resolve))
+      if (params.q === 'bb') return new Promise((resolve) => (resolveBb = resolve))
+      return Promise.resolve({ items: [], total: 0 })
+    })
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    // Type 'aa' and advance a full debounce cycle so its request genuinely
+    // fires and is in flight BEFORE 'bb' is typed. If both were typed
+    // back-to-back, the watch's own clearTimeout on every keystroke would
+    // mean 'aa' is never issued at all -- this test would then pass with the
+    // _searchSeq guards deleted, proving nothing about the guard.
+    await wrapper.find('[data-testid="sidebar-search"]').setValue('aa')
+    await vi.advanceTimersByTimeAsync(250)
+    await wrapper.find('[data-testid="sidebar-search"]').setValue('bb')
+    await vi.advanceTimersByTimeAsync(250)
+    expect(apiGetSessionLibrary).toHaveBeenCalledTimes(2)
+
+    // Resolve 'aa' (the stale request) AFTER 'bb' (the current request).
+    resolveBb({ items: [{ id: 'bb1', topic: 'bb result', ended_at: null }], total: 1 })
+    await flushPromises()
+    resolveAa({ items: [{ id: 'aa1', topic: 'aa result', ended_at: null }], total: 1 })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="sidebar-row-bb1"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sidebar-row-aa1"]').exists()).toBe(false)
+  })
+
+  it('clearing the query restores the tab view without a fetch', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'a1', topic: 'Big-O', created_at: new Date().toISOString(), ended_at: null },
+    ]
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    await wrapper.find('[data-testid="sidebar-search"]').setValue('gly')
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+    apiGetSessionLibrary.mockClear()
+    await wrapper.find('[data-testid="sidebar-search"]').setValue('')
+    await flushPromises()
+    expect(apiGetSessionLibrary).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="sidebar-section-active"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sidebar-row-a1"]').exists()).toBe(true)
+  })
+
+  it('renders zero matches silently (no toast) when the library fetch errors', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'a1', topic: 'Big-O', created_at: new Date().toISOString(), ended_at: null },
+    ]
+    apiGetSessionLibrary.mockRejectedValue(new Error('boom'))
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    await wrapper.find('[data-testid="sidebar-search"]').setValue('gly')
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sidebar-search-empty"]').exists()).toBe(true)
+    // A failed sidebar search must raise no toast at all (not success, not
+    // error, not warn) -- errors render silently as zero matches.
+    expect(showSuccess).not.toHaveBeenCalled()
+    expect(showError).not.toHaveBeenCalled()
+    expect(showWarn).not.toHaveBeenCalled()
+  })
+
+  // Search results describe sessions that are routinely OUTSIDE the store's
+  // 20+20 window. A row action must still be visible on the rendered row --
+  // otherwise nothing appears to happen, the user retries, and the server's
+  // idempotent end/reopen replays 200 while the totals mirror skews again.
+  it('reflects an End taken on a search row for a session outside the loaded window', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'a1', topic: 'Big-O', created_at: new Date().toISOString(), ended_at: null },
+    ]
+    store.activeTotal = 40
+    store.endedTotal = 0
+    apiGetSessionLibrary.mockResolvedValue({
+      items: [{ id: 'out1', topic: 'Glycolysis', ended_at: null, pinned: false }],
+      total: 1,
+    })
+    const api = await import('@/services/sessionsApi.js')
+    const endSpy = vi
+      .spyOn(api, 'endSession')
+      .mockResolvedValue({ ended_at: '2026-05-21T10:00:00Z', summary: null })
+    try {
+      wrapper = mount(Sidebar, { attachTo: document.body })
+      await flushPromises()
+      await wrapper.find('[data-testid="sidebar-search"]').setValue('gly')
+      await vi.advanceTimersByTimeAsync(250)
+      await flushPromises()
+      expect(store.sessions.some((s) => s.id === 'out1')).toBe(false)
+      expect(wrapper.find('[data-session-id="out1"]').classes()).not.toContain('sb-row--ended')
+
+      await wrapper
+        .find('[data-session-id="out1"] [data-testid="sidebar-row-menu-trigger"]')
+        .trigger('click')
+      await wrapper.find('[data-testid="sidebar-row-menu-end"]').trigger('click')
+      await flushPromises()
+
+      expect(endSpy).toHaveBeenCalledWith('out1')
+      expect(wrapper.find('[data-session-id="out1"]').classes()).toContain('sb-row--ended')
+      expect(store.activeTotal).toBe(39)
+      expect(store.endedTotal).toBe(1)
+      // End is no longer offered on a row the user can see is ended, so the
+      // repeat-click loop is closed at the UI as well as in the store.
+      await wrapper
+        .find('[data-session-id="out1"] [data-testid="sidebar-row-menu-trigger"]')
+        .trigger('click')
+      expect(wrapper.find('[data-testid="sidebar-row-menu-end"]').exists()).toBe(false)
+    } finally {
+      endSpy.mockRestore()
+    }
+  })
+
+  // Search is scoped to the current tab (status: statusFilter), so the tab
+  // toggle is the only control that widens the scope. Hiding it while
+  // searching leaves "No sessions match" with no way to look elsewhere.
+  it('keeps the status toggle visible while searching and re-fires the search when the tab changes', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'a1', topic: 'Big-O', created_at: new Date().toISOString(), ended_at: null },
+    ]
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    await wrapper.find('[data-testid="sidebar-search"]').setValue('gly')
+    await vi.advanceTimersByTimeAsync(250)
+    await flushPromises()
+    const endedTab = wrapper.find('[data-testid="sidebar-status-ended"]')
+    expect(endedTab.exists()).toBe(true)
+
+    apiGetSessionLibrary.mockClear()
+    await endedTab.trigger('click')
+    // The re-fire goes through the same debounce as a keystroke, not an
+    // unguarded immediate fetch.
+    await vi.advanceTimersByTimeAsync(249)
+    expect(apiGetSessionLibrary).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1)
+    expect(apiGetSessionLibrary).toHaveBeenCalledWith(
+      { status: 'ended', q: 'gly', sort: 'last_activity', limit: 20, offset: 0 },
+      { silent: true },
+    )
+  })
+
+  it('switching tabs with an empty query does not fire a search', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'a1', topic: 'Big-O', created_at: new Date().toISOString(), ended_at: null },
+    ]
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    apiGetSessionLibrary.mockClear()
+    await wrapper.find('[data-testid="sidebar-status-ended"]').trigger('click')
+    await vi.advanceTimersByTimeAsync(250)
+    expect(apiGetSessionLibrary).not.toHaveBeenCalled()
+  })
+
+  it('does not throw when unmounted mid-debounce', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'a1', topic: 'Big-O', created_at: new Date().toISOString(), ended_at: null },
+    ]
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    await wrapper.find('[data-testid="sidebar-search"]').setValue('gly')
+    wrapper.unmount()
+    wrapper = null
+    // The pending debounce timer must be cleared on unmount; advancing past
+    // it must not call the (now-orphaned) endpoint or throw.
+    await vi.advanceTimersByTimeAsync(250)
+    expect(apiGetSessionLibrary).not.toHaveBeenCalled()
   })
 })
 
@@ -829,6 +1114,96 @@ describe('Sidebar.vue — mount fetch', () => {
   })
 })
 
+describe('Sidebar.vue — review entry', () => {
+  let wrapper
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    routerPush.mockClear()
+    localStorage.clear()
+    setViewport(1400)
+    sidebarTest._setExpanded(true)
+    routeRef.params = {}
+    routeRef.fullPath = '/'
+    // Review-queue badge fetch is gated on isAuthenticated, same signal the
+    // sessions fetch already uses (see "mount fetch" describe above).
+    const auth = useAuthStore()
+    auth.session = { user: { id: 'u-1' }, access_token: 't' }
+    // Sessions fetch runs before the review-queue fetch in onMounted; stub it
+    // so the unrelated real network call doesn't delay/interfere with the
+    // review assertions (mirrors the "mount fetch" describe's pattern).
+    const store = useSessionStore()
+    vi.spyOn(store, 'listSessions').mockResolvedValue([])
+    // Badge fetch is deferred via runWhenIdle; stub requestIdleCallback to
+    // run synchronously so the existing badge assertions still hold.
+    globalThis.requestIdleCallback = (cb) => {
+      cb()
+      return 1
+    }
+    globalThis.cancelIdleCallback = () => {}
+  })
+  afterEach(() => {
+    wrapper?.unmount()
+    delete globalThis.requestIdleCallback
+    delete globalThis.cancelIdleCallback
+  })
+
+  it('shows the review entry with a count when concepts are due', async () => {
+    apiReviewQueue.mockResolvedValue({ items: [], total: 13, limit: 1, offset: 0 })
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    const entry = wrapper.get('[data-testid="sidebar-review"]')
+    expect(entry.text()).toContain('Review')
+    expect(entry.text()).toContain('13')
+    expect(apiReviewQueue).toHaveBeenCalledWith({ limit: 1, offset: 0 }, { silent: true })
+  })
+
+  it('hides the review entry when nothing is due', async () => {
+    apiReviewQueue.mockResolvedValue({ items: [], total: 0, limit: 1, offset: 0 })
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sidebar-review"]').exists()).toBe(false)
+  })
+
+  it('hides the review entry when the fetch fails', async () => {
+    apiReviewQueue.mockRejectedValue(new Error('boom'))
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sidebar-review"]').exists()).toBe(false)
+  })
+
+  it('hides the review entry in icon-rail (collapsed) mode even with a count due', async () => {
+    sidebarTest._setExpanded(false)
+    apiReviewQueue.mockResolvedValue({ items: [], total: 13, limit: 1, offset: 0 })
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sidebar-review"]').exists()).toBe(false)
+  })
+
+  it('does not fetch the badge before the idle callback runs', async () => {
+    let idleCb
+    globalThis.requestIdleCallback = (cb) => {
+      idleCb = cb
+      return 1
+    }
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(apiReviewQueue).not.toHaveBeenCalled()
+    idleCb()
+    await flushPromises()
+    expect(apiReviewQueue).toHaveBeenCalledWith({ limit: 1, offset: 0 }, { silent: true })
+  })
+
+  it('unmount cancels the pending idle badge fetch', async () => {
+    globalThis.requestIdleCallback = () => 1
+    const cancelSpy = vi.fn()
+    globalThis.cancelIdleCallback = cancelSpy
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    wrapper.unmount()
+    expect(cancelSpy).toHaveBeenCalledWith(1)
+  })
+})
+
 describe('session store — rename + pin actions', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -950,5 +1325,210 @@ describe('Sidebar.vue — header states', () => {
     const close = wrapper.find('[data-testid="sidebar-drawer-close"]')
     expect(close.exists()).toBe(true)
     expect(close.classes()).toContain('sb-toggle--end')
+  })
+})
+
+// Builds N active sessions with descending activity so ordering is deterministic
+// (most-recent first) when the component slices down to the cap.
+function makeActiveSessions(count, { pinned = false, prefix = 'u' } = {}) {
+  const now = Date.now()
+  return Array.from({ length: count }, (_, i) => ({
+    id: `${prefix}${i}`,
+    topic: `${prefix}${i}`,
+    created_at: new Date(now - i * 1000).toISOString(),
+    last_activity_at: new Date(now - i * 1000).toISOString(),
+    ended_at: null,
+    pinned,
+  }))
+}
+
+function makeEndedSessions(count) {
+  const now = Date.now()
+  return Array.from({ length: count }, (_, i) => ({
+    id: `e${i}`,
+    topic: `e${i}`,
+    created_at: new Date(now - i * 1000).toISOString(),
+    last_activity_at: new Date(now - i * 1000).toISOString(),
+    ended_at: new Date(now - i * 1000).toISOString(),
+  }))
+}
+
+describe('sidebar 20-row cap and View all links', () => {
+  let wrapper
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    routerPush.mockClear()
+    localStorage.clear()
+    setViewport(1400) // desktop expanded
+    sidebarTest._setExpanded(true)
+    routeRef.params = {}
+    routeRef.fullPath = '/'
+  })
+  afterEach(() => wrapper?.unmount())
+
+  it('renders at most 20 active rows (pinned count toward the cap)', async () => {
+    const store = useSessionStore()
+    const pinnedRows = makeActiveSessions(3, { pinned: true, prefix: 'p' })
+    const unpinnedRows = makeActiveSessions(25, { pinned: false, prefix: 'u' })
+    store.sessions = [...pinnedRows, ...unpinnedRows]
+    store.activeTotal = 28
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(
+      wrapper.findAll('[data-testid="sidebar-section-pinned"] [data-session-id]'),
+    ).toHaveLength(3)
+    expect(wrapper.findAll('[data-testid="sidebar-quick-group"] [data-session-id]')).toHaveLength(
+      17,
+    )
+    const viewAll = wrapper.find('[data-testid="sidebar-view-all-active"]')
+    expect(viewAll.exists()).toBe(true)
+    expect(viewAll.text()).toContain('View all 28 sessions')
+    const viewAllComponent = wrapper
+      .findAllComponents(MockRouterLink)
+      .find((c) => c.attributes('data-testid') === 'sidebar-view-all-active')
+    expect(viewAllComponent.props('to')).toEqual({
+      name: 'sessions-library',
+      query: { status: 'active' },
+    })
+  })
+
+  it('caps pinned rows themselves at 20, leaving no room for unpinned rows', async () => {
+    const store = useSessionStore()
+    const pinnedRows = makeActiveSessions(25, { pinned: true, prefix: 'p' })
+    const unpinnedRows = makeActiveSessions(5, { pinned: false, prefix: 'u' })
+    store.sessions = [...pinnedRows, ...unpinnedRows]
+    store.activeTotal = 30
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(
+      wrapper.findAll('[data-testid="sidebar-section-pinned"] [data-session-id]'),
+    ).toHaveLength(20)
+    expect(wrapper.findAll('[data-testid="sidebar-quick-group"] [data-session-id]')).toHaveLength(0)
+  })
+
+  it('caps the collapsed icon rail at 20 pinned rows too', async () => {
+    sidebarTest._setExpanded(false)
+    const store = useSessionStore()
+    store.sessions = makeActiveSessions(25, { pinned: true, prefix: 'p' })
+    store.activeTotal = 25
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(wrapper.findAll('.sb-session-list--collapsed [data-session-id]')).toHaveLength(20)
+  })
+
+  it('caps the ended tab at 20 and links with status=ended', async () => {
+    const store = useSessionStore()
+    store.sessions = makeEndedSessions(22)
+    store.endedTotal = 40
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    await wrapper.find('[data-testid="sidebar-status-ended"]').trigger('click')
+    expect(wrapper.findAll('[data-testid="sidebar-section-ended"] [data-session-id]')).toHaveLength(
+      20,
+    )
+    const viewAll = wrapper.find('[data-testid="sidebar-view-all-ended"]')
+    expect(viewAll.exists()).toBe(true)
+    expect(viewAll.text()).toContain('40')
+    const viewAllComponent = wrapper
+      .findAllComponents(MockRouterLink)
+      .find((c) => c.attributes('data-testid') === 'sidebar-view-all-ended')
+    expect(viewAllComponent.props('to')).toEqual({
+      name: 'sessions-library',
+      query: { status: 'ended' },
+    })
+  })
+
+  it('hides View all when the tab total fits the rendered rows', async () => {
+    const store = useSessionStore()
+    store.sessions = makeActiveSessions(5)
+    store.activeTotal = 5
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sidebar-view-all-active"]').exists()).toBe(false)
+  })
+
+  it('ended tab badge shows the server total, not the loaded count', async () => {
+    const store = useSessionStore()
+    store.sessions = makeEndedSessions(20)
+    store.endedTotal = 40
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    const endedTab = wrapper.find('[data-testid="sidebar-status-ended"]')
+    expect(endedTab.text()).toContain('(40)')
+  })
+
+  it('ending a session from the sidebar updates the Ended badge and View all counts immediately, without a refetch', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      {
+        id: 'a1',
+        topic: 'Big-O',
+        created_at: '2026-05-20T10:00:00Z',
+        ended_at: null,
+        pinned: false,
+      },
+    ]
+    store.activeTotal = 1
+    store.endedTotal = 0
+    const api = await import('@/services/sessionsApi.js')
+    vi.spyOn(api, 'endSession').mockResolvedValue({
+      ended_at: '2026-05-21T10:00:00Z',
+      summary: null,
+    })
+    const listSpy = vi.spyOn(store, 'listSessions')
+    wrapper = mount(Sidebar, { attachTo: document.body })
+    await flushPromises()
+    await wrapper
+      .find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]')
+      .trigger('click')
+    await wrapper.find('[data-testid="sidebar-row-menu-end"]').trigger('click')
+    await flushPromises()
+    expect(listSpy).not.toHaveBeenCalled()
+    expect(store.activeTotal).toBe(0)
+    expect(store.endedTotal).toBe(1)
+    const endedTab = wrapper.find('[data-testid="sidebar-status-ended"]')
+    expect(endedTab.text()).toContain('(1)')
+  })
+
+  it('the pinned section header reports the capped rendered count, not the uncapped list length', async () => {
+    const store = useSessionStore()
+    store.sessions = makeActiveSessions(25, { pinned: true, prefix: 'p' })
+    store.activeTotal = 25
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(
+      wrapper.findAll('[data-testid="sidebar-section-pinned"] [data-session-id]'),
+    ).toHaveLength(20)
+    expect(
+      wrapper.find('[data-testid="sidebar-section-pinned"] .sb-section-count').text(),
+    ).toContain('20')
+  })
+
+  // The totals are a local mirror: createSession bumps activeTotal without
+  // pushing into the (windowed) `sessions` array, so a brand-new account sits
+  // at activeTotal=1 with zero rows. Offering "View all 1 sessions" directly
+  // under "No sessions yet" is the first-run path, and the two statements
+  // contradict each other.
+  it('never offers the active View all link while no rows are rendered', async () => {
+    const store = useSessionStore()
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    // Exactly what createSession does on a fresh account.
+    store.activeTotal = 1
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sidebar-empty-hint"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sidebar-view-all-active"]').exists()).toBe(false)
+  })
+
+  it('never offers the ended View all link while no ended rows are rendered', async () => {
+    const store = useSessionStore()
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    // e.g. ending a session that was outside the loaded ended window.
+    store.endedTotal = 1
+    await flushPromises()
+    await wrapper.find('[data-testid="sidebar-status-ended"]').trigger('click')
+    expect(wrapper.find('[data-testid="sidebar-ended-empty"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sidebar-view-all-ended"]').exists()).toBe(false)
   })
 })

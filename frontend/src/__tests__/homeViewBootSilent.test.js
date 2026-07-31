@@ -6,12 +6,11 @@ import HomeView from '@/views/HomeView.vue'
 import { useSessionStore } from '@/stores/session.js'
 import { errorBus } from '@/services/errorBus.js'
 
-// U-05: HomeView's boot-mount calls to GET /sessions and GET /review/queue
-// must fail silently. Unlike homeView.test.js, this file does NOT mock
-// sessionsApi.js/reviewApi.js -- it exercises the real store ->
-// sessionsApi/reviewApi -> apiClient chain against a rejecting fetch, so
-// the assertion covers real reportApiError wiring, not just call-argument
-// shape.
+// U-05: HomeView's boot-mount call to GET /sessions must fail silently.
+// Unlike homeView.test.js, this file does NOT mock sessionsApi.js -- it
+// exercises the real store -> sessionsApi -> apiClient chain against a
+// rejecting fetch, so the assertion covers real reportApiError wiring, not
+// just call-argument shape.
 
 const push = vi.fn()
 vi.mock('vue-router', () => ({
@@ -35,8 +34,8 @@ describe('HomeView boot calls fail silently (P3 U-05)', () => {
     push.mockClear()
     listener = vi.fn()
     errorBus.addEventListener('api-error', listener)
-    // Every boot-path GET (sessions, review/queue) hits this same transient
-    // 500 -- the exact condition the original toast sighting matched.
+    // The boot-path GET /sessions hits this same transient 500 -- the exact
+    // condition the original toast sighting matched.
     globalThis.fetch = vi
       .fn()
       .mockResolvedValue(new Response(JSON.stringify({ detail: 'boom' }), { status: 500 }))
@@ -47,7 +46,7 @@ describe('HomeView boot calls fail silently (P3 U-05)', () => {
     vi.restoreAllMocks()
   })
 
-  it('mounting Home with failing GET /sessions and GET /review/queue fires no api-error toast', async () => {
+  it('mounting Home with failing GET /sessions fires no api-error toast', async () => {
     mount(HomeView, { global: { stubs } })
     await flushPromises()
     expect(listener).not.toHaveBeenCalled()

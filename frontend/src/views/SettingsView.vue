@@ -427,20 +427,17 @@ async function signOut() {
   font-weight: 600;
   font-size: 0.9375rem;
   cursor: pointer;
-  box-shadow: var(--shadow-pop);
   transition:
-    transform var(--motion-fast) var(--motion-bounce),
-    box-shadow var(--motion-fast) ease,
+    filter var(--motion-fast) ease,
     opacity var(--motion-fast) ease;
 }
 
 .save-btn:hover:not(:disabled) {
-  transform: translateY(-2px);
+  filter: brightness(1.08);
 }
 
 .save-btn:active:not(:disabled) {
-  transform: translateY(4px);
-  box-shadow: var(--shadow-pop-pressed);
+  filter: brightness(0.95);
 }
 
 .save-btn:disabled {

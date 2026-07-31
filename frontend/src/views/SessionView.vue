@@ -42,6 +42,20 @@
       >
         <MessageListSkeleton v-if="store.detailLoading" />
         <template v-else>
+          <button
+            v-if="store.hasMoreMessages && store.messages.length"
+            type="button"
+            class="load-earlier"
+            data-testid="load-earlier"
+            :disabled="store.loadingEarlier"
+            @click="onLoadEarlier"
+          >
+            <template v-if="store.loadingEarlier">Loading…</template>
+            <template v-else-if="store.loadEarlierError"
+              >Could not load earlier messages — retry</template
+            >
+            <template v-else>Load earlier messages</template>
+          </button>
           <ChatEmptyState
             v-if="!store.messages.length"
             :archived="isEnded"
@@ -114,6 +128,15 @@
         @done="onDoneCheck"
       />
 
+      <DiagnosticConsentCard
+        v-if="showDiagnosticCard"
+        :busy="store.streamState !== 'idle' || !canSend || diagLevelBusy"
+        :error="diagError"
+        @quiz="onDiagQuiz"
+        @level="onDiagLevel"
+        @dismiss="dismissDiag()"
+      />
+
       <Composer
         v-if="!isEnded"
         ref="composerRef"
@@ -162,6 +185,7 @@ import CapBanners from '../components/chat/CapBanners.vue'
 import ChatEmptyState from '../components/chat/EmptyState.vue'
 import CheckQuestion from '../components/chat/CheckQuestion.vue'
 import Composer from '../components/chat/Composer.vue'
+import DiagnosticConsentCard from '../components/DiagnosticConsentCard.vue'
 import GapPickerDialog from '../components/GapPickerDialog.vue'
 import MessageList from '../components/chat/MessageList.vue'
 import MessageListSkeleton from '../components/chat/MessageListSkeleton.vue'
@@ -173,6 +197,7 @@ import { friendlyError } from '../lib/errors.js'
 import { useSessionStore } from '../stores/session.js'
 import { useToast } from '../composables/useToast.js'
 import { costBus } from '../services/costBus.js'
+import { getSessionProfile, patchProfile } from '../services/profileApi.js'
 import { getUploadStatus, uploadDocument, validateFile } from '../services/uploadApi.js'
 import { formatShortDateTime } from '../utils/formatDate.js'
 
@@ -195,8 +220,67 @@ const messagesEl = ref(null)
 const composerRef = ref(null)
 const uploading = ref(false)
 const uploadStatus = ref(null)
+// Same generation-counter idiom as ReferenceStatusBanner: /session/:id reuses
+// this component instance across sidebar switches, so an in-flight upload poll
+// from the previous session must not write uploadStatus/uploading after the id
+// changes. Bumped by the props.id watcher; every write after an await checks it.
+let uploadGen = 0
 const lastError = ref(null)
 const referenceBannerRef = ref(null)
+
+// Diagnostic consent card (spec 2026-07-25-diagnostic-consent-design.md).
+// diagProfile holds the latest GET /profile/:id payload ({ profile, etag });
+// null means not loaded or load failed - the card simply does not render,
+// the tutor's conversational offer is the fallback.
+const diagProfile = ref(null)
+const diagDismissed = ref(false)
+const diagError = ref('')
+// A conversational decline ("no thanks, just teach me") never writes a level,
+// so knowledge_level stays null and the card would render for the rest of the
+// session. Two completed tutor turns with the level still null are treated as
+// an implicit decline. Dismissals (explicit or implicit) persist per session in
+// sessionStorage so a reload does not resurrect the card.
+let diagNullTurns = 0
+
+function diagDismissKey(id) {
+  return `crux:diag-dismissed:${id}`
+}
+
+function dismissDiag() {
+  diagDismissed.value = true
+  try {
+    sessionStorage.setItem(diagDismissKey(props.id), '1')
+  } catch {
+    // storage unavailable (private mode/quota) - in-memory dismissal still holds
+  }
+}
+// F5: guards onDiagLevel's async body against a rapid second click firing a
+// second PATCH with the same (soon-to-be-stale) etag. Folded into the card's
+// busy binding so the buttons visually disable too.
+const diagLevelBusy = ref(false)
+
+const showDiagnosticCard = computed(() =>
+  Boolean(
+    diagProfile.value &&
+    diagProfile.value.profile?.knowledge_level == null &&
+    !store.pendingCheck &&
+    !diagDismissed.value &&
+    !isEnded.value &&
+    !resuming.value &&
+    !notFound.value &&
+    !store.detailLoading,
+  ),
+)
+
+async function loadDiagProfile(id) {
+  try {
+    const data = await getSessionProfile(id)
+    if (id !== props.id) return // stale response from a previous session
+    diagProfile.value = data
+  } catch {
+    if (id === props.id) diagProfile.value = null
+  }
+}
 
 // F-18: a live region over the token-streaming bubble spams SRs with every
 // mutation. Announce discrete transitions instead. The store's stream state
@@ -209,6 +293,30 @@ watch(
   (next, prev) => {
     if (prev === 'idle' && next !== 'idle') streamAnnouncement.value = 'Tutor is replying.'
     else if (prev !== 'idle' && next === 'idle') streamAnnouncement.value = 'Reply finished.'
+  },
+)
+
+// F2: the agent may have conversationally recorded a declared level
+// (update_topic_profile) during the turn -- that only becomes visible to us
+// via a refetch. Once the tutor's turn finishes, refetch so the card hides
+// itself and the cached etag stays fresh, instead of lingering with a stale
+// null level until the next explicit reload.
+watch(
+  () => store.streamState,
+  (next, prev) => {
+    if (prev === 'idle' || next !== 'idle') return
+    if (
+      diagProfile.value &&
+      diagProfile.value.profile?.knowledge_level == null &&
+      !diagDismissed.value
+    ) {
+      diagNullTurns += 1
+      if (diagNullTurns >= 2) {
+        dismissDiag()
+        return
+      }
+      loadDiagProfile(props.id)
+    }
   },
 )
 
@@ -350,7 +458,33 @@ function scrollToBottom() {
   })
 }
 
-watch([() => store.messages.length, awaitingResponse], () => scrollToBottom())
+// True from the moment a "load earlier" click starts until its scroll-offset
+// restore lands. The autoscroll watcher below fires when store.messages.length
+// changes (prepend included) - without this guard it would yank the view back
+// to the bottom right after older messages are spliced in. store.loadingEarlier
+// is already false by the time the watcher flushes (it's cleared before the
+// awaited nextTick below resolves), so it can't do this job - this local flag
+// is the whole point.
+const prepending = ref(false)
+
+async function onLoadEarlier() {
+  const el = messagesEl.value
+  const prevHeight = el ? el.scrollHeight : 0
+  const prevTop = el ? el.scrollTop : 0
+  prepending.value = true
+  try {
+    await store.loadEarlierMessages()
+    await nextTick()
+    if (el) el.scrollTop = prevTop + (el.scrollHeight - prevHeight)
+  } finally {
+    prepending.value = false
+  }
+}
+
+watch([() => store.messages.length, awaitingResponse], () => {
+  if (prepending.value) return
+  scrollToBottom()
+})
 
 async function loadCurrent(id) {
   // Reset per-load so navigating away from a 404 session clears the state.
@@ -360,6 +494,16 @@ async function loadCurrent(id) {
   // loadSession entry. loadCurrent only runs on mount + id-change, so a same-
   // session send-error stays retryable.
   lastError.value = null
+  diagProfile.value = null
+  diagNullTurns = 0
+  try {
+    diagDismissed.value = sessionStorage.getItem(diagDismissKey(id)) === '1'
+  } catch {
+    diagDismissed.value = false
+  }
+  diagError.value = ''
+  diagLevelBusy.value = false
+  loadDiagProfile(id) // deliberately not awaited: card is best-effort
   const startedAt = import.meta.env.DEV ? performance.now() : 0
   try {
     await store.loadSession(id)
@@ -384,8 +528,14 @@ async function loadCurrent(id) {
   }
   if (!isEnded.value && !notFound.value) focusComposer()
   // Covers fresh navigation (new id, e.g. from ProfileView's "Review gaps"
-  // button) where the query is already present before the session loads.
-  if (!notFound.value) await handleReviewGapQuery()
+  // button, or the level-at-start picker's "Quiz me" chip) where the query
+  // is already present before the session loads. handleQuizQuery runs first
+  // so its review_gap precedence guard reads the query before
+  // handleReviewGapQuery strips it.
+  if (!notFound.value) {
+    await handleQuizQuery()
+    await handleReviewGapQuery()
+  }
 }
 
 onMounted(() => loadCurrent(props.id))
@@ -396,7 +546,13 @@ onMounted(() => loadCurrent(props.id))
 watch(
   () => props.id,
   (id) => {
-    if (id) loadCurrent(id)
+    if (!id) return
+    // Invalidate any in-flight upload/poll from the previous session and clear
+    // its banner/lock so the new session never shows or inherits them.
+    uploadGen += 1
+    uploading.value = false
+    uploadStatus.value = null
+    loadCurrent(id)
   },
 )
 
@@ -412,6 +568,16 @@ watch(
     if (!gap) return
     if (store.currentSession?.id !== props.id) return
     handleReviewGapQuery()
+  },
+)
+
+// Twin of the review_gap watcher above, for the smart-start quiz seed.
+watch(
+  () => route.query.quiz,
+  (quiz) => {
+    if (!quiz) return
+    if (store.currentSession?.id !== props.id) return
+    handleQuizQuery()
   },
 )
 
@@ -460,6 +626,88 @@ async function retryLastMessage() {
   await send()
 }
 
+async function onDiagQuiz() {
+  if (!canSend.value) return
+  const id = props.id
+  diagError.value = ''
+  try {
+    await store.sendMessageStreaming({ text: 'Quiz me to gauge my level' })
+  } catch {
+    if (id !== props.id) return // stale response from a previous session
+    // F6: surface on the card, like the level path, instead of the generic
+    // session error banner -- a card failure should read as a card failure.
+    diagError.value = 'Could not start the quiz. Try again.'
+  }
+}
+
+// The card's PATCH writes the level out-of-band of the conversation, so the
+// transcript would otherwise end with the tutor's own unanswered offer -- which
+// makes the model re-ask it next turn. Close the loop with a normal user
+// message. Best-effort: the level is already saved deterministically, so a
+// send failure is not surfaced on the card.
+async function sendLevelDeclaration(level) {
+  if (!canSend.value) return
+  try {
+    await store.sendMessageStreaming({ text: `I'd say my level is ${level}.` })
+  } catch {
+    /* level already persisted; DIAGNOSTIC flips OFF regardless */
+  }
+}
+
+async function onDiagLevel(level) {
+  // F5: a rapid second click before the first PATCH resolves must not fire a
+  // second PATCH with the same (soon-to-be-stale) etag.
+  if (diagLevelBusy.value) return
+  // Same reuse-across-switches hazard as uploadGen (see comment above): this
+  // component instance survives a session switch, so a PATCH started before
+  // the switch must not write the new session's diagProfile/diagError when it
+  // resolves late.
+  const id = props.id
+  const etag = diagProfile.value?.etag
+  if (!etag) return
+  diagLevelBusy.value = true
+  diagError.value = ''
+  try {
+    const res = await patchProfile(id, { knowledge_level: level }, etag)
+    if (id !== props.id) return // stale response from a previous session
+    diagProfile.value = { profile: res.profile, etag: res.etag }
+    await sendLevelDeclaration(level)
+  } catch (e) {
+    if (e?.status === 412) {
+      // Concurrent write (e.g. a quiz just graded). Refetch; if the level is
+      // now set the card hides itself via showDiagnosticCard. loadDiagProfile
+      // has its own stale-response guard, so this is safe even if the
+      // session has since switched.
+      await loadDiagProfile(id)
+      if (id !== props.id) return // stale response from a previous session
+      if (diagProfile.value == null) {
+        // The refetch itself failed (loadDiagProfile sets it to null on
+        // error) -- distinct from "refetch succeeded, level still null".
+        diagError.value = 'Could not save your level. Try again.'
+      } else if (diagProfile.value.profile?.knowledge_level == null) {
+        // Refetch shows the level is STILL unset: the 412 was a stale-etag
+        // false alarm, not a real conflicting write. Retry once with the
+        // fresh etag so the original click is not silently swallowed.
+        const freshEtag = diagProfile.value.etag
+        try {
+          const retryRes = await patchProfile(id, { knowledge_level: level }, freshEtag)
+          if (id !== props.id) return // stale response from a previous session
+          diagProfile.value = { profile: retryRes.profile, etag: retryRes.etag }
+          await sendLevelDeclaration(level)
+        } catch {
+          if (id !== props.id) return // stale response from a previous session
+          diagError.value = 'Could not save your level. Try again.'
+        }
+      }
+    } else {
+      if (id !== props.id) return // stale response from a previous session
+      diagError.value = 'Could not save your level. Try again.'
+    }
+  } finally {
+    if (id === props.id) diagLevelBusy.value = false
+  }
+}
+
 // End is triggered from the sidebar row context menu (S2). When the store
 // commits the End and the ended session matches this view's id, surface the
 // closing summary modal here. Watching pendingSummary keeps the trigger
@@ -485,12 +733,16 @@ async function onAttachFile(file) {
   }
   uploading.value = true
   uploadStatus.value = { kind: 'pending', text: `Uploading ${file.name}...` }
+  const gen = uploadGen
   try {
     const resp = await uploadDocument({ sessionId: props.id, file })
+    if (gen !== uploadGen) return
     referenceBannerRef.value?.refresh?.()
-    await pollUploadStatus(resp.document_id, file.name)
+    await pollUploadStatus(resp.document_id, file.name, gen)
+    if (gen !== uploadGen) return
     referenceBannerRef.value?.refresh?.()
   } catch (e) {
+    if (gen !== uploadGen) return
     // I-09: the 415 (and friends) carry an actionable server message -
     // prefer it over the generic friendlyError copy.
     const serverMsg = e?.body?.detail?.message
@@ -499,22 +751,26 @@ async function onAttachFile(file) {
       text: `Upload failed: ${serverMsg || friendlyError(e)}`,
     }
   } finally {
-    uploading.value = false
+    // The watcher already reset uploading for the new session; a stale finally
+    // must not clobber a newer upload's uploading=true either.
+    if (gen === uploadGen) uploading.value = false
   }
 }
 
-async function pollUploadStatus(documentId, filename) {
+async function pollUploadStatus(documentId, filename, gen) {
   for (let i = 0; i < 30; i += 1) {
     let s
     try {
       s = await getUploadStatus(documentId)
     } catch (e) {
+      if (gen !== uploadGen) return
       uploadStatus.value = {
         kind: 'failed',
         text: `Upload status unavailable: ${friendlyError(e)}`,
       }
       return
     }
+    if (gen !== uploadGen) return
     if (s.status === 'ready') {
       uploadStatus.value = { kind: 'ready', text: `${filename} is ready. Ask a question about it.` }
       return
@@ -527,6 +783,7 @@ async function pollUploadStatus(documentId, filename) {
       return
     }
     await new Promise((r) => setTimeout(r, 1000))
+    if (gen !== uploadGen) return
   }
   uploadStatus.value = {
     kind: 'pending',
@@ -588,6 +845,35 @@ async function handleReviewGapQuery() {
   await sendReviewSeed(String(gap))
 }
 
+// Smart-start diagnostic quiz seed (?quiz=1, e.g. from the level-at-start
+// picker's "Quiz me" chip). Mirrors handleReviewGapQuery/sendReviewSeed
+// above. review_gap takes precedence when both params are present -- checked
+// here (not after handleReviewGapQuery runs) because router.replace()'s
+// query mutation is not guaranteed to be visible synchronously by the time
+// handleReviewGapQuery's await resolves, so this guard must read
+// route.query.review_gap before handleReviewGapQuery has a chance to strip
+// it. Call sites therefore invoke handleQuizQuery() before
+// handleReviewGapQuery().
+async function handleQuizQuery() {
+  if (!route.query.quiz) return
+  // Read review_gap precedence before stripping quiz -- see comment above --
+  // but always strip quiz regardless of the outcome. Otherwise a stale
+  // ?quiz=1 that lost to review_gap on this render survives in the URL and
+  // fires unprompted on a later remount/reload once review_gap is gone.
+  const yieldToReviewGap = !!route.query.review_gap
+  router.replace({ query: { ...route.query, quiz: undefined } })
+  if (yieldToReviewGap) return
+  if (!store.currentSession || store.currentSession.id !== props.id) return
+  try {
+    await store.sendMessageStreaming({
+      text: 'Quiz me so you can pitch this at the right level.',
+      diagnosticAccepted: true,
+    })
+  } catch {
+    // store.error already populated; consent card remains as fallback
+  }
+}
+
 async function onAnswerCheck(index) {
   try {
     await store.answerCheck(index)
@@ -607,6 +893,9 @@ async function onSkipCheck() {
 async function onDoneCheck() {
   try {
     await store.completeCheck()
+    // A graded diagnostic sets knowledge_level server-side; refetch so the
+    // card stays gone (showDiagnosticCard) instead of reappearing stale.
+    await loadDiagProfile(props.id)
   } catch (e) {
     lastError.value = e
   }
@@ -711,6 +1000,35 @@ function goHome() {
 }
 .messages::-webkit-scrollbar-thumb:hover {
   background: var(--color-text-faint);
+}
+
+.load-earlier {
+  align-self: stretch;
+  width: 100%;
+  flex: 0 0 auto;
+  background: transparent;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  padding: 0.4rem 0.75rem;
+  font-family: var(--font-sans);
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: background var(--motion-fast) ease;
+}
+
+.load-earlier:hover:not(:disabled) {
+  background: var(--color-surface-soft);
+}
+
+.load-earlier:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+}
+
+.load-earlier:disabled {
+  cursor: default;
+  opacity: 0.7;
 }
 
 .messages.is-empty {

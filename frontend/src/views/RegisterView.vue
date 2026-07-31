@@ -50,9 +50,7 @@
         />
       </div>
 
-      <p v-if="mismatch" class="hint" data-testid="register-mismatch">
-        Passwords do not match.
-      </p>
+      <p v-if="mismatch" class="hint" data-testid="register-mismatch">Passwords do not match.</p>
       <p v-if="error" class="error" data-testid="register-error">{{ error }}</p>
 
       <label class="consent">
@@ -90,8 +88,8 @@
 
     <div v-else class="form" data-testid="register-sent">
       <p class="sent">
-        Check your inbox at <strong>{{ email.trim() }}</strong> to confirm your
-        account, then sign in.
+        Check your inbox at <strong>{{ email.trim() }}</strong> to confirm your account, then sign
+        in.
       </p>
       <p class="swap">
         <RouterLink to="/login" data-testid="register-sent-to-login">Back to sign in</RouterLink>
@@ -123,10 +121,7 @@ const passwordValid = computed(() => password.value.length >= 8)
 const mismatch = computed(() => confirm.value.length > 0 && confirm.value !== password.value)
 const canSubmit = computed(
   () =>
-    emailValid.value &&
-    passwordValid.value &&
-    confirm.value === password.value &&
-    consent.value,
+    emailValid.value && passwordValid.value && confirm.value === password.value && consent.value,
 )
 
 async function submit() {
@@ -240,8 +235,7 @@ async function submit() {
   font-weight: 600;
   font-size: 0.9375rem;
   cursor: pointer;
-  box-shadow: var(--shadow-pop);
-  transition: transform var(--motion-fast) var(--motion-bounce);
+  transition: filter var(--motion-fast) ease;
 }
 
 .cta:disabled {
@@ -251,7 +245,7 @@ async function submit() {
 }
 
 .cta:not(:disabled):hover {
-  transform: translateY(-1px);
+  filter: brightness(1.08);
 }
 
 .actions {

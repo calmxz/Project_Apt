@@ -44,8 +44,8 @@
 
     <div v-else class="form" data-testid="forgot-sent">
       <p class="sent">
-        If an account exists for <strong>{{ email.trim() }}</strong>, a password
-        reset link is on its way. Check your inbox.
+        If an account exists for <strong>{{ email.trim() }}</strong
+        >, a password reset link is on its way. Check your inbox.
       </p>
       <p class="swap">
         <RouterLink to="/login" data-testid="forgot-sent-to-login">Back to sign in</RouterLink>
@@ -182,8 +182,7 @@ async function submit() {
   font-weight: 600;
   font-size: 0.9375rem;
   cursor: pointer;
-  box-shadow: var(--shadow-pop);
-  transition: transform var(--motion-fast) var(--motion-bounce);
+  transition: filter var(--motion-fast) ease;
 }
 
 .cta:disabled {
@@ -193,7 +192,7 @@ async function submit() {
 }
 
 .cta:not(:disabled):hover {
-  transform: translateY(-1px);
+  filter: brightness(1.08);
 }
 
 .actions {

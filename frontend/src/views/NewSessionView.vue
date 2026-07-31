@@ -2,10 +2,8 @@
   <section class="new-session">
     <div class="hero">
       <span class="folio">begin</span>
-      <h1 class="hero-title">What do you want to learn?</h1>
-      <p class="hero-lede">
-        Type one topic. The tutor adapts to what you already know and where you get stuck.
-      </p>
+      <h1 class="hero-title">Start a session</h1>
+      <p class="hero-lede">One topic per session. The tutor adapts to you.</p>
     </div>
 
     <div class="form">
@@ -21,8 +19,7 @@
           @keydown.enter="onEnter"
         />
         <p class="help">
-          To continue an ended topic, use "Continue topic" on its card in the Sessions library — the
-          tutor keeps your profile. Reopening from the sidebar picks up the same session instead.
+          Continuing an ended topic? Use "Continue topic" on its card in the Sessions library.
         </p>
       </div>
 
@@ -83,44 +80,31 @@
         </div>
       </div>
 
-      <div v-if="activeOnTopic" class="warn" data-testid="new-active-warn">
-        <i class="pi pi-info-circle warn-icon" aria-hidden="true" />
-        <div class="warn-body">
-          <p class="warn-line">
-            You already have an active session on
-            <strong>"{{ activeOnTopic.topic }}"</strong>
-            (#{{ shortId(activeOnTopic.id) }}, started
-            {{ formatRelative(activeOnTopic.created_at) }}).
-          </p>
-          <button
-            type="button"
-            class="warn-action"
-            data-testid="new-open-existing"
-            @click="openExisting"
-          >
-            <span>Open existing</span>
-            <i class="pi pi-arrow-right" aria-hidden="true" />
-          </button>
-        </div>
-      </div>
+      <StartTopicIntercept
+        v-if="stage === 'intercept'"
+        :match="interceptMatch"
+        :kind="interceptKind"
+        :busy="busy"
+        @open-existing="openExisting"
+        @continue-topic="continuePrior"
+        @start-fresh="startFresh"
+        @cancel="cancel"
+      />
+      <StartLevelPicker
+        v-else-if="stage === 'level'"
+        :busy="busy"
+        @select="pickLevel"
+        @quiz="pickQuiz"
+        @skip="skipLevel"
+      />
 
       <p v-if="error" class="error" data-testid="new-error">{{ error }}</p>
-
-      <button
-        v-if="existingSessionId"
-        type="button"
-        class="open-existing"
-        data-testid="open-existing-session"
-        @click="router.push({ name: 'session', params: { id: existingSessionId } })"
-      >
-        Open existing session
-      </button>
 
       <button
         type="button"
         class="cta-primary"
         data-testid="new-submit"
-        :disabled="!canSubmit || store.loading || uploadingFiles || dupeBlocked"
+        :disabled="!canSubmit || store.loading || uploadingFiles || busy"
         @click="submit"
       >
         <span>{{ submitLabel }}</span>
@@ -131,24 +115,56 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
+import StartLevelPicker from '../components/start/StartLevelPicker.vue'
+import StartTopicIntercept from '../components/start/StartTopicIntercept.vue'
+import { useStartFlow } from '../composables/useStartFlow.js'
 import { ACCEPT_ATTR, uploadDocument, validateFile } from '../services/uploadApi.js'
 import { useSessionStore } from '../stores/session.js'
-import { findActiveSessionByTopic, formatRelative, shortId } from '../utils/formatDate.js'
 
 const router = useRouter()
 const store = useSessionStore()
 
 const topic = ref('')
 const error = ref(null)
-const existingSessionId = ref(null)
 
 const files = ref([])
 const fileErrors = ref([])
 const uploadingFiles = ref(false)
 const fileInputEl = ref(null)
+
+async function uploadPending(created) {
+  if (files.value.length) {
+    uploadingFiles.value = true
+    const results = await Promise.allSettled(
+      files.value.map((file) => uploadDocument({ sessionId: created.id, file })),
+    )
+    uploadingFiles.value = false
+    const failed = results.filter((r) => r.status === 'rejected').length
+    if (failed) {
+      fileErrors.value = [`${failed} file(s) failed to upload. You can retry from the session.`]
+    }
+  }
+}
+
+const {
+  stage,
+  busy,
+  interceptMatch,
+  interceptKind,
+  begin,
+  openExisting,
+  continuePrior,
+  startFresh,
+  pickLevel,
+  pickQuiz,
+  skipLevel,
+  cancel,
+} = useStartFlow({ store, router, beforeNavigate: uploadPending })
+
+watch(topic, () => cancel())
 
 const quickPicks = [
   'Recursion',
@@ -165,9 +181,6 @@ onMounted(async () => {
   }
 })
 
-const activeOnTopic = computed(() => findActiveSessionByTopic(store.sessions, topic.value))
-
-const dupeBlocked = computed(() => Boolean(activeOnTopic.value))
 const canSubmit = computed(() => Boolean(topic.value.trim()))
 
 const submitLabel = computed(() => {
@@ -183,12 +196,7 @@ function setTopic(value) {
 }
 
 function onEnter() {
-  if (canSubmit.value && !store.loading && !uploadingFiles.value && !dupeBlocked.value) submit()
-}
-
-function openExisting() {
-  if (!activeOnTopic.value) return
-  router.push({ name: 'session', params: { id: activeOnTopic.value.id } })
+  if (canSubmit.value && !store.loading && !uploadingFiles.value && !busy.value) submit()
 }
 
 function openFilePicker() {
@@ -211,39 +219,7 @@ function removeFile(i) {
 
 async function submit() {
   error.value = null
-  existingSessionId.value = null
-  if (dupeBlocked.value) {
-    error.value = 'An active session for this topic already exists.'
-    return
-  }
-  let created
-  try {
-    created = await store.createSession({
-      topic: topic.value.trim(),
-      seedMode: 'fresh',
-      priorSessionId: null,
-    })
-  } catch (e) {
-    if (e?.status === 409 && e?.body?.detail?.code === 'duplicate_topic') {
-      existingSessionId.value = e.body.detail.session_id
-      error.value = 'An active session for this topic already exists.'
-      return
-    }
-    error.value = e?.message || 'Failed to create session.'
-    return
-  }
-  if (files.value.length) {
-    uploadingFiles.value = true
-    const results = await Promise.allSettled(
-      files.value.map((file) => uploadDocument({ sessionId: created.id, file })),
-    )
-    uploadingFiles.value = false
-    const failed = results.filter((r) => r.status === 'rejected').length
-    if (failed) {
-      fileErrors.value = [`${failed} file(s) failed to upload. You can retry from the session.`]
-    }
-  }
-  router.push({ name: 'session', params: { id: created.id } })
+  await begin(topic.value)
 }
 </script>
 
@@ -535,14 +511,11 @@ async function submit() {
   font-weight: 600;
   font-size: 0.8125rem;
   cursor: pointer;
-  transition:
-    filter var(--motion-fast) ease,
-    transform var(--motion-fast) var(--motion-bounce);
+  transition: filter var(--motion-fast) ease;
 }
 
 .warn-action:hover {
   filter: brightness(1.08);
-  transform: translateY(-1px);
 }
 
 .error {
@@ -565,14 +538,11 @@ async function submit() {
   font-weight: 600;
   font-size: 0.8125rem;
   cursor: pointer;
-  transition:
-    filter var(--motion-fast) ease,
-    transform var(--motion-fast) var(--motion-bounce);
+  transition: filter var(--motion-fast) ease;
 }
 
 .open-existing:hover {
   filter: brightness(1.08);
-  transform: translateY(-1px);
 }
 
 .cta-primary {
@@ -589,20 +559,17 @@ async function submit() {
   font-weight: 600;
   font-size: 1rem;
   cursor: pointer;
-  box-shadow: var(--shadow-pop);
   transition:
-    transform var(--motion-fast) var(--motion-bounce),
-    box-shadow var(--motion-fast) ease,
+    filter var(--motion-fast) ease,
     opacity var(--motion-fast) ease;
 }
 
 .cta-primary:hover:not(:disabled) {
-  transform: translateY(-2px);
+  filter: brightness(1.08);
 }
 
 .cta-primary:active:not(:disabled) {
-  transform: translateY(4px);
-  box-shadow: var(--shadow-pop-pressed);
+  filter: brightness(0.95);
 }
 
 .cta-primary:disabled {

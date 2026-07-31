@@ -2,6 +2,11 @@ import { createRouter, createWebHistory } from 'vue-router'
 
 import { useAuthStore } from '../stores/auth.js'
 import { useUserStore } from '../stores/user.js'
+import {
+  start as progressStart,
+  finish as progressFinish,
+  fail as progressFail,
+} from '../services/routeProgress.js'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -69,6 +74,11 @@ const router = createRouter({
       component: () => import('../views/NewSessionView.vue'),
     },
     {
+      path: '/review',
+      name: 'review',
+      component: () => import('../views/ReviewView.vue'),
+    },
+    {
       path: '/sessions',
       name: 'sessions-library',
       component: () => import('../views/SessionsLibraryView.vue'),
@@ -86,6 +96,10 @@ const router = createRouter({
       props: true,
     },
   ],
+})
+
+router.beforeEach(() => {
+  progressStart()
 })
 
 router.beforeEach(async (to) => {
@@ -114,8 +128,15 @@ router.beforeEach(async (to) => {
   if (auth.isAuthenticated && !user.hydrated) {
     // F-46: onboarding truth lives on the server; the localStorage snapshot
     // is only a warm cache. Await one hydrate so a new device does not
-    // force-route an existing user to onboarding.
-    await user.hydrateFromServer()
+    // force-route an existing user to onboarding. When the snapshot already
+    // says onboarding is complete, the answer cannot get worse by waiting --
+    // render immediately and refresh in the background instead of spending a
+    // full round trip on the first paint.
+    if (user.onboardingComplete) {
+      user.hydrateFromServer()
+    } else {
+      await user.hydrateFromServer()
+    }
   }
   if (
     auth.isAuthenticated &&
@@ -137,6 +158,14 @@ router.afterEach((to, from, failure) => {
   if (failure || !from.name) return
   if (typeof document === 'undefined') return
   document.getElementById('main-content')?.focus()
+})
+
+router.afterEach(() => {
+  progressFinish()
+})
+
+router.onError(() => {
+  progressFail()
 })
 
 export default router

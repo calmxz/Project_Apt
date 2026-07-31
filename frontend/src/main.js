@@ -1,7 +1,6 @@
 import './assets/main.css'
 import './assets/aura-tokens.css'
 import 'primeicons/primeicons.css'
-import 'katex/dist/katex.min.css'
 
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
@@ -19,7 +18,29 @@ import { adaptPresetConfig } from './theme/adaptPreset.js'
 
 const AdaptPreset = definePreset(Aura, adaptPresetConfig)
 
+// Both origins are hit within the first moments of boot (Supabase getSession
+// refresh, then /me + /sessions/library). Preconnect warms DNS+TCP+TLS while
+// the rest of the bundle parses and auth resolves.
+function preconnect() {
+  const hrefs = [import.meta.env.VITE_API_BASE_URL, import.meta.env.VITE_SUPABASE_URL]
+  for (const href of hrefs) {
+    if (!href) continue
+    try {
+      const origin = new URL(href, window.location.href).origin
+      if (origin === window.location.origin) continue
+      const link = document.createElement('link')
+      link.rel = 'preconnect'
+      link.href = origin
+      link.crossOrigin = 'anonymous'
+      document.head.appendChild(link)
+    } catch {
+      // malformed env value -- skip
+    }
+  }
+}
+
 async function bootstrap() {
+  preconnect()
   const app = createApp(App)
   app.use(createPinia())
   useTheme().init()

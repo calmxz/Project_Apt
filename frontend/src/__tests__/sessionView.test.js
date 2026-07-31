@@ -9,6 +9,7 @@ import SessionEndedBanner from '@/components/SessionEndedBanner.vue'
 import CheckQuestion from '@/components/chat/CheckQuestion.vue'
 import Composer from '@/components/chat/Composer.vue'
 import { useSessionStore } from '@/stores/session.js'
+import { getSessionProfile, patchProfile } from '@/services/profileApi.js'
 
 const push = vi.fn()
 // Writes the mutation back into the shared mock route so the query-strip
@@ -40,6 +41,11 @@ vi.mock('@/services/uploadApi.js', () => ({
   MAX_UPLOAD_BYTES: 25 * 1024 * 1024,
 }))
 
+vi.mock('@/services/profileApi.js', () => ({
+  getSessionProfile: vi.fn(),
+  patchProfile: vi.fn(),
+}))
+
 const stubs = {
   BackButton: { template: '<button data-testid="back" />' },
   ReferenceStatusBanner: { methods: { refresh: bannerRefresh }, template: '<div />' },
@@ -68,6 +74,7 @@ function setupSession({
   messages = [],
   dailyCap = null,
   confirmedGaps = [],
+  hasMoreMessages = false,
 } = {}) {
   const store = useSessionStore()
   store.currentSession = {
@@ -84,6 +91,7 @@ function setupSession({
   }
   store.currentSessionId = id
   store.messages = messages
+  store.hasMoreMessages = hasMoreMessages
   if (dailyCap) store.dailyCapInfo = dailyCap
   return store
 }
@@ -103,6 +111,9 @@ describe('SessionView', () => {
     bannerRefresh.mockReset()
     validateFile.mockReset()
     getUploadStatus.mockReset()
+    getSessionProfile.mockReset()
+    patchProfile.mockReset()
+    sessionStorage.clear()
   })
 
   it('renders 404 state when loadSession 404s', async () => {
@@ -576,6 +587,62 @@ describe('SessionView', () => {
     expect(sendSpy).toHaveBeenCalledTimes(1)
   })
 
+  it('quiz=1 sends seeded diagnostic message and strips param', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession({ ended: false })
+    })
+    const sendSpy = vi.spyOn(store, 'sendMessageStreaming').mockResolvedValue()
+    route.query = { quiz: '1' }
+    mountView()
+    await flushPromises()
+    expect(sendSpy).toHaveBeenCalledWith({
+      text: 'Quiz me so you can pitch this at the right level.',
+      diagnosticAccepted: true,
+    })
+    expect(replace).toHaveBeenCalledWith({ query: { quiz: undefined } })
+    await nextTick()
+    await flushPromises()
+    expect(sendSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('quiz param ignored when session id mismatched', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      // currentSession stays unset (null) -- simulates a load that hasn't
+      // populated the store yet / a superseded load.
+    })
+    const sendSpy = vi.spyOn(store, 'sendMessageStreaming').mockResolvedValue()
+    route.query = { quiz: '1' }
+    mountView()
+    await flushPromises()
+    expect(sendSpy).not.toHaveBeenCalled()
+  })
+
+  it('review_gap query param wins when both review_gap and quiz are present', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession({ ended: false, confirmedGaps: ['b'] })
+    })
+    const sendSpy = vi.spyOn(store, 'sendMessageStreaming').mockResolvedValue()
+    route.query = { review_gap: 'b', quiz: '1' }
+    mountView()
+    await flushPromises()
+    expect(sendSpy).toHaveBeenCalledWith({
+      text: 'Review my gap: b',
+      reviewGaps: true,
+      reviewGap: 'b',
+    })
+    expect(sendSpy).toHaveBeenCalledTimes(1)
+    // quiz must be stripped even though it lost precedence -- otherwise a
+    // stale ?quiz=1 survives and fires unprompted on a later remount once
+    // review_gap is gone.
+    expect(replace).toHaveBeenCalledWith(
+      expect.objectContaining({ query: expect.objectContaining({ quiz: undefined }) }),
+    )
+    expect(route.query.quiz).toBeUndefined()
+  })
+
   it('duplicateReopen renders a go-to-active-session link targeting the conflicting session', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'loadSession').mockImplementation(async () => {
@@ -628,6 +695,45 @@ describe('SessionView', () => {
     expect(wrapper.find('[data-testid="upload-status-ready"]').exists()).toBe(true)
     // Banner is refreshed so the newly uploaded doc's ingestion status appears.
     expect(bannerRefresh).toHaveBeenCalled()
+  })
+
+  // A poll started in session A must not paint A's status into session B after
+  // a sidebar switch (same route component instance, no remount), and must not
+  // leave B's attach button locked behind A's in-flight upload.
+  it('a session switch invalidates an in-flight upload poll', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async (id) => {
+      setupSession({ id })
+    })
+    validateFile.mockReturnValue({ ok: true })
+    uploadDocument.mockResolvedValue({ document_id: 'doc-1' })
+    let resolveStatus
+    getUploadStatus.mockImplementation(
+      () =>
+        new Promise((res) => {
+          resolveStatus = res
+        }),
+    )
+    const wrapper = mountView({ id: 's1' })
+    await flushPromises()
+    const file = new File(['pdf-bytes'], 'notes.pdf', { type: 'application/pdf' })
+    const input = wrapper.get('[data-testid="session-upload-input"]')
+    Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
+    await input.trigger('change')
+    await flushPromises() // upload resolved; first status poll still pending
+
+    await wrapper.setProps({ id: 's2' }) // switch sessions mid-ingestion
+    await flushPromises()
+
+    // B must not inherit A's upload lock while the stale poll is still pending.
+    expect(wrapper.findComponent(Composer).props('uploading')).toBe(false)
+
+    resolveStatus({ status: 'ready' }) // the superseded poll resolves late
+    await flushPromises()
+
+    // The stale result must not paint A's status banner into B.
+    expect(wrapper.find('[data-testid="upload-status-ready"]').exists()).toBe(false)
+    expect(wrapper.findComponent(Composer).props('uploading')).toBe(false)
   })
 
   // I-09: the 415 (and friends) carry an actionable server message - prefer
@@ -830,5 +936,513 @@ describe('SessionView', () => {
     store.streamState = 'idle'
     await nextTick()
     expect(region.text()).toBe('Reply finished.')
+  })
+
+  describe('diagnostic consent card', () => {
+    it('shows the card when knowledge_level is null and no check is pending', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      getSessionProfile.mockResolvedValue({ profile: { knowledge_level: null }, etag: 't1' })
+      const wrapper = mountView()
+      await flushPromises()
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(true)
+    })
+
+    it('hides the card when knowledge_level is set', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      getSessionProfile.mockResolvedValue({ profile: { knowledge_level: 'beginner' }, etag: 't1' })
+      const wrapper = mountView()
+      await flushPromises()
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(false)
+    })
+
+    it('hides the card while a check batch is open', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      store.pendingCheck = { gap: 'g', total: 1, currentIndex: 0, viewIndex: 0, items: [] }
+      getSessionProfile.mockResolvedValue({ profile: { knowledge_level: null }, etag: 't1' })
+      const wrapper = mountView()
+      await flushPromises()
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(false)
+    })
+
+    it('quiz button sends the canned message through the store', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      const sendSpy = vi.spyOn(store, 'sendMessageStreaming').mockResolvedValue()
+      getSessionProfile.mockResolvedValue({ profile: { knowledge_level: null }, etag: 't1' })
+      const wrapper = mountView()
+      await flushPromises()
+      await wrapper.get('[data-testid="diag-quiz"]').trigger('click')
+      await flushPromises()
+      expect(sendSpy).toHaveBeenCalledWith({ text: 'Quiz me to gauge my level' })
+    })
+
+    it('level button PATCHes the profile with the etag and hides the card', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      getSessionProfile.mockResolvedValue({ profile: { knowledge_level: null }, etag: 't1' })
+      patchProfile.mockResolvedValue({ profile: { knowledge_level: 'advanced' }, etag: 't2' })
+      const wrapper = mountView()
+      await flushPromises()
+      await wrapper.get('[data-testid="diag-level-advanced"]').trigger('click')
+      await flushPromises()
+      expect(patchProfile).toHaveBeenCalledWith('s1', { knowledge_level: 'advanced' }, 't1')
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(false)
+    })
+
+    it('level button also sends a declaration message so the tutor sees the answer', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      const sendSpy = vi.spyOn(store, 'sendMessageStreaming').mockResolvedValue()
+      getSessionProfile.mockResolvedValue({ profile: { knowledge_level: null }, etag: 't1' })
+      patchProfile.mockResolvedValue({ profile: { knowledge_level: 'advanced' }, etag: 't2' })
+      const wrapper = mountView()
+      await flushPromises()
+      await wrapper.get('[data-testid="diag-level-advanced"]').trigger('click')
+      await flushPromises()
+      expect(sendSpy).toHaveBeenCalledWith({ text: "I'd say my level is advanced." })
+    })
+
+    it('level button does not send a declaration message when the PATCH fails', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      const sendSpy = vi.spyOn(store, 'sendMessageStreaming').mockResolvedValue()
+      getSessionProfile.mockResolvedValue({ profile: { knowledge_level: null }, etag: 't1' })
+      patchProfile.mockRejectedValue(new Error('network down'))
+      const wrapper = mountView()
+      await flushPromises()
+      await wrapper.get('[data-testid="diag-level-beginner"]').trigger('click')
+      await flushPromises()
+      expect(sendSpy).not.toHaveBeenCalled()
+    })
+
+    it('412 on PATCH refetches the profile and hides the card if the level is now set', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      getSessionProfile.mockResolvedValueOnce({ profile: { knowledge_level: null }, etag: 't1' })
+      patchProfile.mockRejectedValue(Object.assign(new Error('precondition'), { status: 412 }))
+      getSessionProfile.mockResolvedValueOnce({
+        profile: { knowledge_level: 'beginner' },
+        etag: 't2',
+      })
+      const wrapper = mountView()
+      await flushPromises()
+      await wrapper.get('[data-testid="diag-level-beginner"]').trigger('click')
+      await flushPromises()
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(false)
+    })
+
+    it('dismiss hides the card locally', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      getSessionProfile.mockResolvedValue({ profile: { knowledge_level: null }, etag: 't1' })
+      const wrapper = mountView()
+      await flushPromises()
+      await wrapper.get('[data-testid="diag-dismiss"]').trigger('click')
+      await flushPromises()
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(false)
+    })
+
+    // A conversational decline ("no thanks, just teach me") writes no level, so
+    // knowledge_level stays null forever and the card would otherwise render for
+    // the rest of the session. Two completed tutor turns with the level still
+    // null are treated as an implicit decline.
+    it('soft-dismisses the card after two completed tutor turns with a still-null level', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      getSessionProfile.mockResolvedValue({ profile: { knowledge_level: null }, etag: 't1' })
+      const wrapper = mountView()
+      await flushPromises()
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(true)
+
+      store.streamState = 'streaming'
+      await nextTick()
+      store.streamState = 'idle'
+      await nextTick()
+      await flushPromises()
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(true)
+
+      store.streamState = 'streaming'
+      await nextTick()
+      store.streamState = 'idle'
+      await nextTick()
+      await flushPromises()
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(false)
+    })
+
+    it('a session switch resets the soft-dismiss turn counter', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async (id) => {
+        setupSession({ id })
+      })
+      getSessionProfile.mockResolvedValue({ profile: { knowledge_level: null }, etag: 't1' })
+      const wrapper = mountView({ id: 's1' })
+      await flushPromises()
+
+      store.streamState = 'streaming'
+      await nextTick()
+      store.streamState = 'idle'
+      await nextTick()
+      await flushPromises()
+
+      await wrapper.setProps({ id: 's2' })
+      await flushPromises()
+
+      store.streamState = 'streaming'
+      await nextTick()
+      store.streamState = 'idle'
+      await nextTick()
+      await flushPromises()
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(true)
+    })
+
+    it('X-dismissal persists across a remount of the same session', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      getSessionProfile.mockResolvedValue({ profile: { knowledge_level: null }, etag: 't1' })
+      const first = mountView()
+      await flushPromises()
+      await first.get('[data-testid="diag-dismiss"]').trigger('click')
+      await flushPromises()
+      first.unmount()
+
+      const second = mountView()
+      await flushPromises()
+      expect(second.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(false)
+    })
+
+    it('a dismissal in one session does not hide the card in another', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async (id) => {
+        setupSession({ id })
+      })
+      getSessionProfile.mockResolvedValue({ profile: { knowledge_level: null }, etag: 't1' })
+      const first = mountView({ id: 's1' })
+      await flushPromises()
+      await first.get('[data-testid="diag-dismiss"]').trigger('click')
+      await flushPromises()
+      first.unmount()
+
+      const second = mountView({ id: 's2' })
+      await flushPromises()
+      expect(second.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(true)
+    })
+
+    it('a session switch invalidates an in-flight level PATCH', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async (id) => {
+        setupSession({ id })
+      })
+      getSessionProfile.mockImplementation((id) =>
+        id === 's1'
+          ? Promise.resolve({ profile: { knowledge_level: null }, etag: 't1' })
+          : Promise.resolve({ profile: { knowledge_level: null }, etag: 't3' }),
+      )
+      let resolvePatch
+      patchProfile.mockImplementation(
+        () =>
+          new Promise((res) => {
+            resolvePatch = res
+          }),
+      )
+      const wrapper = mountView({ id: 's1' })
+      await flushPromises()
+      await wrapper.get('[data-testid="diag-level-advanced"]').trigger('click')
+      await flushPromises() // PATCH sent from s1, still pending
+
+      await wrapper.setProps({ id: 's2' }) // switch sessions mid-PATCH
+      await flushPromises()
+
+      // s2's own fetch shows the card (its knowledge_level is null too).
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(true)
+
+      resolvePatch({ profile: { knowledge_level: 'advanced' }, etag: 't2' }) // stale s1 PATCH resolves late
+      await flushPromises()
+
+      // The stale PATCH response must not clobber s2's freshly-fetched profile.
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(true)
+    })
+
+    // Re-review finding: onDiagLevel's finally must not clear diagLevelBusy
+    // for a stale (previous-session) PATCH resolving after a same-session
+    // PATCH is already in flight, else the double-PATCH window (F5) reopens.
+    it('a stale PATCH resolving late does not clobber a newer same-session PATCH busy-guard', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async (id) => {
+        setupSession({ id })
+      })
+      getSessionProfile.mockImplementation((id) =>
+        id === 's1'
+          ? Promise.resolve({ profile: { knowledge_level: null }, etag: 't1' })
+          : Promise.resolve({ profile: { knowledge_level: null }, etag: 't3' }),
+      )
+      const resolvers = []
+      patchProfile.mockImplementation(
+        () =>
+          new Promise((res, rej) => {
+            resolvers.push({ res, rej })
+          }),
+      )
+      const wrapper = mountView({ id: 's1' })
+      await flushPromises()
+      await wrapper.get('[data-testid="diag-level-advanced"]').trigger('click')
+      await flushPromises() // PATCH_A sent from s1, still pending
+
+      await wrapper.setProps({ id: 's2' }) // switch sessions mid-PATCH
+      await flushPromises()
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(true)
+
+      await wrapper.get('[data-testid="diag-level-advanced"]').trigger('click')
+      await flushPromises() // PATCH_B sent from s2, still pending
+      expect(patchProfile).toHaveBeenCalledTimes(2)
+
+      resolvers[0].res({ profile: { knowledge_level: 'advanced' }, etag: 't2' }) // stale PATCH_A resolves late
+      await flushPromises()
+
+      // Click level again on s2 while PATCH_B is still in flight. A correctly
+      // session-guarded finally must leave diagLevelBusy true (busy belongs
+      // to s2's own pending PATCH_B), so this third click must be blocked.
+      await wrapper.get('[data-testid="diag-level-advanced"]').trigger('click')
+      await flushPromises()
+
+      expect(patchProfile).toHaveBeenCalledTimes(2)
+    })
+
+    // F4: the card must never paint over the skeleton (or flash) before the
+    // session detail has resolved, even if the best-effort profile fetch
+    // (which is not gated on loadSession) comes back with a null level.
+    it('does not show the card while detail is loading (F4)', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(() => new Promise(() => {}))
+      store.detailLoading = true
+      getSessionProfile.mockResolvedValue({ profile: { knowledge_level: null }, etag: 't1' })
+      const wrapper = mountView({ id: 's1' })
+      await flushPromises()
+      expect(wrapper.find('[data-testid="session-messages-skeleton"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(false)
+    })
+
+    // F2: a conversational level declaration (agent-side update_topic_profile
+    // during the turn) is only visible to us via a refetch. Once a tutor turn
+    // finishes (stream goes back to idle), refetch so the card hides itself
+    // instead of lingering with a stale null level.
+    it('refetches the profile when a tutor turn completes and hides the card if the level is now set (F2)', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      getSessionProfile.mockResolvedValueOnce({ profile: { knowledge_level: null }, etag: 't1' })
+      const wrapper = mountView()
+      await flushPromises()
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(true)
+      expect(getSessionProfile).toHaveBeenCalledTimes(1)
+
+      getSessionProfile.mockResolvedValueOnce({
+        profile: { knowledge_level: 'intermediate' },
+        etag: 't2',
+      })
+      store.streamState = 'streaming'
+      await nextTick()
+      store.streamState = 'idle'
+      await flushPromises()
+
+      expect(getSessionProfile).toHaveBeenCalledTimes(2)
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(false)
+    })
+
+    it('does not refetch on stream idle when the card is dismissed (F2)', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      getSessionProfile.mockResolvedValueOnce({ profile: { knowledge_level: null }, etag: 't1' })
+      const wrapper = mountView()
+      await flushPromises()
+      await wrapper.get('[data-testid="diag-dismiss"]').trigger('click')
+      await flushPromises()
+      expect(getSessionProfile).toHaveBeenCalledTimes(1)
+
+      store.streamState = 'streaming'
+      await nextTick()
+      store.streamState = 'idle'
+      await flushPromises()
+
+      expect(getSessionProfile).toHaveBeenCalledTimes(1)
+    })
+
+    // F3: a 412 can be a stale-etag false alarm rather than a real conflict.
+    // If the refetch shows the level is STILL unset, retry the PATCH once
+    // with the fresh etag rather than silently dropping the user's click.
+    it('412 with a still-null refetch retries the PATCH once and hides the card on success (F3)', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      getSessionProfile.mockResolvedValueOnce({ profile: { knowledge_level: null }, etag: 't1' })
+      patchProfile.mockRejectedValueOnce(Object.assign(new Error('precondition'), { status: 412 }))
+      getSessionProfile.mockResolvedValueOnce({ profile: { knowledge_level: null }, etag: 't2' })
+      patchProfile.mockResolvedValueOnce({ profile: { knowledge_level: 'beginner' }, etag: 't3' })
+      const wrapper = mountView()
+      await flushPromises()
+      await wrapper.get('[data-testid="diag-level-beginner"]').trigger('click')
+      await flushPromises()
+
+      expect(patchProfile).toHaveBeenCalledTimes(2)
+      expect(patchProfile).toHaveBeenNthCalledWith(2, 's1', { knowledge_level: 'beginner' }, 't2')
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(false)
+      expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+    })
+
+    it('412 retry failure surfaces the inline save error (F3)', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      getSessionProfile.mockResolvedValueOnce({ profile: { knowledge_level: null }, etag: 't1' })
+      patchProfile.mockRejectedValueOnce(Object.assign(new Error('precondition'), { status: 412 }))
+      getSessionProfile.mockResolvedValueOnce({ profile: { knowledge_level: null }, etag: 't2' })
+      patchProfile.mockRejectedValueOnce(new Error('network down'))
+      const wrapper = mountView()
+      await flushPromises()
+      await wrapper.get('[data-testid="diag-level-beginner"]').trigger('click')
+      await flushPromises()
+
+      expect(patchProfile).toHaveBeenCalledTimes(2)
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(true)
+      expect(wrapper.get('[role="alert"]').text()).toBe('Could not save your level. Try again.')
+    })
+
+    // F5: a rapid second click before the first PATCH resolves must not fire
+    // a second PATCH with the same (now-stale) etag.
+    it('a rapid second level click does not fire a second PATCH (F5)', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      getSessionProfile.mockResolvedValueOnce({ profile: { knowledge_level: null }, etag: 't1' })
+      let resolvePatch
+      patchProfile.mockImplementation(
+        () =>
+          new Promise((res) => {
+            resolvePatch = res
+          }),
+      )
+      const wrapper = mountView()
+      await flushPromises()
+      const btn = wrapper.get('[data-testid="diag-level-beginner"]')
+      btn.trigger('click')
+      btn.trigger('click')
+      await flushPromises()
+
+      expect(patchProfile).toHaveBeenCalledTimes(1)
+      resolvePatch({ profile: { knowledge_level: 'beginner' }, etag: 't2' })
+      await flushPromises()
+    })
+
+    // F6: quiz-start failures must surface on the card (diagError), matching
+    // the level path, instead of the generic session error banner.
+    it('quiz failures surface an inline card error instead of the session error banner (F6)', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      getSessionProfile.mockResolvedValueOnce({ profile: { knowledge_level: null }, etag: 't1' })
+      vi.spyOn(store, 'sendMessageStreaming').mockRejectedValue(new Error('boom'))
+      const wrapper = mountView()
+      await flushPromises()
+      await wrapper.get('[data-testid="diag-quiz"]').trigger('click')
+      await flushPromises()
+
+      expect(wrapper.find('[data-testid="session-error"]').exists()).toBe(false)
+      expect(wrapper.get('[data-testid="diagnostic-consent-card"] [role="alert"]').text()).toBe(
+        'Could not start the quiz. Try again.',
+      )
+    })
+  })
+
+  describe('load earlier messages', () => {
+    // setupSession() alone leaves store.detailLoading true until the real
+    // (unmocked) loadSession fetch settles, which is exactly what every other
+    // describe block in this file avoids by driving setupSession through a
+    // loadSession spy. Do the same here so these assertions run against the
+    // loaded (v-else) branch deterministically instead of racing a live fetch.
+    it('shows the button only when hasMoreMessages', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession({
+          id: 's1',
+          messages: [{ role: 'user', content: 'hi', message_id: 9 }],
+          hasMoreMessages: true,
+        })
+      })
+      const wrapper = mountView()
+      await flushPromises()
+      expect(wrapper.find('[data-testid="load-earlier"]').exists()).toBe(true)
+    })
+
+    it('hides the button when history is exhausted', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession({ id: 's1', messages: [{ role: 'user', content: 'hi', message_id: 9 }] })
+      })
+      const wrapper = mountView()
+      await flushPromises()
+      expect(wrapper.find('[data-testid="load-earlier"]').exists()).toBe(false)
+    })
+
+    it('click calls store.loadEarlierMessages and disables while pending', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession({
+          id: 's1',
+          messages: [{ role: 'user', content: 'hi', message_id: 9 }],
+          hasMoreMessages: true,
+        })
+      })
+      const spy = vi.spyOn(store, 'loadEarlierMessages').mockResolvedValue()
+      const wrapper = mountView()
+      await flushPromises()
+      await wrapper.get('[data-testid="load-earlier"]').trigger('click')
+      expect(spy).toHaveBeenCalled()
+    })
+
+    it('shows retry copy when the page fetch failed', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession({
+          id: 's1',
+          messages: [{ role: 'user', content: 'hi', message_id: 9 }],
+          hasMoreMessages: true,
+        })
+        store.loadEarlierError = 'boom'
+      })
+      const wrapper = mountView()
+      await flushPromises()
+      expect(wrapper.get('[data-testid="load-earlier"]').text()).toMatch(/retry/i)
+    })
   })
 })

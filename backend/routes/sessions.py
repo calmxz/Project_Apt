@@ -24,6 +24,7 @@ from contracts import (
     Citation,
     DocumentStatus,
     Message,
+    MessagePage,
     SessionCreateRequest,
     SessionDetail,
     SessionEndResponse,
@@ -31,6 +32,8 @@ from contracts import (
     SessionIngestionStatus,
     SessionLibraryPage,
     SessionListItem,
+    SessionLookupResult,
+    SessionMatch,
     SessionResponse,
     SessionUpdateRequest,
     ToolCallRecord,
@@ -135,6 +138,12 @@ async def create_session(
             status_code=400, detail="prior_session_id forbidden when seed_mode=fresh"
         )
 
+    if req.declared_level is not None and req.seed_mode == "resume":
+        raise HTTPException(
+            status_code=422,
+            detail="declared_level forbidden when seed_mode=resume",
+        )
+
     ensure_user(db, user_id, accepted_terms=accepted_terms_from_request(request))
 
     # Final-review fix: this check must run BEFORE the resume block below.
@@ -159,7 +168,7 @@ async def create_session(
         )
 
     new_id = uuid.uuid4().hex
-    profile_json = TopicProfile().model_dump_json()
+    profile_json = TopicProfile(knowledge_level=req.declared_level).model_dump_json()
 
     if req.seed_mode == "resume":
         prior = db.get(SessionModel, req.prior_session_id)
@@ -210,12 +219,21 @@ def list_sessions(
     return _enrich_list_items(db, rows)
 
 
-def _load_messages(db: Session, session_id: str, open_message_id: int | None = None) -> list[Message]:
-    rows = db.execute(
-        select(ChatMessage)
-        .where(ChatMessage.session_id == session_id)
-        .order_by(ChatMessage.created_at.asc(), ChatMessage.id.asc())
-    ).scalars().all()
+def _load_messages(
+    db: Session,
+    session_id: str,
+    open_message_id: int | None = None,
+    before: int | None = None,
+    limit: int = 30,
+) -> tuple[list[Message], bool]:
+    q = select(ChatMessage).where(ChatMessage.session_id == session_id)
+    if before is not None:
+        q = q.where(ChatMessage.id < before)
+    window = list(
+        db.execute(q.order_by(ChatMessage.id.desc()).limit(limit + 1)).scalars().all()
+    )
+    has_more = len(window) > limit
+    rows = list(reversed(window[:limit]))
     # Preload LearningEvents once iff some message may need reconstruction
     # (no persisted check_batch_json and not the open message). Avoids the
     # former per-item N+1 entirely; skipped when every batch is persisted.
@@ -255,7 +273,7 @@ def _load_messages(db: Session, session_id: str, open_message_id: int | None = N
                 status=m.status,
             )
         )
-    return out
+    return out, has_more
 
 
 def _build_end_summary(db: Session, session_id: str, text: str) -> SessionEndSummary:
@@ -270,7 +288,7 @@ def _build_end_summary(db: Session, session_id: str, text: str) -> SessionEndSum
 def list_session_library(
     status: Literal["all", "active", "ended"] = "all",
     q: str | None = None,
-    sort: Literal["last_activity", "created", "topic"] = "last_activity",
+    sort: Literal["last_activity", "created", "topic", "pinned_activity"] = "last_activity",
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     user_id: str = Depends(current_user_id),
@@ -292,19 +310,28 @@ def list_session_library(
         ordered = base.order_by(SessionModel.created_at.desc(), SessionModel.id.desc())
     elif sort == "topic":
         ordered = base.order_by(SessionModel.topic.asc(), SessionModel.id.asc())
-    else:  # last_activity: order by max(message.created_at), falling back to created_at
+    else:  # last_activity / pinned_activity: order by max(message.created_at), falling back to created_at
         last_act_sub = (
             select(
                 ChatMessage.session_id.label("sid"),
                 func.max(ChatMessage.created_at).label("la"),
             )
+            # Without this the aggregate scans every user's messages (a
+            # whole-table GROUP BY) just to sort one user's page.
+            .where(
+                ChatMessage.session_id.in_(
+                    select(SessionModel.id).where(SessionModel.user_id == user_id)
+                )
+            )
             .group_by(ChatMessage.session_id)
             .subquery()
         )
-        ordered = (
-            base.outerjoin(last_act_sub, last_act_sub.c.sid == SessionModel.id)
-            .order_by(func.coalesce(last_act_sub.c.la, SessionModel.created_at).desc(), SessionModel.id.desc())
-        )
+        activity_desc = func.coalesce(last_act_sub.c.la, SessionModel.created_at).desc()
+        joined = base.outerjoin(last_act_sub, last_act_sub.c.sid == SessionModel.id)
+        if sort == "pinned_activity":
+            ordered = joined.order_by(SessionModel.pinned.desc(), activity_desc, SessionModel.id.desc())
+        else:
+            ordered = joined.order_by(activity_desc, SessionModel.id.desc())
 
     rows = db.execute(ordered.limit(limit).offset(offset)).scalars().all()
     return SessionLibraryPage(
@@ -313,6 +340,52 @@ def list_session_library(
         limit=limit,
         offset=offset,
     )
+
+
+@router.get("/sessions/lookup", response_model=SessionLookupResult)
+def lookup_sessions_by_topic(
+    topic: str = Query(..., max_length=200),
+    user_id: str = Depends(current_user_id),
+    db: Session = Depends(get_db),
+):
+    """Case-insensitive exact-match lookup used by the start pages.
+
+    Active match wins; ended match (most recently ended) only when no
+    active session matches. Read-only.
+    """
+    normalized = topic.strip().lower()
+    if not normalized:
+        return SessionLookupResult()
+
+    def _to_match(row: SessionModel) -> SessionMatch:
+        profile = TopicProfile.model_validate_json(row.topic_profile_json)
+        return SessionMatch(
+            session_id=row.id,
+            title=row.topic,
+            ended_at=row.ended_at,
+            gap_count=len(profile.confirmed_gaps),
+            knowledge_level=profile.knowledge_level,
+        )
+
+    base = db.query(SessionModel).filter(
+        SessionModel.user_id == user_id,
+        func.lower(func.trim(SessionModel.topic)) == normalized,
+    )
+    active = (
+        base.filter(SessionModel.ended_at.is_(None))
+        .order_by(SessionModel.created_at.desc())
+        .first()
+    )
+    if active is not None:
+        return SessionLookupResult(active_match=_to_match(active))
+    ended = (
+        base.filter(SessionModel.ended_at.is_not(None))
+        .order_by(SessionModel.ended_at.desc())
+        .first()
+    )
+    if ended is not None:
+        return SessionLookupResult(ended_match=_to_match(ended))
+    return SessionLookupResult()
 
 
 @router.get("/sessions/{session_id}", response_model=SessionDetail)
@@ -329,6 +402,7 @@ def get_session(
     # path, or a narrow race). When None, suppression below cannot fire; the
     # read-time backfill is best-effort and any co-render window is transient.
     open_msg_id = pc.get("message_id") if pc else None
+    messages, has_more = _load_messages(db, row.id, open_msg_id)
     return SessionDetail(
         id=row.id,
         user_id=row.user_id,
@@ -337,10 +411,30 @@ def get_session(
         created_at=_aware_utc(row.created_at),
         ended_at=_aware_utc(row.ended_at),
         ingestion_status=documents_service.session_ingestion_status(db, row.id),
-        messages=_load_messages(db, row.id, open_msg_id),
+        messages=messages,
+        has_more_messages=has_more,
         pinned=row.pinned,
         pending_check=check_question_service.public_view(pc),
     )
+
+
+@router.get("/sessions/{session_id}/messages", response_model=MessagePage)
+def get_session_messages(
+    session_id: str,
+    before: int = Query(..., description="Exclusive message-id cursor"),
+    limit: int = Query(30, ge=1, le=100),
+    user_id: str = Depends(current_user_id),
+    db: Session = Depends(get_db),
+):
+    row = db.get(SessionModel, session_id)
+    if row is None or row.user_id != user_id:
+        raise HTTPException(status_code=404, detail="session not found")
+    # Same open-batch recap suppression as get_session: if the open check
+    # message ever lands in an older page, the live card still owns it.
+    pc = check_question_service.get_pending_check(db, row.id)
+    open_msg_id = pc.get("message_id") if pc else None
+    items, has_more = _load_messages(db, row.id, open_msg_id, before=before, limit=limit)
+    return MessagePage(items=items, has_more=has_more)
 
 
 def _claim_end(db: Session, session_id: str) -> bool:

@@ -61,6 +61,7 @@ def _build_prompt_state(
     retrieval_required: bool,
     review_gaps: bool,
     review_gap: str | None = None,
+    diagnostic_accepted: bool = False,
     pending_check,
     quiz_cooldown,
     gap_accuracy: dict | None = None,
@@ -83,6 +84,8 @@ def _build_prompt_state(
         "quiz_cooldown": quiz_cooldown,
         "gap_accuracy": gap_accuracy or {},
     }
+    if diagnostic_accepted and profile.knowledge_level is None:
+        prompt_state["diagnostic_accepted"] = True
     if review_gaps:
         gaps = profile_service.concept_names(profile.confirmed_gaps)
         mastered = [
@@ -103,6 +106,7 @@ def _build_prompt_state(
             prompt_state["review_gaps_target"] = target
             prompt_state["review_gaps_retention"] = target in mastered
             prompt_state["diagnostic_required"] = False
+            prompt_state["diagnostic_accepted"] = False
     if prefetched_chunks:
         prompt_state["prefetched_excerpts"] = [
             wrap_chunk(ch) for ch in prefetched_chunks
@@ -253,6 +257,7 @@ async def _prepare_turn(
             retrieval_required=retrieval_required,
             review_gaps=getattr(req, "review_gaps", False),
             review_gap=getattr(req, "review_gap", None),
+            diagnostic_accepted=getattr(req, "diagnostic_accepted", False),
             pending_check=pending_check_store.get_pending_check_from_row(session),
             quiz_cooldown=check_question_service.get_quiz_cooldown_from_row(session),
             gap_accuracy=gap_accuracy,

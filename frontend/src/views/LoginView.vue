@@ -42,17 +42,13 @@
 
       <p v-if="error" class="error" data-testid="login-error">{{ error }}</p>
       <p v-if="needsConfirm" class="hint">
-        <button
-          type="button"
-          class="linkbtn"
-          data-testid="login-resend"
-          @click="resend"
-        >
+        <button type="button" class="linkbtn" data-testid="login-resend" @click="resend">
           Resend confirmation email
         </button>
       </p>
       <p v-if="resent" class="sent" data-testid="login-resent">
-        Confirmation email re-sent to <strong>{{ email.trim() }}</strong>.
+        Confirmation email re-sent to <strong>{{ email.trim() }}</strong
+        >.
       </p>
 
       <div class="actions">
@@ -102,9 +98,7 @@ const needsConfirm = ref(false)
 const resent = ref(false)
 
 const canSubmit = computed(
-  () =>
-    /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.value.trim()) &&
-    password.value.length > 0,
+  () => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.value.trim()) && password.value.length > 0,
 )
 
 async function submit() {
@@ -239,8 +233,7 @@ async function resend() {
   font-weight: 600;
   font-size: 0.9375rem;
   cursor: pointer;
-  box-shadow: var(--shadow-pop);
-  transition: transform var(--motion-fast) var(--motion-bounce);
+  transition: filter var(--motion-fast) ease;
 }
 
 .cta:disabled {
@@ -250,7 +243,7 @@ async function resend() {
 }
 
 .cta:not(:disabled):hover {
-  transform: translateY(-1px);
+  filter: brightness(1.08);
 }
 
 .actions {

@@ -46,8 +46,18 @@ def get_review_queue(
         for ev, topic in rows
     ]
     evidence_map: dict[str, str | None] = {}
-    for sid in {e.session_id for e in events}:
-        prof = profile_service.load_profile(db, sid)
+    # One batched fetch instead of a profile load per distinct session; this
+    # runs on every sidebar boot, so it must not be O(sessions) round trips.
+    sids = {e.session_id for e in events}
+    session_rows = (
+        db.execute(select(SessionModel).where(SessionModel.id.in_(sids)))
+        .scalars()
+        .all()
+        if sids
+        else []
+    )
+    for row in session_rows:
+        prof = profile_service.profile_from_row(row)
         for entry in (prof.mastered_concepts or []) + (prof.confirmed_gaps or []):
             key = profile_service.canon(entry.name)
             # tested wins across sessions; otherwise last writer is fine
