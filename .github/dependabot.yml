@@ -20,6 +20,12 @@ updates:
     cooldown:
       default-days: 7
     open-pull-requests-limit: 5
+    # primevue 5.x is the PrimeUI relicense: requires a configured license
+    # key (Community or Commercial) and renders an "Invalid PrimeUI License"
+    # watermark without one. Stay on MIT 4.x; revisit deliberately.
+    ignore:
+      - dependency-name: "primevue"
+        update-types: ["version-update:semver-major"]
     labels:
       - "dependencies"
       - "frontend"
