@@ -17,7 +17,7 @@
     "format": "prettier --write --experimental-cli src/"
   },
   "dependencies": {
-    "@primeuix/themes": "^2.0.3",
+    "@primeuix/themes": "^3.0.0",
     "@supabase/supabase-js": "^2.45.0",
     "@vscode/markdown-it-katex": "^1.1.2",
     "dompurify": "^3.4.5",
