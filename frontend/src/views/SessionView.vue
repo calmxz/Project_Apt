@@ -134,7 +134,7 @@
         :error="diagError"
         @quiz="onDiagQuiz"
         @level="onDiagLevel"
-        @dismiss="diagDismissed = true"
+        @dismiss="dismissDiag()"
       />
 
       <Composer
@@ -235,6 +235,25 @@ const referenceBannerRef = ref(null)
 const diagProfile = ref(null)
 const diagDismissed = ref(false)
 const diagError = ref('')
+// A conversational decline ("no thanks, just teach me") never writes a level,
+// so knowledge_level stays null and the card would render for the rest of the
+// session. Two completed tutor turns with the level still null are treated as
+// an implicit decline. Dismissals (explicit or implicit) persist per session in
+// sessionStorage so a reload does not resurrect the card.
+let diagNullTurns = 0
+
+function diagDismissKey(id) {
+  return `crux:diag-dismissed:${id}`
+}
+
+function dismissDiag() {
+  diagDismissed.value = true
+  try {
+    sessionStorage.setItem(diagDismissKey(props.id), '1')
+  } catch {
+    // storage unavailable (private mode/quota) - in-memory dismissal still holds
+  }
+}
 // F5: guards onDiagLevel's async body against a rapid second click firing a
 // second PATCH with the same (soon-to-be-stale) etag. Folded into the card's
 // busy binding so the buttons visually disable too.
@@ -291,6 +310,11 @@ watch(
       diagProfile.value.profile?.knowledge_level == null &&
       !diagDismissed.value
     ) {
+      diagNullTurns += 1
+      if (diagNullTurns >= 2) {
+        dismissDiag()
+        return
+      }
       loadDiagProfile(props.id)
     }
   },
@@ -471,7 +495,12 @@ async function loadCurrent(id) {
   // session send-error stays retryable.
   lastError.value = null
   diagProfile.value = null
-  diagDismissed.value = false
+  diagNullTurns = 0
+  try {
+    diagDismissed.value = sessionStorage.getItem(diagDismissKey(id)) === '1'
+  } catch {
+    diagDismissed.value = false
+  }
   diagError.value = ''
   diagLevelBusy.value = false
   loadDiagProfile(id) // deliberately not awaited: card is best-effort
