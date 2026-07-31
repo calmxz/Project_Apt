@@ -12,7 +12,7 @@ dependencies = [
     "sqlalchemy>=2.0,<3.0",
     "pydantic>=2.13.4,<3.0",
     "pydantic-settings>=2.14.2",
-    "litellm>=1.85.1,<2.0",
+    "litellm>=1.93.0,<2.0",
     # litellm.completion() imports litellm.proxy.* -> orjson whenever `tools` is
     # passed, but only declares orjson under its [proxy] extra. Every tutor turn
     # passes tools, so without this the live chat path dies with
