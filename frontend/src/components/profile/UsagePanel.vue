@@ -10,22 +10,9 @@
     </p>
 
     <template v-else>
-      <div
-        class="spend-chart"
-        role="img"
-        :aria-label="`Daily spend, last ${usage.daily.length} days`"
-      >
-        <div
-          v-for="d in usage.daily"
-          :key="d.date_utc"
-          class="spend-col"
-          :title="`${d.date_utc}: $${d.cost_usd.toFixed(2)}`"
-        >
-          <span class="spend-track">
-            <span class="spend-bar" :style="{ height: barHeight(d) }" />
-          </span>
-        </div>
-      </div>
+      <p class="glance-line" data-testid="usage-glance">
+        Today ${{ usage.today_spend_usd.toFixed(2) }} · Last 7 days ${{ last7.toFixed(2) }}
+      </p>
 
       <div class="meter-wrap">
         <div
@@ -75,19 +62,13 @@ const props = defineProps({
   usage: { type: Object, required: true },
 })
 
-const maxDay = computed(() =>
-  Math.max(...props.usage.daily.map((d) => d.cost_usd), 0),
-)
+const maxDay = computed(() => Math.max(...props.usage.daily.map((d) => d.cost_usd), 0))
 
-const noSpend = computed(
-  () => maxDay.value === 0 && props.usage.today_spend_usd === 0,
-)
+const noSpend = computed(() => maxDay.value === 0 && props.usage.today_spend_usd === 0)
 
-const barHeight = (d) =>
-  `${maxDay.value ? Math.round((d.cost_usd / maxDay.value) * 100) : 0}%`
+const last7 = computed(() => props.usage.daily.slice(-7).reduce((acc, d) => acc + d.cost_usd, 0))
 
-const pctOfHard = (v) =>
-  `${Math.min(100, Math.round((v / props.usage.hard_cap_usd) * 100))}%`
+const pctOfHard = (v) => `${Math.min(100, Math.round((v / props.usage.hard_cap_usd) * 100))}%`
 
 const fillPct = computed(() => pctOfHard(props.usage.today_spend_usd))
 const markerPct = (v) => pctOfHard(v)
@@ -117,34 +98,15 @@ const markerPct = (v) => pctOfHard(v)
   color: var(--color-accent-text);
 }
 
-.muted { color: var(--color-text-muted); }
-
-.spend-chart {
-  display: flex;
-  align-items: flex-end;
-  gap: 0.25rem;
-  height: 5rem;
+.muted {
+  color: var(--color-text-muted);
 }
 
-.spend-col {
-  flex: 1;
-  height: 100%;
-  min-width: 0;
-}
-
-.spend-track {
-  display: flex;
-  align-items: flex-end;
-  height: 100%;
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-soft);
-}
-
-.spend-bar {
-  display: block;
-  width: 100%;
-  border-radius: var(--radius-sm);
-  background: var(--accent-coral-400);
+.glance-line {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  color: var(--color-text-muted);
 }
 
 .meter-wrap {
