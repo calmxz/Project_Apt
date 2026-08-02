@@ -23,8 +23,15 @@ updates:
     # primevue 5.x is the PrimeUI relicense: requires a configured license
     # key (Community or Commercial) and renders an "Invalid PrimeUI License"
     # watermark without one. Stay on MIT 4.x; revisit deliberately.
+    # @primeuix/themes 3.x and primeicons 8.x joined the same PrimeUI license
+    # (LICENSE.md replaces MIT); themes 3.x also requires @primeuix/styled
+    # ^1.0.0 while primevue 4.5.5 pins ^0.7.4.
     ignore:
       - dependency-name: "primevue"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@primeuix/themes"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "primeicons"
         update-types: ["version-update:semver-major"]
     labels:
       - "dependencies"
