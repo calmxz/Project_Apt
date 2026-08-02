@@ -68,8 +68,17 @@
         <div class="glance" data-testid="agg-insights">
           <h2 class="sr-only">At a glance</h2>
           <p class="glance-line" data-testid="glance-mastery">{{ masteryLine }}</p>
-          <p v-if="attentionLine" class="glance-line" data-testid="glance-attention">
-            {{ attentionLine }}
+          <p v-if="attentionItems.length" class="glance-line" data-testid="glance-attention">
+            <span>Needs attention: </span>
+            <template v-for="(c, i) in attentionItems" :key="c.concept">
+              <span v-if="i > 0">, </span>
+              <router-link
+                :to="{ name: 'session-profile', params: { id: c.first_seen_session_id } }"
+                class="glance-link"
+                >{{ c.concept }}</router-link
+              >
+              <span> ({{ c.pct }}%)</span>
+            </template>
           </p>
         </div>
 
@@ -195,19 +204,23 @@ const masteryLine = computed(() => {
   const total = data.value?.combined_mastered_concepts.length || 0
   if (total === 0) return 'Nothing mastered yet'
   const weeks = data.value?.weekly_mastery || []
-  const thisWeek = weeks.length ? weeks[weeks.length - 1].count : 0
+  // weekly_mastery counts first-correct events, which survive later demotions
+  // out of mastered_concepts — clamp so "this week" never exceeds the total
+  const thisWeek = Math.min(weeks.length ? weeks[weeks.length - 1].count : 0, total)
   return `${thisWeek} mastered this week · ${total} total`
 })
 
-const attentionLine = computed(() => {
-  const ranked = (data.value?.concept_accuracy || [])
+const attentionItems = computed(() =>
+  (data.value?.concept_accuracy || [])
     .filter((c) => c.total_count >= 2)
     .sort((a, b) => a.accuracy - b.accuracy || a.concept.localeCompare(b.concept))
     .slice(0, 3)
-  if (!ranked.length) return ''
-  const parts = ranked.map((c) => `${c.concept} (${Math.round(c.accuracy * 100)}%)`)
-  return `Needs attention: ${parts.join(', ')}`
-})
+    .map((c) => ({
+      concept: c.concept,
+      pct: Math.round(c.accuracy * 100),
+      first_seen_session_id: c.first_seen_session_id,
+    })),
+)
 
 async function load() {
   loading.value = true
@@ -419,6 +432,19 @@ async function saveFeedback() {
   font-family: var(--font-sans);
   font-size: 0.9375rem;
   color: var(--color-text-muted);
+}
+
+.glance-link {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: var(--color-border-strong);
+  transition: color var(--motion-fast) ease;
+}
+
+.glance-link:hover {
+  color: var(--color-accent-text);
+  text-decoration-color: currentColor;
 }
 
 /* Section + columns */

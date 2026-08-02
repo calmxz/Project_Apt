@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { mount, flushPromises } from '@vue/test-utils'
+import { mount, flushPromises, RouterLinkStub } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 import ProfileTab from '@/components/settings/ProfileTab.vue'
@@ -13,7 +13,7 @@ vi.mock('@/composables/useToast.js', () => ({
 }))
 
 const stubs = {
-  RouterLink: { template: '<a><slot /></a>', props: ['to'] },
+  RouterLink: RouterLinkStub,
 }
 
 function seedUser() {
@@ -149,6 +149,34 @@ describe('ProfileTab', () => {
     )
     expect(attention).not.toContain('fourth concept')
     expect(attention).not.toContain('single try')
+  })
+
+  it('clamps the mastered-this-week count to the mastered total', async () => {
+    seedUser()
+    const payload = nonEmptyAggregatePayload()
+    payload.weekly_mastery = [{ week_start: '2026-07-27', count: 5 }]
+    vi.spyOn(profileApi, 'getAggregateProfile').mockResolvedValue(payload)
+
+    const wrapper = mount(ProfileTab, { global: { stubs } })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="glance-mastery"]').text()).toBe(
+      '2 mastered this week · 2 total',
+    )
+  })
+
+  it('links each needs-attention concept to its first-seen session', async () => {
+    seedUser()
+    vi.spyOn(profileApi, 'getAggregateProfile').mockResolvedValue(nonEmptyAggregatePayload())
+
+    const wrapper = mount(ProfileTab, { global: { stubs } })
+    await flushPromises()
+
+    const links = wrapper.find('[data-testid="glance-attention"]').findAllComponents(RouterLinkStub)
+    expect(links).toHaveLength(3)
+    expect(links[0].text()).toBe('formal analysis')
+    expect(links[0].props('to')).toEqual({ name: 'session-profile', params: { id: 's1' } })
+    expect(links[2].props('to')).toEqual({ name: 'session-profile', params: { id: 's2' } })
   })
 
   it('shows error banner when the API throws', async () => {
