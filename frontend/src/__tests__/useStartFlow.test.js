@@ -16,17 +16,22 @@ const router = { push: vi.fn() }
 beforeEach(() => router.push.mockClear())
 
 describe('useStartFlow', () => {
-  it('no match: begin goes to level stage', async () => {
-    const flow = useStartFlow({ store: makeStore(), router })
+  it('no match: begin creates a session directly and navigates', async () => {
+    const store = makeStore()
+    const flow = useStartFlow({ store, router })
     await flow.begin('new topic')
-    expect(flow.stage.value).toBe('level')
+    expect(store.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({ topic: 'new topic', seedMode: 'fresh' }),
+    )
+    expect(router.push).toHaveBeenCalledWith({ name: 'session', params: { id: 'new1' } })
   })
 
-  it('lookup failure (null) falls back to level stage', async () => {
+  it('lookup failure (null) falls through to direct create', async () => {
     const store = makeStore({ lookupTopic: vi.fn().mockResolvedValue(null) })
     const flow = useStartFlow({ store, router })
     await flow.begin('t')
-    expect(flow.stage.value).toBe('level')
+    expect(store.createSession).toHaveBeenCalled()
+    expect(router.push).toHaveBeenCalledWith({ name: 'session', params: { id: 'new1' } })
   })
 
   it('active match: intercept stage, openExisting navigates', async () => {
@@ -40,6 +45,7 @@ describe('useStartFlow', () => {
     await flow.begin('css')
     expect(flow.stage.value).toBe('intercept')
     expect(flow.interceptKind.value).toBe('active')
+    expect(store.createSession).not.toHaveBeenCalled()
     flow.openExisting()
     expect(router.push).toHaveBeenCalledWith({ name: 'session', params: { id: 'a1' } })
   })
@@ -66,7 +72,7 @@ describe('useStartFlow', () => {
     expect(router.push).toHaveBeenCalledWith({ name: 'session', params: { id: 'res1' } })
   })
 
-  it('startFresh moves intercept -> level', async () => {
+  it('startFresh from intercept creates a session and navigates', async () => {
     const store = makeStore({
       lookupTopic: vi.fn().mockResolvedValue({
         active_match: null,
@@ -75,41 +81,10 @@ describe('useStartFlow', () => {
     })
     const flow = useStartFlow({ store, router })
     await flow.begin('css')
-    flow.startFresh()
-    expect(flow.stage.value).toBe('level')
-  })
-
-  it('pickLevel creates with declaredLevel and navigates', async () => {
-    const store = makeStore()
-    const flow = useStartFlow({ store, router })
-    await flow.begin('t')
-    await flow.pickLevel('advanced')
+    await flow.startFresh()
     expect(store.createSession).toHaveBeenCalledWith(
-      expect.objectContaining({ topic: 't', seedMode: 'fresh', declaredLevel: 'advanced' }),
+      expect.objectContaining({ topic: 'css', seedMode: 'fresh' }),
     )
-    expect(router.push).toHaveBeenCalledWith({ name: 'session', params: { id: 'new1' } })
-  })
-
-  it('pickQuiz creates plain and navigates with quiz query', async () => {
-    const store = makeStore()
-    const flow = useStartFlow({ store, router })
-    await flow.begin('t')
-    await flow.pickQuiz()
-    expect(store.createSession).toHaveBeenCalledWith(
-      expect.objectContaining({ declaredLevel: null }),
-    )
-    expect(router.push).toHaveBeenCalledWith({
-      name: 'session',
-      params: { id: 'new1' },
-      query: { quiz: '1' },
-    })
-  })
-
-  it('skipLevel creates plain and navigates without query', async () => {
-    const store = makeStore()
-    const flow = useStartFlow({ store, router })
-    await flow.begin('t')
-    await flow.skipLevel()
     expect(router.push).toHaveBeenCalledWith({ name: 'session', params: { id: 'new1' } })
   })
 
@@ -121,7 +96,6 @@ describe('useStartFlow', () => {
     const store = makeStore({ createSession: vi.fn().mockRejectedValue(err) })
     const flow = useStartFlow({ store, router })
     await flow.begin('t')
-    await flow.skipLevel()
     expect(router.push).not.toHaveBeenCalled()
     expect(flow.stage.value).toBe('intercept')
     expect(flow.interceptKind.value).toBe('active')
@@ -139,19 +113,24 @@ describe('useStartFlow', () => {
     const beforeNavigate = vi.fn().mockImplementation(async () => order.push('hook'))
     const flow = useStartFlow({ store, router, beforeNavigate })
     await flow.begin('t')
-    await flow.skipLevel()
     expect(order).toEqual(['create', 'hook'])
     expect(router.push).toHaveBeenCalled()
   })
 
   it('cancel returns to idle', async () => {
-    const flow = useStartFlow({ store: makeStore(), router })
+    const store = makeStore({
+      lookupTopic: vi.fn().mockResolvedValue({
+        active_match: { session_id: 'a1', title: 'CSS' },
+        ended_match: null,
+      }),
+    })
+    const flow = useStartFlow({ store, router })
     await flow.begin('t')
     flow.cancel()
     expect(flow.stage.value).toBe('idle')
   })
 
-  it('cancel during an in-flight begin() prevents the stale resolution from setting stage', async () => {
+  it('cancel during an in-flight begin() prevents the stale lookup from creating a session', async () => {
     let resolveLookup
     const lookupPromise = new Promise((resolve) => {
       resolveLookup = resolve
@@ -162,6 +141,8 @@ describe('useStartFlow', () => {
     flow.cancel()
     resolveLookup({ active_match: null, ended_match: null })
     await beginPromise
+    expect(store.createSession).not.toHaveBeenCalled()
+    expect(router.push).not.toHaveBeenCalled()
     expect(flow.stage.value).toBe('idle')
   })
 })

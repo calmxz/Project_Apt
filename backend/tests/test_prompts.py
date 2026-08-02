@@ -180,6 +180,38 @@ def test_diagnostic_first_reply_must_answer_before_offer():
     assert "incomplete" in low
 
 
+def test_diagnostic_off_forbids_reasking_known_level():
+    # User report (2026-08-02): picking a level on the start page seeds
+    # knowledge_level, yet the first chat turn ("where should I start with X?")
+    # still asked what the learner already knows. DIAGNOSTIC: OFF had no rule
+    # against re-asking, and "where should I start" is exactly the question
+    # that tempts a tutor into a redundant level interview. The OFF branch must
+    # explicitly forbid re-asking and mandate trusting the profile.
+    rules = prompts.IMMUTABLE_RULES
+    block = rules.split("KNOWLEDGE DIAGNOSTIC:")[1].split("REVIEW-GAPS MODE:")[0]
+    low = " ".join(block.lower().split())
+    assert "do not ask the learner to state their level" in low
+    assert "already gives their level" in low
+
+
+def test_lesson_flow_forbids_per_turn_path_menus():
+    # User report (2026-08-02): mid-topic the tutor teaches one chunk, then
+    # ends the turn asking which path to take next -- every turn. Choice-menu
+    # fatigue: the learner came to be taught, not to route the curriculum.
+    # The rules must make the tutor lead (continue the logical next step,
+    # announce it, honor redirects) and reserve explicit forks for rare,
+    # genuinely divergent moments.
+    rules = prompts.IMMUTABLE_RULES
+    assert "LESSON FLOW:" in rules
+    block = " ".join(
+        rules.split("LESSON FLOW:")[1].split("KNOWLEDGE DIAGNOSTIC:")[0].lower().split()
+    )
+    assert "you lead the lesson" in block
+    assert "do not end your turns with a menu of options" in block
+    assert "redirect" in block
+    assert "genuine fork" in block
+
+
 def test_system_prompt_prefix_is_byte_identical_across_turns():
     """Gemini's implicit prefix cache only helps if the prompt head never
     varies. All per-turn material must render strictly after IMMUTABLE_RULES.

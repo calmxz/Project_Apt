@@ -69,9 +69,11 @@ const router = createRouter({
       component: () => import('../views/AggregateProfileView.vue'),
     },
     {
+      // Unified into Home (2026-08-02): one canonical start experience.
+      // Redirect kept so old links and the sidebar name keep working.
       path: '/new',
       name: 'new-session',
-      component: () => import('../views/NewSessionView.vue'),
+      redirect: { name: 'home' },
     },
     {
       path: '/review',
