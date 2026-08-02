@@ -131,6 +131,22 @@ describe('AccountTab', () => {
     expect(btn.attributes('disabled')).toBeUndefined()
   })
 
+  it('wrong current password shows an error and does not update', async () => {
+    const auth = useAuthStore()
+    auth.session = { user: { id: 'u-1', email: 'a@b.c' }, access_token: 't' }
+    vi.spyOn(auth, 'signIn').mockRejectedValue(new Error('Invalid login credentials'))
+    const update = vi.spyOn(auth, 'updatePassword').mockResolvedValue()
+    const w = mount(AccountTab, { global: { stubs } })
+    await flushPromises()
+    await w.get('[data-testid="settings-pw-current"]').setValue('wrongpass')
+    await w.get('[data-testid="settings-pw-new"]').setValue('newpass12')
+    await w.get('[data-testid="settings-pw-confirm"]').setValue('newpass12')
+    await w.get('[data-testid="settings-pw-submit"]').trigger('click')
+    await flushPromises()
+    expect(w.find('[data-testid="settings-pw-error"]').exists()).toBe(true)
+    expect(update).not.toHaveBeenCalled()
+  })
+
   it('valid change verifies current password then updates and shows success', async () => {
     const auth = useAuthStore()
     auth.session = { user: { id: 'u-1', email: 'a@b.c' }, access_token: 't' }
