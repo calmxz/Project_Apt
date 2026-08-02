@@ -98,6 +98,10 @@ describe('ProfileTab', () => {
 
     expect(wrapper.find('[data-testid="agg-stats"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="agg-profile"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="agg-dist"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="agg-insights"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="weakest-concepts"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="mastery-trend"]').exists()).toBe(true)
   })
 
   it('shows error banner when the API throws', async () => {
