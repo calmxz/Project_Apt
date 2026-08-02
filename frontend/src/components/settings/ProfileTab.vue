@@ -62,32 +62,14 @@
 
         <div class="dist" data-testid="agg-dist">
           <h2 class="section-title">Knowledge level distribution</h2>
-          <div class="dist-bar" role="img" :aria-label="distAriaLabel">
-            <span
-              v-for="key in levelKeys"
-              :key="key"
-              :class="['dist-seg', `seg-${key}`]"
-              :style="{ flexGrow: data.knowledge_level_distribution[key] || 0 }"
-              :title="`${key}: ${data.knowledge_level_distribution[key]}`"
-              aria-hidden="true"
-            />
-          </div>
-          <ul class="dist-legend">
-            <li v-for="key in levelKeys" :key="key">
-              <span :class="['dot', `seg-${key}`]" />
-              <span class="dist-key">{{ key }}</span>
-              <span class="dist-count">{{ data.knowledge_level_distribution[key] }}</span>
-            </li>
-          </ul>
+          <p v-if="distLine" class="glance-line">{{ distLine }}</p>
         </div>
 
-        <div class="two-col" data-testid="agg-insights">
-          <div class="col">
-            <WeakestConcepts :concept-accuracy="data.concept_accuracy" />
-          </div>
-          <div class="col">
-            <MasteryTrend :weekly-mastery="data.weekly_mastery" />
-          </div>
+        <div class="glance" data-testid="agg-insights">
+          <p class="glance-line" data-testid="glance-mastery">{{ masteryLine }}</p>
+          <p v-if="attentionLine" class="glance-line" data-testid="glance-attention">
+            {{ attentionLine }}
+          </p>
         </div>
 
         <div class="two-col">
@@ -184,8 +166,6 @@
 import { computed, onMounted, ref } from 'vue'
 
 import EmptyState from '../EmptyState.vue'
-import MasteryTrend from '../profile/MasteryTrend.vue'
-import WeakestConcepts from '../profile/WeakestConcepts.vue'
 import FeedbackStylePicker from '../FeedbackStylePicker.vue'
 import { friendlyError } from '../../lib/errors.js'
 import { getAggregateProfile } from '../../services/profileApi.js'
@@ -202,10 +182,30 @@ const error = ref('')
 
 const levelKeys = ['beginner', 'intermediate', 'advanced', 'unknown']
 
-const distAriaLabel = computed(() => {
+const distLine = computed(() => {
   const d = data.value?.knowledge_level_distribution || {}
-  const parts = levelKeys.map((k) => `${d[k] || 0} ${k}`)
-  return `Knowledge level distribution: ${parts.join(', ')}`
+  return levelKeys
+    .filter((k) => (d[k] || 0) > 0)
+    .map((k) => `${d[k]} ${k}`)
+    .join(' · ')
+})
+
+const masteryLine = computed(() => {
+  const total = data.value?.combined_mastered_concepts.length || 0
+  if (total === 0) return 'Nothing mastered yet'
+  const weeks = data.value?.weekly_mastery || []
+  const thisWeek = weeks.length ? weeks[weeks.length - 1].count : 0
+  return `${thisWeek} mastered this week · ${total} total`
+})
+
+const attentionLine = computed(() => {
+  const ranked = (data.value?.concept_accuracy || [])
+    .filter((c) => c.total_count >= 2)
+    .sort((a, b) => a.accuracy - b.accuracy || a.concept.localeCompare(b.concept))
+    .slice(0, 3)
+  if (!ranked.length) return ''
+  const parts = ranked.map((c) => `${c.concept} (${Math.round(c.accuracy * 100)}%)`)
+  return `Needs attention: ${parts.join(', ')}`
 })
 
 async function load() {
@@ -407,68 +407,17 @@ async function saveFeedback() {
   gap: 0.75rem;
 }
 
-.dist-bar {
+.glance {
   display: flex;
-  height: 0.75rem;
-  border-radius: var(--radius-pill);
-  overflow: hidden;
-  background: var(--color-surface-soft);
-  border: 1px solid var(--color-border);
-  gap: 2px;
-  padding: 2px;
+  flex-direction: column;
+  gap: 0.375rem;
 }
 
-.dist-seg {
-  display: block;
-  min-width: 0;
-  border-radius: var(--radius-pill);
-}
-
-.seg-beginner {
-  background: var(--accent-coral-200);
-}
-.seg-intermediate {
-  background: var(--accent-coral-400);
-}
-.seg-advanced {
-  background: var(--accent-coral-600);
-}
-.seg-unknown {
-  background: var(--color-border-strong);
-}
-
-.dist-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 1rem;
-  padding: 0;
+.glance-line {
   margin: 0;
-  list-style: none;
   font-family: var(--font-sans);
-  font-size: 0.8125rem;
+  font-size: 0.9375rem;
   color: var(--color-text-muted);
-}
-
-.dist-legend li {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.dist-key {
-  text-transform: capitalize;
-}
-
-.dist-count {
-  color: var(--color-text-faint);
-  font-family: var(--font-mono);
-}
-
-.dot {
-  display: inline-block;
-  width: 0.625rem;
-  height: 0.625rem;
-  border-radius: 999px;
 }
 
 /* Section + columns */

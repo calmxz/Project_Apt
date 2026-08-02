@@ -40,8 +40,47 @@ function nonEmptyAggregatePayload() {
     recent_topics: [
       { id: 's3', topic: 'sql joins', created_at: new Date().toISOString(), ended_at: null },
     ],
-    concept_accuracy: [],
-    weekly_mastery: [],
+    concept_accuracy: [
+      {
+        concept: 'formal analysis',
+        accuracy: 0.31,
+        total_count: 13,
+        last_results: [false, false, true],
+        first_seen_session_id: 's1',
+      },
+      {
+        concept: 'data transmission',
+        accuracy: 0.33,
+        total_count: 3,
+        last_results: [false, true],
+        first_seen_session_id: 's1',
+      },
+      {
+        concept: 'CSS selectors',
+        accuracy: 0.67,
+        total_count: 3,
+        last_results: [true, true, false],
+        first_seen_session_id: 's2',
+      },
+      {
+        concept: 'fourth concept',
+        accuracy: 0.9,
+        total_count: 4,
+        last_results: [true, true],
+        first_seen_session_id: 's2',
+      },
+      {
+        concept: 'single try',
+        accuracy: 0,
+        total_count: 1,
+        last_results: [false],
+        first_seen_session_id: 's3',
+      },
+    ],
+    weekly_mastery: [
+      { week_start: '2026-07-20', count: 1 },
+      { week_start: '2026-07-27', count: 3 },
+    ],
   }
 }
 
@@ -98,10 +137,18 @@ describe('ProfileTab', () => {
 
     expect(wrapper.find('[data-testid="agg-stats"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="agg-profile"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="agg-dist"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="agg-insights"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="weakest-concepts"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="mastery-trend"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="glance-mastery"]').text()).toBe(
+      '3 mastered this week · 2 total',
+    )
+    expect(wrapper.find('[data-testid="agg-dist"]').text()).toContain('2 beginner · 1 intermediate')
+    expect(wrapper.find('[data-testid="agg-dist"]').text()).not.toContain('advanced')
+    expect(wrapper.find('[data-testid="agg-dist"]').text()).not.toContain('unknown')
+    const attention = wrapper.find('[data-testid="glance-attention"]').text()
+    expect(attention).toBe(
+      'Needs attention: formal analysis (31%), data transmission (33%), CSS selectors (67%)',
+    )
+    expect(attention).not.toContain('fourth concept')
+    expect(attention).not.toContain('single try')
   })
 
   it('shows error banner when the API throws', async () => {
@@ -142,6 +189,21 @@ describe('ProfileTab', () => {
     expect(gapsText).toContain('window-fns')
     expect(gapsText).toContain('×2')
     expect(wrapper.find('[data-testid="agg-recent"]').text()).toContain('sql joins')
+  })
+
+  it('glance lines: zero-mastered form and hidden needs-attention', async () => {
+    seedUser()
+    const payload = nonEmptyAggregatePayload()
+    payload.combined_mastered_concepts = []
+    payload.weekly_mastery = []
+    payload.concept_accuracy = []
+    vi.spyOn(profileApi, 'getAggregateProfile').mockResolvedValue(payload)
+
+    const wrapper = mount(ProfileTab, { global: { stubs } })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="glance-mastery"]').text()).toBe('Nothing mastered yet')
+    expect(wrapper.find('[data-testid="glance-attention"]').exists()).toBe(false)
   })
 
   it('feedback style card renders picker and save button; changing feedback enables save', async () => {
