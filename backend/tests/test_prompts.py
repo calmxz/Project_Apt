@@ -210,6 +210,11 @@ def test_lesson_flow_forbids_per_turn_path_menus():
     assert "do not end your turns with a menu of options" in block
     assert "redirect" in block
     assert "genuine fork" in block
+    # Follow-up report (2026-08-02): tutor announced the next step and then
+    # stopped, leaving the learner nothing to reply but "okay". Turns must
+    # end on something the learner can actually respond to.
+    assert "never announce the next step and stop" in block
+    assert "end on something the learner can actually respond to" in block
 
 
 def test_system_prompt_prefix_is_byte_identical_across_turns():
