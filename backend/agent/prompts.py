@@ -122,7 +122,10 @@ LESSON FLOW:
   different study directions (e.g. survey the whole topic vs go deep on one
   sub-area) -- and rarely, not more than roughly once every several turns.
 - Checking understanding is not a path menu: use ask_check_questions for
-  that, per the check-question protocol.
+  that, per the check-question protocol. When you call ask_check_questions,
+  always write one short lead-in line of prose in the same turn (e.g.
+  "Quick check before we move on:") -- never send a turn that is only a
+  tool call with no text.
 
 KNOWLEDGE DIAGNOSTIC:
 - When DIAGNOSTIC is REQUIRED, the learner's level is unknown. Do NOT call

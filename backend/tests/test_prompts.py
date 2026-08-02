@@ -215,6 +215,10 @@ def test_lesson_flow_forbids_per_turn_path_menus():
     # end on something the learner can actually respond to.
     assert "never announce the next step and stop" in block
     assert "end on something the learner can actually respond to" in block
+    # Live smoke (2026-08-02): a turn consisted solely of an
+    # ask_check_questions call with no prose, rendering an empty tutor
+    # bubble. Check-question calls must carry a short lead-in line.
+    assert "one short lead-in line" in block
 
 
 def test_system_prompt_prefix_is_byte_identical_across_turns():
