@@ -66,6 +66,7 @@
         </div>
 
         <div class="glance" data-testid="agg-insights">
+          <h2 class="sr-only">At a glance</h2>
           <p class="glance-line" data-testid="glance-mastery">{{ masteryLine }}</p>
           <p v-if="attentionLine" class="glance-line" data-testid="glance-attention">
             {{ attentionLine }}

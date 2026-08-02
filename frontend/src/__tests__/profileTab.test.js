@@ -79,7 +79,7 @@ function nonEmptyAggregatePayload() {
     ],
     weekly_mastery: [
       { week_start: '2026-07-20', count: 1 },
-      { week_start: '2026-07-27', count: 3 },
+      { week_start: '2026-07-27', count: 1 },
     ],
   }
 }
@@ -138,7 +138,7 @@ describe('ProfileTab', () => {
     expect(wrapper.find('[data-testid="agg-stats"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="agg-profile"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="glance-mastery"]').text()).toBe(
-      '3 mastered this week · 2 total',
+      '1 mastered this week · 2 total',
     )
     expect(wrapper.find('[data-testid="agg-dist"]').text()).toContain('2 beginner · 1 intermediate')
     expect(wrapper.find('[data-testid="agg-dist"]').text()).not.toContain('advanced')
