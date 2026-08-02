@@ -28,7 +28,7 @@
         :disabled="!dirty || saving"
       >
         <i class="pi pi-check" aria-hidden="true" />
-        <span>Save preferences</span>
+        <span>Save name</span>
       </button>
       <span v-if="savedFlash" class="saved-flash" data-testid="settings-saved">
         <i class="pi pi-check-circle" aria-hidden="true" />
@@ -161,7 +161,7 @@ async function save() {
       feedback: user.interactionPreferences?.feedback || 'hints',
     })
     savedFlash.value = true
-    showSuccess('Preferences saved.')
+    showSuccess('Name saved.')
   } catch (e) {
     // F-11: inline surface (LoginView pattern); the errorBus toast alone
     // left the form frozen with no explanation and an unhandled rejection.

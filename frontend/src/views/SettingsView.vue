@@ -15,13 +15,16 @@
         <button
           v-for="(t, i) in tabs"
           :key="t.slug"
+          :ref="(el) => (tabRefs[i] = el)"
           role="tab"
+          :id="`tab-${t.slug}`"
+          :aria-controls="`panel-${t.slug}`"
           :aria-selected="t.slug === tab ? 'true' : 'false'"
           :tabindex="t.slug === tab ? 0 : -1"
           :class="['rail-tab', { 'rail-tab--active': t.slug === tab }]"
           :data-testid="`settings-tab-${t.slug}`"
           type="button"
-          @click="go(t.slug)"
+          @click="activate(i)"
           @keydown="onKeydown($event, i)"
         >
           <i :class="['pi', t.icon]" aria-hidden="true" />
@@ -29,7 +32,13 @@
         </button>
       </nav>
 
-      <div class="panel" role="tabpanel">
+      <div
+        class="panel"
+        role="tabpanel"
+        :id="`panel-${tab}`"
+        :aria-labelledby="`tab-${tab}`"
+        tabindex="0"
+      >
         <KeepAlive>
           <component :is="activeComponent" />
         </KeepAlive>
@@ -39,7 +48,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import ProfileTab from '../components/settings/ProfileTab.vue'
@@ -64,18 +73,24 @@ const activeComponent = computed(
   () => (tabs.find((t) => t.slug === props.tab) || tabs[0]).component,
 )
 
-function go(slug) {
-  if (slug === props.tab) return
-  router.push({ name: 'settings', params: { tab: slug } })
+const tabRefs = ref([])
+
+async function activate(i) {
+  const slug = tabs[i].slug
+  if (slug !== props.tab) {
+    await router.push({ name: 'settings', params: { tab: slug } })
+  }
+  await nextTick()
+  tabRefs.value[i]?.focus()
 }
 
 function onKeydown(e, i) {
-  let next = null
-  if (e.key === 'ArrowDown' || e.key === 'ArrowRight') next = tabs[(i + 1) % tabs.length]
-  if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') next = tabs[(i - 1 + tabs.length) % tabs.length]
-  if (!next) return
+  let nextIndex = null
+  if (e.key === 'ArrowDown' || e.key === 'ArrowRight') nextIndex = (i + 1) % tabs.length
+  if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') nextIndex = (i - 1 + tabs.length) % tabs.length
+  if (nextIndex === null) return
   e.preventDefault()
-  go(next.slug)
+  activate(nextIndex)
 }
 </script>
 

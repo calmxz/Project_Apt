@@ -23,13 +23,13 @@ const { openDrawer } = useSidebar()
     </RouterLink>
     <div class="sb-strip-actions">
       <RouterLink
-        to="/profile"
+        to="/settings"
         class="sb-strip-btn"
-        aria-label="Combined profile"
-        title="Combined profile"
-        data-testid="strip-profile"
+        aria-label="Settings"
+        title="Settings"
+        data-testid="strip-settings"
       >
-        <i class="pi pi-user" />
+        <i class="pi pi-cog" />
       </RouterLink>
     </div>
   </div>
@@ -75,7 +75,10 @@ const { openDrawer } = useSidebar()
   text-decoration: none;
   cursor: pointer;
   font-size: 1rem;
-  transition: background var(--motion-fast) ease, color var(--motion-fast) ease, border-color var(--motion-fast) ease;
+  transition:
+    background var(--motion-fast) ease,
+    color var(--motion-fast) ease,
+    border-color var(--motion-fast) ease;
 }
 
 .sb-strip-btn:hover {

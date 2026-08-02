@@ -239,7 +239,7 @@ async function saveFeedback() {
     await user.updateProfile({ name: user.name || '', feedback: feedback.value })
     showSuccess('Preferences saved.')
   } catch (e) {
-    showError(e?.message || 'Could not save. Try again.')
+    showError(friendlyError(e))
   } finally {
     savingFeedback.value = false
   }

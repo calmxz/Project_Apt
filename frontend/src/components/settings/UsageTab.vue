@@ -5,8 +5,10 @@
       <span class="skel-block skel-short" />
     </div>
     <span v-if="loading" class="sr-only" role="status">Loading</span>
+    <p v-else-if="error" class="muted" data-testid="usage-error">
+      Usage data is unavailable right now.
+    </p>
     <UsagePanel v-else-if="usage" :usage="usage" />
-    <p v-else class="muted" data-testid="usage-error">Usage data is unavailable right now.</p>
   </div>
 </template>
 
@@ -18,13 +20,14 @@ import { getUsageSummary } from '../../services/profileApi.js'
 
 const usage = ref(null)
 const loading = ref(true)
+const error = ref(false)
 
 onMounted(async () => {
-  loading.value = true
   try {
     usage.value = await getUsageSummary()
-  } catch {
-    usage.value = null
+  } catch (e) {
+    error.value = true
+    console.error('usage fetch failed', e)
   } finally {
     loading.value = false
   }
