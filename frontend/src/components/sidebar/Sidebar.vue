@@ -509,18 +509,6 @@ function onNewSession() {
 
     <footer class="sb-rail" :class="{ 'sb-rail--column': !isExpanded }">
       <RouterLink
-        to="/profile"
-        class="sb-icon"
-        :class="{ 'sb-icon--row': isExpanded }"
-        aria-label="Combined profile"
-        title="Combined profile"
-        data-testid="sidebar-profile"
-        @click="closeDrawer"
-      >
-        <i class="pi pi-user" />
-        <span v-if="isExpanded" class="sb-icon-label">Profile</span>
-      </RouterLink>
-      <RouterLink
         to="/settings"
         class="sb-icon"
         :class="{ 'sb-icon--row': isExpanded }"

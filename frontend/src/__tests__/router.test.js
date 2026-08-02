@@ -73,7 +73,7 @@ describe('router', () => {
     user.onboardingComplete = false
     // Push to a non-default route to avoid hitting the "same route" no-op path
     // when a prior test or beforeEach left us on /onboarding already.
-    await router.push({ name: 'settings' })
+    await router.push({ name: 'settings', params: { tab: 'profile' } })
     expect(router.currentRoute.value.name).toBe('onboarding')
   })
 
@@ -81,7 +81,7 @@ describe('router', () => {
     setAuth(true)
     const user = useUserStore()
     user.onboardingComplete = true
-    await router.push({ name: 'settings' })
+    await router.push({ name: 'settings', params: { tab: 'profile' } })
     await router.push({ name: 'onboarding' })
     expect(router.currentRoute.value.name).toBe('home')
   })
@@ -133,7 +133,7 @@ describe('router', () => {
     // already answers the onboarding question, so the server refresh is
     // background-only.
     const spy = vi.spyOn(user, 'hydrateFromServer').mockReturnValue(new Promise(() => {}))
-    const push = router.push({ name: 'settings' })
+    const push = router.push({ name: 'settings', params: { tab: 'profile' } })
     await new Promise((r) => setTimeout(r, 0))
     expect(spy).toHaveBeenCalled()
     expect(router.currentRoute.value.name).toBe('settings')
@@ -149,7 +149,7 @@ describe('router', () => {
       user.onboardingComplete = true
       user.hydrated = true
     })
-    await router.push({ name: 'settings' })
+    await router.push({ name: 'settings', params: { tab: 'profile' } })
     expect(spy).toHaveBeenCalled()
     expect(router.currentRoute.value.name).toBe('settings')
   })
@@ -163,7 +163,7 @@ describe('router', () => {
     main.setAttribute('tabindex', '-1')
     document.body.appendChild(main)
     await router.push('/') // establish an initial route first
-    await router.push({ name: 'settings' }) // any second authenticated route in this suite
+    await router.push({ name: 'settings', params: { tab: 'profile' } }) // any second authenticated route in this suite
     expect(document.activeElement).toBe(main)
     main.remove()
   })

@@ -16,11 +16,11 @@ describe('SidebarMobileTopStrip', () => {
   })
   afterEach(() => wrapper?.unmount())
 
-  it('renders the hamburger, logo, and profile link', () => {
+  it('renders the hamburger, logo, and settings link', () => {
     wrapper = mount(SidebarMobileTopStrip)
     expect(wrapper.find('[data-testid="sidebar-mobile-hamburger"]').exists()).toBe(true)
     expect(wrapper.find('.sb-strip-brand').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="strip-profile"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="strip-settings"]').exists()).toBe(true)
   })
 
   it('no longer renders theme or sign-out controls', () => {
