@@ -593,6 +593,9 @@ function useQuickPrompt(text) {
 const canRetry = computed(() => Boolean(lastSentText.value) && !sending.value && !isEnded.value)
 
 const rawErrorDetail = computed(() => {
+  // Debug affordance only: raw status/path/body must never render in a
+  // production build (leaks backend envelope shapes to end users).
+  if (!import.meta.env.DEV) return null
   const e = lastError.value || (store.error ? { message: store.error } : null)
   if (!e || typeof e !== 'object') return null
   const parts = []
