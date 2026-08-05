@@ -108,10 +108,6 @@
         >
           Go to active session
         </router-link>
-        <details v-if="rawErrorDetail" class="error-details">
-          <summary>Technical details</summary>
-          <pre>{{ rawErrorDetail }}</pre>
-        </details>
       </div>
 
       <ReferenceStatusBanner ref="referenceBannerRef" :session-id="props.id" />
@@ -591,19 +587,6 @@ function useQuickPrompt(text) {
 }
 
 const canRetry = computed(() => Boolean(lastSentText.value) && !sending.value && !isEnded.value)
-
-const rawErrorDetail = computed(() => {
-  // Debug affordance only: raw status/path/body must never render in a
-  // production build (leaks backend envelope shapes to end users).
-  if (!import.meta.env.DEV) return null
-  const e = lastError.value || (store.error ? { message: store.error } : null)
-  if (!e || typeof e !== 'object') return null
-  const parts = []
-  if (e.status != null) parts.push(`status: ${e.status}`)
-  if (e.path) parts.push(`path: ${e.path}`)
-  if (e.body) parts.push(`body: ${typeof e.body === 'string' ? e.body : JSON.stringify(e.body)}`)
-  return parts.length ? parts.join('\n') : null
-})
 
 async function send() {
   const text = draft.value
@@ -1085,18 +1068,6 @@ function goHome() {
 .error-retry:focus-visible {
   outline: 2px solid var(--color-accent-ring);
   outline-offset: 2px;
-}
-
-.error-details {
-  flex: 1 0 100%;
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-}
-
-.error-details pre {
-  white-space: pre-wrap;
-  margin: 0.4rem 0 0;
 }
 
 .error {
