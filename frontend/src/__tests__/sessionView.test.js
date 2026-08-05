@@ -303,6 +303,24 @@ describe('SessionView', () => {
     expect(wrapper.find('[data-testid="session-error"]').exists()).toBe(true)
   })
 
+  it('never renders raw technical details in the error banner', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession()
+    })
+    vi.spyOn(store, 'sendMessageStreaming').mockRejectedValue(
+      Object.assign(new Error('cap'), { status: 429, path: '/chat/stream', body: '{}' }),
+    )
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-testid="session-input"]').setValue('hello')
+    await wrapper.get('[data-testid="session-send"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="session-error"]').exists()).toBe(true)
+    expect(wrapper.find('.error-details').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="session-error"]').text()).not.toContain('/chat/stream')
+  })
+
   it('retry button resends last message', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'loadSession').mockImplementation(async () => {
