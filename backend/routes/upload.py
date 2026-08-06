@@ -20,7 +20,7 @@ from config import settings
 from contracts import UploadResponse, UploadStatus
 from db.database import get_db
 from db.models import Document, Session as SessionModel
-from lib.error_codes import DAILY_CAP_REACHED
+from lib.error_codes import CHUNK_LIMIT_EXCEEDED, DAILY_CAP_REACHED
 from services import cost_meter, ingestion_service, object_store, rate_limit
 from services.auth import current_user_id
 
@@ -29,6 +29,11 @@ router = APIRouter(prefix="/api")
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB
 ALLOWED_EXTENSIONS = {".pdf", ".pptx", ".txt", ".md", ".markdown"}
+
+# F-03: measured plaintext ratios (audit 2026-08-06, live tiktoken run)
+_CHARS_PER_TOKEN = 6.38
+_CHUNK_STRIDE_TOKENS = 450
+_PLAINTEXT_EXTENSIONS = {".txt", ".md", ".markdown"}
 
 # F-55: content sniff for container formats. Extensions with no reliable
 # magic bytes (.txt, .md) are exempt -- the extension check already ran.
@@ -100,6 +105,20 @@ def upload_file(
     if sess is None or sess.user_id != user_id:
         raise HTTPException(status_code=404, detail="session not found")
 
+    # B-01: cost caps gate before the rate-limit slot is consumed, mirroring
+    # the chat turn's guard order (routes/chat.py:141-153) - a capped account
+    # must not be able to burn a daily upload slot on a rejected request.
+    try:
+        cost_meter.assert_within_caps(db, user_id)
+    except cost_meter.CostCapExceeded as e:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code": e.code,
+                "resets_at": cost_meter.midnight_utc_iso(),
+            },
+        ) from e
+
     # B-07: rate limit only after extension + ownership pass, mirroring
     # _prepare_turn's guard order - a rejected upload must not consume a
     # daily slot. Ownership-before-increment also guarantees the users row
@@ -122,6 +141,18 @@ def upload_file(
         raise HTTPException(status_code=400, detail={"code": "INVALID_FILENAME"})
 
     data = _read_bounded(file.file, MAX_UPLOAD_BYTES)
+
+    if ext in _PLAINTEXT_EXTENSIONS:
+        estimated_chunks = len(data) / _CHARS_PER_TOKEN / _CHUNK_STRIDE_TOKENS
+        if estimated_chunks > settings.max_chunks:
+            raise HTTPException(
+                status_code=413,
+                detail={
+                    "code": CHUNK_LIMIT_EXCEEDED,
+                    "max_chunks": settings.max_chunks,
+                    "estimated_chunks": int(estimated_chunks),
+                },
+            )
 
     expected = _MAGIC_BYTES.get(ext)
     if expected and not any(data.startswith(m) for m in expected):

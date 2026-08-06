@@ -7,3 +7,5 @@ toast copy).
 
 DAILY_CAP_REACHED = "daily_cap_reached"
 DAILY_COST_CAP_REACHED = "daily_cost_cap_reached"
+GLOBAL_COST_CAP_REACHED = "global_cost_cap_reached"
+CHUNK_LIMIT_EXCEEDED = "chunk_limit_exceeded"

@@ -13,3 +13,8 @@ def test_dotenv_disabled_under_pytest():
 def test_cap_settings_are_code_defaults():
     assert settings.llm_soft_cap_usd == 2.00
     assert settings.llm_hard_cap_usd == 3.00
+
+
+def test_cost_guard_defaults():
+    assert settings.max_chunks == 5000
+    assert settings.global_daily_cost_cap_usd is None

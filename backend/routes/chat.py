@@ -19,7 +19,7 @@ from contracts import ChatRequest, Citation
 from db.database import SessionLocal, get_db
 from db.models import ChatMessage, Document, Session as SessionModel, User
 from lib import keyword_index
-from lib.error_codes import DAILY_CAP_REACHED, DAILY_COST_CAP_REACHED
+from lib.error_codes import DAILY_CAP_REACHED, DAILY_COST_CAP_REACHED, GLOBAL_COST_CAP_REACHED
 from services import (
     check_question_service,
     cost_meter,
@@ -151,6 +151,18 @@ async def _prepare_turn(
                 "resets_at": cost_meter.midnight_utc_iso(),
             },
         )
+
+    if settings.global_daily_cost_cap_usd is not None:
+        if cost_meter.global_spend(db) >= Decimal(
+            str(settings.global_daily_cost_cap_usd)
+        ):
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "code": GLOBAL_COST_CAP_REACHED,
+                    "resets_at": cost_meter.midnight_utc_iso(),
+                },
+            )
 
     # 2) Session + ingestion counts in one statement. Runs BEFORE the rate
     # limiter so a rejected turn (foreign 404 / ended 409) does not consume
