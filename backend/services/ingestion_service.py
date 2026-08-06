@@ -191,9 +191,15 @@ def run(document_id: int) -> None:
 
         owner_id: str | None = None
         embed_cost_holder: list[Decimal] = []
+        # Hoisted local: except arms below read this after db.rollback(),
+        # which expires ORM instances -- reading doc.session_id there would
+        # trigger an implicit refresh SELECT that can itself raise if the
+        # original failure was DB/connection-related, skipping the
+        # mark-failed commit and stranding the doc in "pending".
+        session_id = doc.session_id
         log.info(
             "ingestion start document_id=%s session_id=%s filename=%s",
-            doc.id, doc.session_id, doc.filename,
+            doc.id, session_id, doc.filename,
         )
         try:
             blob = _load_blob(object_store.get_store(), doc)
@@ -249,8 +255,9 @@ def run(document_id: int) -> None:
         except cost_meter.CostCapExceeded:
             db.rollback()
             log.warning(
-                "ingestion stopped: cost cap reached document_id=%s session_id=%s",
-                document_id, doc.session_id,
+                "ingestion stopped: cost cap reached "
+                "document_id=%s session_id=%s error=%s",
+                document_id, session_id, "cost_cap_exceeded",
                 extra={"doc_id": document_id},
             )
             # B-01: batches embedded before the breach were genuinely paid
@@ -276,7 +283,7 @@ def run(document_id: int) -> None:
             db.rollback()
             log.error(
                 "ingestion failed document_id=%s session_id=%s error=%s",
-                document_id, doc.session_id, e,
+                document_id, session_id, e,
                 extra={"err_type": type(e).__name__, "doc_id": document_id},
                 exc_info=settings.env != "prod",
             )
