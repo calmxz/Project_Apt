@@ -1,8 +1,8 @@
 """File ingestion background pipeline (Spec §4.2, §3.1).
 
-run(document_id) is invoked via FastAPI BackgroundTasks. Opens its own
-SessionLocal because the request-scoped DB session is gone by the time the
-background task fires.
+run(document_id) is invoked by the worker process (services.worker) after it
+claims a pending document from the queue. Opens its own SessionLocal because
+no request-scoped DB session exists in the worker.
 
 Pipeline:
   1. Load Document; load the blob via services.object_store (R2 in prod,
@@ -41,12 +41,11 @@ unaffected), then status=failed, error=str(exc)[:1000], committed alone.
 import io
 import logging
 import os
-from datetime import datetime, timedelta, timezone
 
 import litellm
 from pptx import Presentation
 from pypdf import PdfReader
-from sqlalchemy import select, update
+from sqlalchemy import select
 
 from config import settings
 from db.database import SessionLocal
@@ -59,30 +58,6 @@ from services import cost_meter, object_store, pgvector_store
 log = logging.getLogger(__name__)
 
 EMBED_BATCH = 100
-
-# F-26: ingestion is an in-process BackgroundTask; a restart kills it silently
-# and the Document row stays "pending" forever (the session banner spins and
-# aggregate status pins to pending). At startup, fail anything still pending
-# from before the restart. The age guard avoids racing a live ingestion in an
-# overlapping-deploy window; genuinely fresh uploads are left alone.
-REAP_PENDING_AFTER_MINUTES = 10
-REAP_ERROR = "ingestion interrupted by a server restart; please re-upload"
-
-
-def reap_stale_pending(db, *, now: datetime | None = None) -> int:
-    """Mark stale 'pending' documents as failed. Returns how many were reaped."""
-    now = now or datetime.now(timezone.utc)
-    cutoff = now - timedelta(minutes=REAP_PENDING_AFTER_MINUTES)
-    result = db.execute(
-        update(Document)
-        .where(Document.status == "pending", Document.created_at < cutoff)
-        .values(status="failed", error=REAP_ERROR)
-    )
-    db.commit()
-    count = result.rowcount or 0
-    if count:
-        log.warning("reaped %d stale pending document(s) at startup", count)
-    return count
 
 
 def _load_blob(store: "object_store.ObjectStore", doc: Document) -> bytes:

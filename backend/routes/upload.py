@@ -4,7 +4,6 @@ from pathlib import Path
 
 from fastapi import (
     APIRouter,
-    BackgroundTasks,
     Depends,
     File,
     Form,
@@ -21,7 +20,7 @@ from contracts import UploadResponse, UploadStatus
 from db.database import get_db
 from db.models import Document, Session as SessionModel
 from lib.error_codes import CHUNK_LIMIT_EXCEEDED, DAILY_CAP_REACHED
-from services import cost_meter, ingestion_service, object_store, rate_limit
+from services import cost_meter, object_store, rate_limit
 from services.auth import current_user_id
 
 
@@ -71,7 +70,6 @@ def _read_bounded(fh, max_bytes: int) -> bytes:
 )
 def upload_file(
     request: Request,
-    background_tasks: BackgroundTasks,
     response: Response,
     session_id: str = Form(...),
     file: UploadFile = File(...),
@@ -194,8 +192,6 @@ def upload_file(
             status_code=507,
             detail={"code": "STORAGE_WRITE_FAILED"},
         )
-
-    background_tasks.add_task(ingestion_service.run, doc.id)
 
     warn = cost_meter.cost_warning_header(db, user_id)
     if warn:

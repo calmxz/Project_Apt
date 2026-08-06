@@ -1,4 +1,4 @@
-"""TDD: POST /api/upload (multipart PDF -> Document row + background ingestion)."""
+"""TDD: POST /api/upload (multipart PDF -> Document row, queued for the worker)."""
 
 import io
 from decimal import Decimal
@@ -33,9 +33,13 @@ def seeded(db_session):
 
 
 @pytest.fixture(autouse=True)
-def stub_background(monkeypatch):
-    """Prevent background ingestion from firing (we test it separately)."""
-    monkeypatch.setattr("services.ingestion_service.run", lambda doc_id: None)
+def ingestion_never_inline(monkeypatch):
+    """F-04: ingestion must be enqueued for the worker, never run in-process."""
+
+    def _boom(doc_id):
+        raise AssertionError("ingestion must not run in the request process")
+
+    monkeypatch.setattr("services.ingestion_service.run", _boom)
 
 
 @pytest.fixture(autouse=True)
@@ -233,18 +237,14 @@ def test_upload_sanitizes_traversal_filename(client, seeded, db_session):
     assert body["filename"].endswith("passwd.pdf")
 
 
-def test_background_task_scheduled(client, seeded, monkeypatch):
-    seen = []
-
-    def fake_run(doc_id):
-        seen.append(doc_id)
-
-    monkeypatch.setattr("services.ingestion_service.run", fake_run)
+def test_upload_leaves_document_pending_for_worker_to_claim(client, seeded, db_session):
+    """F-04: upload only enqueues (status="pending"); the worker process
+    claims and runs ingestion out-of-process (see services/worker.py)."""
     files = {"file": ("notes.pdf", io.BytesIO(b"%PDF-fake"), "application/pdf")}
     r = client.post("/api/upload", data={"user_id": USER_ID, "session_id": SESSION_ID}, files=files)
     assert r.status_code == 202
-    assert len(seen) == 1
-    assert seen[0] == r.json()["document_id"]
+    doc = db_session.get(Document, r.json()["document_id"])
+    assert doc.status == "pending"
 
 
 def test_read_bounded_returns_all_bytes_under_cap():
