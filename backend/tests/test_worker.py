@@ -48,6 +48,46 @@ def test_recover_stuck_resets_old_processing(db_session):
     assert db_session.get(Document, fresh.id).status == "processing"
 
 
+def test_main_loop_recovers_stale_claim_mid_run_without_restart(db_session, monkeypatch):
+    """PR-4 Finding 2: recover_stuck must not run only at boot. A worker
+    that claims a doc and then dies leaves it "processing" with a stale
+    claimed_at; the SAME running loop (no restart) must eventually recover
+    it once it goes stale, not just at process start."""
+    from sqlalchemy.orm import sessionmaker
+
+    d = _seed_doc(db_session, status="pending")
+
+    test_engine = db_session.get_bind()
+    monkeypatch.setattr(
+        "worker.SessionLocal",
+        sessionmaker(autocommit=False, autoflush=False, bind=test_engine),
+    )
+    monkeypatch.setattr("worker.time", type("T", (), {
+        "sleep": staticmethod(lambda s: None)
+    }))
+    monkeypatch.setattr("worker.RECOVER_EVERY_ITERATIONS", 2)
+
+    call_count = {"n": 0}
+
+    def fake_claim_next(db):
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            # Simulate a worker that claimed the doc and died immediately --
+            # by the next iteration its claim is already stale.
+            doc = db.get(Document, d.id)
+            doc.status = "processing"
+            doc.claimed_at = datetime.now(timezone.utc) - timedelta(minutes=45)
+            db.commit()
+        return None
+
+    monkeypatch.setattr("worker.claim_next", fake_claim_next)
+
+    worker.main_loop(max_iterations=3)
+
+    db_session.expire_all()
+    assert db_session.get(Document, d.id).status == "pending"
+
+
 def test_main_loop_processes_then_exits(db_session, monkeypatch):
     d = _seed_doc(db_session)
     processed = []

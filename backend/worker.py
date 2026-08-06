@@ -23,6 +23,14 @@ log = logging.getLogger(__name__)
 POLL_INTERVAL_S = 2.0
 STALE_PROCESSING_MINUTES = 30
 
+# PR-4 Finding 2: recover_stuck must not run only once at process boot.
+# A kill+immediate-restart otherwise strands a "processing" doc until a
+# future restart happens more than STALE_PROCESSING_MINUTES later. Run it
+# periodically inside the running loop instead -- every N iterations is
+# simpler to test than wall-clock, and at POLL_INTERVAL_S=2.0 this is
+# roughly once a minute.
+RECOVER_EVERY_ITERATIONS = 30
+
 
 def claim_next(db) -> int | None:
     stmt = (
@@ -71,6 +79,14 @@ def main_loop(max_iterations: int | None = None) -> None:
         boot_db.close()
     while max_iterations is None or iterations < max_iterations:
         iterations += 1
+        if iterations % RECOVER_EVERY_ITERATIONS == 0:
+            recover_db = SessionLocal()
+            try:
+                n = recover_stuck(recover_db)
+                if n:
+                    log.info("recovered %s stuck documents mid-run", n)
+            finally:
+                recover_db.close()
         db = SessionLocal()
         try:
             doc_id = claim_next(db)
