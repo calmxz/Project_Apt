@@ -738,6 +738,52 @@ def test_run_txt_success(db_session, insert_capture, mock_embed, monkeypatch, tm
     assert len(insert_capture[0]["rows"]) >= 1
 
 
+def test_run_logs_carry_document_and_session_ids(
+    db_session, insert_capture, mock_embed, monkeypatch, tmp_path, caplog
+):
+    """G-06: ingestion start/done log lines must carry document_id and
+    session_id so a failure can be correlated back to the upload without
+    logging any message/document content (PII rule, logging_config.py)."""
+    import logging
+
+    from contracts import TopicProfile
+    from db.models import Document, Session as SessionModel, User
+    from sqlalchemy.orm import sessionmaker
+    from services import ingestion_service
+
+    db_session.add(User(id="u_log"))
+    db_session.flush()
+    db_session.add(
+        SessionModel(
+            id="s_log",
+            user_id="u_log",
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.flush()
+    doc = Document(session_id="s_log", filename="ref.txt", status="pending")
+    db_session.add(doc)
+    db_session.commit()
+    db_session.refresh(doc)
+
+    monkeypatch.setattr("services.ingestion_service.settings.uploads_path", str(tmp_path))
+    (tmp_path / f"{doc.id}_ref.txt").write_text(
+        "Indexes accelerate database queries. " * 20, encoding="utf-8"
+    )
+    monkeypatch.setattr(
+        "services.ingestion_service.SessionLocal",
+        sessionmaker(autocommit=False, autoflush=False, bind=db_session.get_bind()),
+    )
+
+    with caplog.at_level(logging.INFO, logger="services.ingestion_service"):
+        ingestion_service.run(doc.id)
+
+    joined = " ".join(r.getMessage() for r in caplog.records)
+    assert f"document_id={doc.id}" in joined
+    assert f"session_id={doc.session_id}" in joined
+
+
 # --- F-26: startup reaper for stale pending documents ---------------------
 
 
