@@ -174,6 +174,7 @@ async def _prepare_turn(
             SessionModel,
             doc_base.scalar_subquery().label("doc_total"),
             doc_base.where(Document.status == "pending").scalar_subquery().label("doc_pending"),
+            doc_base.where(Document.status == "processing").scalar_subquery().label("doc_processing"),
             doc_base.where(Document.status == "ready").scalar_subquery().label("doc_ready"),
         ).where(SessionModel.id == req.session_id)
     ).first()
@@ -183,7 +184,7 @@ async def _prepare_turn(
     if session.ended_at is not None:
         raise HTTPException(status_code=409, detail={"code": "session_ended"})
     ingestion_status = documents_service.status_from_counts(
-        row.doc_total, row.doc_pending, row.doc_ready
+        row.doc_total, row.doc_pending, row.doc_ready, row.doc_processing
     )
     # Detach: ensure_user/check_and_increment commit below would otherwise
     # expire this already-fully-loaded row (expire_on_commit), forcing a
