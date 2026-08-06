@@ -1,3 +1,9 @@
+import os
+
+# Q-01: must run before anything imports `config`, or the real .env loads
+# into the test process. Do not move below the imports.
+os.environ["CRUX_SKIP_DOTENV"] = "1"
+
 import json
 from types import SimpleNamespace
 from typing import Any
