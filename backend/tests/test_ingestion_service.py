@@ -554,6 +554,95 @@ def test_ingestion_meters_embedding_spend(
     assert cost_meter.current_spend(db_session, user_id) == Decimal("0.0040")
 
 
+def test_embed_all_stops_at_cap_between_batches(db_session, monkeypatch):
+    """B-01: _embed_all must consult the daily cost cap at the TOP of each
+    per-batch loop iteration, before spending on litellm.embedding -- a user
+    already over cap must not trigger another paid call."""
+    from decimal import Decimal
+
+    from services import cost_meter as cm
+    from services import ingestion_service
+
+    monkeypatch.setattr("services.cost_meter.settings.llm_hard_cap_usd", 0.10)
+    db_session.add(User(id="u_capped"))
+    db_session.commit()
+    cm.record_cost(db_session, "u_capped", Decimal("0.2000"))
+    db_session.commit()
+    called = []
+    monkeypatch.setattr(
+        "services.ingestion_service.litellm.embedding",
+        lambda **kw: called.append(1),
+    )
+    with pytest.raises(cm.CostCapExceeded):
+        ingestion_service._embed_all(
+            db_session, ["text"], user_id="u_capped", session_id="s_cap"
+        )
+    assert called == []
+
+
+def test_run_fails_over_cost_cap_and_keeps_prior_spend(db_session, monkeypatch, tmp_path):
+    """B-01: a cap breach discovered mid-ingestion must fail the document
+    with a friendly error, distinct from the generic embedding-failure
+    message, and must not lose spend already paid for by earlier batches
+    (Finding 1 pattern -- the cost-cap branch also re-records
+    embed_cost_holder like the broad except arm does)."""
+    from decimal import Decimal
+    from sqlalchemy.orm import sessionmaker
+
+    from config import settings
+    from services import cost_meter as cm
+    from services import ingestion_service
+
+    db_session.add(User(id="u_cap_run"))
+    db_session.flush()
+    db_session.add(
+        SessionModel(
+            id="s_cap_run",
+            user_id="u_cap_run",
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.flush()
+    doc = Document(session_id="s_cap_run", filename="ref.txt", status="pending")
+    db_session.add(doc)
+    db_session.commit()
+    db_session.refresh(doc)
+
+    monkeypatch.setattr("services.ingestion_service.settings.uploads_path", str(tmp_path))
+    (tmp_path / f"{doc.id}_ref.txt").write_text(
+        "Indexes accelerate database queries. " * 20, encoding="utf-8"
+    )
+    monkeypatch.setattr(
+        "services.ingestion_service.SessionLocal",
+        sessionmaker(autocommit=False, autoflush=False, bind=db_session.get_bind()),
+    )
+
+    # Over cap before ingestion even starts, so the very first batch trips it.
+    monkeypatch.setattr("services.cost_meter.settings.llm_hard_cap_usd", 0.10)
+    cm.record_cost(db_session, "u_cap_run", Decimal("0.2000"))
+    db_session.commit()
+
+    embed_calls: list[object] = []
+
+    def boom_if_called(model, input, **_):
+        embed_calls.append((model, input))
+        raise AssertionError("embedding must not be called once the cap is exceeded")
+
+    monkeypatch.setattr("services.ingestion_service.litellm.embedding", boom_if_called)
+
+    ingestion_service.run(doc.id)
+
+    db_session.expire_all()
+    refreshed = db_session.get(Document, doc.id)
+    assert refreshed.status == "failed"
+    assert refreshed.error == "daily cost cap reached; ingestion stopped"
+    assert embed_calls == []
+    # Spend already on the ledger before ingestion ran must survive intact
+    # (nothing new was spent since the very first batch was blocked).
+    assert cm.current_spend(db_session, "u_cap_run") == Decimal("0.2000")
+
+
 def test_missing_blob_marks_failed(setup_doc, db_session, monkeypatch, tmp_path):
     """F-15: if the blob isn't in the object store (and no legacy bare-filename
     fallback exists either), ingestion must fail the document, not crash."""

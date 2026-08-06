@@ -143,6 +143,8 @@ def _embed_all(
     pending_meter: list[tuple[object, list[str]]] = []
     for i in range(0, len(texts), EMBED_BATCH):
         batch = texts[i : i + EMBED_BATCH]
+        if user_id is not None:
+            cost_meter.assert_within_caps(db, user_id)
         try:
             resp = litellm.embedding(
                 model=settings.embedding_model,
@@ -170,10 +172,9 @@ def _embed_all(
         for item in resp.data:
             out.append(item["embedding"] if isinstance(item, dict) else item.embedding)
     for resp, batch in pending_meter:
-        # F-19: ingestion is the largest embedding spender; meter it.
-        # Metering only -- NO cap gate here. Ingestion is already
-        # rate-limited at upload time, and failing a document mid-pipeline
-        # for a cap breach would strand it (F-26 territory, Batch 5).
+        # F-19: ingestion is the largest embedding spender; meter it. The cap
+        # gate itself runs at the top of the loop above, before each batch's
+        # litellm.embedding call (audit B-01) -- this is metering only.
         cost_meter.meter_embedding_response(
             db, resp, user_id=user_id, session_id=session_id, texts=batch,
         )
@@ -237,6 +238,31 @@ def run(document_id: int) -> None:
             doc.status = "ready"
             doc.error = None
             db.commit()
+        except cost_meter.CostCapExceeded:
+            db.rollback()
+            log.warning(
+                "ingestion stopped: cost cap reached",
+                extra={"doc_id": document_id},
+            )
+            # B-01: batches embedded before the breach were genuinely paid
+            # for; re-record that spend on the fresh post-rollback
+            # transaction, same as the generic failure arm below.
+            total_embed_cost = sum(embed_cost_holder, Decimal("0"))
+            if total_embed_cost > Decimal("0") and owner_id is not None:
+                try:
+                    cost_meter.record_cost(db, owner_id, total_embed_cost)
+                except Exception:
+                    log.error(
+                        "failed to re-record embedding spend after cost-cap rollback",
+                        extra={"doc_id": document_id},
+                        exc_info=settings.env != "prod",
+                    )
+            doc = db.get(Document, document_id)
+            if doc is not None:
+                doc.status = "failed"
+                doc.error = "daily cost cap reached; ingestion stopped"
+                db.commit()
+            return
         except Exception as e:
             db.rollback()
             log.error(
