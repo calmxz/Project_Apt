@@ -448,3 +448,28 @@ def test_upload_rejected_when_cost_capped(client, db_session, seeded, monkeypatc
     assert "resets_at" in r.json()["detail"]
     count = db_session.query(UsageCounter).filter_by(user_id=USER_ID).count()
     assert count == 0
+
+
+def test_plaintext_upload_rejected_by_chunk_estimate(client, seeded, monkeypatch):
+    monkeypatch.setattr("routes.upload.settings.max_chunks", 10)
+    # 10 chunks * 450 tokens * 6.38 chars ~= 28,710 chars; send well past it
+    big = b"a" * 60_000
+    files = {"file": ("notes.txt", big, "text/plain")}
+    r = client.post(
+        "/api/upload",
+        data={"user_id": USER_ID, "session_id": SESSION_ID},
+        files=files,
+    )
+    assert r.status_code == 413
+    assert r.json()["detail"]["code"] == "chunk_limit_exceeded"
+
+
+def test_pdf_upload_not_subject_to_byte_estimate(client, seeded, monkeypatch):
+    monkeypatch.setattr("routes.upload.settings.max_chunks", 1)
+    files = {"file": ("slides.pdf", b"%PDF-1.4 tiny", "application/pdf")}
+    r = client.post(
+        "/api/upload",
+        data={"user_id": USER_ID, "session_id": SESSION_ID},
+        files=files,
+    )
+    assert r.status_code == 202  # PDFs skip the estimate; worker cap catches them
