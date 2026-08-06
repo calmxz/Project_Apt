@@ -80,4 +80,15 @@ describe('ResetPasswordView', () => {
     expect(wrapper.get('[data-testid="reset-error"]').text()).toContain('Auth session missing!')
     expect(routerPush).not.toHaveBeenCalled()
   })
+
+  it('announces the error to screen readers', async () => {
+    const auth = useAuthStore()
+    vi.spyOn(auth, 'updatePassword').mockRejectedValue(new Error('Auth session missing!'))
+    const wrapper = mountView()
+    await wrapper.get('[data-testid="reset-password"]').setValue('newpass12')
+    await wrapper.get('[data-testid="reset-confirm"]').setValue('newpass12')
+    await wrapper.get('[data-testid="reset-form"]').trigger('submit.prevent')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="reset-error"]').attributes('role')).toBe('alert')
+  })
 })
