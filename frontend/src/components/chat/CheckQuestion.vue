@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 
 const props = defineProps({
   // Batch: { gap, total, currentIndex, viewIndex, items: [
@@ -23,6 +23,16 @@ function optionClass(i) {
   if (i === item.value.selectedIndex) return 'is-incorrect'
   return ''
 }
+
+const nextBtn = ref(null)
+const doneBtn = ref(null)
+
+watch(answered, async (is) => {
+  if (!is) return
+  await nextTick()
+  const target = nextBtn.value ?? doneBtn.value
+  target?.focus()
+})
 </script>
 
 <template>
@@ -32,9 +42,23 @@ function optionClass(i) {
     data-testid="check-card"
   >
     <span class="check-eyebrow">
-      Check question<template v-if="showProgress"> &middot; {{ check.viewIndex + 1 }}/{{ check.total }}</template>
+      Check question<template v-if="showProgress">
+        &middot; {{ check.viewIndex + 1 }}/{{ check.total }}</template
+      >
     </span>
     <p class="check-question">{{ item.question }}</p>
+
+    <div
+      class="sr-only"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      data-testid="check-live"
+    >
+      <template v-if="item.status === 'answered'">
+        {{ correct ? 'Correct.' : 'Not quite.' }} {{ item.explanation || '' }}
+      </template>
+    </div>
 
     <ul class="check-options">
       <li v-for="(opt, i) in item.options" :key="i">
@@ -43,8 +67,8 @@ function optionClass(i) {
           class="check-option"
           :class="optionClass(i)"
           data-testid="check-option"
-          :disabled="answered"
-          @click="emit('answer', i)"
+          :aria-disabled="answered ? 'true' : undefined"
+          @click="answered ? undefined : emit('answer', i)"
         >
           {{ opt }}
         </button>
@@ -71,6 +95,7 @@ function optionClass(i) {
 
     <button
       v-if="answered && !isLast"
+      ref="nextBtn"
       type="button"
       class="check-next"
       data-testid="check-next"
@@ -81,6 +106,7 @@ function optionClass(i) {
     </button>
     <button
       v-if="answered && isLast"
+      ref="doneBtn"
       type="button"
       class="check-next"
       data-testid="check-done"
@@ -131,17 +157,20 @@ function optionClass(i) {
   padding: 0.6rem 0.85rem;
   color: var(--color-text);
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
 }
-.check-option:not(:disabled):hover {
+.check-option:not(:disabled):not([aria-disabled='true']):hover {
   border-color: var(--color-accent);
 }
-.check-option:not(:disabled):focus-visible {
+.check-option:not(:disabled):not([aria-disabled='true']):focus-visible {
   border-color: var(--color-accent);
   outline: 2px solid var(--color-accent-ring);
   outline-offset: 2px;
 }
-.check-option:disabled {
+.check-option:disabled,
+.check-option[aria-disabled='true'] {
   cursor: default;
 }
 .check-option.is-correct {
