@@ -430,3 +430,19 @@ def test_foreign_session_does_not_burn_slot(client, seeded, db_session):
     assert resp.status_code == 404
     count = db_session.query(UsageCounter).filter_by(user_id=USER_ID).count()
     assert count == 0
+
+
+def test_upload_rejected_when_cost_capped(client, db_session, seeded, monkeypatch):
+    monkeypatch.setattr("services.cost_meter.settings.llm_hard_cap_usd", 0.10)
+
+    cost_meter.record_cost(db_session, USER_ID, Decimal("0.2000"))
+    db_session.commit()
+    files = {"file": ("notes.txt", b"hello", "text/plain")}
+    r = client.post(
+        "/api/upload",
+        data={"user_id": USER_ID, "session_id": SESSION_ID},
+        files=files,
+    )
+    assert r.status_code == 429
+    assert r.json()["detail"]["code"] == "daily_cost_cap_reached"
+    assert "resets_at" in r.json()["detail"]

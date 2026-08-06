@@ -100,6 +100,20 @@ def upload_file(
     if sess is None or sess.user_id != user_id:
         raise HTTPException(status_code=404, detail="session not found")
 
+    # B-01: cost caps gate before the rate-limit slot is consumed, mirroring
+    # the chat turn's guard order (routes/chat.py:141-153) - a capped account
+    # must not be able to burn a daily upload slot on a rejected request.
+    try:
+        cost_meter.assert_within_caps(db, user_id)
+    except cost_meter.CostCapExceeded as e:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code": e.code,
+                "resets_at": cost_meter.midnight_utc_iso(),
+            },
+        ) from e
+
     # B-07: rate limit only after extension + ownership pass, mirroring
     # _prepare_turn's guard order - a rejected upload must not consume a
     # daily slot. Ownership-before-increment also guarantees the users row
