@@ -6,10 +6,12 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import assert_prod_database, settings
 from db.database import SessionLocal, create_tables
+from lib.logging_config import configure_logging
 from routes import chat, documents, health, me, profile, review, sessions, upload, usage
 from services import ingestion_service
 from services.auth import validate_jwks_startup
 
+configure_logging()
 
 log = logging.getLogger(__name__)
 
