@@ -227,6 +227,66 @@ def test_pgvector_insert_failure_marks_failed(
     assert "pgvector" in (doc.error or "")
 
 
+def test_run_fails_over_chunk_cap_before_embedding(db_session, monkeypatch, tmp_path):
+    """F-03 enforcement: documents whose chunk count exceeds settings.max_chunks
+    must fail before any embedding call -- no vendor spend for an oversized doc."""
+    from sqlalchemy.orm import sessionmaker
+
+    from services import ingestion_service
+
+    db_session.add(User(id="u_cap"))
+    db_session.flush()
+    db_session.add(
+        SessionModel(
+            id="s_cap",
+            user_id="u_cap",
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.flush()
+    doc = Document(session_id="s_cap", filename="big.txt", status="pending")
+    db_session.add(doc)
+    db_session.commit()
+    db_session.refresh(doc)
+
+    monkeypatch.setattr(
+        "services.ingestion_service.SessionLocal",
+        sessionmaker(autocommit=False, autoflush=False, bind=db_session.get_bind()),
+    )
+    monkeypatch.setattr("services.ingestion_service.settings.max_chunks", 1)
+
+    # chunk=500 tokens, stride 450 -- 4000 words yields well over 1 chunk.
+    _write_blob_stub(
+        monkeypatch, tmp_path, doc.id, doc.filename, content=b"word " * 4000
+    )
+
+    embed_calls: list[object] = []
+
+    def boom_if_called(model, input, **_):
+        embed_calls.append((model, input))
+        raise AssertionError("embedding must not be called over the chunk cap")
+
+    monkeypatch.setattr("services.ingestion_service.litellm.embedding", boom_if_called)
+
+    inserted: list[dict] = []
+
+    def fake_insert(db, *, session_id, document_id, rows):
+        inserted.append({"session_id": session_id, "document_id": document_id, "rows": list(rows)})
+        return len(rows)
+
+    monkeypatch.setattr("services.ingestion_service.pgvector_store.insert_chunks", fake_insert)
+
+    ingestion_service.run(doc.id)
+
+    db_session.expire_all()
+    refreshed = db_session.get(Document, doc.id)
+    assert refreshed.status == "failed"
+    assert "chunk limit" in refreshed.error
+    assert embed_calls == []
+    assert inserted == []
+
+
 def test_merge_failure_leaves_no_chunks_and_marks_failed(db_session, monkeypatch, tmp_path):
     """F-27: insert_chunks and merge_into_session no longer commit -- the
     caller (ingestion_service.run) owns the transaction. A failure in the

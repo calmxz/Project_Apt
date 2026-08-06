@@ -204,6 +204,12 @@ def run(document_id: int) -> None:
                 db.commit()
                 return
 
+            if len(chunks) > settings.max_chunks:
+                doc.status = "failed"
+                doc.error = "document too large to ingest (chunk limit)"
+                db.commit()
+                return
+
             owner_id = db.execute(
                 select(SessionModel.user_id).where(SessionModel.id == doc.session_id)
             ).scalar_one_or_none()
