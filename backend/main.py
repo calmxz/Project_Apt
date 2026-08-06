@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from config import assert_prod_database, settings
 from db.database import SessionLocal, create_tables
 from lib.logging_config import configure_logging
+from lib.request_id import RequestIdMiddleware
 from routes import chat, documents, health, me, profile, review, sessions, upload, usage
 from services import ingestion_service
 from services.auth import validate_jwks_startup
@@ -45,8 +46,10 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Content-Type", "Accept", "Authorization", "If-Match"],
-    expose_headers=["X-Cost-Warning"],
+    expose_headers=["X-Cost-Warning", "X-Request-Id"],
 )
+
+app.add_middleware(RequestIdMiddleware)
 
 app.include_router(health.router)
 app.include_router(chat.router)
