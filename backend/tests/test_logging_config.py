@@ -1,6 +1,18 @@
 import logging
 
+import pytest
+
 from lib.logging_config import configure_logging
+
+
+@pytest.fixture(autouse=True)
+def _restore_root_logging():
+    root = logging.getLogger()
+    saved_level = root.level
+    saved_handlers = list(root.handlers)
+    yield
+    root.setLevel(saved_level)
+    root.handlers[:] = saved_handlers
 
 
 def test_configure_logging_sets_formatted_console_handler(capsys):
