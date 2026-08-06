@@ -19,7 +19,7 @@ import pytest
 from config import settings
 from contracts import TopicProfile
 from db.models import DailyCostLedger, Session as SessionModel, User
-from lib.error_codes import DAILY_COST_CAP_REACHED
+from lib.error_codes import DAILY_COST_CAP_REACHED, GLOBAL_COST_CAP_REACHED
 from services import cost_meter
 
 
@@ -129,6 +129,35 @@ def test_chat_stream_returns_429_when_hard_cap_reached(
     assert detail["code"] == DAILY_COST_CAP_REACHED
     assert Decimal(detail["hard_cap_usd"]) == Decimal("3.00")
     assert Decimal(detail["used_usd"]) == Decimal("3.5000")
+    assert "resets_at" in detail
+
+
+def test_chat_rejected_when_global_ceiling_hit(
+    client, db_session, seed_user, monkeypatch
+):
+    """B-04: even when the per-user cap has room, the optional global daily
+    ceiling must independently block the turn."""
+    monkeypatch.setattr(settings, "llm_stub", True)  # never reach a real LLM
+    monkeypatch.setattr(
+        "services.cost_meter.settings.global_daily_cost_cap_usd", 0.10
+    )
+    db_session.add(
+        DailyCostLedger(
+            user_id=USER_ID,
+            date_utc=cost_meter._today_utc(),
+            cost_usd=Decimal("0.2000"),
+        )
+    )
+    db_session.commit()
+
+    r = client.post(
+        "/api/chat/stream",
+        json={"session_id": SESSION_ID, "message": "hi"},
+        headers={"Authorization": f"Bearer test-{USER_ID}"},
+    )
+    assert r.status_code == 429
+    detail = r.json()["detail"]
+    assert detail["code"] == GLOBAL_COST_CAP_REACHED
     assert "resets_at" in detail
 
 
