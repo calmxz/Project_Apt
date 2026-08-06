@@ -446,3 +446,5 @@ def test_upload_rejected_when_cost_capped(client, db_session, seeded, monkeypatc
     assert r.status_code == 429
     assert r.json()["detail"]["code"] == "daily_cost_cap_reached"
     assert "resets_at" in r.json()["detail"]
+    count = db_session.query(UsageCounter).filter_by(user_id=USER_ID).count()
+    assert count == 0
