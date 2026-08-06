@@ -312,9 +312,11 @@ def test_storage_write_failure_507_holds_even_if_mark_failed_commit_raises(
 
     def flaky_commit():
         calls["n"] += 1
-        if calls["n"] <= 2:
-            # let the rate-limit-usage commit and the initial "pending" row
-            # creation commit succeed; only the mark-failed commit fails.
+        if calls["n"] <= 1:
+            # let the rate-limit-usage commit succeed; the pending row is
+            # only flushed (not committed) before the write, so the very
+            # next commit is the mark-failed one -- that's the one that
+            # must fail here.
             return real_commit()
         raise OSError("connection dropped")
 
@@ -408,6 +410,38 @@ def test_upload_writes_through_object_store(client, seeded, db_session, monkeypa
     assert r.status_code == 202
     doc_id = r.json()["document_id"]
     assert store.puts == [(f"{doc_id}_notes.pdf", b"%PDF-fake")]
+
+
+def test_blob_write_happens_before_pending_row_commit(client, seeded, db_session, monkeypatch):
+    """PR-4 Finding 1: the pending row must not be committed (and therefore
+    not claimable by the worker's poll loop) until after the blob write
+    succeeds. Pins the ordering: put() must run strictly before the commit
+    that persists the pending row."""
+    order = []
+
+    class RecordingStore:
+        def put(self, key, data):
+            order.append("put")
+
+    monkeypatch.setattr("routes.upload.object_store.get_store", lambda: RecordingStore())
+
+    real_commit = db_session.commit
+
+    def spy_commit():
+        order.append("commit")
+        return real_commit()
+
+    monkeypatch.setattr(db_session, "commit", spy_commit)
+
+    files = {"file": ("notes.pdf", io.BytesIO(b"%PDF-fake"), "application/pdf")}
+    r = client.post("/api/upload", data={"user_id": USER_ID, "session_id": SESSION_ID}, files=files)
+    assert r.status_code == 202, r.text
+
+    # Exactly: rate-limit commit, then the blob write, then the row commit.
+    # If the pending row were committed before the write (the race), "put"
+    # would land after the second "commit" or the sequence would collapse
+    # to ["commit", "commit", "put"].
+    assert order == ["commit", "put", "commit"], order
 
 
 def test_bad_extension_does_not_burn_slot(client, seeded, db_session):
