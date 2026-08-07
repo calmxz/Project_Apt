@@ -20,32 +20,37 @@ from services import object_store, pgvector_store
 
 logger = logging.getLogger(__name__)
 
-IngestionStatus = Literal["pending", "ready", "failed"]
+IngestionStatus = Literal["pending", "processing", "ready", "failed"]
 
 
 def aggregate_status(statuses: Iterable[str]) -> IngestionStatus | None:
     """Aggregate a collection of document statuses into one session-wide status.
 
-    Priority: pending > ready > failed > None (no documents). Pure helper so the
+    Priority: (pending or processing) > ready > failed > None (no documents).
+    `processing` (worker has picked up the document but not finished) counts as
+    in-flight exactly like `pending`, so the session-wide aggregate stays
+    "pending" until every document is ready or failed. Pure helper so the
     route can derive the aggregate from documents it has already fetched, without
     a second query and without duplicating the priority logic.
     """
     seen = set(statuses)
     if not seen:
         return None
-    if "pending" in seen:
+    if "pending" in seen or "processing" in seen:
         return "pending"
     if "ready" in seen:
         return "ready"
     return "failed"
 
 
-def status_from_counts(total: int, pending: int, ready: int) -> IngestionStatus | None:
-    """Counts-based twin of aggregate_status (pending > ready > failed > None).
-    Used by the consolidated prepare-path session SELECT."""
+def status_from_counts(
+    total: int, pending: int, ready: int, processing: int = 0
+) -> IngestionStatus | None:
+    """Counts-based twin of aggregate_status ((pending or processing) > ready >
+    failed > None). Used by the consolidated prepare-path session SELECT."""
     if total == 0:
         return None
-    if pending > 0:
+    if pending > 0 or processing > 0:
         return "pending"
     if ready > 0:
         return "ready"

@@ -5,11 +5,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import assert_prod_database, settings
-from db.database import SessionLocal, create_tables
+from db.database import create_tables
 from lib.logging_config import configure_logging
 from lib.request_id import RequestIdMiddleware
 from routes import chat, documents, health, me, profile, review, sessions, upload, usage
-from services import ingestion_service
 from services.auth import validate_jwks_startup
 
 configure_logging()
@@ -24,17 +23,6 @@ async def lifespan(app: FastAPI):
         raise RuntimeError("SUPABASE_URL is required when ENV=prod")
     validate_jwks_startup()
     create_tables()
-    db = SessionLocal()
-    try:
-        # Best-effort startup cleanup (F-26): a transient DB error reaping
-        # stale pending documents must not prevent the app from booting
-        # (final-review fix wave, Finding 3).
-        try:
-            ingestion_service.reap_stale_pending(db)
-        except Exception as e:  # noqa: BLE001 - startup must not be gated on this
-            log.warning("startup reap_stale_pending failed: %s", e)
-    finally:
-        db.close()
     yield
 
 

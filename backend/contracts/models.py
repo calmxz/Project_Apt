@@ -304,7 +304,7 @@ class SessionResponse(BaseModel):
     topic_profile: TopicProfile
     created_at: datetime
     ended_at: datetime | None = None
-    ingestion_status: Literal["pending", "ready", "failed"] | None = None
+    ingestion_status: Literal["pending", "processing", "ready", "failed"] | None = None
     pinned: bool | None = False
 
 
@@ -371,7 +371,7 @@ class SessionDetail(BaseModel):
     topic_profile: TopicProfile
     created_at: datetime
     ended_at: datetime | None = None
-    ingestion_status: Literal["pending", "ready", "failed"] | None = None
+    ingestion_status: Literal["pending", "processing", "ready", "failed"] | None = None
     pinned: bool | None = False
     pending_check: PendingCheck | None = None
     messages: list[Message]
@@ -464,7 +464,7 @@ class UploadResponse(BaseModel):
     document_id: int
     session_id: str
     filename: str
-    status: Literal["pending", "ready", "failed"]
+    status: Literal["pending", "processing", "ready", "failed"]
 
 
 class UploadStatus(BaseModel):
@@ -476,7 +476,7 @@ class UploadStatus(BaseModel):
         extra="forbid",
     )
     id: int
-    status: Literal["pending", "ready", "failed"]
+    status: Literal["pending", "processing", "ready", "failed"]
     error: str | None = None
 
 
@@ -490,7 +490,7 @@ class DocumentStatus(BaseModel):
     )
     id: int
     filename: str
-    status: Literal["pending", "ready", "failed"]
+    status: Literal["pending", "processing", "ready", "failed"]
     error: str | None = None
 
 
@@ -504,7 +504,7 @@ class SessionIngestionStatus(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    status: Literal["pending", "ready", "failed"] | None
+    status: Literal["pending", "processing", "ready", "failed"] | None
     documents: list[DocumentStatus]
 
 

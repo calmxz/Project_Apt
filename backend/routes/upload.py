@@ -4,7 +4,6 @@ from pathlib import Path
 
 from fastapi import (
     APIRouter,
-    BackgroundTasks,
     Depends,
     File,
     Form,
@@ -21,7 +20,7 @@ from contracts import UploadResponse, UploadStatus
 from db.database import get_db
 from db.models import Document, Session as SessionModel
 from lib.error_codes import CHUNK_LIMIT_EXCEEDED, DAILY_CAP_REACHED
-from services import cost_meter, ingestion_service, object_store, rate_limit
+from services import cost_meter, object_store, rate_limit
 from services.auth import current_user_id
 
 
@@ -71,7 +70,6 @@ def _read_bounded(fh, max_bytes: int) -> bytes:
 )
 def upload_file(
     request: Request,
-    background_tasks: BackgroundTasks,
     response: Response,
     session_id: str = Form(...),
     file: UploadFile = File(...),
@@ -164,10 +162,14 @@ def upload_file(
             },
         )
 
+    # PR-4 Finding 1: the pending row must not be committed (and therefore
+    # claimable by the worker's poll loop, which runs every 2s) before the
+    # blob write completes. flush() assigns the PK for the storage key
+    # without opening the row up to a concurrent claim; only commit once
+    # the blob write has actually succeeded.
     doc = Document(session_id=session_id, filename=safe_name, status="pending")
     db.add(doc)
-    db.commit()
-    db.refresh(doc)
+    db.flush()
 
     # F-29: a failed blob write must not strand a permanent "pending" row.
     # Mark the row failed (visible in the UI banner) and report 507.
@@ -183,9 +185,18 @@ def upload_file(
             extra={"doc_id": doc.id},
             exc_info=settings.env != "prod",
         )
+        # Discard the never-committed pending insert entirely (it was only
+        # flushed, not committed, so no other session could ever have seen
+        # it) before persisting a fresh row that starts life as "failed".
+        db.rollback()
         try:
-            doc.status = "failed"
-            doc.error = "storage write failed"
+            failed_doc = Document(
+                session_id=session_id,
+                filename=safe_name,
+                status="failed",
+                error="storage write failed",
+            )
+            db.add(failed_doc)
             db.commit()
         except Exception:
             db.rollback()
@@ -195,7 +206,8 @@ def upload_file(
             detail={"code": "STORAGE_WRITE_FAILED"},
         )
 
-    background_tasks.add_task(ingestion_service.run, doc.id)
+    db.commit()
+    db.refresh(doc)
 
     warn = cost_meter.cost_warning_header(db, user_id)
     if warn:
