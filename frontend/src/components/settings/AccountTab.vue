@@ -84,8 +84,10 @@
       <p v-if="pwMismatch" class="hint" data-testid="settings-pw-mismatch">
         New passwords do not match.
       </p>
-      <p v-if="pwError" class="pw-error" data-testid="settings-pw-error">{{ pwError }}</p>
-      <p v-if="pwSuccess" class="saved-flash" data-testid="settings-pw-success">
+      <p v-if="pwError" class="pw-error" role="alert" data-testid="settings-pw-error">
+        {{ pwError }}
+      </p>
+      <p v-if="pwSuccess" class="saved-flash" role="status" data-testid="settings-pw-success">
         <i class="pi pi-check-circle" aria-hidden="true" />
         Password updated.
       </p>

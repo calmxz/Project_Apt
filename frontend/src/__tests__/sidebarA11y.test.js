@@ -116,9 +116,7 @@ describe('Mobile drawer a11y — focus trap', () => {
 
   it('Tab on last focusable wraps to first', async () => {
     const store = useSessionStore()
-    store.sessions = [
-      { id: 'a1', topic: 'X', created_at: '2026-05-20T10:00:00Z', ended_at: null },
-    ]
+    store.sessions = [{ id: 'a1', topic: 'X', created_at: '2026-05-20T10:00:00Z', ended_at: null }]
     wrapper = mount(Sidebar, { attachTo: document.body })
     const { openDrawer } = useSidebar()
     openDrawer()
@@ -144,6 +142,43 @@ describe('Mobile drawer a11y — focus trap', () => {
   })
 })
 
+describe('Sidebar a11y — inert when closed (D-03)', () => {
+  let wrapper
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    localStorage.clear()
+    routeRef.meta = {}
+    routeRef.params = {}
+    // useSidebar's drawerOpen is module-level singleton state that can leak
+    // across tests in this file; force it closed before each case.
+    useSidebar().closeDrawer()
+  })
+  afterEach(() => wrapper?.unmount())
+
+  it('closed mobile drawer is inert', async () => {
+    setViewport(500)
+    wrapper = mount(Sidebar, { attachTo: document.body })
+    await flushPromises()
+    expect(wrapper.find('aside.sidebar').attributes('inert')).toBeDefined()
+  })
+
+  it('open mobile drawer is not inert', async () => {
+    setViewport(500)
+    wrapper = mount(Sidebar, { attachTo: document.body })
+    const { openDrawer } = useSidebar()
+    openDrawer()
+    await flushPromises()
+    expect(wrapper.find('aside.sidebar').attributes('inert')).toBeUndefined()
+  })
+
+  it('desktop sidebar is never inert', async () => {
+    setViewport(1400)
+    wrapper = mount(Sidebar, { attachTo: document.body })
+    await flushPromises()
+    expect(wrapper.find('aside.sidebar').attributes('inert')).toBeUndefined()
+  })
+})
+
 describe('Sidebar a11y — rename focus management', () => {
   let wrapper
   beforeEach(() => {
@@ -158,16 +193,22 @@ describe('Sidebar a11y — rename focus management', () => {
 
   it('rename input receives focus and Escape returns to a stable state', async () => {
     const store = useSessionStore()
-    store.sessions = [{ id: 'a1', topic: 'X', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false }]
+    store.sessions = [
+      { id: 'a1', topic: 'X', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: false },
+    ]
     wrapper = mount(Sidebar, { attachTo: document.body })
     await flushPromises()
-    await wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]').trigger('click')
+    await wrapper
+      .find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]')
+      .trigger('click')
     await wrapper.find('[data-testid="sidebar-row-menu-rename"]').trigger('click')
     await flushPromises()
     const input = wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-rename-input"]')
     expect(document.activeElement).toBe(input.element)
     await input.trigger('keydown.esc')
-    expect(wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-rename-input"]').exists()).toBe(false)
+    expect(
+      wrapper.find('[data-session-id="a1"] [data-testid="sidebar-row-rename-input"]').exists(),
+    ).toBe(false)
     wrapper.unmount()
   })
 })

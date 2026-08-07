@@ -144,6 +144,7 @@ describe('AccountTab', () => {
     await w.get('[data-testid="settings-pw-submit"]').trigger('click')
     await flushPromises()
     expect(w.find('[data-testid="settings-pw-error"]').exists()).toBe(true)
+    expect(w.find('[data-testid="settings-pw-error"]').attributes('role')).toBe('alert')
     expect(update).not.toHaveBeenCalled()
   })
 
@@ -162,6 +163,7 @@ describe('AccountTab', () => {
     expect(signIn).toHaveBeenCalledWith('a@b.c', 'oldpass12')
     expect(update).toHaveBeenCalledWith('newpass12')
     expect(w.find('[data-testid="settings-pw-success"]').exists()).toBe(true)
+    expect(w.find('[data-testid="settings-pw-success"]').attributes('role')).toBe('status')
     expect(showSuccess).toHaveBeenCalled()
   })
 

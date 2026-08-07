@@ -22,7 +22,7 @@
         />
       </div>
 
-      <p v-if="error" class="error" data-testid="forgot-error">{{ error }}</p>
+      <p v-if="error" class="error" role="alert" data-testid="forgot-error">{{ error }}</p>
 
       <div class="actions">
         <button
