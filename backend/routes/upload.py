@@ -4,7 +4,6 @@ from pathlib import Path
 
 from fastapi import (
     APIRouter,
-    BackgroundTasks,
     Depends,
     File,
     Form,
@@ -20,8 +19,8 @@ from config import settings
 from contracts import UploadResponse, UploadStatus
 from db.database import get_db
 from db.models import Document, Session as SessionModel
-from lib.error_codes import DAILY_CAP_REACHED
-from services import cost_meter, ingestion_service, object_store, rate_limit
+from lib.error_codes import CHUNK_LIMIT_EXCEEDED, DAILY_CAP_REACHED
+from services import cost_meter, object_store, rate_limit
 from services.auth import current_user_id
 
 
@@ -29,6 +28,11 @@ router = APIRouter(prefix="/api")
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB
 ALLOWED_EXTENSIONS = {".pdf", ".pptx", ".txt", ".md", ".markdown"}
+
+# F-03: measured plaintext ratios (audit 2026-08-06, live tiktoken run)
+_CHARS_PER_TOKEN = 6.38
+_CHUNK_STRIDE_TOKENS = 450
+_PLAINTEXT_EXTENSIONS = {".txt", ".md", ".markdown"}
 
 # F-55: content sniff for container formats. Extensions with no reliable
 # magic bytes (.txt, .md) are exempt -- the extension check already ran.
@@ -66,7 +70,6 @@ def _read_bounded(fh, max_bytes: int) -> bytes:
 )
 def upload_file(
     request: Request,
-    background_tasks: BackgroundTasks,
     response: Response,
     session_id: str = Form(...),
     file: UploadFile = File(...),
@@ -100,6 +103,20 @@ def upload_file(
     if sess is None or sess.user_id != user_id:
         raise HTTPException(status_code=404, detail="session not found")
 
+    # B-01: cost caps gate before the rate-limit slot is consumed, mirroring
+    # the chat turn's guard order (routes/chat.py:141-153) - a capped account
+    # must not be able to burn a daily upload slot on a rejected request.
+    try:
+        cost_meter.assert_within_caps(db, user_id)
+    except cost_meter.CostCapExceeded as e:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code": e.code,
+                "resets_at": cost_meter.midnight_utc_iso(),
+            },
+        ) from e
+
     # B-07: rate limit only after extension + ownership pass, mirroring
     # _prepare_turn's guard order - a rejected upload must not consume a
     # daily slot. Ownership-before-increment also guarantees the users row
@@ -123,6 +140,18 @@ def upload_file(
 
     data = _read_bounded(file.file, MAX_UPLOAD_BYTES)
 
+    if ext in _PLAINTEXT_EXTENSIONS:
+        estimated_chunks = len(data) / _CHARS_PER_TOKEN / _CHUNK_STRIDE_TOKENS
+        if estimated_chunks > settings.max_chunks:
+            raise HTTPException(
+                status_code=413,
+                detail={
+                    "code": CHUNK_LIMIT_EXCEEDED,
+                    "max_chunks": settings.max_chunks,
+                    "estimated_chunks": int(estimated_chunks),
+                },
+            )
+
     expected = _MAGIC_BYTES.get(ext)
     if expected and not any(data.startswith(m) for m in expected):
         raise HTTPException(
@@ -133,10 +162,14 @@ def upload_file(
             },
         )
 
+    # PR-4 Finding 1: the pending row must not be committed (and therefore
+    # claimable by the worker's poll loop, which runs every 2s) before the
+    # blob write completes. flush() assigns the PK for the storage key
+    # without opening the row up to a concurrent claim; only commit once
+    # the blob write has actually succeeded.
     doc = Document(session_id=session_id, filename=safe_name, status="pending")
     db.add(doc)
-    db.commit()
-    db.refresh(doc)
+    db.flush()
 
     # F-29: a failed blob write must not strand a permanent "pending" row.
     # Mark the row failed (visible in the UI banner) and report 507.
@@ -152,9 +185,18 @@ def upload_file(
             extra={"doc_id": doc.id},
             exc_info=settings.env != "prod",
         )
+        # Discard the never-committed pending insert entirely (it was only
+        # flushed, not committed, so no other session could ever have seen
+        # it) before persisting a fresh row that starts life as "failed".
+        db.rollback()
         try:
-            doc.status = "failed"
-            doc.error = "storage write failed"
+            failed_doc = Document(
+                session_id=session_id,
+                filename=safe_name,
+                status="failed",
+                error="storage write failed",
+            )
+            db.add(failed_doc)
             db.commit()
         except Exception:
             db.rollback()
@@ -164,7 +206,8 @@ def upload_file(
             detail={"code": "STORAGE_WRITE_FAILED"},
         )
 
-    background_tasks.add_task(ingestion_service.run, doc.id)
+    db.commit()
+    db.refresh(doc)
 
     warn = cost_meter.cost_warning_header(db, user_id)
     if warn:

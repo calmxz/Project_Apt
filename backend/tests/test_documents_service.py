@@ -297,3 +297,24 @@ def test_delete_document_tolerates_unlink_oserror(db_session, monkeypatch, tmp_p
 )
 def test_status_from_counts_mirrors_aggregate_status(total, pending, ready, expected):
     assert documents_service.status_from_counts(total, pending, ready) == expected
+
+
+def test_aggregate_status_treats_processing_as_in_flight():
+    assert documents_service.aggregate_status(["processing"]) == "pending"
+    assert documents_service.aggregate_status(["ready", "processing"]) == "pending"
+
+
+@pytest.mark.parametrize(
+    "total,pending,ready,processing,expected",
+    [
+        (1, 0, 0, 1, "pending"),
+        (2, 0, 1, 1, "pending"),
+    ],
+)
+def test_status_from_counts_treats_processing_as_in_flight(
+    total, pending, ready, processing, expected
+):
+    assert (
+        documents_service.status_from_counts(total, pending, ready, processing)
+        == expected
+    )

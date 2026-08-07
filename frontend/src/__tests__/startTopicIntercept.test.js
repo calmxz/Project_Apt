@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
 
 import StartTopicIntercept from '@/components/start/StartTopicIntercept.vue'
 
@@ -16,6 +17,14 @@ const endedMatch = {
   ended_at: '2026-07-01T00:00:00Z',
   gap_count: 3,
   knowledge_level: 'intermediate',
+}
+
+function mountActive(opts = {}) {
+  const { attachTo, ...rest } = opts
+  return mount(StartTopicIntercept, {
+    props: { match: activeMatch, kind: 'active', ...rest.props },
+    ...(attachTo ? { attachTo } : {}),
+  })
 }
 
 describe('StartTopicIntercept', () => {
@@ -47,5 +56,20 @@ describe('StartTopicIntercept', () => {
     const w = mount(StartTopicIntercept, { props: { match: activeMatch, kind: 'active' } })
     await w.get('[data-testid="intercept-cancel"]').trigger('click')
     expect(w.emitted('cancel')).toHaveLength(1)
+  })
+
+  it('is a polite live region', () => {
+    const wrapper = mountActive()
+    const root = wrapper.find('[data-testid="start-intercept"]')
+    expect(root.attributes('role')).toBe('status')
+    expect(root.attributes('aria-live')).toBe('polite')
+  })
+
+  it('focuses the primary action on mount', async () => {
+    const wrapper = mountActive({ attachTo: document.body })
+    await nextTick()
+    await nextTick()
+    expect(document.activeElement?.dataset?.testid).toBe('intercept-open-existing')
+    wrapper.unmount()
   })
 })

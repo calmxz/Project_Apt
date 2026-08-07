@@ -37,7 +37,7 @@
       </div>
 
       <p v-if="mismatch" class="hint" data-testid="reset-mismatch">Passwords do not match.</p>
-      <p v-if="error" class="error" data-testid="reset-error">{{ error }}</p>
+      <p v-if="error" class="error" role="alert" data-testid="reset-error">{{ error }}</p>
       <p v-if="error" class="swap">
         Link expired?
         <RouterLink to="/forgot" data-testid="reset-to-forgot">Request a new one</RouterLink>

@@ -51,7 +51,7 @@
       </div>
 
       <p v-if="mismatch" class="hint" data-testid="register-mismatch">Passwords do not match.</p>
-      <p v-if="error" class="error" data-testid="register-error">{{ error }}</p>
+      <p v-if="error" class="error" role="alert" data-testid="register-error">{{ error }}</p>
 
       <label class="consent">
         <input

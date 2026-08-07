@@ -67,7 +67,11 @@ def _persist_partial_on_abort(ctx, accumulated_text, tool_calls, citations, aske
             check_question_service.attach_message_id(ctx.db, ctx.session_id, msg_id)
         return msg_id
     except Exception:
-        log.exception("failed to persist partial assistant message on abort")
+        log.exception(
+            "failed to persist partial assistant message on abort "
+            "session_id=%s user_id=%s",
+            ctx.session_id, ctx.user_id,
+        )
         return None
 
 
@@ -173,8 +177,9 @@ async def run_streaming(
             cap = cost_meter.check_cap(ctx.db, ctx.user_id)
             if not cap.allowed:
                 log.warning(
-                    "hard cost cap reached mid-turn (stream) for user_id=%s used=%s",
-                    ctx.user_id, cap.used,
+                    "hard cost cap reached mid-turn (stream) "
+                    "session_id=%s user_id=%s used=%s",
+                    ctx.session_id, ctx.user_id, cap.used,
                 )
                 _persist_partial_on_abort(
                     ctx, accumulated_text, tool_calls_record, citations, asked_check
@@ -521,7 +526,9 @@ async def run_streaming(
                 await dispatch_task
             except Exception:
                 log.warning(
-                    "in-flight tool dispatch raised while draining on cancel",
+                    "in-flight tool dispatch raised while draining on cancel "
+                    "session_id=%s user_id=%s",
+                    ctx.session_id, ctx.user_id,
                     exc_info=True,
                 )
 
@@ -549,7 +556,11 @@ async def run_streaming(
             if asked_check:
                 check_question_service.attach_message_id(ctx.db, ctx.session_id, msg_id)
         except Exception:
-            log.exception("failed to persist assistant message on cancel")
+            log.exception(
+                "failed to persist assistant message on cancel "
+                "session_id=%s user_id=%s",
+                ctx.session_id, ctx.user_id,
+            )
 
         yield StreamEvent(
             "cancelled",
@@ -565,11 +576,19 @@ async def run_streaming(
         # F-01: a provider 429/timeout, malformed stream chunk, or tool crash
         # must surface as an error SSE, not a silent stream end that leaves the
         # client stuck in 'streaming'. Persist whatever text already streamed.
-        log.exception("agent loop failed (stream); emitting error event")
+        log.exception(
+            "agent loop failed (stream); emitting error event "
+            "session_id=%s user_id=%s",
+            ctx.session_id, ctx.user_id,
+        )
         try:
             ctx.db.rollback()  # the session may hold a failed transaction
         except Exception as rb_err:
-            log.warning("rollback after agent-loop failure failed: %s", rb_err)
+            log.warning(
+                "rollback after agent-loop failure failed: %s "
+                "session_id=%s user_id=%s",
+                rb_err, ctx.session_id, ctx.user_id,
+            )
         # Deferred F-03 item: re-estimate the WHOLE turn (all snapshots), not
         # just the unbilled tail. Since B-10's loop-top commit before each
         # acompletion, completed iterations' real costs are already published
@@ -601,7 +620,11 @@ async def run_streaming(
             if asked_check:
                 check_question_service.attach_message_id(ctx.db, ctx.session_id, msg_id)
         except Exception:
-            log.exception("failed to persist assistant message after agent-loop failure")
+            log.exception(
+                "failed to persist assistant message after agent-loop failure "
+                "session_id=%s user_id=%s",
+                ctx.session_id, ctx.user_id,
+            )
         yield StreamEvent(
             "error",
             {

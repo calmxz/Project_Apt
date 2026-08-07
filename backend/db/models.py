@@ -133,6 +133,9 @@ class LearningEvent(Base):
 
 class Document(Base):
     __tablename__ = "documents"
+    __table_args__ = (
+        Index("ix_documents_status_id", "status", "id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     session_id: Mapped[str] = mapped_column(
@@ -142,6 +145,9 @@ class Document(Base):
     status: Mapped[str] = mapped_column(String, default="pending")
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    claimed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
     session: Mapped["Session"] = relationship("Session", back_populates="documents")
@@ -149,6 +155,11 @@ class Document(Base):
 
 class ChunkEmbedding(Base):
     __tablename__ = "chunk_embeddings"
+    __table_args__ = (
+        UniqueConstraint(
+            "document_id", "chunk_index", name="uq_chunk_embeddings_doc_idx"
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
     session_id: Mapped[str] = mapped_column(ForeignKey("sessions.id"), nullable=False, index=True)

@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -5,13 +6,19 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _DATA_DIR = _REPO_ROOT / "data"
 
+_ENV_FILE = (
+    None
+    if os.environ.get("CRUX_SKIP_DOTENV") == "1"
+    else str(_REPO_ROOT / ".env")
+)
+
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=str(_REPO_ROOT / ".env"),
+        env_file=_ENV_FILE,
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -38,6 +45,7 @@ class Settings(BaseSettings):
     debug_timing: bool = False
     cors_origins: str = "http://localhost:5173"
     env: str = "dev"
+    log_level: str = "INFO"
     # F-61: allow booting without Supabase auth config (local hacking, CI
     # subsets). Default False: a deploy missing SUPABASE_URL dies at startup
     # instead of 500ing "auth_not_configured" on every authenticated request.
@@ -49,6 +57,8 @@ class Settings(BaseSettings):
     supabase_secret_key: str = ""
     llm_soft_cap_usd: float = 2.00
     llm_hard_cap_usd: float = 3.00
+    max_chunks: int = 5000
+    global_daily_cost_cap_usd: float | None = None
     llm_temperature: float = 0.3
     summary_temperature: float = 0.0
     retrieval_fallback_threshold: float = 0.75

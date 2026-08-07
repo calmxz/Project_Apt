@@ -56,4 +56,14 @@ describe('ForgotPasswordView', () => {
     expect(wrapper.find('[data-testid="forgot-error"]').exists()).toBe(true)
     expect(wrapper.get('[data-testid="forgot-error"]').text()).toContain('rate limit')
   })
+
+  it('announces the error to screen readers', async () => {
+    const auth = useAuthStore()
+    vi.spyOn(auth, 'requestPasswordReset').mockRejectedValue(new Error('rate limit'))
+    const wrapper = mountView()
+    await wrapper.get('[data-testid="forgot-email"]').setValue('me@example.com')
+    await wrapper.get('[data-testid="forgot-form"]').trigger('submit.prevent')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="forgot-error"]').attributes('role')).toBe('alert')
+  })
 })

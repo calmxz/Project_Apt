@@ -264,6 +264,7 @@ function onNewSession() {
       'sidebar--drawer-open': !isDesktop && mode === 'drawer-open',
     }"
     :data-mode="mode"
+    :inert="(!isDesktop && mode !== 'drawer-open') || null"
     aria-label="App navigation"
   >
     <div class="sb-header">

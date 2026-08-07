@@ -744,7 +744,7 @@ async function onAttachFile(file) {
 }
 
 async function pollUploadStatus(documentId, filename, gen) {
-  for (let i = 0; i < 30; i += 1) {
+  for (let i = 0; i < 90; i += 1) {
     let s
     try {
       s = await getUploadStatus(documentId)

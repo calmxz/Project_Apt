@@ -11,11 +11,13 @@ module.
 
 from dataclasses import dataclass
 from typing import Sequence
+from uuid import uuid4
 
 from sqlalchemy import delete as _delete, select
 from sqlalchemy.orm import Session
 
 from db.models import ChunkEmbedding, Document
+from services.sql_dialect import dialect_insert
 
 
 @dataclass(frozen=True)
@@ -36,21 +38,35 @@ def insert_chunks(
     """Bulk insert chunk embeddings. `rows` is `(chunk_index, page, text, embedding)`.
     Returns the number of rows inserted. Does NOT commit — the caller owns the
     transaction (F-27: ingestion commits chunks, keyword index, and status
-    together, atomically)."""
-    objs = [
-        ChunkEmbedding(
-            session_id=session_id,
-            document_id=document_id,
-            chunk_index=chunk_index,
-            page=page,
-            chunk_text=text,
-            embedding=embedding,
-        )
+    together, atomically).
+
+    Idempotent: `(document_id, chunk_index)` is unique (migration 0023), and
+    conflicting rows are skipped via ON CONFLICT DO NOTHING rather than
+    raising — a retried ingestion attempt (e.g. after a crash between the
+    chunk insert and the status commit) must not fail on rows it already
+    wrote."""
+    if not rows:
+        return 0
+    values = [
+        {
+            "id": str(uuid4()),
+            "session_id": session_id,
+            "document_id": document_id,
+            "chunk_index": chunk_index,
+            "page": page,
+            "chunk_text": text,
+            "embedding": embedding,
+        }
         for (chunk_index, page, text, embedding) in rows
     ]
-    db.add_all(objs)
+    ins = dialect_insert(db)(ChunkEmbedding).values(values)
+    stmt = ins.on_conflict_do_nothing(
+        index_elements=["document_id", "chunk_index"]
+    ).returning(ChunkEmbedding.id)
+    result = db.execute(stmt)
+    inserted = len(result.fetchall())
     db.flush()
-    return len(objs)
+    return inserted
 
 
 def delete_document_chunks(db: Session, document_id: int) -> int:
