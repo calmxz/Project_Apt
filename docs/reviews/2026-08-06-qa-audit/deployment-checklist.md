@@ -17,12 +17,40 @@ launch purposes an unknown is a failure.
 
 ## Recommendation
 
-# NOT READY
+# READY-for-closed-beta
 
-This is not a close call, and it is not a judgement on the quality of the code — which is
-in several respects better than typical for a project at this stage. It is a judgement on
-five specific Criticals that all live in one subsystem, one missing operational
-discipline, and a backup that has never been proven.
+**Updated 2026-08-07** after the launch-gating remediation sprint (PRs #215–#219, all
+merged to `dev`) and the human-gate session of the same date. The original NOT READY
+rationale is preserved below for the record; every item it names is now closed:
+
+- **B-01 / F-03 / B-04** (cost cap, OOM, global ceiling) — PR #216.
+- **F-02 / F-04 / B-02** (in-process ingestion) — PR #218 worker with DB queue + resume.
+- **G-05 / G-06** (no production logging) — PR #217.
+- **D-01..D-04 + C-02** (screen-reader blockers, nginx body cap) — PR #219.
+- **Q-01 / Q-02 / Q-05** (test/CI foundations) — PR #215.
+- **W-02** (unproven backup) — restore drill run 2026-08-07, PASS, mechanical RTO 2m29s
+  (`docs/deploy/RESTORE.md`).
+- **W-14** (anonymous sign-in) — verified disabled over the wire.
+
+Scope note: this verdict is for a **closed beta of tens of users**, the narrower launch
+the original audit itself called defensible. The 1M-user premise is formally out of scope
+for v1 (see F-5).
+
+**Conditions attached to this verdict** — deploy-time gates that cannot be closed until
+the RUNBOOK deploy actually runs (no provider services exist as of 2026-08-07): W-15
+(`SUPABASE_JWKS_URL_OVERRIDE` absent), `GLOBAL_DAILY_COST_CAP_USD` set on both services,
+live alembic upgrade to head, `nginx -t` + real-PDF upload smoke, worker kill/resume
+smoke, deployed-log observation of a chat turn and an ingestion run (W-01, W-03..W-05).
+The W-13 owed paid smokes remain open and are accepted as closed-beta risk.
+
+---
+
+### Original recommendation (2026-08-06, superseded)
+
+NOT READY — this is not a close call, and it is not a judgement on the quality of the
+code — which is in several respects better than typical for a project at this stage. It
+is a judgement on five specific Criticals that all live in one subsystem, one missing
+operational discipline, and a backup that has never been proven.
 
 **The three things that make this a hard NOT READY:**
 
@@ -95,16 +123,16 @@ rather than throughput.
 
 | # | Check | Evidence | Blocking? |
 |---|---|---|---|
-| F-1 | **Cost cap bounds spend** | **B-01** — upload/ingestion never call `check_cap`. ~34x the configured cap per user per day (ratio measured; underlying rates are a placeholder table). | **Yes** |
-| F-2 | **A single user cannot degrade service for others** | **B-02**, **F-02**, **F-03** — one 25 MB `.txt` (or ~3 concurrent PDFs) OOMs the instance, 10 uploads exhaust the DB pool, 40 starve the threadpool and trigger a restart that kills all live streams. | **Yes** |
-| F-3 | **Production failures are diagnosable** | **G-05** — no logging config exists; `log.info` is discarded and surviving lines have no timestamp, logger, or level. **G-06** — agent-loop failures carry no session or user id. | **Yes** |
-| F-4 | **Backups are restorable** | **W-02 / G-09** — `RESTORE.md:23` states "Not yet run" by the document's own admission. RPO 24h, RTO unknown. | **Yes** |
-| F-5 | **Service capacity meets the stated premise** | **F-01** — 10 concurrent connection-holding requests, one worker, one instance. Short of 1M users by 3-4 orders of magnitude. | **Yes** at stated scale |
-| F-6 | **Backend test suite green on a developer machine** | **Q-01** — `pytest` from `backend/` → 3 failed. Green in CI only because the runner has no `.env`. Live credentials load into every test run. | No, but fix first |
-| F-7 | **Core workflows complete for screen-reader users** | **D-01, D-02, D-03, D-04** — a blind user cannot get past login unaided, and gets silence after answering a check question. | **Yes** |
-| F-8 | **Upload works on the compose deploy** | **C-02** — nginx caps bodies at the 1 MB default; every realistic PDF 413s with an HTML page the frontend cannot parse. | Yes for that path |
+| F-1 | **Cost cap bounds spend** | **CLOSED 2026-08-07** — PR #216: ingestion cap gate (B-01), chunk caps (F-03), global daily ceiling (B-04). | ~~Yes~~ Closed |
+| F-2 | **A single user cannot degrade service for others** | **CLOSED 2026-08-07** — PR #216 (chunk caps close the OOM, F-03) + PR #218 (ingestion moved to a worker with DB queue, streaming batches, idempotent resume — B-02/F-02/F-04). Live worker kill/resume smoke owed at deploy. | ~~Yes~~ Closed |
+| F-3 | **Production failures are diagnosable** | **CLOSED 2026-08-07** — PR #217: `dictConfig` logging + request ids (G-05/G-06). Deployed-log observation owed at deploy. | ~~Yes~~ Closed |
+| F-4 | **Backups are restorable** | **CLOSED 2026-08-07** — restore drill run and PASSED (see W-02). RPO 24h, mechanical RTO proven at 2m29s. | ~~Yes~~ Closed |
+| F-5 | **Service capacity meets the stated premise** | **DOWNGRADED 2026-08-07** — launch scope is a closed beta of tens of users, at which the capacity ceilings drop to Medium (per this document's own Recommendation). PR #218 additionally removed the worst offender (connection-holding in-process ingestion). 1M-user premise formally abandoned for v1. | ~~Yes~~ Out of scope |
+| F-6 | **Backend test suite green on a developer machine** | **CLOSED 2026-08-07** — PR #215: hermetic tests (Q-01), real lint gate (Q-02), CI on dev pushes (Q-05). | Closed |
+| F-7 | **Core workflows complete for screen-reader users** | **CLOSED 2026-08-07** — PR #219: D-01..D-04 fixed. Manual screen-reader pass still advisable post-deploy. | ~~Yes~~ Closed |
+| F-8 | **Upload works on the compose deploy** | **CLOSED 2026-08-07** — PR #219: nginx `client_max_body_size` raised (C-02). Live `nginx -t` + upload smoke owed at deploy. | ~~Yes~~ Closed |
 | F-9 | **User input is never silently destroyed** | **E-05, E-11, E-14** — three paths clear the composer on non-success. | No, but high-complaint |
-| F-10 | **CI gates are enforced** | **W-07** — branch protection never enabled, so every check is advisory. **Q-05** — no CI on direct pushes to `dev`. **Q-02** — the lint gate auto-fixes and cannot fail. **Q-04** — the coverage floor ignores `routes/`, `agent/`, `db/`. | No, but compounding |
+| F-10 | **CI gates are enforced** | **PARTIALLY CLOSED 2026-08-07** — Q-05 (CI on dev pushes) and Q-02 (real lint gate) fixed in PR #215. W-07 (branch protection) deliberately deferred by owner — solo-dev friction call; script at `docs/deploy/enable-branch-protection.sh`. Q-04 (coverage floor scope) open. | No, but compounding |
 
 ---
 
@@ -117,20 +145,20 @@ findings; all are **open**. A launch decision that ignores them is uninformed.
 | # | Owed gate | Origin | Status |
 |---|---|---|---|
 | W-01 | **Production deploy is PAUSED at the Render step** | Phase 8 / review 2026-07-18 | Open. Step 0 banked (R2 backup armed, DB at 0021+). Everything below depends on this. |
-| W-02 | **R2 restore drill never performed** | WS-D / PR #102, #150 | **Open — highest-risk gate.** Backup cron has 6 consecutive green scheduled runs; the restore half is unproven. See G-09. |
+| W-02 | **R2 restore drill never performed** | WS-D / PR #102, #150 | **CLOSED — PASS 2026-08-07.** Newest dump restored into a scratch pgvector/pg17 container; all app-table row counts verified, alembic head `0022`, live vector query, `auth.users` intact. Mechanical RTO 2m29s. 268 ignored errors, all Supabase-infra, zero on `public.*`. Full log + findings in `docs/deploy/RESTORE.md`. C-15/C-16/C-18 did not fire. |
 | W-03 | **Live CSP header verification** | Slice 7 / WS-C | Blocked on W-01. The `CRUX_API_HOST` placeholder is substituted at deploy time; an unverified substitution is an unverified CSP. |
 | W-04 | **Cross-origin `X-Cost-Warning` expose-headers over the wire** | Slice 7 | Blocked on W-01. |
 | W-05 | **Live TTFT and pool-ceiling observation** | Slice 7 | Blocked on W-01. The report carries a *computed* ceiling (10) — this gate would confirm it. |
 | W-06 | **Clean-clone `docker compose` smoke** | Batch 1 / PR #116 | Open — and **C-02 is exactly what it would have caught**. |
-| W-07 | **Branch protection + code scanning toggle** | Phase 6 | Open, owner dashboard action. Until enabled, all CI gates are advisory. |
+| W-07 | **Branch protection + code scanning toggle** | Phase 6 | **DEFERRED — owner decision 2026-08-07.** Solo-dev closed beta; friction outweighs benefit for now. Not launch-blocking (F-10 is "No, but compounding"). Ready-to-run script preserved; revisit when a second contributor or public traffic arrives. |
 | W-08 | **HNSW recall re-`EXPLAIN` at realistic volume** | Slice 7 | Open. `chunk_embeddings` had 8 rows at last check so the planner correctly ignores the index. See F-10 for what this will look like at scale. |
 | W-09 | **Local docker images are stale** | Ledger 2026-07-25 | Open. Backend image built 2026-07-18, verified stale by content. Any "smoke tested in docker" claim older than a rebuild is void. |
 | W-10 | **Phase 5 screencast** | Phase 5 | Open. Non-blocking for correctness. |
 | W-11 | **Narrow-viewport rail check** | PR #210 | **Still open, but de-risked.** Code-read at `SettingsView.vue:187-203` says it scrolls correctly. That is a CSS-spec inference; this gate was owed as a *visual* check and no browser was run, so it is not closed. Expected to pass. |
 | W-12 | **Post-merge visual pass for glance stats** | PR #212 | Open. |
 | W-13 | **Assorted owed paid smokes** | PRs #103, #104, #108, #110, #111, #114, #179 | Open. This audit deliberately ran none, to respect the cost cap. |
-| W-14 | **Confirm Supabase anonymous sign-in is DISABLED** | **New — Audit A** | Not verifiable from the repo. If enabled, an anonymous JWT carries `aud: "authenticated"` and a valid `sub`, passes `auth.py:86-94`, and reaches **every** authenticated route with a full daily LLM quota. Cheap to check, expensive to miss. |
-| W-15 | **Confirm `SUPABASE_JWKS_URL_OVERRIDE` is absent from prod env** | **New — Audit A** | `config.py:48,71-76`. Setting it redirects the entire trust root. Must be **absent**, not merely empty. |
+| W-14 | **Confirm Supabase anonymous sign-in is DISABLED** | **New — Audit A** | **CLOSED — PASS 2026-08-07.** Verified empirically over the wire, not by dashboard read: `POST /auth/v1/signup` with empty body and the publishable key returned `422 {"error_code":"anonymous_provider_disabled","msg":"Anonymous sign-ins are disabled"}`. |
+| W-15 | **Confirm `SUPABASE_JWKS_URL_OVERRIDE` is absent from prod env** | **New — Audit A** | **RECLASSIFIED 2026-08-07 → deploy-time gate.** No Render services exist yet (deploy still paused at W-01), so there is no prod env to inspect. Must be verified — absent, not merely empty — during the RUNBOOK deploy, alongside setting `GLOBAL_DAILY_COST_CAP_USD` on both services. `config.py:48,71-76`. |
 
 ---
 
