@@ -189,7 +189,7 @@ import SessionHeader from '../components/chat/SessionHeader.vue'
 import SessionEndedBanner from '../components/SessionEndedBanner.vue'
 import ReferenceStatusBanner from '../components/chat/ReferenceStatusBanner.vue'
 import UploadStatus from '../components/chat/UploadStatus.vue'
-import { friendlyError } from '../lib/errors.js'
+import { friendlyError, StreamAbortedError } from '../lib/errors.js'
 import { useSessionStore } from '../stores/session.js'
 import { useToast } from '../composables/useToast.js'
 import { costBus } from '../services/costBus.js'
@@ -534,7 +534,10 @@ async function loadCurrent(id) {
   }
 }
 
-onMounted(() => loadCurrent(props.id))
+onMounted(() => {
+  loadCurrent(props.id)
+  restoreStashedDraft(props.id)
+})
 
 // Sidebar session->session clicks reuse this route component (same /session/:id
 // route), so onMounted does not re-fire. Re-load when the id prop changes;
@@ -549,6 +552,7 @@ watch(
     uploading.value = false
     uploadStatus.value = null
     loadCurrent(id)
+    restoreStashedDraft(id)
   },
 )
 
@@ -599,17 +603,54 @@ async function send() {
     await store.sendMessageStreaming({ text })
     lastSentText.value = ''
   } catch (e) {
-    draft.value = text
-    lastError.value = e
+    if (e instanceof StreamAbortedError) {
+      // The store already surfaced the state (ended banner / login redirect),
+      // so a generic error chip on top of it would be noise. Just give the
+      // text back so nothing the user typed is lost.
+      if (e.reason === 'auth_expired') {
+        // E-05: this component is about to unmount via the login redirect, so
+        // in-memory draft restore is not enough - park it where the post-login
+        // remount can find it.
+        try {
+          sessionStorage.setItem(`crux:draft:${props.id}`, text)
+        } catch {
+          // storage unavailable (private mode/quota) - the in-memory restore
+          // below is still the best we can do
+        }
+      }
+      draft.value = text
+    } else {
+      draft.value = text
+      lastError.value = e
+    }
   } finally {
     sending.value = false
   }
 }
 
 async function retryLastMessage() {
-  if (!lastSentText.value) return
-  draft.value = lastSentText.value
+  // E-14: the composer wins. After a failed send the draft is restored, and the
+  // user may have edited it before hitting Retry - resending lastSentText would
+  // silently discard that edit. lastSentText is only the fallback for the case
+  // where the composer was cleared.
+  if (!draft.value.trim() && lastSentText.value) draft.value = lastSentText.value
+  if (!draft.value.trim()) return
   await send()
+}
+
+// E-05: a draft stashed by send() just before the auth redirect survives the
+// login round-trip in sessionStorage; restore it exactly once.
+function restoreStashedDraft(id) {
+  const key = `crux:draft:${id}`
+  try {
+    const stashed = sessionStorage.getItem(key)
+    if (stashed !== null) {
+      draft.value = stashed
+      sessionStorage.removeItem(key)
+    }
+  } catch {
+    // storage unavailable (private mode/quota) - nothing to restore
+  }
 }
 
 async function onDiagQuiz() {

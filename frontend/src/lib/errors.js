@@ -20,3 +20,14 @@ export function friendlyError(err) {
   if (err instanceof Error) return err.message
   return String(err)
 }
+
+// Thrown by the session store when a send-stream is aborted for a reason the
+// view must react to (restore the draft) rather than silently swallow.
+export class StreamAbortedError extends Error {
+  constructor(reason, cause) {
+    super(`stream aborted: ${reason}`)
+    this.name = 'StreamAbortedError'
+    this.reason = reason
+    this.cause = cause
+  }
+}
