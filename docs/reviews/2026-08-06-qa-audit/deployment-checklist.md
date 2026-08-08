@@ -131,8 +131,8 @@ rather than throughput.
 | F-6 | **Backend test suite green on a developer machine** | **CLOSED 2026-08-07** — PR #215: hermetic tests (Q-01), real lint gate (Q-02), CI on dev pushes (Q-05). | Closed |
 | F-7 | **Core workflows complete for screen-reader users** | **CLOSED 2026-08-07** — PR #219: D-01..D-04 fixed. Manual screen-reader pass still advisable post-deploy. | ~~Yes~~ Closed |
 | F-8 | **Upload works on the compose deploy** | **CLOSED 2026-08-07** — PR #219: nginx `client_max_body_size` raised (C-02). Live `nginx -t` + upload smoke owed at deploy. | ~~Yes~~ Closed |
-| F-9 | **User input is never silently destroyed** | **E-05, E-11, E-14** — three paths clear the composer on non-success. | No, but high-complaint |
-| F-10 | **CI gates are enforced** | **PARTIALLY CLOSED 2026-08-07** — Q-05 (CI on dev pushes) and Q-02 (real lint gate) fixed in PR #215. W-07 (branch protection) deliberately deferred by owner — solo-dev friction call; script at `docs/deploy/enable-branch-protection.sh`. Q-04 (coverage floor scope) open. | No, but compounding |
+| F-9 | **User input is never silently destroyed** | **CLOSED 2026-08-08** — PR #220: typed `StreamAbortedError` rethrown from the send-stream error arms; SessionView restores the draft (E-11), stashes it to `sessionStorage` across the auth redirect (E-05), and retry sends the edited composer text (E-14). E-05 end-to-end auth round-trip smoke (real token expiry through login and back) still owed — tests cover the two halves separately. | ~~No~~ Closed |
+| F-10 | **CI gates are enforced** | **PARTIALLY CLOSED 2026-08-07** — Q-05 (CI on dev pushes) and Q-02 (real lint gate) fixed in PR #215. W-07 (branch protection) deliberately deferred by owner — solo-dev friction call; script at `docs/deploy/enable-branch-protection.sh`. Q-04 closed 2026-08-08 (PR #220): coverage gate widened to `routes`/`agent`/`db`, measured TOTAL 95% against the intact 75 floor. Follow-up recommended: ratchet floor toward 90. | No, but compounding (W-07 only) |
 
 ---
 
@@ -149,13 +149,13 @@ findings; all are **open**. A launch decision that ignores them is uninformed.
 | W-03 | **Live CSP header verification** | Slice 7 / WS-C | Blocked on W-01. The `CRUX_API_HOST` placeholder is substituted at deploy time; an unverified substitution is an unverified CSP. |
 | W-04 | **Cross-origin `X-Cost-Warning` expose-headers over the wire** | Slice 7 | Blocked on W-01. |
 | W-05 | **Live TTFT and pool-ceiling observation** | Slice 7 | Blocked on W-01. The report carries a *computed* ceiling (10) — this gate would confirm it. |
-| W-06 | **Clean-clone `docker compose` smoke** | Batch 1 / PR #116 | Open — and **C-02 is exactly what it would have caught**. |
+| W-06 | **Clean-clone `docker compose` smoke** | Batch 1 / PR #116 | **CLOSED — PASS 2026-08-08.** Fresh `git clone` → `dev` @ 09af5da, user-placed root `.env`, `docker compose up --build -d`: backend healthy + `/health` 200, frontend 200, worker up. Real-PDF upload exercised through the browser (602B PDF via composer attach): nginx proxy → backend → worker ingestion → "1 reference ready" — the C-02-class path works from a clean checkout. Test doc deleted via UI afterward; clone torn down. |
 | W-07 | **Branch protection + code scanning toggle** | Phase 6 | **DEFERRED — owner decision 2026-08-07.** Solo-dev closed beta; friction outweighs benefit for now. Not launch-blocking (F-10 is "No, but compounding"). Ready-to-run script preserved; revisit when a second contributor or public traffic arrives. |
 | W-08 | **HNSW recall re-`EXPLAIN` at realistic volume** | Slice 7 | Open. `chunk_embeddings` had 8 rows at last check so the planner correctly ignores the index. See F-10 for what this will look like at scale. |
-| W-09 | **Local docker images are stale** | Ledger 2026-07-25 | Open. Backend image built 2026-07-18, verified stale by content. Any "smoke tested in docker" claim older than a rebuild is void. |
+| W-09 | **Local docker images are stale** | Ledger 2026-07-25 | **CLOSED — PASS 2026-08-08.** `docker compose build --no-cache` on `dev` @ 09af5da (post-#220): frontend, backend, worker images rebuilt; `docker compose up -d` → backend `/health` 200 + container healthcheck healthy, frontend 200 on :5173, worker up. |
 | W-10 | **Phase 5 screencast** | Phase 5 | Open. Non-blocking for correctness. |
-| W-11 | **Narrow-viewport rail check** | PR #210 | **Still open, but de-risked.** Code-read at `SettingsView.vue:187-203` says it scrolls correctly. That is a CSS-spec inference; this gate was owed as a *visual* check and no browser was run, so it is not closed. Expected to pass. |
-| W-12 | **Post-merge visual pass for glance stats** | PR #212 | Open. |
+| W-11 | **Narrow-viewport rail check** | PR #210 | **CLOSED — PASS 2026-08-08.** Verified in a real Chrome window at a true 500px viewport (script-opened popup on the rebuilt local stack; the main window refused programmatic resize, so evidence is programmatic DOM assertions at 500px rather than a screenshot): `documentElement.scrollWidth` 485 ≤ 500 (no horizontal overflow), settings `.layout` grid collapsed to a single 445px column, `.rail` has `overflow-y: auto`, sidebar switched to `sidebar--drawer` (breakpoint fired), zero elements clipping with `overflow-x: visible`. |
+| W-12 | **Post-merge visual pass for glance stats** | PR #212 | **CLOSED — PASS 2026-08-08.** Settings Profile + Usage glance areas checked in the browser on the rebuilt stack, light and dark: stat tiles (33 sessions = 32 active + 1 ended, 10 mastered, 12 gaps, 63 events), knowledge-level distribution line, needs-attention links, mastered/gap chips, usage line (`Today $0.00 · Last 7 days $0.03`), cap bar and top-3 session costs all render sanely in both themes. Evidence: `evidence/w12-settings-{profile,usage}-glance-{dark,light}.jpg`. |
 | W-13 | **Assorted owed paid smokes** | PRs #103, #104, #108, #110, #111, #114, #179 | Open. This audit deliberately ran none, to respect the cost cap. |
 | W-14 | **Confirm Supabase anonymous sign-in is DISABLED** | **New — Audit A** | **CLOSED — PASS 2026-08-07.** Verified empirically over the wire, not by dashboard read: `POST /auth/v1/signup` with empty body and the publishable key returned `422 {"error_code":"anonymous_provider_disabled","msg":"Anonymous sign-ins are disabled"}`. |
 | W-15 | **Confirm `SUPABASE_JWKS_URL_OVERRIDE` is absent from prod env** | **New — Audit A** | **RECLASSIFIED 2026-08-07 → deploy-time gate.** No Render services exist yet (deploy still paused at W-01), so there is no prod env to inspect. Must be verified — absent, not merely empty — during the RUNBOOK deploy, alongside setting `GLOBAL_DAILY_COST_CAP_USD` on both services. `config.py:48,71-76`. |
@@ -181,7 +181,11 @@ Risks that persist even after the blockers above are fixed.
 4. **Migration locking as the dataset grows.** C-12 shows three applied migrations that
    take blocking locks with no `lock_timeout`. They ran clean only because the tables are
    small. The next index migration on a populated table is a self-inflicted outage unless
-   the `CONCURRENTLY` pattern is adopted first.
+   the `CONCURRENTLY` pattern is adopted first. *2026-08-08: the required patterns
+   (CONCURRENTLY via `autocommit_block`, `NOT VALID` then `VALIDATE`, `lock_timeout = '5s'`
+   on hot tables) are now codified in the local migration-reviewer checklist item 4 and the
+   project-conventions skill — local-only files (`.claude/` is gitignored), so no repo diff;
+   the reviewer agent enforces them on every future migration.*
 5. **No account-deletion path, against a published privacy policy.** The schema cannot
    support one today — every session-scoped FK is `NO ACTION`. This is a design decision
    deferred, not a bug, but the deadline for making it is set externally.
