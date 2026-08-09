@@ -21,11 +21,11 @@ RUN adduser --system --no-create-home --group --uid 1000 app \
     && chmod +x /app/entrypoint.sh \
     && chown -R app:app /app
 
-USER app
+USER 1000
 
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD curl -fsS "http://127.0.0.1:${PORT:-8000}/health" || exit 1
+    CMD ["/bin/sh", "-c", "curl -fsS \"http://127.0.0.1:${PORT:-8000}/health\" || exit 1"]
 
 CMD ["/app/entrypoint.sh"]
