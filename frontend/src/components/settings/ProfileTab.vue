@@ -1,15 +1,9 @@
 <template>
-  <section class="agg" data-testid="agg-profile">
-    <header class="head">
-      <div class="head-text">
-        <span class="folio">across all sessions</span>
-        <h1 class="title">Your Learning Profile</h1>
-        <p v-if="data?.last_active_at" class="lede">
-          Last active {{ formatRelative(data.last_active_at) }}.
-        </p>
-        <p v-else class="lede">Snapshot of everything the tutor has learned about you.</p>
-      </div>
-    </header>
+  <div class="profile-tab" data-testid="agg-profile">
+    <p v-if="data?.last_active_at" class="lede">
+      Last active {{ formatRelative(data.last_active_at) }}.
+    </p>
+    <p v-else class="lede">Snapshot of everything the tutor has learned about you.</p>
 
     <div v-if="loading" class="skel" data-testid="agg-loading" aria-hidden="true">
       <span class="skel-block skel-row-tall" />
@@ -68,32 +62,24 @@
 
         <div class="dist" data-testid="agg-dist">
           <h2 class="section-title">Knowledge level distribution</h2>
-          <div class="dist-bar" role="img" :aria-label="distAriaLabel">
-            <span
-              v-for="key in levelKeys"
-              :key="key"
-              :class="['dist-seg', `seg-${key}`]"
-              :style="{ flexGrow: data.knowledge_level_distribution[key] || 0 }"
-              :title="`${key}: ${data.knowledge_level_distribution[key]}`"
-              aria-hidden="true"
-            />
-          </div>
-          <ul class="dist-legend">
-            <li v-for="key in levelKeys" :key="key">
-              <span :class="['dot', `seg-${key}`]" />
-              <span class="dist-key">{{ key }}</span>
-              <span class="dist-count">{{ data.knowledge_level_distribution[key] }}</span>
-            </li>
-          </ul>
+          <p v-if="distLine" class="glance-line">{{ distLine }}</p>
         </div>
 
-        <div class="two-col" data-testid="agg-insights">
-          <div class="col">
-            <WeakestConcepts :concept-accuracy="data.concept_accuracy" />
-          </div>
-          <div class="col">
-            <MasteryTrend :weekly-mastery="data.weekly_mastery" />
-          </div>
+        <div class="glance" data-testid="agg-insights">
+          <h2 class="sr-only">At a glance</h2>
+          <p class="glance-line" data-testid="glance-mastery">{{ masteryLine }}</p>
+          <p v-if="attentionItems.length" class="glance-line" data-testid="glance-attention">
+            <span>Needs attention: </span>
+            <template v-for="(c, i) in attentionItems" :key="c.concept">
+              <span v-if="i > 0">, </span>
+              <router-link
+                :to="{ name: 'session-profile', params: { id: c.first_seen_session_id } }"
+                class="glance-link"
+                >{{ c.concept }}</router-link
+              >
+              <span> ({{ c.pct }}%)</span>
+            </template>
+          </p>
         </div>
 
         <div class="two-col">
@@ -161,102 +147,126 @@
             </li>
           </ul>
         </div>
-
-        <UsagePanel v-if="usage" :usage="usage" />
-        <p v-else-if="usageError" class="muted" data-testid="usage-error">
-          Usage data is unavailable right now.
-        </p>
       </template>
     </template>
-  </section>
+
+    <section class="card" data-testid="profile-feedback">
+      <h2 class="card-title">
+        <i class="pi pi-comments card-icon" aria-hidden="true" />
+        Feedback style
+      </h2>
+      <FeedbackStylePicker v-model="feedback" :options="feedbackOptions" />
+      <div class="actions">
+        <button
+          type="button"
+          class="save-btn"
+          data-testid="profile-feedback-save"
+          :disabled="!feedbackDirty || savingFeedback"
+          @click="saveFeedback"
+        >
+          <i class="pi pi-check" aria-hidden="true" />
+          <span>Save feedback style</span>
+        </button>
+      </div>
+    </section>
+  </div>
 </template>
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 
-import EmptyState from '../components/EmptyState.vue'
-import MasteryTrend from '../components/profile/MasteryTrend.vue'
-import UsagePanel from '../components/profile/UsagePanel.vue'
-import WeakestConcepts from '../components/profile/WeakestConcepts.vue'
-import { friendlyError } from '../lib/errors.js'
-import { getAggregateProfile, getUsageSummary } from '../services/profileApi.js'
-import { formatRelative } from '../utils/formatDate.js'
+import EmptyState from '../EmptyState.vue'
+import FeedbackStylePicker from '../FeedbackStylePicker.vue'
+import { friendlyError } from '../../lib/errors.js'
+import { getAggregateProfile } from '../../services/profileApi.js'
+import { formatRelative } from '../../utils/formatDate.js'
+import { useUserStore } from '../../stores/user.js'
+import { useToast } from '../../composables/useToast.js'
+
+const user = useUserStore()
+const { showSuccess, showError } = useToast()
 
 const data = ref(null)
 const loading = ref(false)
 const error = ref('')
-const usage = ref(null)
-const usageError = ref(false)
 
 const levelKeys = ['beginner', 'intermediate', 'advanced', 'unknown']
 
-const distAriaLabel = computed(() => {
+const distLine = computed(() => {
   const d = data.value?.knowledge_level_distribution || {}
-  const parts = levelKeys.map((k) => `${d[k] || 0} ${k}`)
-  return `Knowledge level distribution: ${parts.join(', ')}`
+  return levelKeys
+    .filter((k) => (d[k] || 0) > 0)
+    .map((k) => `${d[k]} ${k}`)
+    .join(' · ')
 })
+
+const masteryLine = computed(() => {
+  const total = data.value?.combined_mastered_concepts.length || 0
+  if (total === 0) return 'Nothing mastered yet'
+  const weeks = data.value?.weekly_mastery || []
+  // weekly_mastery counts first-correct events, which survive later demotions
+  // out of mastered_concepts — clamp so "this week" never exceeds the total
+  const thisWeek = Math.min(weeks.length ? weeks[weeks.length - 1].count : 0, total)
+  return `${thisWeek} mastered this week · ${total} total`
+})
+
+const attentionItems = computed(() =>
+  (data.value?.concept_accuracy || [])
+    .filter((c) => c.total_count >= 2)
+    .sort((a, b) => a.accuracy - b.accuracy || a.concept.localeCompare(b.concept))
+    .slice(0, 3)
+    .map((c) => ({
+      concept: c.concept,
+      pct: Math.round(c.accuracy * 100),
+      first_seen_session_id: c.first_seen_session_id,
+    })),
+)
 
 async function load() {
   loading.value = true
   error.value = ''
-  usageError.value = false
-  const [agg, use] = await Promise.allSettled([getAggregateProfile(), getUsageSummary()])
-  if (agg.status === 'fulfilled') {
-    data.value = agg.value
-  } else {
-    error.value = friendlyError(agg.reason)
-  }
-  if (use.status === 'fulfilled') {
-    usage.value = use.value
-  } else {
-    usageError.value = true
+  try {
+    data.value = await getAggregateProfile()
+  } catch (e) {
+    error.value = friendlyError(e)
   }
   loading.value = false
 }
 
 onMounted(load)
+
+const feedbackOptions = [
+  { value: 'hints', label: 'Hints', sub: 'Nudge me toward the answer.' },
+  { value: 'direct_answers', label: 'Direct answers', sub: 'Explain outright when I ask.' },
+]
+
+const feedback = ref(user.interactionPreferences?.feedback || 'hints')
+const savingFeedback = ref(false)
+const feedbackDirty = computed(
+  () => feedback.value !== (user.interactionPreferences?.feedback || 'hints'),
+)
+
+async function saveFeedback() {
+  if (!feedbackDirty.value || savingFeedback.value) return
+  savingFeedback.value = true
+  try {
+    await user.updateProfile({ name: user.name || '', feedback: feedback.value })
+    showSuccess('Preferences saved.')
+  } catch (e) {
+    showError(friendlyError(e))
+  } finally {
+    savingFeedback.value = false
+  }
+}
 </script>
 
 <style scoped>
-.agg {
+.profile-tab {
   max-width: 72rem;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: 1.75rem;
-}
-
-.head {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 2rem;
-  flex-wrap: wrap;
-}
-
-.head-text {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.folio {
-  font-family: var(--font-sans);
-  font-size: var(--fs-label);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  font-weight: 600;
-  color: var(--color-accent-text);
-}
-
-.title {
-  font-family: var(--font-display);
-  font-size: clamp(2.25rem, 4vw, 2.75rem);
-  font-weight: 700;
-  letter-spacing: var(--tracking-display);
-  line-height: 1.05;
-  color: var(--color-heading);
-  margin: 0;
 }
 
 .lede {
@@ -411,68 +421,30 @@ onMounted(load)
   gap: 0.75rem;
 }
 
-.dist-bar {
+.glance {
   display: flex;
-  height: 0.75rem;
-  border-radius: var(--radius-pill);
-  overflow: hidden;
-  background: var(--color-surface-soft);
-  border: 1px solid var(--color-border);
-  gap: 2px;
-  padding: 2px;
+  flex-direction: column;
+  gap: 0.375rem;
 }
 
-.dist-seg {
-  display: block;
-  min-width: 0;
-  border-radius: var(--radius-pill);
-}
-
-.seg-beginner {
-  background: var(--accent-coral-200);
-}
-.seg-intermediate {
-  background: var(--accent-coral-400);
-}
-.seg-advanced {
-  background: var(--accent-coral-600);
-}
-.seg-unknown {
-  background: var(--color-border-strong);
-}
-
-.dist-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem 1rem;
-  padding: 0;
+.glance-line {
   margin: 0;
-  list-style: none;
   font-family: var(--font-sans);
-  font-size: 0.8125rem;
+  font-size: 0.9375rem;
   color: var(--color-text-muted);
 }
 
-.dist-legend li {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
+.glance-link {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: var(--color-border-strong);
+  transition: color var(--motion-fast) ease;
 }
 
-.dist-key {
-  text-transform: capitalize;
-}
-
-.dist-count {
-  color: var(--color-text-faint);
-  font-family: var(--font-mono);
-}
-
-.dot {
-  display: inline-block;
-  width: 0.625rem;
-  height: 0.625rem;
-  border-radius: 999px;
+.glance-link:hover {
+  color: var(--color-accent-text);
+  text-decoration-color: currentColor;
 }
 
 /* Section + columns */
@@ -676,5 +648,73 @@ onMounted(load)
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* Feedback card */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.5rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-paper);
+}
+
+.card-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: var(--tracking-tight);
+  color: var(--color-heading);
+  margin: 0;
+}
+
+.card-icon {
+  font-size: 1rem;
+  color: var(--color-accent-text);
+}
+
+.actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.875rem;
+  flex-wrap: wrap;
+}
+
+.save-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent-strong);
+  color: #ffffff;
+  border: 0;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.9375rem;
+  cursor: pointer;
+  transition:
+    filter var(--motion-fast) ease,
+    opacity var(--motion-fast) ease;
+}
+
+.save-btn:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.save-btn:active:not(:disabled) {
+  filter: brightness(0.95);
+}
+
+.save-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
 }
 </style>

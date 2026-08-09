@@ -86,9 +86,18 @@ describe('LoginView', () => {
     await wrapper.get('[data-testid="login-form"]').trigger('submit.prevent')
     await flushPromises()
     expect(wrapper.find('[data-testid="login-error"]').exists()).toBe(true)
-    expect(wrapper.get('[data-testid="login-error"]').text()).toContain(
-      'Invalid login credentials',
-    )
+    expect(wrapper.get('[data-testid="login-error"]').text()).toContain('Invalid login credentials')
+  })
+
+  it('announces the error to screen readers', async () => {
+    const auth = useAuthStore()
+    vi.spyOn(auth, 'signIn').mockRejectedValue(new Error('Invalid login credentials'))
+    const wrapper = mountView()
+    await wrapper.get('[data-testid="login-email"]').setValue('me@example.com')
+    await wrapper.get('[data-testid="login-password"]').setValue('wrongpass')
+    await wrapper.get('[data-testid="login-form"]').trigger('submit.prevent')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="login-error"]').attributes('role')).toBe('alert')
   })
 
   it('offers resend when the account email is not confirmed', async () => {

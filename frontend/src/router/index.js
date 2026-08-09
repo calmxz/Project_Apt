@@ -60,18 +60,34 @@ const router = createRouter({
     },
     {
       path: '/settings',
+      redirect: { name: 'settings', params: { tab: 'profile' } },
+    },
+    {
+      path: '/settings/:tab',
       name: 'settings',
       component: () => import('../views/SettingsView.vue'),
+      props: true,
+      beforeEnter: (to) => {
+        const valid = ['profile', 'usage', 'account', 'appearance']
+        if (!valid.includes(to.params.tab)) {
+          return { name: 'settings', params: { tab: 'profile' } }
+        }
+      },
     },
     {
+      // Unified into Settings (2026-08-02): aggregate profile is now the
+      // Profile tab. Redirect kept so old links and router.push({name})
+      // calls keep working.
       path: '/profile',
       name: 'profile-aggregate',
-      component: () => import('../views/AggregateProfileView.vue'),
+      redirect: { name: 'settings', params: { tab: 'profile' } },
     },
     {
+      // Unified into Home (2026-08-02): one canonical start experience.
+      // Redirect kept so old links and the sidebar name keep working.
       path: '/new',
       name: 'new-session',
-      component: () => import('../views/NewSessionView.vue'),
+      redirect: { name: 'home' },
     },
     {
       path: '/review',

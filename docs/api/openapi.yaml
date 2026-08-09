@@ -536,8 +536,10 @@ paths:
       summary: Upload a reference file (PDF, PPTX, TXT, or MD) to attach to a session (background ingestion).
       description: |
         Accepted file types are validated by extension: .pdf, .pptx, .txt, .md
-        (.markdown is also accepted). The 25 MB per-request cap and background
-        ingestion behaviour are unchanged.
+        (.markdown is also accepted). The 25 MB per-request cap is unchanged.
+        Ingestion is performed asynchronously by a background worker process;
+        the document transitions pending -> processing -> ready (or failed)
+        as the worker picks it up and completes extraction/embedding.
       operationId: uploadPdf
       requestBody:
         required: true
@@ -556,7 +558,7 @@ paths:
                   format: binary
       responses:
         "202":
-          description: Accepted; ingestion runs in background.
+          description: Accepted; ingestion is performed by a background worker process.
           content:
             application/json:
               schema:
@@ -839,7 +841,7 @@ components:
 
     IngestionStatus:
       type: string
-      enum: [pending, ready, failed]
+      enum: [pending, processing, ready, failed]
 
     ToolStatus:
       type: string

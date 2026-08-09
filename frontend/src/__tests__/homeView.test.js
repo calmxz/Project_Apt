@@ -106,31 +106,16 @@ describe('HomeView', () => {
     expect(wrapper.find('[data-testid="home-build-start"]').exists()).toBe(false)
   })
 
-  it('renders no review card and no reference-files link', async () => {
+  it('renders no review card', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'listSessions').mockResolvedValue([])
     const wrapper = mountView()
     await flushPromises()
     expect(wrapper.find('[data-testid="home-mode-review"]').exists()).toBe(false)
-    expect(wrapper.text()).not.toContain('Add reference files')
     expect(wrapper.text()).not.toContain('Due for review')
   })
 
-  it('New lesson: no match shows the level picker instead of creating immediately', async () => {
-    const store = useSessionStore()
-    vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    vi.spyOn(store, 'lookupTopic').mockResolvedValue({ active_match: null, ended_match: null })
-    const createSpy = vi.spyOn(store, 'createSession').mockResolvedValue({ id: 'sess1' })
-    const wrapper = mountView()
-    await flushPromises()
-    await wrapper.get('[data-testid="home-quick-topic"]').setValue('Recursion')
-    await wrapper.get('[data-testid="home-quick-go"]').trigger('click')
-    await flushPromises()
-    expect(createSpy).not.toHaveBeenCalled()
-    expect(wrapper.find('[data-testid="start-level-quiz"]').exists()).toBe(true)
-  })
-
-  it('level chip creates with declaredLevel and navigates', async () => {
+  it('New lesson: no match creates a session immediately and navigates', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'listSessions').mockResolvedValue([])
     vi.spyOn(store, 'lookupTopic').mockResolvedValue({ active_match: null, ended_match: null })
@@ -139,37 +124,15 @@ describe('HomeView', () => {
     await flushPromises()
     await wrapper.get('[data-testid="home-quick-topic"]').setValue('Recursion')
     await wrapper.get('[data-testid="home-quick-go"]').trigger('click')
-    await flushPromises()
-    await wrapper.get('[data-testid="start-level-beginner"]').trigger('click')
     await flushPromises()
     expect(store.createSession).toHaveBeenCalledWith(
       expect.objectContaining({
         topic: 'Recursion',
         seedMode: 'fresh',
         priorSessionId: null,
-        declaredLevel: 'beginner',
       }),
     )
     expect(push).toHaveBeenCalledWith({ name: 'session', params: { id: 'sess1' } })
-  })
-
-  it('quiz chip navigates with quiz query', async () => {
-    const store = useSessionStore()
-    vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    vi.spyOn(store, 'lookupTopic').mockResolvedValue({ active_match: null, ended_match: null })
-    vi.spyOn(store, 'createSession').mockResolvedValue({ id: 'sess1' })
-    const wrapper = mountView()
-    await flushPromises()
-    await wrapper.get('[data-testid="home-quick-topic"]').setValue('Recursion')
-    await wrapper.get('[data-testid="home-quick-go"]').trigger('click')
-    await flushPromises()
-    await wrapper.get('[data-testid="start-level-quiz"]').trigger('click')
-    await flushPromises()
-    expect(push).toHaveBeenCalledWith({
-      name: 'session',
-      params: { id: 'sess1' },
-      query: { quiz: '1' },
-    })
   })
 
   it('active match shows intercept with open-existing', async () => {
@@ -217,6 +180,7 @@ describe('HomeView', () => {
         resolveLookup = resolve
       }),
     )
+    vi.spyOn(store, 'createSession').mockResolvedValue({ id: 'sess1' })
     const wrapper = mountView()
     await flushPromises()
     await wrapper.get('[data-testid="home-quick-topic"]').setValue('Recursion')
@@ -225,7 +189,7 @@ describe('HomeView', () => {
     expect(lookupSpy).toHaveBeenCalledTimes(1)
     resolveLookup({ active_match: null, ended_match: null })
     await flushPromises()
-    expect(wrapper.find('[data-testid="start-level-quiz"]').exists()).toBe(true)
+    expect(store.createSession).toHaveBeenCalledTimes(1)
   })
 
   it('does not render the dupe banner or recent feed (relocated)', async () => {
@@ -236,5 +200,23 @@ describe('HomeView', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="home-dupe-banner"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="home-recent"]').exists()).toBe(false)
+  })
+
+  it('quick pick chip fills the topic input', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'listSessions').mockResolvedValue([])
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.findAll('.quick-pick')[0].trigger('click')
+    expect(wrapper.get('[data-testid="home-quick-topic"]').element.value).toBe('Recursion')
+  })
+
+  it('does not render a file-attach control', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'listSessions').mockResolvedValue([])
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="home-file-add"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="home-file-input"]').exists()).toBe(false)
   })
 })

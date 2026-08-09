@@ -19,6 +19,7 @@ import * as sessionsApi from '@/services/sessionsApi.js'
 import { getSessionLibrary } from '@/services/sessionsApi.js'
 import * as streamSvc from '@/services/chatStreamService.js'
 import { ERR_DAILY_CAP_REACHED, ERR_DAILY_COST_CAP_REACHED } from '@/lib/errorCodes.js'
+import { StreamAbortedError } from '@/lib/errors.js'
 
 class ApiErrorLike extends Error {
   constructor(status, body) {
@@ -765,7 +766,9 @@ describe('session store — streaming', () => {
         body: { detail: { code: 'session_ended' } },
       }),
     )
-    await s.sendMessageStreaming({ text: 'hello' })
+    await expect(s.sendMessageStreaming({ text: 'hello' })).rejects.toBeInstanceOf(
+      StreamAbortedError,
+    )
     expect(s.error).toMatch(/ended/i)
     expect(s.streamState).toBe('idle')
     expect(s.currentSession.ended_at).not.toBeNull()
@@ -786,8 +789,56 @@ describe('session store — streaming', () => {
         body: { detail: { code: 'session_ended' } },
       }),
     )
-    await s.sendMessageStreaming({ text: 'hello' })
+    await expect(s.sendMessageStreaming({ text: 'hello' })).rejects.toBeInstanceOf(
+      StreamAbortedError,
+    )
     expect(s.messages.filter((m) => m.role === 'user' && m.content === 'hello')).toHaveLength(0)
+  })
+
+  // E-05: sign-out on a 401 resets the store mid-stream, which makes the
+  // stream look superseded. The store must still reject so the view can stash
+  // the draft before the login redirect unmounts it.
+  it('sendMessageStreaming throws StreamAbortedError(auth_expired) on 401, even after store reset', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 's1'
+    vi.spyOn(streamSvc, 'streamChat').mockImplementation(async () => {
+      s.reset() // simulates _onAuthExpired -> signOut -> reset() nulling currentSessionId
+      throw Object.assign(new Error('API 401'), { status: 401 })
+    })
+    await expect(s.sendMessageStreaming({ text: 'long draft' })).rejects.toSatisfy(
+      (e) => e instanceof StreamAbortedError && e.reason === 'auth_expired',
+    )
+  })
+
+  // E-11: the 409 arm keeps its cleanup but now rethrows so the view restores
+  // the draft instead of running its success path.
+  it('sendMessageStreaming throws StreamAbortedError(session_ended) on 409 and keeps the banner', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 's1'
+    s.currentSession = { id: 's1', ended_at: null }
+    vi.spyOn(streamSvc, 'streamChat').mockImplementation(async () => {
+      throw Object.assign(new Error('API 409'), {
+        status: 409,
+        body: { detail: { code: 'session_ended' } },
+      })
+    })
+    await expect(s.sendMessageStreaming({ text: 'q' })).rejects.toSatisfy(
+      (e) => e instanceof StreamAbortedError && e.reason === 'session_ended',
+    )
+    expect(s.error).toMatch(/ended elsewhere/)
+    expect(s.currentSession.ended_at).toBeTruthy()
+    expect(s.streamState).toBe('idle')
+  })
+
+  it('sendMessageStreaming stays silent on genuine navigation supersede', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 's1'
+    vi.spyOn(streamSvc, 'streamChat').mockImplementation(async () => {
+      s.currentSessionId = 's2' // user opened another session mid-stream
+      throw Object.assign(new Error('boom'), { status: 500 })
+    })
+    await expect(s.sendMessageStreaming({ text: 'q' })).resolves.toBeUndefined()
+    expect(s.error).toBeNull()
   })
 
   it('sendMessageStreaming maps a mid-turn SSE cost-cap error event into costCapInfo', async () => {

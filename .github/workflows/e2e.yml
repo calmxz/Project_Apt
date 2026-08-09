@@ -6,9 +6,10 @@ on:
       - 'frontend/**'
       - 'backend/**'
       - 'docker-compose.yml'
+      - 'docker-compose.prod.yml'
       - '.github/workflows/e2e.yml'
   push:
-    branches: [main]
+    branches: [main, dev]
   workflow_dispatch:
 
 concurrency:

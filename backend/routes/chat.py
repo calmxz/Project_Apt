@@ -19,7 +19,7 @@ from contracts import ChatRequest, Citation
 from db.database import SessionLocal, get_db
 from db.models import ChatMessage, Document, Session as SessionModel, User
 from lib import keyword_index
-from lib.error_codes import DAILY_CAP_REACHED, DAILY_COST_CAP_REACHED
+from lib.error_codes import DAILY_CAP_REACHED, DAILY_COST_CAP_REACHED, GLOBAL_COST_CAP_REACHED
 from services import (
     check_question_service,
     cost_meter,
@@ -152,6 +152,18 @@ async def _prepare_turn(
             },
         )
 
+    if settings.global_daily_cost_cap_usd is not None:
+        if cost_meter.global_spend(db) >= Decimal(
+            str(settings.global_daily_cost_cap_usd)
+        ):
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "code": GLOBAL_COST_CAP_REACHED,
+                    "resets_at": cost_meter.midnight_utc_iso(),
+                },
+            )
+
     # 2) Session + ingestion counts in one statement. Runs BEFORE the rate
     # limiter so a rejected turn (foreign 404 / ended 409) does not consume
     # a daily slot (Batch-1 deferral), and before ensure_user so bogus
@@ -162,6 +174,7 @@ async def _prepare_turn(
             SessionModel,
             doc_base.scalar_subquery().label("doc_total"),
             doc_base.where(Document.status == "pending").scalar_subquery().label("doc_pending"),
+            doc_base.where(Document.status == "processing").scalar_subquery().label("doc_processing"),
             doc_base.where(Document.status == "ready").scalar_subquery().label("doc_ready"),
         ).where(SessionModel.id == req.session_id)
     ).first()
@@ -171,7 +184,7 @@ async def _prepare_turn(
     if session.ended_at is not None:
         raise HTTPException(status_code=409, detail={"code": "session_ended"})
     ingestion_status = documents_service.status_from_counts(
-        row.doc_total, row.doc_pending, row.doc_ready
+        row.doc_total, row.doc_pending, row.doc_ready, row.doc_processing
     )
     # Detach: ensure_user/check_and_increment commit below would otherwise
     # expire this already-fully-loaded row (expire_on_commit), forcing a

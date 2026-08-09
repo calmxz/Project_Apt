@@ -108,10 +108,6 @@
         >
           Go to active session
         </router-link>
-        <details v-if="rawErrorDetail" class="error-details">
-          <summary>Technical details</summary>
-          <pre>{{ rawErrorDetail }}</pre>
-        </details>
       </div>
 
       <ReferenceStatusBanner ref="referenceBannerRef" :session-id="props.id" />
@@ -193,7 +189,7 @@ import SessionHeader from '../components/chat/SessionHeader.vue'
 import SessionEndedBanner from '../components/SessionEndedBanner.vue'
 import ReferenceStatusBanner from '../components/chat/ReferenceStatusBanner.vue'
 import UploadStatus from '../components/chat/UploadStatus.vue'
-import { friendlyError } from '../lib/errors.js'
+import { friendlyError, StreamAbortedError } from '../lib/errors.js'
 import { useSessionStore } from '../stores/session.js'
 import { useToast } from '../composables/useToast.js'
 import { costBus } from '../services/costBus.js'
@@ -538,7 +534,10 @@ async function loadCurrent(id) {
   }
 }
 
-onMounted(() => loadCurrent(props.id))
+onMounted(() => {
+  loadCurrent(props.id)
+  restoreStashedDraft(props.id)
+})
 
 // Sidebar session->session clicks reuse this route component (same /session/:id
 // route), so onMounted does not re-fire. Re-load when the id prop changes;
@@ -553,6 +552,7 @@ watch(
     uploading.value = false
     uploadStatus.value = null
     loadCurrent(id)
+    restoreStashedDraft(id)
   },
 )
 
@@ -592,16 +592,6 @@ function useQuickPrompt(text) {
 
 const canRetry = computed(() => Boolean(lastSentText.value) && !sending.value && !isEnded.value)
 
-const rawErrorDetail = computed(() => {
-  const e = lastError.value || (store.error ? { message: store.error } : null)
-  if (!e || typeof e !== 'object') return null
-  const parts = []
-  if (e.status != null) parts.push(`status: ${e.status}`)
-  if (e.path) parts.push(`path: ${e.path}`)
-  if (e.body) parts.push(`body: ${typeof e.body === 'string' ? e.body : JSON.stringify(e.body)}`)
-  return parts.length ? parts.join('\n') : null
-})
-
 async function send() {
   const text = draft.value
   if (!text.trim()) return
@@ -613,17 +603,54 @@ async function send() {
     await store.sendMessageStreaming({ text })
     lastSentText.value = ''
   } catch (e) {
-    draft.value = text
-    lastError.value = e
+    if (e instanceof StreamAbortedError) {
+      // The store already surfaced the state (ended banner / login redirect),
+      // so a generic error chip on top of it would be noise. Just give the
+      // text back so nothing the user typed is lost.
+      if (e.reason === 'auth_expired') {
+        // E-05: this component is about to unmount via the login redirect, so
+        // in-memory draft restore is not enough - park it where the post-login
+        // remount can find it.
+        try {
+          sessionStorage.setItem(`crux:draft:${props.id}`, text)
+        } catch {
+          // storage unavailable (private mode/quota) - the in-memory restore
+          // below is still the best we can do
+        }
+      }
+      draft.value = text
+    } else {
+      draft.value = text
+      lastError.value = e
+    }
   } finally {
     sending.value = false
   }
 }
 
 async function retryLastMessage() {
-  if (!lastSentText.value) return
-  draft.value = lastSentText.value
+  // E-14: the composer wins. After a failed send the draft is restored, and the
+  // user may have edited it before hitting Retry - resending lastSentText would
+  // silently discard that edit. lastSentText is only the fallback for the case
+  // where the composer was cleared.
+  if (!draft.value.trim() && lastSentText.value) draft.value = lastSentText.value
+  if (!draft.value.trim()) return
   await send()
+}
+
+// E-05: a draft stashed by send() just before the auth redirect survives the
+// login round-trip in sessionStorage; restore it exactly once.
+function restoreStashedDraft(id) {
+  const key = `crux:draft:${id}`
+  try {
+    const stashed = sessionStorage.getItem(key)
+    if (stashed !== null) {
+      draft.value = stashed
+      sessionStorage.removeItem(key)
+    }
+  } catch {
+    // storage unavailable (private mode/quota) - nothing to restore
+  }
 }
 
 async function onDiagQuiz() {
@@ -758,7 +785,7 @@ async function onAttachFile(file) {
 }
 
 async function pollUploadStatus(documentId, filename, gen) {
-  for (let i = 0; i < 30; i += 1) {
+  for (let i = 0; i < 90; i += 1) {
     let s
     try {
       s = await getUploadStatus(documentId)
@@ -1082,18 +1109,6 @@ function goHome() {
 .error-retry:focus-visible {
   outline: 2px solid var(--color-accent-ring);
   outline-offset: 2px;
-}
-
-.error-details {
-  flex: 1 0 100%;
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-}
-
-.error-details pre {
-  white-space: pre-wrap;
-  margin: 0.4rem 0 0;
 }
 
 .error {

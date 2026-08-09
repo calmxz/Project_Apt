@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from config import settings
 from db.models import DailyCostLedger, LlmCallLog
+from lib.error_codes import DAILY_COST_CAP_REACHED, GLOBAL_COST_CAP_REACHED
 from services.sql_dialect import dialect_insert
 
 
@@ -182,6 +183,36 @@ def check_cap_from_spend(used: Decimal) -> CapStatus:
 
 def check_cap(db: Session, user_id: str) -> CapStatus:
     return check_cap_from_spend(current_spend(db, user_id))
+
+
+class CostCapExceeded(Exception):
+    """Raised by assert_within_caps when a spend cap blocks the operation."""
+
+    def __init__(self, code: str, cap: CapStatus | None = None):
+        self.code = code
+        self.cap = cap
+        super().__init__(code)
+
+
+def global_spend(db: Session) -> Decimal:
+    """Total spend across ALL users for today (UTC)."""
+    total = db.execute(
+        select(func.coalesce(func.sum(DailyCostLedger.cost_usd), 0)).where(
+            DailyCostLedger.date_utc == _today_utc()
+        )
+    ).scalar_one()
+    return _quantize(Decimal(str(total)))
+
+
+def assert_within_caps(db: Session, user_id: str) -> None:
+    """Raise CostCapExceeded if the per-user hard cap or the optional
+    global daily ceiling blocks further paid calls."""
+    cap = check_cap(db, user_id)
+    if not cap.allowed:
+        raise CostCapExceeded(DAILY_COST_CAP_REACHED, cap)
+    ceiling = settings.global_daily_cost_cap_usd
+    if ceiling is not None and global_spend(db) >= Decimal(str(ceiling)):
+        raise CostCapExceeded(GLOBAL_COST_CAP_REACHED, cap)
 
 
 def cost_warning_header(db: Session, user_id: str) -> str | None:

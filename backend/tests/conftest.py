@@ -1,3 +1,9 @@
+import os
+
+# Q-01: must run before anything imports `config`, or the real .env loads
+# into the test process. Do not move below the imports.
+os.environ["CRUX_SKIP_DOTENV"] = "1"
+
 import json
 from types import SimpleNamespace
 from typing import Any
@@ -102,16 +108,6 @@ def client(db_session, monkeypatch):
 
     monkeypatch.setattr(main_module, "create_tables", lambda: Base.metadata.create_all(bind=test_engine))
     monkeypatch.setattr(main_module, "validate_jwks_startup", lambda: None)
-    # F-26: lifespan now opens its own SessionLocal() to run the startup
-    # reaper. Without this, that session binds to the real (possibly
-    # Postgres) engine from db.database instead of the test's isolated
-    # in-memory sqlite -- hitting a live database from every client-based
-    # test, or erroring on an unmigrated real sqlite file in CI.
-    monkeypatch.setattr(
-        main_module,
-        "SessionLocal",
-        sessionmaker(autocommit=False, autoflush=False, bind=test_engine),
-    )
 
     def override_get_db():
         yield db_session

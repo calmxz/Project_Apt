@@ -40,7 +40,7 @@
         />
       </div>
 
-      <p v-if="error" class="error" data-testid="login-error">{{ error }}</p>
+      <p v-if="error" class="error" role="alert" data-testid="login-error">{{ error }}</p>
       <p v-if="needsConfirm" class="hint">
         <button type="button" class="linkbtn" data-testid="login-resend" @click="resend">
           Resend confirmation email

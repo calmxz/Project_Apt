@@ -23,12 +23,29 @@ const factory = (u = usage()) =>
   })
 
 describe('UsagePanel', () => {
-  it('renders one spend bar per day, scaled to the max day', () => {
+  it('renders the today / last-7-days glance line and no bar chart', () => {
     const w = factory()
-    const bars = w.findAll('.spend-bar')
-    expect(bars).toHaveLength(2)
-    expect(bars[1].attributes('style')).toContain('height: 100%')
-    expect(bars[0].attributes('style')).toContain('height: 50%')
+    expect(w.find('[data-testid="usage-glance"]').text()).toBe('Today $1.00 · Last 7 days $1.50')
+    expect(w.find('.spend-chart').exists()).toBe(false)
+  })
+
+  it('sums only the last 7 daily entries', () => {
+    const w = factory(
+      usage({
+        daily: [
+          { date_utc: '2026-07-03', cost_usd: 5.0 },
+          { date_utc: '2026-07-04', cost_usd: 0.1 },
+          { date_utc: '2026-07-05', cost_usd: 0.1 },
+          { date_utc: '2026-07-06', cost_usd: 0.1 },
+          { date_utc: '2026-07-07', cost_usd: 0.1 },
+          { date_utc: '2026-07-08', cost_usd: 0.1 },
+          { date_utc: '2026-07-09', cost_usd: 0.1 },
+          { date_utc: '2026-07-10', cost_usd: 0.1 },
+        ],
+        today_spend_usd: 0.1,
+      }),
+    )
+    expect(w.find('[data-testid="usage-glance"]').text()).toBe('Today $0.10 · Last 7 days $0.70')
   })
 
   it('positions tier markers from response values, not literals', () => {
@@ -70,6 +87,6 @@ describe('UsagePanel', () => {
       }),
     )
     expect(w.find('[data-testid="usage-empty"]').exists()).toBe(true)
-    expect(w.find('.spend-chart').exists()).toBe(false)
+    expect(w.find('[data-testid="usage-glance"]').exists()).toBe(false)
   })
 })

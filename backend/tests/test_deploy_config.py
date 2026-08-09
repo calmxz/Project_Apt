@@ -6,6 +6,14 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 RENDER = REPO_ROOT / "render.yaml"
 VERCEL = REPO_ROOT / "frontend" / "vercel.json"
+COMPOSE_FILES = (REPO_ROOT / "docker-compose.yml", REPO_ROOT / "docker-compose.prod.yml")
+
+
+def _load(path):
+    p = Path(path)
+    if not p.is_absolute():
+        p = REPO_ROOT / p
+    return yaml.safe_load(p.read_text(encoding="utf-8"))
 
 
 def test_render_yaml_parses():
@@ -62,3 +70,20 @@ def test_vercel_has_security_headers_but_not_csp():
     assert "X-Content-Type-Options" in keys
     assert "X-Frame-Options" in keys
     assert "Referrer-Policy" in keys
+
+
+def test_compose_files_define_worker_service():
+    for path in ("docker-compose.yml", "docker-compose.prod.yml"):
+        cfg = _load(path)
+        worker = cfg["services"]["worker"]
+        assert worker["command"] == ["python", "-m", "worker"]
+        assert "ports" not in worker
+        assert worker["healthcheck"] == {"disable": True}
+
+
+def test_render_defines_worker_service():
+    cfg = _load("render.yaml")
+    names = {s["name"]: s for s in cfg["services"]}
+    w = names["crux-worker"]
+    assert w["type"] == "worker"
+    assert w["dockerCommand"] == "python -m worker"

@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 
 const props = defineProps({
   match: { type: Object, required: true },
@@ -13,13 +13,21 @@ const gapLine = computed(() =>
     ? `${props.match.gap_count} ${props.match.gap_count === 1 ? 'gap' : 'gaps'} open`
     : '',
 )
+
+const primaryBtn = ref(null)
+
+onMounted(async () => {
+  await nextTick()
+  primaryBtn.value?.focus()
+})
 </script>
 
 <template>
   <div
     class="intercept"
     data-testid="start-intercept"
-    role="region"
+    role="status"
+    aria-live="polite"
     aria-label="Existing session found"
   >
     <button
@@ -43,6 +51,7 @@ const gapLine = computed(() =>
     <div class="intercept-actions">
       <button
         v-if="kind === 'active'"
+        ref="primaryBtn"
         type="button"
         class="intercept-primary"
         data-testid="intercept-open-existing"
@@ -53,6 +62,7 @@ const gapLine = computed(() =>
       </button>
       <button
         v-else
+        ref="primaryBtn"
         type="button"
         class="intercept-primary"
         data-testid="intercept-continue"

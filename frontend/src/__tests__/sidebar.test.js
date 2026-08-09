@@ -1045,9 +1045,9 @@ describe('Sidebar.vue — footer rail labels', () => {
   it('footer shows text labels when expanded', async () => {
     wrapper = mount(Sidebar)
     await flushPromises()
-    const footer = wrapper.find('[data-testid="sidebar-profile"]')
+    const footer = wrapper.find('[data-testid="sidebar-settings"]')
     expect(footer.exists()).toBe(true)
-    expect(wrapper.find('[data-testid="sidebar-profile"]').text()).toContain('Profile')
+    expect(wrapper.find('[data-testid="sidebar-settings"]').text()).toContain('Settings')
   })
 
   it('footer hides text labels when collapsed', async () => {
@@ -1057,7 +1057,7 @@ describe('Sidebar.vue — footer rail labels', () => {
     // collapsed: footer carries sb-rail--column class
     expect(wrapper.find('footer.sb-rail').classes()).toContain('sb-rail--column')
     // no label text visible
-    expect(wrapper.find('[data-testid="sidebar-profile"]').text()).not.toContain('Profile')
+    expect(wrapper.find('[data-testid="sidebar-settings"]').text()).not.toContain('Settings')
   })
 
   it('footer rail no longer renders theme or sign-out controls', async () => {
@@ -1067,7 +1067,13 @@ describe('Sidebar.vue — footer rail labels', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="sidebar-theme-toggle"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="sidebar-sign-out"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="sidebar-profile"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="sidebar-settings"]').exists()).toBe(true)
+  })
+
+  it('footer has a single Settings entry and no Profile entry', async () => {
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sidebar-profile"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="sidebar-settings"]').exists()).toBe(true)
   })
 })

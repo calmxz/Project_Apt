@@ -8,6 +8,7 @@ import SessionHeader from '@/components/chat/SessionHeader.vue'
 import SessionEndedBanner from '@/components/SessionEndedBanner.vue'
 import CheckQuestion from '@/components/chat/CheckQuestion.vue'
 import Composer from '@/components/chat/Composer.vue'
+import { StreamAbortedError } from '@/lib/errors.js'
 import { useSessionStore } from '@/stores/session.js'
 import { getSessionProfile, patchProfile } from '@/services/profileApi.js'
 
@@ -303,6 +304,24 @@ describe('SessionView', () => {
     expect(wrapper.find('[data-testid="session-error"]').exists()).toBe(true)
   })
 
+  it('never renders raw technical details in the error banner', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession()
+    })
+    vi.spyOn(store, 'sendMessageStreaming').mockRejectedValue(
+      Object.assign(new Error('cap'), { status: 429, path: '/chat/stream', body: '{}' }),
+    )
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-testid="session-input"]').setValue('hello')
+    await wrapper.get('[data-testid="session-send"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="session-error"]').exists()).toBe(true)
+    expect(wrapper.find('.error-details').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="session-error"]').text()).not.toContain('/chat/stream')
+  })
+
   it('retry button resends last message', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'loadSession').mockImplementation(async () => {
@@ -321,6 +340,111 @@ describe('SessionView', () => {
     await flushPromises()
     expect(sendSpy).toHaveBeenCalledTimes(2)
     expect(sendSpy.mock.calls[1][0]).toEqual({ text: 'retry me' })
+  })
+
+  // F-9 (E-11): the store already surfaced the ended state (its own specific
+  // copy + ended_at), so the view must keep the typed text and add no
+  // lastError of its own on top. This test isolates the VIEW's contribution -
+  // the error banner's v-if has two inputs (store.error || lastError) and the
+  // bare mock sets neither, so a false assertion here means the view added a
+  // chip. The realistic store-side-effect path is covered by the next test.
+  it('restores the draft and skips the error chip when the session was ended elsewhere (E-11)', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession()
+    })
+    vi.spyOn(store, 'sendMessageStreaming').mockRejectedValueOnce(
+      new StreamAbortedError('session_ended'),
+    )
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-testid="session-input"]').setValue('my long message')
+    await wrapper.get('[data-testid="session-send"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="session-input"]').element.value).toBe('my long message')
+    expect(wrapper.find('[data-testid="session-error"]').exists()).toBe(false)
+  })
+
+  // Companion to the test above, driving the store's REAL 409 side effects
+  // (store.error copy + ended_at) before the rejection. The user must see
+  // exactly one banner carrying the store's specific "ended elsewhere" copy -
+  // not a second generic chip - and no Retry button, since retrying into an
+  // ended session would just fail again. The composer unmounts here (ended_at
+  // flips isEnded), so the restored draft is not visible at this instant; it
+  // lives in the view, not the Composer, and reappears bound to the composer
+  // once the user clicks Resume and it remounts.
+  it('shows only the store ended-session banner with no retry affordance (E-11)', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession()
+    })
+    vi.spyOn(store, 'sendMessageStreaming').mockImplementationOnce(async () => {
+      store.error = 'This session was ended elsewhere. Reopen it to continue.'
+      store.currentSession.ended_at = new Date().toISOString()
+      throw new StreamAbortedError('session_ended')
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-testid="session-input"]').setValue('my long message')
+    await wrapper.get('[data-testid="session-send"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.findAll('[data-testid="session-error"]')).toHaveLength(1)
+    expect(wrapper.get('[data-testid="session-error"]').text()).toContain('ended elsewhere')
+    expect(wrapper.find('[data-testid="session-error-retry"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="ended-banner"]').exists()).toBe(true)
+  })
+
+  // F-9 (E-05): the 401 arm redirects to login, unmounting this view. Stash the
+  // draft so the login round-trip does not eat what the user typed.
+  it('stashes the draft to sessionStorage on auth expiry (E-05)', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession()
+    })
+    vi.spyOn(store, 'sendMessageStreaming').mockRejectedValueOnce(
+      new StreamAbortedError('auth_expired'),
+    )
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-testid="session-input"]').setValue('precious text')
+    await wrapper.get('[data-testid="session-send"]').trigger('click')
+    await flushPromises()
+    expect(sessionStorage.getItem('crux:draft:s1')).toBe('precious text')
+  })
+
+  it('restores a stashed draft on mount and clears the stash (E-05 round-trip)', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession()
+    })
+    sessionStorage.setItem('crux:draft:s1', 'from before login')
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.get('[data-testid="session-input"]').element.value).toBe('from before login')
+    // One-shot: a second mount must not resurrect it.
+    expect(sessionStorage.getItem('crux:draft:s1')).toBeNull()
+  })
+
+  // F-9 (E-14): retry must send what is in the composer now, not the text that
+  // failed - the user may have edited it after the failure.
+  it('retry sends the edited composer text, not the stale lastSentText (E-14)', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession()
+    })
+    const sendSpy = vi
+      .spyOn(store, 'sendMessageStreaming')
+      .mockRejectedValueOnce(Object.assign(new Error('500'), { status: 500 }))
+    const wrapper = mountView()
+    await flushPromises()
+    await wrapper.get('[data-testid="session-input"]').setValue('original')
+    await wrapper.get('[data-testid="session-send"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="session-input"]').setValue('edited')
+    sendSpy.mockResolvedValueOnce(undefined)
+    await wrapper.get('[data-testid="session-error-retry"]').trigger('click')
+    await flushPromises()
+    expect(sendSpy).toHaveBeenLastCalledWith(expect.objectContaining({ text: 'edited' }))
   })
 
   it('enter key sends without shift', async () => {

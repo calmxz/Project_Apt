@@ -4,7 +4,7 @@ import { defineStore } from 'pinia'
 import * as sessionsApi from '../services/sessionsApi.js'
 import { streamChat, streamCheckComplete } from '../services/chatStreamService.js'
 import { reportCostWarning } from '../services/costBus.js'
-import { friendlyError } from '../lib/errors.js'
+import { friendlyError, StreamAbortedError } from '../lib/errors.js'
 import { mapCapError } from '../lib/capErrors.js'
 import { createDeltaBatcher } from '../lib/deltaBatcher.js'
 
@@ -868,7 +868,10 @@ export const useSessionStore = defineStore('session', () => {
       }
     } catch (e) {
       deltaBatcher.flush()
-      if (_streamSuperseded()) {
+      const authExpired = e?.status === 401
+      // Superseded by navigation: swallow. Superseded because sign-out reset
+      // the store (E-05): fall through so the 401 arm can rethrow.
+      if (_streamSuperseded() && !authExpired) {
         _clearStreamState()
         return
       }
@@ -885,18 +888,22 @@ export const useSessionStore = defineStore('session', () => {
         const last = messages.value[messages.value.length - 1]
         if (last?.role === 'user' && last.message_id === undefined) messages.value.pop()
       }
+      if (authExpired) {
+        // E-05: the view must get a chance to stash the draft before the
+        // login redirect unmounts it.
+        _clearStreamState()
+        throw new StreamAbortedError('auth_expired', e)
+      }
       if (e?.status === 409 && e?.body?.detail?.code === 'session_ended') {
         error.value = 'This session was ended elsewhere. Reopen it to continue.'
         if (currentSession.value) currentSession.value.ended_at = new Date().toISOString()
-        streamingMessage.value = null
-        streamState.value = 'idle'
-        abortController.value = null
-        return
+        _clearStreamState()
+        // E-11: rethrow so the view restores the draft instead of running
+        // its success path.
+        throw new StreamAbortedError('session_ended', e)
       }
       if (e?.status === 429) _applyCapError(e?.body?.detail)
-      streamingMessage.value = null
-      streamState.value = 'idle'
-      abortController.value = null
+      _clearStreamState()
       _setError(e)
     }
   }

@@ -1,9 +1,11 @@
 import { ref } from 'vue'
 
-// State machine for the start pages: lookup -> intercept -> level -> create.
-// Lookup is an enhancement: any failure falls through to the level picker.
+// State machine for the start pages: lookup -> intercept | create.
+// Lookup is an enhancement: any failure falls through to direct create.
+// No level picker up front -- the in-chat knowledge diagnostic asks after the
+// tutor's first answer (DIAGNOSTIC: REQUIRED prompt state).
 export function useStartFlow({ store, router, beforeNavigate }) {
-  const stage = ref('idle') // 'idle' | 'intercept' | 'level'
+  const stage = ref('idle') // 'idle' | 'intercept'
   const busy = ref(false)
   const interceptMatch = ref(null)
   const interceptKind = ref(null) // 'active' | 'ended' | null
@@ -28,7 +30,7 @@ export function useStartFlow({ store, router, beforeNavigate }) {
         interceptKind.value = 'ended'
         stage.value = 'intercept'
       } else {
-        stage.value = 'level'
+        await _create(gen)
       }
     } finally {
       busy.value = false
@@ -54,25 +56,26 @@ export function useStartFlow({ store, router, beforeNavigate }) {
     }
   }
 
-  function startFresh() {
-    stage.value = 'level'
-  }
-
-  async function _create({ declaredLevel = null, quiz = false } = {}) {
+  async function startFresh() {
     if (busy.value) return
     busy.value = true
+    try {
+      await _create(generation)
+    } finally {
+      busy.value = false
+    }
+  }
+
+  async function _create(gen) {
     try {
       const created = await store.createSession({
         topic: topic.value,
         seedMode: 'fresh',
         priorSessionId: null,
-        declaredLevel,
       })
-      if (!created) return
+      if (!created || gen !== generation) return
       if (beforeNavigate) await beforeNavigate(created)
-      const route = { name: 'session', params: { id: created.id } }
-      if (quiz) route.query = { quiz: '1' }
-      router.push(route)
+      router.push({ name: 'session', params: { id: created.id } })
     } catch (e) {
       if (e?.status === 409 && e?.body?.detail?.code === 'duplicate_topic') {
         // Race backstop: a session appeared between lookup and create.
@@ -82,14 +85,8 @@ export function useStartFlow({ store, router, beforeNavigate }) {
         return
       }
       throw e
-    } finally {
-      busy.value = false
     }
   }
-
-  const pickLevel = (level) => _create({ declaredLevel: level })
-  const pickQuiz = () => _create({ quiz: true })
-  const skipLevel = () => _create()
 
   function cancel() {
     generation += 1
@@ -107,9 +104,6 @@ export function useStartFlow({ store, router, beforeNavigate }) {
     openExisting,
     continuePrior,
     startFresh,
-    pickLevel,
-    pickQuiz,
-    skipLevel,
     cancel,
   }
 }

@@ -1,12 +1,23 @@
 <script setup>
+import { computed } from 'vue'
 import MarkdownContent from './MarkdownContent.vue'
 import ToolCallChip from './ToolCallChip.vue'
 import CitationsList from './CitationsList.vue'
 import CheckRecap from './CheckRecap.vue'
 
-defineProps({
+const props = defineProps({
   message: { type: Object, required: true },
   streaming: { type: Boolean, default: false },
+})
+
+// A failed tool call that was retried successfully in the same message is
+// noise to the learner -- show only the successful chip.
+const visibleToolCalls = computed(() => {
+  const calls = props.message.tool_calls || []
+  const succeeded = new Set(
+    calls.filter((tc) => (tc.state || 'done') !== 'error').map((tc) => tc.name),
+  )
+  return calls.filter((tc) => tc.state !== 'error' || !succeeded.has(tc.name))
 })
 </script>
 
@@ -35,14 +46,15 @@ defineProps({
         />
       </template>
       <template v-else>
-        <span
-          v-for="(tc, ti) in (message.tool_calls || [])"
-          :key="tc.id ?? ti"
-          class="tool-call-row"
-        >
+        <span v-for="(tc, ti) in visibleToolCalls" :key="tc.id ?? ti" class="tool-call-row">
           <ToolCallChip :tool_call="tc" :state="tc.state || 'done'" />
         </span>
-        <MarkdownContent class="content" :text="message.content || ''" :streaming="streaming" />
+        <MarkdownContent
+          v-if="message.content || streaming"
+          class="content"
+          :text="message.content || ''"
+          :streaming="streaming"
+        />
       </template>
       <span v-if="message.status === 'cancelled'" class="cancelled-marker">(stopped)</span>
       <span v-else-if="message.status === 'partial'" class="cancelled-marker">(interrupted)</span>

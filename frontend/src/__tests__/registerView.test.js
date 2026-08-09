@@ -43,7 +43,9 @@ describe('RegisterView', () => {
 
   it('submit calls register and shows the check-inbox state', async () => {
     const auth = useAuthStore()
-    const spy = vi.spyOn(auth, 'register').mockResolvedValue({ user: { id: 'u-new' }, session: null })
+    const spy = vi
+      .spyOn(auth, 'register')
+      .mockResolvedValue({ user: { id: 'u-new' }, session: null })
     const wrapper = mountView()
     await wrapper.get('[data-testid="register-email"]').setValue('me@example.com')
     await wrapper.get('[data-testid="register-password"]').setValue('hunter2pw')
@@ -79,5 +81,18 @@ describe('RegisterView', () => {
     expect(wrapper.get('[data-testid="register-error"]').text()).toContain(
       'User already registered',
     )
+  })
+
+  it('announces the error to screen readers', async () => {
+    const auth = useAuthStore()
+    vi.spyOn(auth, 'register').mockRejectedValue(new Error('User already registered'))
+    const wrapper = mountView()
+    await wrapper.get('[data-testid="register-email"]').setValue('me@example.com')
+    await wrapper.get('[data-testid="register-password"]').setValue('hunter2pw')
+    await wrapper.get('[data-testid="register-confirm"]').setValue('hunter2pw')
+    await wrapper.get('[data-testid="register-consent"]').setValue(true)
+    await wrapper.get('[data-testid="register-form"]').trigger('submit.prevent')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="register-error"]').attributes('role')).toBe('alert')
   })
 })

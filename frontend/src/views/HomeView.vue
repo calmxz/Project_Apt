@@ -2,7 +2,7 @@
   <section class="home">
     <h1 class="title">What do you want to learn?</h1>
 
-    <p v-if="store.loading" class="muted">Loading...</p>
+    <p v-if="store.loading && !store.sessions.length" class="muted">Loading...</p>
     <p v-else-if="store.error && !store.sessions.length" class="error" data-testid="home-error">
       {{ friendlyError(store.error) }}
     </p>
@@ -19,6 +19,19 @@
           autocomplete="off"
           @keydown.enter="startQuick"
         />
+
+        <div class="quick-picks" aria-label="Quick topic ideas">
+          <button
+            v-for="pick in quickPicks"
+            :key="pick"
+            type="button"
+            class="quick-pick"
+            @click="quickTopic = pick"
+          >
+            {{ pick }}
+          </button>
+        </div>
+
         <button
           type="button"
           class="cta-primary"
@@ -26,7 +39,8 @@
           :disabled="busy"
           @click="startQuick"
         >
-          <span>Start</span><i class="pi pi-arrow-right" aria-hidden="true" />
+          <span>{{ startLabel }}</span
+          ><i class="pi pi-arrow-right" aria-hidden="true" />
         </button>
       </div>
       <StartTopicIntercept
@@ -39,22 +53,14 @@
         @start-fresh="startFresh"
         @cancel="cancel"
       />
-      <StartLevelPicker
-        v-else-if="stage === 'level'"
-        :busy="busy"
-        @select="pickLevel"
-        @quiz="pickQuiz"
-        @skip="skipLevel"
-      />
     </template>
   </section>
 </template>
 
 <script setup>
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
-import StartLevelPicker from '../components/start/StartLevelPicker.vue'
 import StartTopicIntercept from '../components/start/StartTopicIntercept.vue'
 import { useStartFlow } from '../composables/useStartFlow.js'
 import { useSessionStore } from '../stores/session.js'
@@ -63,6 +69,15 @@ import { friendlyError } from '../lib/errors.js'
 const router = useRouter()
 const store = useSessionStore()
 const quickTopic = ref('')
+
+const quickPicks = [
+  'Recursion',
+  'CSS grid',
+  'Photosynthesis',
+  'Big-O notation',
+  'French verbs',
+  'World War II',
+]
 
 const {
   stage,
@@ -73,13 +88,12 @@ const {
   openExisting,
   continuePrior,
   startFresh,
-  pickLevel,
-  pickQuiz,
-  skipLevel,
   cancel,
 } = useStartFlow({ store, router })
 
 watch(quickTopic, () => cancel())
+
+const startLabel = computed(() => (busy.value ? 'Starting...' : 'Start'))
 
 onMounted(() => {
   // U-05: boot-path load - failure is handled locally (store error state),
@@ -98,10 +112,14 @@ function startQuick() {
 <style scoped>
 .home {
   max-width: 42rem;
-  margin: 3rem auto 0;
+  /* Fill the viewport minus .page-inner's top/bottom padding (App.vue) so
+     the prompt block sits vertically centered rather than pinned to the top. */
+  min-height: calc(100dvh - clamp(2rem, 6vw, 4.5rem) - 4rem);
+  margin: 0 auto;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 2rem;
 }
 
@@ -172,6 +190,37 @@ function startQuick() {
 .quick-input:focus {
   outline: none;
   border-color: var(--color-accent);
+}
+
+.quick-picks {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.quick-pick {
+  padding: 0.375rem 0.875rem;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  transition:
+    border-color var(--motion-fast) ease,
+    color var(--motion-fast) ease;
+}
+
+.quick-pick:hover {
+  border-color: var(--color-border-strong);
+  color: var(--color-heading);
+}
+
+.quick-pick:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 
 .cta-primary {
