@@ -72,18 +72,20 @@ def test_vercel_has_security_headers_but_not_csp():
     assert "Referrer-Policy" in keys
 
 
-def test_compose_files_define_worker_service():
+def test_compose_files_do_not_define_worker_service():
+    """2026-08-12 worker-deferral spec: ingestion runs in-process in the
+    web service (INGEST_IN_PROCESS, default on). Re-adding a worker
+    service here means the scale-out path was taken deliberately --
+    revisit the flag on the web service and the spec before deleting
+    this test (see docs/superpowers/specs/2026-08-12-defer-render-worker-design.md)."""
     for path in ("docker-compose.yml", "docker-compose.prod.yml"):
         cfg = _load(path)
-        worker = cfg["services"]["worker"]
-        assert worker["command"] == ["python", "-m", "worker"]
-        assert "ports" not in worker
-        assert worker["healthcheck"] == {"disable": True}
+        assert "worker" not in cfg["services"]
 
 
-def test_render_defines_worker_service():
+def test_render_does_not_define_worker_service():
+    """See test_compose_files_do_not_define_worker_service."""
     cfg = _load("render.yaml")
-    names = {s["name"]: s for s in cfg["services"]}
-    w = names["crux-worker"]
-    assert w["type"] == "worker"
-    assert w["dockerCommand"] == "python -m worker"
+    names = {s["name"] for s in cfg["services"]}
+    assert "crux-worker" not in names
+    assert {s["type"] for s in cfg["services"]} == {"web"}
