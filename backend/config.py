@@ -106,8 +106,10 @@ def assert_prod_database(env: str, database_url: str) -> None:
 
 
 # Ensure runtime directories exist (data/uploads/ and parent of the sqlite file).
+# The uploads dir is only used by the local store; with r2 the path may not
+# even be creatable (read-only / in containers) and must not be touched.
 for _p in (
-    Path(settings.uploads_path),
+    Path(settings.uploads_path) if settings.uploads_store == "local" else None,
     Path(settings.database_url.replace("sqlite:///", "", 1)).parent
     if settings.database_url.startswith("sqlite:///")
     else None,
