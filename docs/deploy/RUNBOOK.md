@@ -20,6 +20,23 @@ Run them deliberately and observed instead:
 - Render account (free).
 - Vercel account (Hobby) with **NO payment card on file**.
 
+## Render Services
+
+### Ingestion worker: deferred (2026-08-12)
+
+There is deliberately NO `crux-worker` service. The web service drains the
+ingestion queue itself in a background thread (`INGEST_IN_PROCESS`, default
+on) per `docs/superpowers/specs/2026-08-12-defer-render-worker-design.md`.
+This accepts the B-02 isolation revert for beta (ingestion CPU and memory
+share the web instance).
+
+Scale-out restore (real users / ingestion latency complaints / chat stutter
+correlated with uploads):
+1. Restore the `crux-worker` block in `render.yaml` and the `worker` service
+   in both compose files from git history.
+2. Set `INGEST_IN_PROCESS=false` on the crux-api web service.
+3. Re-invert the two worker tests in `backend/tests/test_deploy_config.py`.
+
 ## Step 2 — Backend on Render
 
 1. Render dashboard → New → Blueprint → connect this repo.

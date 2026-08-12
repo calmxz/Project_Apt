@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     db_max_overflow: int = 5
     llm_stub: bool = False
     debug_timing: bool = False
+    # 2026-08-12 worker-deferral spec: the web process drains the ingestion
+    # queue itself by default. Set false only when a dedicated worker
+    # service (python -m worker) is deployed alongside.
+    ingest_in_process: bool = True
     cors_origins: str = "http://localhost:5173"
     env: str = "dev"
     log_level: str = "INFO"

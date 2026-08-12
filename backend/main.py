@@ -1,4 +1,5 @@
 import logging
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -10,10 +11,28 @@ from lib.logging_config import configure_logging
 from lib.request_id import RequestIdMiddleware
 from routes import chat, documents, health, me, profile, review, sessions, upload, usage
 from services.auth import validate_jwks_startup
+from worker import main_loop
 
 configure_logging()
 
 log = logging.getLogger(__name__)
+
+
+def start_ingest_loop() -> tuple[threading.Thread | None, threading.Event | None]:
+    """2026-08-12 worker-deferral spec: the web process drains the
+    ingestion queue in a daemon thread unless a dedicated worker
+    deployment disables it via INGEST_IN_PROCESS=false."""
+    if not settings.ingest_in_process:
+        return None, None
+    stop_event = threading.Event()
+    thread = threading.Thread(
+        target=main_loop,
+        kwargs={"stop_event": stop_event},
+        daemon=True,
+        name="ingest-loop",
+    )
+    thread.start()
+    return thread, stop_event
 
 
 @asynccontextmanager
@@ -23,7 +42,13 @@ async def lifespan(app: FastAPI):
         raise RuntimeError("SUPABASE_URL is required when ENV=prod")
     validate_jwks_startup()
     create_tables()
+    ingest_thread, ingest_stop = start_ingest_loop()
     yield
+    if ingest_stop is not None:
+        ingest_stop.set()
+        # Bounded join: an ingest abandoned mid-shutdown is reclaimed by
+        # recover_stuck on next boot (idempotent re-run).
+        ingest_thread.join(timeout=5)
 
 
 app = FastAPI(title="Crux", lifespan=lifespan)

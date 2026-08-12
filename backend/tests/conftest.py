@@ -39,6 +39,16 @@ def _fake_current_user_id(request: Request) -> str:
     )
 
 
+@pytest.fixture(autouse=True)
+def _no_ingest_thread(monkeypatch):
+    """Default-ON ingest_in_process must not start a real poll thread
+    inside tests that run the app lifespan. Tests that exercise
+    start_ingest_loop() re-enable it explicitly."""
+    from config import settings
+
+    monkeypatch.setattr(settings, "ingest_in_process", False)
+
+
 @pytest.fixture
 def db_session():
     engine = create_engine(
