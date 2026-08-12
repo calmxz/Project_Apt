@@ -68,7 +68,10 @@ def recover_stuck(db, *, now: datetime | None = None) -> int:
     return result.rowcount
 
 
-def main_loop(max_iterations: int | None = None) -> None:
+def main_loop(max_iterations: int | None = None, stop_event=None) -> None:
+    """stop_event (threading.Event, optional): set to request a prompt
+    exit. Used by the in-process mode (main.py lifespan); worker mode
+    (python -m worker) passes nothing and keeps the plain sleep path."""
     iterations = 0
     boot_db = SessionLocal()
     try:
@@ -78,6 +81,8 @@ def main_loop(max_iterations: int | None = None) -> None:
     finally:
         boot_db.close()
     while max_iterations is None or iterations < max_iterations:
+        if stop_event is not None and stop_event.is_set():
+            break
         iterations += 1
         if iterations % RECOVER_EVERY_ITERATIONS == 0:
             recover_db = SessionLocal()
@@ -93,7 +98,10 @@ def main_loop(max_iterations: int | None = None) -> None:
         finally:
             db.close()
         if doc_id is None:
-            time.sleep(POLL_INTERVAL_S)
+            if stop_event is not None:
+                stop_event.wait(POLL_INTERVAL_S)
+            else:
+                time.sleep(POLL_INTERVAL_S)
             continue
         log.info("worker picked up document_id=%s", doc_id)
         ingestion_service.run(doc_id)
