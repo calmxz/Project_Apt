@@ -101,8 +101,15 @@ Before (deployed topology)              After (beta topology)
 - Ingestion CPU (PDF parse + embedding calls) returns to the web process. The
   loop ingests one document at a time, which bounds contention. Latency spikes
   during ingest are accepted at beta load.
-- Revisit trigger: real/paying users, ingestion-latency complaints, or more
-  than ~2-3 concurrent uploaders.
+- CPU share: the Render free web instance (0.1 CPU) replaces a dedicated
+  0.5-CPU worker. Parse runs slower and competes (GIL) with request handling;
+  chat streaming may stutter during heavy parse.
+- Memory blast radius: PDF parse now spikes RAM inside the web service's
+  512 MB. An OOM restarts the whole web service (dropping in-flight chats)
+  instead of killing only a worker. Upload caps (25 MB, max_chunks) bound the
+  worst case.
+- Revisit trigger: real/paying users, ingestion-latency complaints, chat
+  stutter correlated with uploads, or more than ~2-3 concurrent uploaders.
 
 ## Scale-out restoration (runbook)
 
