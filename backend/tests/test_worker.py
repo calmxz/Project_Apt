@@ -108,3 +108,58 @@ def test_main_loop_processes_then_exits(db_session, monkeypatch):
     }))
     worker.main_loop(max_iterations=2)
     assert processed == [d.id]
+
+
+def test_main_loop_exits_when_stop_event_already_set(db_session, monkeypatch):
+    """A stop_event set before entry must exit the loop without claiming
+    anything, even with max_iterations=None (the in-process mode)."""
+    import threading
+
+    from sqlalchemy.orm import sessionmaker
+
+    d = _seed_doc(db_session, status="pending")
+    test_engine = db_session.get_bind()
+    monkeypatch.setattr(
+        "worker.SessionLocal",
+        sessionmaker(autocommit=False, autoflush=False, bind=test_engine),
+    )
+    ev = threading.Event()
+    ev.set()
+    worker.main_loop(stop_event=ev)  # must return, not hang
+    db_session.expire_all()
+    assert db_session.get(Document, d.id).status == "pending"
+
+
+def test_main_loop_idle_wait_uses_stop_event_not_sleep(db_session, monkeypatch):
+    """With a stop_event provided, idle waiting must go through
+    stop_event.wait(POLL_INTERVAL_S) so shutdown interrupts the wait.
+    time.sleep must not be touched on this path."""
+    from sqlalchemy.orm import sessionmaker
+
+    test_engine = db_session.get_bind()
+    monkeypatch.setattr(
+        "worker.SessionLocal",
+        sessionmaker(autocommit=False, autoflush=False, bind=test_engine),
+    )
+
+    def _boom(_s):
+        raise AssertionError("time.sleep must not be used when stop_event given")
+
+    monkeypatch.setattr("worker.time", type("T", (), {"sleep": staticmethod(_boom)}))
+
+    class _SelfStoppingEvent:
+        def __init__(self):
+            self.waits = 0
+            self._set = False
+
+        def is_set(self):
+            return self._set
+
+        def wait(self, timeout=None):
+            assert timeout == worker.POLL_INTERVAL_S
+            self.waits += 1
+            self._set = True
+
+    ev = _SelfStoppingEvent()
+    worker.main_loop(stop_event=ev)  # empty queue: one wait, then exits
+    assert ev.waits == 1
