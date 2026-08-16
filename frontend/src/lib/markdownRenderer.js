@@ -1,9 +1,13 @@
 import MarkdownIt from 'markdown-it'
-// NOTE: @vscode/markdown-it-katex replaces the plan's markdown-it-katex@2,
-// which carries an unfixable high-sev XSS (GHSA-5ff8-jcf9-fw62). The fork is
-// Microsoft-maintained with the same md.use(plugin, kaTeXOptions) API. Its
-// default export is double-wrapped across Node/Vite interop, hence the unwrap.
-import mdKatexImport from '@vscode/markdown-it-katex'
+// NOTE: @mdit/plugin-katex replaces @vscode/markdown-it-katex (itself a
+// replacement for markdown-it-katex@2 and its unfixable XSS,
+// GHSA-5ff8-jcf9-fw62). The vscode fork is CJS-only and pins katex ^0.16;
+// both Vite's dev prebundle and the rolldown prod build mis-convert it so
+// KaTeX's macro table ends up empty in the browser and every \command renders
+// as literal "undefined control sequence" text (node/vitest render fine,
+// which is why CI missed it). @mdit/plugin-katex is ESM-native and peers on
+// markdown-it 15 + katex 0.18.
+import { katex as mdKatex } from '@mdit/plugin-katex'
 // KaTeX CSS rides this async chunk (only lazy routes import the renderer),
 // keeping its webfont family out of the entry bundle on /login.
 import 'katex/dist/katex.min.css'
@@ -17,8 +21,6 @@ import json from 'highlight.js/lib/languages/json'
 import yaml from 'highlight.js/lib/languages/yaml'
 import markdown from 'highlight.js/lib/languages/markdown'
 import DOMPurify from 'dompurify'
-
-const mdKatex = mdKatexImport.default ?? mdKatexImport
 
 hljs.registerLanguage('python', python)
 hljs.registerLanguage('javascript', javascript)
