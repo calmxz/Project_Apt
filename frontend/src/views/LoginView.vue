@@ -28,16 +28,28 @@
 
       <div class="field">
         <label for="password" class="label">Password</label>
-        <InputText
-          id="password"
-          v-model="password"
-          type="password"
-          data-testid="login-password"
-          autocomplete="current-password"
-          placeholder="Your password"
-          required
-          class="input"
-        />
+        <div class="pwd-wrap">
+          <InputText
+            id="password"
+            v-model="password"
+            :type="showPassword ? 'text' : 'password'"
+            data-testid="login-password"
+            autocomplete="current-password"
+            placeholder="Your password"
+            required
+            class="input pwd-input"
+          />
+          <button
+            type="button"
+            class="pwd-toggle"
+            data-testid="login-toggle-password"
+            :aria-label="showPassword ? 'Hide password' : 'Show password'"
+            :aria-pressed="showPassword"
+            @click="showPassword = !showPassword"
+          >
+            <i :class="showPassword ? 'pi pi-eye-slash' : 'pi pi-eye'" aria-hidden="true" />
+          </button>
+        </div>
       </div>
 
       <p v-if="error" class="error" role="alert" data-testid="login-error">{{ error }}</p>
@@ -92,6 +104,7 @@ const auth = useAuthStore()
 
 const email = ref('')
 const password = ref('')
+const showPassword = ref(false)
 const submitting = ref(false)
 const error = ref('')
 const needsConfirm = ref(false)
@@ -141,9 +154,14 @@ async function resend() {
 .login {
   max-width: 30rem;
   margin: 0 auto;
-  padding: 2rem 0;
+  min-height: 100dvh;
+  /* Larger bottom padding biases the flex-centered block upward so the card,
+     not the header+card group, sits near the optical center of the viewport. */
+  padding: 2rem 1.25rem calc(2rem + 12vh);
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 1.75rem;
 }
 
@@ -217,6 +235,38 @@ async function resend() {
   border-radius: var(--radius-pill);
   padding: 0.7rem 1.1rem;
   width: 100%;
+}
+
+.pwd-wrap {
+  position: relative;
+}
+
+.pwd-input :deep(input),
+.pwd-input.p-inputtext {
+  padding-right: 3rem;
+}
+
+.pwd-toggle {
+  position: absolute;
+  top: 50%;
+  right: 0.5rem;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: color var(--motion-fast) ease;
+}
+
+.pwd-toggle:hover,
+.pwd-toggle:focus-visible {
+  color: var(--color-heading);
 }
 
 .cta {

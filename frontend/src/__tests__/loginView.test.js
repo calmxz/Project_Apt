@@ -116,6 +116,19 @@ describe('LoginView', () => {
     expect(wrapper.find('[data-testid="login-resent"]').exists()).toBe(true)
   })
 
+  it('toggles password visibility via the eye button', async () => {
+    const wrapper = mountView()
+    const input = wrapper.get('[data-testid="login-password"]')
+    const toggle = wrapper.get('[data-testid="login-toggle-password"]')
+    expect(input.attributes('type')).toBe('password')
+    expect(toggle.attributes('aria-label')).toBe('Show password')
+    await toggle.trigger('click')
+    expect(input.attributes('type')).toBe('text')
+    expect(toggle.attributes('aria-label')).toBe('Hide password')
+    await toggle.trigger('click')
+    expect(input.attributes('type')).toBe('password')
+  })
+
   it('links to the forgot-password page', () => {
     const wrapper = mountView()
     expect(wrapper.find('[data-testid="login-to-forgot"]').exists()).toBe(true)
