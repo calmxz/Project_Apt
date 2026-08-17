@@ -17,6 +17,19 @@ def _neutralize(text: str) -> str:
     return _TAG_RE.sub(r"&lt;\1", text)
 
 
+def wrap_untrusted(tag: str, text: str) -> str:
+    """Fence learner-influenced text in <tag>...</tag> for the prompt (G-01).
+
+    Generic sibling of wrap_chunk: any embedded opening or closing `tag`
+    sequence in the text is neutralized first (case/whitespace tolerant), so
+    the payload cannot close the fence early and plant instructions outside
+    the guarded region. The matching rule block lives in prompts.py.
+    """
+    pattern = re.compile(rf"<(\s*/?\s*{re.escape(tag)})", re.IGNORECASE)
+    safe = pattern.sub(r"&lt;\1", str(text))
+    return f"<{tag}>{safe}</{tag}>"
+
+
 def _attr(value: str) -> str:
     return value.replace("<", "").replace(">", "").replace("'", "").replace('"', "")
 
