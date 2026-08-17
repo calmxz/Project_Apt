@@ -22,8 +22,7 @@ describe('code-block chrome', () => {
   })
 })
 
-// F-03: the copy button used to be dead markup — rendered by the fence rule
-// but wired to nothing. The handler is delegated from the component root
+// F-03: the copy button's handler is delegated from the component root
 // because v-html content cannot carry listeners.
 describe('code-block copy button (F-03)', () => {
   function mountWithClipboard(writeText) {

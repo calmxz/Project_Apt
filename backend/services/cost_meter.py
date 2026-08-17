@@ -334,10 +334,8 @@ def meter_embedding_response(
     (F-19). Never raises: metering must not fail the calling feature.
 
     Returns the metered cost (Decimal("0") if metering failed outright), so
-    callers that need to survive a later transaction rollback -- e.g.
-    ingestion_service.run() re-recording real vendor spend after F-27's
-    single-commit pipeline fails mid-run -- can track what was actually
-    charged instead of only what ended up durable.
+    callers can re-record real vendor spend after a later transaction
+    rollback (F-27).
     """
     try:
         cost = embedding_cost(settings.embedding_model, resp, texts)

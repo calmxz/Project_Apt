@@ -51,11 +51,11 @@ async def generate_and_persist(
     short-circuits to the mechanical summary -- an end must always succeed,
     but must not spend (F-03).
 
-    Does NOT set Session.ended_at -- the caller must claim the end first (see
-    routes/sessions.py `_claim_end`, F-30). After the summary is computed,
-    force-skips any open check batch and writes the summary in a single
-    commit (F-31, F-33). F-11: the summary merges onto a freshly re-read
-    profile; concurrent writes during the LLM call survive."""
+    Does NOT set Session.ended_at; the caller claims the end first (see
+    routes/sessions.py `_claim_end`) (F-30). After the summary is computed,
+    force-skips any open check batch and writes it in a single commit
+    (F-31, F-33). The summary merges onto a freshly re-read profile so
+    concurrent writes during the LLM call survive (F-11)."""
     messages = db.execute(
         select(ChatMessage)
         .where(ChatMessage.session_id == session.id)
@@ -125,15 +125,14 @@ async def generate_and_persist(
             log.warning("summary LLM failed, using mechanical fallback: %s", e)
             summary = _mechanical_fallback(messages)
 
-    # F-33: single write window AFTER the LLM await; F-30: the caller's
-    # _claim_end owns ended_at. F-11 + F-12: re-read the profile UNDER THE ROW
-    # LOCK now that the await is over -- the pre-await copy fed the prompt but
-    # any write that landed during the multi-second call (user PATCH, check
-    # answer in another tab) must not be clobbered, so only
-    # last_session_summary is merged onto the fresh blob. Cost-ledger writes
-    # above publish with this same commit (see prior F-33 note): if the commit
-    # fails after a won claim, the session is ended with no summary -- an
-    # honest state; later end calls take the idempotent replay path.
+    # Single write window after the LLM await, since the caller's _claim_end
+    # already owns ended_at (F-30, F-33). Re-read the profile under the row
+    # lock and merge only last_session_summary onto the fresh blob, so
+    # concurrent writes during the multi-second call (user PATCH, check
+    # answer elsewhere) aren't clobbered (F-11, F-12). Cost-ledger writes
+    # above publish in this same commit; if it fails after a won claim, the
+    # session ends with no summary -- an honest state, since later end calls
+    # take the idempotent replay path (F-33).
     row = profile_service.lock_session_row(db, session.id)
     check_question_service.abandon_open_batch(db, session.id, commit=False)
     fresh = profile_service.profile_from_row(row)
@@ -225,8 +224,7 @@ async def update_rolling_summary(db: Session, session_id: str) -> str | None:
             content = (resp.choices[0].message.content or "").strip()
             # Meter before branching on content: an empty response is still a
             # paid acompletion call and must hit the ledger, not just the
-            # non-empty path (previously an empty-content early return here
-            # skipped the whole cost block -- tokens spent, nothing billed).
+            # non-empty path.
             try:
                 cost = litellm.completion_cost(completion_response=resp)
             except Exception as e:

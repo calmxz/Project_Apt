@@ -1,12 +1,11 @@
 """Uploaded-blob storage behind an ObjectStore protocol (F-15, owner decision Q4).
 
-Uploads previously lived only on local disk at settings.uploads_path, which is
-ephemeral on Render: any deploy or restart wiped un-ingested files and made
-re-ingestion of prior files impossible. Blobs now go through this protocol:
+Local disk (settings.uploads_path) is ephemeral on Render: any deploy or
+restart wipes un-ingested files and blocks re-ingestion of prior files.
+Blobs go through this protocol instead:
 
-  LocalDiskStore : dev / docker-compose / tests (default). Same on-disk layout
-                   as before ({uploads_path}/{doc_id}_{filename}), so files
-                   uploaded before this change remain readable.
+  LocalDiskStore : dev / docker-compose / tests (default). On-disk layout
+                   is {uploads_path}/{doc_id}_{filename}.
   R2ObjectStore  : prod. Cloudflare R2 via boto3's S3 client, keys prefixed
                    "uploads/". Durable across restarts and replicas.
 
@@ -73,8 +72,7 @@ class LocalDiskStore:
 
 
 class R2ObjectStore:
-    """Cloudflare R2 via boto3's S3-compatible API (same client shape WS-D's
-    scripts/backup.py proved for Postgres dumps). Keys live under uploads/."""
+    """Cloudflare R2 via boto3's S3-compatible API. Keys live under uploads/."""
 
     PREFIX = "uploads/"
 

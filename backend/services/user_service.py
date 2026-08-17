@@ -22,18 +22,17 @@ def ensure_user(db: Session, user_id: str, *, accepted_terms: bool = False) -> U
     """Return the users row for user_id, creating it if absent.
 
     On create, stamp accepted_terms_at (server-owned, tz-aware) and
-    terms_version ONLY when accepted_terms is True (F-52: the caller derives
-    this from the verified JWT's accepted_terms metadata claim, not from
-    row-existence). Existing rows are returned unchanged (no re-stamp).
-    Race-safe (F-37): INSERT ... ON CONFLICT DO NOTHING so two concurrent
-    first-requests cannot IntegrityError; the loser re-selects the winner's
-    row. Writes stay pending until the caller's commit, same as the old
-    flush-based version.
+    terms_version ONLY when accepted_terms is True; the caller derives this
+    from the verified JWT's accepted_terms metadata claim, not from
+    row-existence (F-52). Existing rows are returned unchanged (no
+    re-stamp). Race-safe: INSERT ... ON CONFLICT DO NOTHING so two
+    concurrent first-requests cannot IntegrityError, and the loser
+    re-selects the winner's row (F-37). Writes stay pending until the
+    caller's commit.
 
-    Deviation from the ON CONFLICT recipe used by rate_limit.check_and_increment:
-    after the insert we still re-select (needed either way to get an ORM
-    row), but on the winning path we then patch accepted_terms_at back to
-    the exact tz-aware value we wrote, via set_committed_value (marks it as
+    After the insert we still re-select (needed either way to get an ORM
+    row); on the winning path we then patch accepted_terms_at back to the
+    exact tz-aware value we wrote, via set_committed_value (marks it as
     loaded, not dirty -- no spurious UPDATE on next flush). SQLite's
     DateTime(timezone=True) has no native timestamptz and returns a naive
     datetime on read-back (see the round-trip note in

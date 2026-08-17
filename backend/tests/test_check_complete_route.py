@@ -215,12 +215,10 @@ def test_complete_writes_check_batch_to_message(client, db_session, seeded_sessi
 
 
 def test_complete_check_claims_batch_under_row_lock(client, db_session, seeded_session, monkeypatch):
-    """B-02 (final review 2026-07-18): two concurrent /check/complete calls
-    both passed the plain-read is_done guard and double-fired the paid
-    follow-up turn. The route must take the session row lock BEFORE reading
-    the batch, so the loser blocks on the winner's clear commit and then
+    """B-02: the route must take the session row lock BEFORE reading the
+    batch, so a concurrent caller blocks on the winner's clear commit and
     re-reads an empty batch (409). SQLite cannot exercise the real race, so
-    this asserts the claim ordering (repo lock-ordering test pattern).
+    this asserts the claim ordering.
     """
     sid = seeded_session.id
     _resolved_batch(db_session, sid)

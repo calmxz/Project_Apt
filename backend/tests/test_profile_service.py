@@ -167,8 +167,8 @@ def test_apply_patch_mastery_add_removes_gap_with_dangling_focus_cleared(
 def test_apply_patch_mastery_add_rejects_explicit_focus_resend_of_mastered_gap(
     session_row, ctx, db_session
 ):
-    """Regression (F-13 review, Fix Wave 1): add_exclusive nulls a canon-equal
-    prior focus when a gap is mastered. If the same call also explicitly
+    """F-13: add_exclusive nulls a canon-equal prior focus when a gap is
+    mastered. If the same call also explicitly
     resends focus_target_gap equal to the just-mastered concept, the later
     elif branch (args.focus_target_gap is not None) must not resurrect it --
     the mastered concept is no longer in confirmed_gaps, so a focus pointing

@@ -146,18 +146,13 @@ async def create_session(
 
     ensure_user(db, user_id, accepted_terms=accepted_terms_from_request(request))
 
-    # Final-review fix: this check must run BEFORE the resume block below.
-    # The resume block has irreversible side effects (claim-end the prior,
-    # consume a rate-limit slot, fire a summary LLM call) -- if a
-    # pre-existing second active session on this topic exists, we must 409
-    # before any of that runs, not after. exclude_id=req.prior_session_id
-    # keeps a legitimate resume self-exclusive: the prior being resumed is
-    # still active (ended_at IS NULL) at this point and must not conflict
-    # with itself. Consolidated from the two checks this used to be (pre-
-    # resume didn't exist; the sole check ran post-resume) -- a single
-    # pre-check fully covers both the resume and fresh-create paths, since by
-    # the time the fresh-create path would have hit the old post-check there
-    # are no intervening side effects to protect against.
+    # This check must run BEFORE the resume block below. The resume block has
+    # irreversible side effects (claim-end the prior, consume a rate-limit
+    # slot, fire a summary LLM call) -- a pre-existing second active session
+    # on this topic must 409 before any of that runs, not after.
+    # exclude_id=req.prior_session_id keeps a legitimate resume
+    # self-exclusive: the prior being resumed is still active (ended_at IS
+    # NULL) here and must not conflict with itself.
     existing = _active_session_on_topic(
         db, user_id, req.topic, exclude_id=req.prior_session_id
     )
@@ -175,10 +170,10 @@ async def create_session(
         if prior is None or prior.user_id != user_id:
             raise HTTPException(status_code=404, detail="prior session not found")
         if prior.ended_at is None and _claim_end(db, prior.id):
-            # F-03: a resume-triggered summary fires a full-transcript LLM
-            # call; count it like a chat turn. F-30: claim-first so a
-            # concurrent explicit end cannot double-pay. F-31: the open check
-            # batch is abandoned inside generate_and_persist.
+            # A resume-triggered summary fires a full-transcript LLM call, so
+            # count it like a chat turn and claim the end first, else a
+            # concurrent explicit end double-pays; the open check batch is
+            # abandoned inside generate_and_persist (F-03/F-30/F-31).
             allow_llm, _ = rate_limit.check_and_increment(db, user_id)
             await summary_service.generate_and_persist(db, prior, allow_llm=allow_llm)
         db.refresh(prior)
@@ -682,12 +677,11 @@ async def complete_check(
     if row.ended_at is not None:
         raise HTTPException(status_code=409, detail={"code": "session_ended"})
 
-    # B-02: claim the batch under the session row lock. Two concurrent
-    # /check/complete calls both passed the is_done guard (plain read) and
-    # both fired the paid follow-up turn; with the lock, the loser blocks
-    # until the winner's clear_pending_check commit below releases it, then
-    # re-reads an empty batch and 409s. The lock is released by that same
-    # commit, well before the LLM stream starts.
+    # B-02: claim the batch under the session row lock, so two concurrent
+    # /check/complete calls cannot both pass the is_done guard and both fire
+    # the paid follow-up turn. The loser blocks until the winner's
+    # clear_pending_check commit below, then re-reads an empty batch and 409s;
+    # that same commit releases the lock, well before the LLM stream starts.
     profile_service.lock_session_row(db, session_id)
     pc = check_question_service.get_pending_check(db, session_id)
     if pc is None or not check_question_service.is_done(pc):

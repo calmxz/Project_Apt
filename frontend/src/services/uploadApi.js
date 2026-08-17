@@ -87,9 +87,8 @@ export async function uploadDocument({ sessionId, file }) {
   }
 
   if (!resp.ok) {
-    // F-12: still-401 after the retry means the session is truly dead --
-    // same policy as request()'s still-401 branch (F-09): sign out and
-    // redirect to login instead of leaving the app believing it's signed in.
+    // F-12: still-401 after the retry means the session is dead; sign out and
+    // redirect to login rather than leave the app looking signed in (F-09).
     if (resp.status === 401 && retried) await _onAuthExpired()
     throw new ApiError(resp.status, parsed ?? text, '/upload')
   }

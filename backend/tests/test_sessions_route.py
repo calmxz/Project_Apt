@@ -115,25 +115,9 @@ def test_post_resume_with_unended_prior_generates_summary(
 def test_resume_409_when_second_active_session_exists_leaves_prior_untouched(
     client, db_session, seeded_user, mock_litellm, llm_text, monkeypatch
 ):
-    """Final-review fix: the duplicate-topic check must run BEFORE the
-    resume block's irreversible side effects (claim-end + summary LLM call).
-    A pre-existing active session on the same topic must 409 without ending
-    or summarizing the (already-ended) session being resumed.
-
-    P3 B-05 note: `uq_sessions_active_topic` now makes it impossible for two
-    *active* (ended_at IS NULL) same-topic sessions to coexist in the DB, so
-    the original seeding (both rows active) can no longer be constructed at
-    all -- it would fail at fixture insert, not at the route. This version
-    seeds a legal pre-state instead: `active_other` active, `prior_dup`
-    already ENDED (the partial index ignores ended rows), then resumes the
-    ended `prior_dup` while `active_other` still holds the topic. The route's
-    pre-check must still 409 and leave both rows untouched. Because
-    `prior_dup` starts already ended, the resume block's own
-    `if prior.ended_at is None` gate would skip claim-end/summary regardless
-    of check ordering here -- so this no longer isolates "check runs before
-    claim-end" the way the original did, but it still guards the same
-    externally observable contract: a blocked resume must not mutate either
-    row or fire the summary call.
+    """B-05: a pre-existing active session on the same topic must 409 on
+    resume without ending or summarizing the session being resumed, and must
+    leave both rows untouched.
     """
     called = {"summary": False}
 

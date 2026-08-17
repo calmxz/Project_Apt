@@ -37,8 +37,8 @@ def grade_if_diagnostic(db: "Session", session_id: str) -> None:
     profile = profile_service.load_profile(db, session_id)
     if profile.knowledge_level is not None:
         # F-39: a user PATCH mid-batch already set the level; the diagnostic
-        # must not clobber explicit user intent. (This also makes re-grading
-        # a resolved batch a no-op, replacing the old recompute-idempotency.)
+        # must not clobber explicit user intent. This also makes re-grading
+        # a resolved batch a no-op.
         return
     profile.knowledge_level = level
     profile_service.save_profile(db, session_id, profile)

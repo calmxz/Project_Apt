@@ -15,13 +15,10 @@ export const createSession = ({ topic, seedMode, priorSessionId, declaredLevel }
 // never block session creation or surface an error toast.
 export const lookupTopic = (topic) => apiGet('/sessions/lookup', { topic }, { silent: true })
 
-// U-05: every current caller (HomeView, Sidebar, NewSessionView) fires this
-// from onMounted as a fire-and-forget background load -- none is a
-// user-initiated action -- so silencing it here at the wrapper is
-// unconditional and race-proof against the store's in-flight de-dupe
-// (session.js:listSessions), unlike threading an opts flag through from one
-// call site, which the de-dupe could silently drop if a different caller's
-// non-silent call wins the race and gets shared.
+// U-05: silenced unconditionally here, not via a per-caller opts flag --
+// every current caller fires this fire-and-forget from onMounted, and the
+// store's in-flight de-dupe (session.js:listSessions) could otherwise drop
+// the flag if a different caller's non-silent call wins the race.
 export const listSessions = () => apiGet('/sessions', undefined, { silent: true })
 
 // params: { status?: 'all'|'active'|'ended', q?: string,
