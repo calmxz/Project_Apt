@@ -329,11 +329,9 @@ def test_storage_write_failure_507_holds_even_if_mark_failed_commit_raises(
 
 
 def test_store_construction_failure_marks_failed_and_507(client, seeded, db_session, monkeypatch):
-    """Final-review fix wave, Finding 2: object_store.get_store() itself
-    (not just store.put) can raise -- e.g. bad R2 config. Before the fix it
-    sat outside the try/except around store.put, so a construction failure
-    stranded the pending row and surfaced a bare 500 instead of the F-29
-    507-plus-marked-failed contract."""
+    """F-29: object_store.get_store() itself (not just store.put) can raise
+    -- e.g. bad R2 config -- and must still hit the 507-plus-marked-failed
+    contract, not a bare 500."""
 
     def boom_get_store():
         raise RuntimeError("bad R2 config")

@@ -32,9 +32,7 @@ describe('SessionProfileView (per-session)', () => {
     vi.spyOn(profileApi, 'getSessionProfile').mockResolvedValue({
       profile: {
         knowledge_level: 'beginner',
-        confirmed_gaps: [
-          { name: 'window-fns', evidence_type: null, last_event_at: null },
-        ],
+        confirmed_gaps: [{ name: 'window-fns', evidence_type: null, last_event_at: null }],
         mastered_concepts: [
           { name: 'joins', evidence_type: 'tested', last_event_at: null },
           { name: 'select', evidence_type: 'declared', last_event_at: null },
@@ -244,9 +242,8 @@ describe('SessionProfileView (per-session)', () => {
     expect(wrapper.get('[data-testid="sprof-conflict"]').exists()).toBe(true)
   })
 
-  // F-05: a non-412 write failure used to set the load-path `error`, whose
-  // template branch supplants the whole data branch -- one transient 500
-  // permanently replaced the loaded profile with an error paragraph.
+  // F-05: a write failure must show an inline banner, not replace the
+  // loaded profile with an error page.
   it('a failed write shows an inline banner and keeps the profile visible (F-05)', async () => {
     vi.spyOn(profileApi, 'patchProfile').mockRejectedValueOnce(
       Object.assign(new Error('boom'), { status: 500 }),
@@ -336,7 +333,11 @@ describe('SessionProfileView (per-session)', () => {
 
   it('PATCHes subtopic level on pill click and DELETEs on remove', async () => {
     const patchProfile = vi.spyOn(profileApi, 'patchProfile').mockResolvedValue({
-      profile: { mastered_concepts: [], confirmed_gaps: [], subtopic_levels: { 'chain rule': 'advanced' } },
+      profile: {
+        mastered_concepts: [],
+        confirmed_gaps: [],
+        subtopic_levels: { 'chain rule': 'advanced' },
+      },
       etag: 'e1',
     })
     const deleteProfileItem = vi.spyOn(profileApi, 'deleteProfileItem').mockResolvedValue({

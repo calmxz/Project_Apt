@@ -255,9 +255,8 @@ async def run_streaming(
 
             # Record this iteration's cost BEFORE branching on tool_frags. Every
             # acompletion above is billed, so tool-dispatch iterations must count
-            # toward the daily cap too. Previously this block lived inside `if not
-            # tool_frags`, so multi-tool turns charged only their final text
-            # iteration and could evade the hard cost cap.
+            # toward the daily cap too -- otherwise a multi-tool turn could evade
+            # the hard cost cap by only ever billing its final text iteration.
             built = None
             try:
                 built = litellm.stream_chunk_builder(chunks, messages=full)
@@ -324,11 +323,11 @@ async def run_streaming(
             ordered = [tool_frags[k] for k in sorted(tool_frags)]
             # ask_check_questions is turn-terminating and must be the LAST call
             # of the turn. F-10: bundled non-ask calls (profile patches,
-            # retrieval) are legitimate and are dispatched FIRST in their
-            # original order instead of being dropped; only ADDITIONAL asks
-            # (e.g. the model prematurely grading its own question) are
-            # dropped. Reduce BEFORE building the assistant message so the
-            # persisted tool calls and `full` stay consistent.
+            # retrieval) are legitimate and are dispatched first in their
+            # original order; only ADDITIONAL asks (e.g. the model prematurely
+            # grading its own question) are dropped. Reduce BEFORE building the
+            # assistant message so the persisted tool calls and `full` stay
+            # consistent.
             ask_slots = [s for s in ordered if s["name"] == "ask_check_questions"]
             if ask_slots:
                 non_ask = [s for s in ordered if s["name"] != "ask_check_questions"]
@@ -532,8 +531,8 @@ async def run_streaming(
                     exc_info=True,
                 )
 
-        # Bill only iterations not yet metered: completed iterations already
-        # recorded real cost above (previously this arm re-billed all of them).
+        # Bill only iterations not yet metered -- completed iterations already
+        # recorded real cost above.
         cost = _record_partial_cost(
             ctx,
             iter_prompt_snapshots[billed_iters:],
@@ -589,20 +588,16 @@ async def run_streaming(
                 "session_id=%s user_id=%s",
                 rb_err, ctx.session_id, ctx.user_id,
             )
-        # Deferred F-03 item: re-estimate the WHOLE turn (all snapshots), not
-        # just the unbilled tail. Since B-10's loop-top commit before each
-        # acompletion, completed iterations' real costs are already published
-        # and survive the rollback above, so for errored multi-iteration turns
-        # this whole-turn re-estimate double-counts those iterations as the
-        # NORMAL case -- deliberately retained as conservative in the cap's
-        # favor (overcount only shortens the user's own daily budget; no card
-        # billing). Tail-only would undercount the one iteration whose
-        # record_cost ran but was rolled back before the next loop-top commit;
-        # reconciling the two error arms is a tracked follow-up. The rollback
-        # also discards any in-turn retrieval-embedding metering on ctx.db,
-        # which this re-estimate does not account for (it only re-tokenizes
-        # chat prompt snapshots) -- a known, negligible undercount
-        # (~$0.0005/query) opposite the accepted completion overcount above.
+        # F-03/B-10: re-estimate the WHOLE turn (all snapshots), not just the
+        # unbilled tail. Because of B-10's loop-top commit before each
+        # acompletion, completed iterations' real costs already survived the
+        # rollback above, so on an errored multi-iteration turn this
+        # double-counts them -- kept deliberately, since overcounting only
+        # shortens the user's own daily budget (no card billing) and is safer
+        # than the alternative undercount. It also doesn't account for
+        # in-turn retrieval-embedding spend discarded by the rollback (only
+        # chat prompt snapshots are re-tokenized), a known negligible
+        # undercount (~$0.0005/query) in the opposite direction.
         _record_partial_cost(
             ctx,
             iter_prompt_snapshots,

@@ -113,20 +113,21 @@ async def prefetch_for_prompt(
     query_vec: list | None = None,
     cost_holder: list | None = None,
 ) -> list[dict] | None:
-    """F-56: server-side retrieval for REQUIRED turns. The REQUIRED flag was
-    advisory -- the model could answer ungrounded without calling
-    retrieve_chunks. Fetch the chunks ourselves and inject them into the
-    prompt instead. Returns chunk dicts (same shape retrieve() produces) or
-    None on any failure/no-results -- the caller then falls back to the
-    advisory flag. Embedding spend is metered like every other call (F-19).
+    """Server-side retrieval for REQUIRED turns, since the REQUIRED flag is
+    only advisory -- the model could otherwise answer ungrounded without
+    calling retrieve_chunks (F-56). Fetch the chunks ourselves and inject
+    them into the prompt instead. Returns chunk dicts (same shape retrieve()
+    produces) or None on any failure/no-results, so the caller falls back to
+    the advisory flag. Embedding spend is metered like every other call
+    (F-19).
 
-    B-08: cost_holder, if given, collects the metered Decimal cost so a
-    caller whose own transaction later rolls back (_prepare_turn) can
-    re-record the real vendor spend on a fresh transaction.
+    cost_holder, if given, collects the metered Decimal cost so a caller
+    whose own transaction later rolls back (_prepare_turn) can re-record the
+    real vendor spend on a fresh transaction (B-08).
 
-    B-09: query_vec, if given, is the vector semantic_fallback_required
-    already embedded for this same query -- reuse it instead of embedding
-    again (that spend was already metered by the fallback call).
+    query_vec, if given, is the vector already embedded for this same query
+    by semantic_fallback_required -- reuse it instead of embedding again,
+    since that spend was already metered (B-09).
     """
     try:
         if not documents_service.has_ready_document(db, session_id):
@@ -171,26 +172,24 @@ async def semantic_fallback_required(
     db: Session, session_id: str, query: str, *, user_id: str | None = None,
     cost_holder: list | None = None,
 ) -> tuple[bool, list[float] | None]:
-    """D2.2: escalate the OPTIONAL lexical gate when the query is semantically
-    close to the session's uploaded material (paraphrase/acronym misses that
-    the stem overlap cannot catch). Best-effort by design: any failure keeps
-    the gate OPTIONAL, mirroring gap_accuracy in routes/chat.py.
+    """Escalate the OPTIONAL lexical gate when the query is semantically
+    close to the session's uploaded material -- paraphrase/acronym misses
+    the stem overlap cannot catch (D2.2). Best-effort by design: any failure
+    keeps the gate OPTIONAL, mirroring gap_accuracy in routes/chat.py.
 
-    F-19: when `user_id` is supplied, the embedding call's spend is metered
-    onto the cost ledger. Callers that cannot attribute the call to a user
-    (or don't have one handy) may omit it and simply skip metering.
+    Meters the embedding call's spend onto the cost ledger when `user_id` is
+    supplied; callers that cannot attribute the call to a user may omit it
+    and skip metering (F-19). Runs the embedding directly on the event loop
+    in _prepare_turn (F-18).
 
-    B-08: cost_holder, if given, collects the metered Decimal cost (only
-    when user_id is also given, since that's when metering runs) so a
-    caller whose own transaction later rolls back (_prepare_turn) can
-    re-record the real vendor spend on a fresh transaction.
+    cost_holder, if given, collects the metered Decimal cost (only when
+    user_id is also given) so a caller whose own transaction later rolls
+    back (_prepare_turn) can re-record the real vendor spend on a fresh
+    transaction (B-08).
 
-    F-18: async embedding; this runs directly on the event loop in _prepare_turn.
-
-    B-09: also returns the embedded query vector (None whenever the
-    embedding call never ran) so a caller that goes on to call
-    prefetch_for_prompt can hand it back in and skip a second, identical
-    embed for the same query.
+    Also returns the embedded query vector (None whenever the embedding call
+    never ran) so a caller that goes on to call prefetch_for_prompt can hand
+    it back in and skip a second, identical embed for the same query (B-09).
     """
     if settings.llm_stub_enabled:
         return False, None

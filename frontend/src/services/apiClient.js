@@ -35,12 +35,11 @@ function _tokenExpMs(token) {
   }
 }
 
-// F-47: read the token from the SDK, not the Pinia snapshot. getSession()
-// refreshes an expired access token; after wake-from-sleep the store can
-// hold a stale one and would burn the single F-09 retry on a guaranteed 401.
-// (Wake-from-sleep staleness means the token is past its exp, so the cheap
-// exp check above never short-circuits that case.)
-// Falls back to the store token (tests without a supabase env), then null.
+// F-47: read the token from the SDK, not the Pinia snapshot -- getSession()
+// refreshes an expired token, and after wake-from-sleep the store can hold a
+// stale (already-past-exp) one that would burn the single F-09 retry on a
+// guaranteed 401. Falls back to the store token (tests without a supabase
+// env), then null.
 export async function getFreshAccessToken() {
   try {
     const cached = useAuthStore().accessToken

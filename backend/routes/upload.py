@@ -162,20 +162,20 @@ def upload_file(
             },
         )
 
-    # PR-4 Finding 1: the pending row must not be committed (and therefore
-    # claimable by the worker's poll loop, which runs every 2s) before the
-    # blob write completes. flush() assigns the PK for the storage key
-    # without opening the row up to a concurrent claim; only commit once
-    # the blob write has actually succeeded.
+    # The pending row must not be committed (and therefore claimable by the
+    # worker's poll loop, which runs every 2s) before the blob write
+    # completes. flush() assigns the PK for the storage key without opening
+    # the row up to a concurrent claim; only commit once the blob write has
+    # actually succeeded.
     doc = Document(session_id=session_id, filename=safe_name, status="pending")
     db.add(doc)
     db.flush()
 
     # F-29: a failed blob write must not strand a permanent "pending" row.
     # Mark the row failed (visible in the UI banner) and report 507.
-    # get_store() itself is inside the try (final-review fix wave, Finding
-    # 2): a bad R2 config can raise on construction, before put() is ever
-    # called, and that must route through the same mark-failed + 507 path.
+    # get_store() itself is inside the try: a bad R2 config can raise on
+    # construction, before put() is ever called, and that must route
+    # through the same mark-failed + 507 path.
     try:
         store = object_store.get_store()
         store.put(object_store.key_for(doc.id, doc.filename), data)

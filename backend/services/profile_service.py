@@ -8,7 +8,7 @@ Rules:
 - focus_target_gap clearing requires focus_clear_reason; omitting the focus
   field without a reason leaves focus unchanged (F-23). Reason
   "tested_correct" is server-verified against a correct LearningEvent for the
-  focused gap in this session (F-02, restored per owner decision Q1).
+  focused gap in this session (F-02).
 """
 
 import hashlib
@@ -405,8 +405,8 @@ def apply_patch(
 
     if args.add_confirmed_gap:
         gap_evidence = evidence if evidence in ("declared", "tested") else None
-        # B-03: route through the exclusivity choke point (F-13) like the
-        # user PATCH path; upsert_entry left the concept in both lists.
+        # Route through the exclusivity choke point, like the user PATCH path,
+        # so a concept never sits in both lists (B-03/F-13).
         add_exclusive(
             profile, "confirmed_gaps", args.add_confirmed_gap,
             evidence_type=gap_evidence, stamp=datetime.now(timezone.utc),

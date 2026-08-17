@@ -342,12 +342,8 @@ describe('SessionView', () => {
     expect(sendSpy.mock.calls[1][0]).toEqual({ text: 'retry me' })
   })
 
-  // F-9 (E-11): the store already surfaced the ended state (its own specific
-  // copy + ended_at), so the view must keep the typed text and add no
-  // lastError of its own on top. This test isolates the VIEW's contribution -
-  // the error banner's v-if has two inputs (store.error || lastError) and the
-  // bare mock sets neither, so a false assertion here means the view added a
-  // chip. The realistic store-side-effect path is covered by the next test.
+  // F-9 (E-11): when the session was ended elsewhere, the view must keep the
+  // typed text and add no lastError of its own on top of the store's error.
   it('restores the draft and skips the error chip when the session was ended elsewhere (E-11)', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'loadSession').mockImplementation(async () => {

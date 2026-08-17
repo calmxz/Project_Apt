@@ -96,11 +96,10 @@ watch(quickTopic, () => cancel())
 const startLabel = computed(() => (busy.value ? 'Starting...' : 'Start'))
 
 onMounted(() => {
-  // U-05: boot-path load - failure is handled locally (store error state),
-  // so a transient backend hiccup must not toast on Home's very first mount.
-  // Silence is threaded through explicitly via { silent: true } on the
-  // getSessionLibrary calls inside listSessions() (session.js), not by any
-  // unconditional silence in the (unused) sessionsApi.listSessions export.
+  // U-05: boot-path load - failure is handled locally (store error state), so
+  // a transient backend hiccup must not toast on Home's first mount. Silence
+  // comes from { silent: true } on the getSessionLibrary calls inside
+  // store.listSessions() (session.js), not from sessionsApi.listSessions.
   store.listSessions().catch(() => {})
 })
 

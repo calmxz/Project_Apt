@@ -235,8 +235,7 @@ def run(document_id: int) -> None:
             )
             # Per-batch commits mean any batches embedded before the breach
             # are already durable, with their spend already on the ledger --
-            # nothing to re-record here, unlike the old deferred-metering
-            # design.
+            # nothing to re-record here.
             doc = db.get(Document, document_id)
             if doc is not None:
                 doc.status = "failed"

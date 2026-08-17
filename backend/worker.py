@@ -23,12 +23,11 @@ log = logging.getLogger(__name__)
 POLL_INTERVAL_S = 2.0
 STALE_PROCESSING_MINUTES = 30
 
-# PR-4 Finding 2: recover_stuck must not run only once at process boot.
-# A kill+immediate-restart otherwise strands a "processing" doc until a
-# future restart happens more than STALE_PROCESSING_MINUTES later. Run it
-# periodically inside the running loop instead -- every N iterations is
-# simpler to test than wall-clock, and at POLL_INTERVAL_S=2.0 this is
-# roughly once a minute.
+# recover_stuck must not run only once at process boot: a kill+immediate-
+# restart would strand a "processing" doc until a future restart happens
+# more than STALE_PROCESSING_MINUTES later. Run it periodically inside the
+# running loop instead -- every N iterations is simpler to test than
+# wall-clock, and at POLL_INTERVAL_S=2.0 this is roughly once a minute.
 RECOVER_EVERY_ITERATIONS = 30
 
 

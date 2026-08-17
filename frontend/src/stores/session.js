@@ -161,9 +161,8 @@ export const useSessionStore = defineStore('session', () => {
       loading.value = true
       error.value = null
       try {
-        // Boot-path fire-and-forget (HomeView + Sidebar onMounted) — silent for
-        // the same reason the old listSessions wrapper was (U-05): a background
-        // load must never toast.
+        // Boot-path fire-and-forget (HomeView + Sidebar onMounted) — silent
+        // because a background load must never toast (U-05).
         const [activePage, endedPage] = await Promise.all([
           sessionsApi.getSessionLibrary(
             { status: 'active', sort: 'pinned_activity', limit: SIDEBAR_PAGE_LIMIT, offset: 0 },

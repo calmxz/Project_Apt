@@ -30,8 +30,8 @@ class Settings(BaseSettings):
     database_url: str = f"sqlite:///{(_DATA_DIR / 'app.db').as_posix()}"
     embedding_dim: int = 768
     uploads_path: str = (_DATA_DIR / "uploads").as_posix()
-    # F-15 (owner decision Q4): where uploaded blobs live. "local" writes under
-    # uploads_path (dev / docker / tests); "r2" targets Cloudflare R2 (prod).
+    # F-15: where uploaded blobs live. "local" writes under uploads_path
+    # (dev / docker / tests); "r2" targets Cloudflare R2 (prod).
     uploads_store: str = "local"
     r2_endpoint: str = ""
     r2_access_key_id: str = ""
@@ -43,9 +43,8 @@ class Settings(BaseSettings):
     db_max_overflow: int = 5
     llm_stub: bool = False
     debug_timing: bool = False
-    # 2026-08-12 worker-deferral spec: the web process drains the ingestion
-    # queue itself by default. Set false only when a dedicated worker
-    # service (python -m worker) is deployed alongside.
+    # The web process drains the ingestion queue itself by default. Set false
+    # only when a dedicated worker service (python -m worker) runs alongside.
     ingest_in_process: bool = True
     cors_origins: str = "http://localhost:5173"
     env: str = "dev"
