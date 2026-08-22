@@ -24,7 +24,7 @@
     "@primeuix/themes": "^2.0.3",
     "@supabase/supabase-js": "^2.110.8",
     "dompurify": "^3.4.5",
-    "highlight.js": "^11.11.1",
+    "highlight.js": "^11.12.0",
     "katex": "^0.18.4",
     "markdown-it": "^15.0.0",
     "pinia": "^4.0.2",
