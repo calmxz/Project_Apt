@@ -16,7 +16,7 @@ from services import cost_meter
 def test_log_call_writes_row(db_session):
     cost_meter.log_call(
         db_session, user_id="u1", session_id="s1", purpose="chat",
-        model="gemini/gemini-3.1-flash-lite", cost_usd=Decimal("0.0032"),
+        model="gemini/gemini-3.5-flash-lite", cost_usd=Decimal("0.0032"),
     )
     row = db_session.query(LlmCallLog).one()
     assert row.purpose == "chat" and row.session_id == "s1"
