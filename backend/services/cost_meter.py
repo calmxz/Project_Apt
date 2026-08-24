@@ -242,21 +242,28 @@ def spend_subquery(user_id: str):
     )
 
 
-# Per-1000-token USD rates. VERIFY against live pricing before launch; update on model/pricing change.
+# Per-1000-token USD rates. Verified against ai.google.dev/gemini-api/docs/pricing
+# (standard paid tier) on 2026-08-24; update on model/pricing change.
 MODEL_RATES: dict[str, dict[str, Decimal]] = {
-    # Google Gemini 3.1 Flash-Lite — flash-lite tier (placeholder; verify at ai.google.dev/pricing)
+    # Google Gemini 3.5 Flash-Lite — default chat model
+    "gemini/gemini-3.5-flash-lite": {
+        "input_per_1k": Decimal("0.000300"),   # $0.30 / 1M tokens
+        "output_per_1k": Decimal("0.002500"),  # $2.50 / 1M tokens
+    },
+    # Google Gemini 3.1 Flash-Lite — deprecated by Google, shutdown 2027-05-07;
+    # kept for env-selected fallback
     "gemini/gemini-3.1-flash-lite": {
-        "input_per_1k": Decimal("0.000075"),   # $0.075 / 1M tokens
-        "output_per_1k": Decimal("0.000300"),  # $0.30  / 1M tokens
+        "input_per_1k": Decimal("0.000250"),   # $0.25 / 1M tokens
+        "output_per_1k": Decimal("0.001500"),  # $1.50 / 1M tokens
     },
     # Anthropic Claude Sonnet 4.6 — project fallback model if gemini underperforms (verify at anthropic.com/pricing)
     "anthropic/claude-sonnet-4-6": {
         "input_per_1k": Decimal("0.003"),      # $3.00  / 1M tokens
         "output_per_1k": Decimal("0.015"),     # $15.00 / 1M tokens
     },
-    # Google Gemini embedding model — placeholder; verify at ai.google.dev/pricing
+    # Google Gemini embedding model
     "gemini/gemini-embedding-2": {
-        "input_per_1k": Decimal("0.000150"),  # $0.15 / 1M tokens
+        "input_per_1k": Decimal("0.000200"),  # $0.20 / 1M tokens
         "output_per_1k": Decimal("0"),
     },
 }
@@ -274,7 +281,7 @@ def estimate_cancelled_cost(model: str, delta_text: str, prompt_tokens: int) -> 
     preserves arithmetic accuracy across multiple cancelled turns.
 
     litellm.token_counter confirmed to return sane (non-zero) counts for
-    'gemini/gemini-3.1-flash-lite' — returns 6 for a 6-word phrase — so no
+    'gemini/gemini-3.5-flash-lite' — returns 6 for a 6-word phrase — so no
     fallback guard is needed for this model id.
 
     Unknown models fall back to litellm.cost_per_token, then to 0.
