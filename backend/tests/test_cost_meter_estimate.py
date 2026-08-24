@@ -107,8 +107,8 @@ def test_embedding_cost_token_math_fallback(monkeypatch):
     cost = cost_meter.embedding_cost(
         "gemini/gemini-embedding-2", _FakeEmbedResp(), ["some query"]
     )
-    # 1000 tokens * 0.000150 / 1000 = 0.00015
-    assert cost == Decimal("0.00015")
+    # 1000 tokens * 0.000200 / 1000 = 0.0002
+    assert cost == Decimal("0.0002")
 
 
 def test_embedding_cost_unknown_model_returns_zero(monkeypatch):
