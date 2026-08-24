@@ -22,7 +22,7 @@
   "dependencies": {
     "@mdit/plugin-katex": "^1.1.0",
     "@primeuix/themes": "^2.0.3",
-    "@supabase/supabase-js": "^2.110.8",
+    "@supabase/supabase-js": "^2.112.3",
     "dompurify": "^3.4.5",
     "highlight.js": "^11.11.1",
     "katex": "^0.18.4",
