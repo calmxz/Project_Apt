@@ -26,6 +26,13 @@ updates:
     # @primeuix/themes 3.x and primeicons 8.x joined the same PrimeUI license
     # (LICENSE.md replaces MIT); themes 3.x also requires @primeuix/styled
     # ^1.0.0 while primevue 4.5.5 pins ^0.7.4.
+    # eslint-plugin-oxlint pins its peer to the matching oxlint minor
+    # (oxlint@~X.Y.0); a solo oxlint bump fails npm ci with ERESOLVE.
+    groups:
+      oxlint:
+        patterns:
+          - "oxlint"
+          - "eslint-plugin-oxlint"
     ignore:
       - dependency-name: "primevue"
         update-types: ["version-update:semver-major"]
