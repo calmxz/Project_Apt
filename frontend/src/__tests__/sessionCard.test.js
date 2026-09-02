@@ -1,16 +1,15 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import {
-  stripAutoPrefix,
-  cardMeta,
-  cardStory,
-  cardChips,
-  railMeta,
-} from '@/utils/sessionCard.js'
+import { stripAutoPrefix, cardMeta, cardStory, cardChips } from '@/utils/sessionCard.js'
 
 const active = (over = {}) => ({
-  id: 's', topic: 'Bio', created_at: '2026-06-01T00:00:00Z',
-  ended_at: null, message_count: 0, last_activity_at: null,
-  last_message_preview: null, progress: { focus_target_gap: null, mastered_count: 0 },
+  id: 's',
+  topic: 'Bio',
+  created_at: '2026-06-01T00:00:00Z',
+  ended_at: null,
+  message_count: 0,
+  last_activity_at: null,
+  last_message_preview: null,
+  progress: { focus_target_gap: null, mastered_count: 0 },
   ...over,
 })
 
@@ -74,40 +73,12 @@ describe('cardChips', () => {
 
   it('omits the mastered chip at zero and the focus chip when null', () => {
     expect(cardChips(active())).toEqual([])
-    expect(
-      cardChips(active({ progress: { focus_target_gap: null, mastered_count: 1 } })),
-    ).toEqual([{ type: 'mastered', label: '1 mastered', count: 1 }])
+    expect(cardChips(active({ progress: { focus_target_gap: null, mastered_count: 1 } }))).toEqual([
+      { type: 'mastered', label: '1 mastered', count: 1 },
+    ])
   })
 
   it('handles null progress safely', () => {
     expect(cardChips(active({ progress: null }))).toEqual([])
-  })
-})
-
-describe('railMeta', () => {
-  it('compact count and short relative time', () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date('2026-06-01T02:00:00Z'))
-    const s = active({ message_count: 12, last_activity_at: '2026-06-01T00:00:00Z' })
-    expect(railMeta(s)).toBe('12 msgs · 2h ago')
-  })
-
-  it('singular msg; falls back to created_at', () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date('2026-06-01T00:05:00Z'))
-    const s = active({ message_count: 1 })
-    expect(railMeta(s)).toBe('1 msg · 5m ago')
-  })
-
-  it('shows "now" when the timestamp is under a minute old', () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date('2026-06-01T00:00:30Z'))
-    const s = active({ message_count: 2 })
-    expect(railMeta(s)).toBe('2 msgs · now')
-  })
-
-  it('omits the time clause when no timestamps at all', () => {
-    const s = active({ message_count: 0, created_at: null, last_activity_at: null })
-    expect(railMeta(s)).toBe('0 msgs')
   })
 })

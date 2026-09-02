@@ -144,6 +144,41 @@ def test_embed_and_store_requests_configured_dimension(db_session, setup_doc, mo
     assert captured["dimensions"] == expected_dim
 
 
+def test_embed_and_store_retries_once_on_transient_provider_error(
+    db_session, setup_doc, monkeypatch
+):
+    """A single APIConnectionError from the provider must not fail the batch;
+    the retry helper re-issues the call and the chunks are stored."""
+    import litellm
+    from config import settings
+    from services import ingestion_service
+
+    doc = db_session.get(Document, setup_doc)
+    calls = {"n": 0}
+
+    def flaky_embedding(model, input, **kw):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise litellm.APIConnectionError(message="blip", llm_provider="gemini", model=model)
+        return SimpleNamespace(
+            data=[{"embedding": [0.1] * settings.embedding_dim} for _ in input]
+        )
+
+    stored = []
+    monkeypatch.setattr("services.ingestion_service.litellm.embedding", flaky_embedding)
+    monkeypatch.setattr(
+        "services.ingestion_service.pgvector_store.insert_chunks",
+        lambda db, **kw: stored.append(kw["rows"]) or len(kw["rows"]),
+    )
+    monkeypatch.setattr("services.ingestion_service.llm_retry.time.sleep", lambda _s: None)
+
+    chunks = [chunking.Chunk(text="hello world", page=1, chunk_idx=0)]
+    ingestion_service._embed_and_store(db_session, doc, chunks, user_id=None)
+
+    assert calls["n"] == 2
+    assert len(stored) == 1 and len(stored[0]) == 1
+
+
 def test_success_path(
     setup_doc, insert_capture, mock_pdf, mock_embed, db_session, monkeypatch, tmp_path
 ):

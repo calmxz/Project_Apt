@@ -20,7 +20,7 @@ from contracts import UploadResponse, UploadStatus
 from db.database import get_db
 from db.models import Document, Session as SessionModel
 from lib.error_codes import CHUNK_LIMIT_EXCEEDED, DAILY_CAP_REACHED
-from services import cost_meter, object_store, rate_limit
+from services import cost_meter, object_store, rate_limit, velocity_limit
 from services.auth import current_user_id
 
 
@@ -67,6 +67,7 @@ def _read_bounded(fh, max_bytes: int) -> bytes:
     "/upload",
     response_model=UploadResponse,
     status_code=status.HTTP_202_ACCEPTED,
+    dependencies=[Depends(velocity_limit.enforce_velocity)],
 )
 def upload_file(
     request: Request,

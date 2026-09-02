@@ -5,10 +5,12 @@ Exercises real cosine-distance ordering against a live Postgres with the
 mock `pgvector_store.query_chunks`, so the SQL operator (`<=>`) is never
 actually executed there — this test fills that gap.
 
-**Opt-in**: skipped unless `TEST_DATABASE_URL` is set. CI provides it
-(spins up `pgvector/pgvector:pg16`); locals can point it at a throwaway
-DB. Never run this against a production / Supabase database — it inserts
-and immediately deletes rows but you should not be poking prod with tests.
+**Opt-in**: skipped unless `TEST_DATABASE_URL` is set. CI provides one via
+the `postgres` service container in .github/workflows/ci.yml
+(pgvector/pgvector:pg17) and runs `alembic upgrade head` against it first.
+Locally: docker run -e POSTGRES_PASSWORD=crux -p 5432:5432 pgvector/pgvector:pg17
+Never run this against a production / Supabase database: it inserts and
+immediately deletes rows, but you should not be poking prod with tests.
 """
 
 from __future__ import annotations
