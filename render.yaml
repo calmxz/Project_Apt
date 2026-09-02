@@ -17,6 +17,8 @@ services:
         value: "768"
       - key: DAILY_CAP
         value: "50"
+      - key: BURST_LIMIT_PER_MINUTE
+        value: "20"
       - key: LLM_SOFT_CAP_USD
         value: "0.8"
       - key: LLM_HARD_CAP_USD

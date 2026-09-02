@@ -30,6 +30,7 @@ from services import (
     rate_limit,
     retrieval_service,
     summary_service,
+    velocity_limit,
 )
 from services.auth import accepted_terms_from_request, current_user_id
 from services.user_service import ensure_user
@@ -319,7 +320,7 @@ async def _prepare_turn(
     return messages, system_prompt, ctx
 
 
-@router.post("/chat/stream")
+@router.post("/chat/stream", dependencies=[Depends(velocity_limit.enforce_velocity)])
 async def chat_stream(
     req: ChatRequest,
     request: Request,

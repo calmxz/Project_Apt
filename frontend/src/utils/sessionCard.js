@@ -1,4 +1,4 @@
-import { formatRelative, formatRelativeShort } from '@/utils/formatDate.js'
+import { formatRelative } from '@/utils/formatDate.js'
 
 const AUTO_RE = /^\[auto\]\s*/
 
@@ -38,13 +38,4 @@ export function cardChips(session) {
     chips.push({ type: 'mastered', label: `${mastered} mastered`, count: mastered })
   }
   return chips
-}
-
-// Compact sidebar meta: "<n> msgs · <short-rel>".
-export function railMeta(session) {
-  const count = session.message_count || 0
-  const left = `${count} ${count === 1 ? 'msg' : 'msgs'}`
-  const ts = session.last_activity_at || session.created_at
-  const rel = ts ? formatRelativeShort(ts) : ''
-  return rel ? `${left} · ${rel}` : left
 }

@@ -51,7 +51,7 @@ from config import settings
 from db.database import SessionLocal
 from db.models import ChunkEmbedding, Document
 from db.models import Session as SessionModel
-from lib import chunking, keyword_index
+from lib import chunking, keyword_index, llm_retry
 from services import cost_meter, object_store, pgvector_store
 
 
@@ -137,11 +137,13 @@ def _embed_and_store(db, doc, chunks, *, user_id: str | None) -> int:
             cost_meter.assert_within_caps(db, user_id)
         db.commit()  # release the connection before the network call
         try:
-            resp = litellm.embedding(
-                model=settings.embedding_model,
-                input=[c.text for c in batch],
-                dimensions=settings.embedding_dim,
-                timeout=settings.embedding_timeout_s,
+            resp = llm_retry.retry_sync(
+                lambda: litellm.embedding(
+                    model=settings.embedding_model,
+                    input=[c.text for c in batch],
+                    dimensions=settings.embedding_dim,
+                    timeout=settings.embedding_timeout_s,
+                )
             )
         except Exception as e:
             raise RuntimeError(f"embedding api failed: {e}") from e
