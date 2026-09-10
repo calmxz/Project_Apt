@@ -148,11 +148,10 @@ async function onRootClick(e) {
   font-family: var(--font-mono);
   font-size: 0.9em;
 }
-/* Display math is the one red mark inside the notes: a rule drawn under it. */
 .md-rendered :deep(.katex-display) {
   margin: var(--line-pitch) 0;
   padding-bottom: calc(var(--line-pitch) / 2);
-  border-bottom: 1px solid var(--ink-marker);
+  border-bottom: 1px solid var(--rule-strong);
 }
 .md-rendered :deep(table) {
   border-collapse: collapse;

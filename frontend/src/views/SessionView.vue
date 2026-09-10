@@ -1076,6 +1076,7 @@ function goHome() {
   overflow-y: auto;
   scrollbar-gutter: stable;
   background-image: var(--ruled-bg);
+  background-position-y: var(--ruled-offset);
   background-attachment: local;
   padding: 0 clamp(1rem, 3vw, 2rem);
   scrollbar-width: thin;

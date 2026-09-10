@@ -3,6 +3,14 @@
      Ground, rules and pitch. Structure comes from rules and whitespace, not
      from cards or shadows. */
   --line-pitch: 28px;
+  /* The rule paints at the foot of each 28px box, but the text baseline sits
+     above it. Atkinson Hyperlegible Next is upem 1000, ascent 984, descent 316
+     (USE_TYPO_METRICS set), so at 17px the content box is 22.1px, half-leading
+     is 2.95px and the baseline lands 19.68px below the box top -- 7.32px above
+     the rule. Shifting the pattern up by 7px puts the rule under the baseline.
+     Every consumer of --ruled-bg must also set
+     background-position-y: var(--ruled-offset). */
+  --ruled-offset: -7px;
   --ruled-bg: repeating-linear-gradient(
     to bottom,
     transparent 0,

@@ -38,6 +38,12 @@ const mastered = computed(() =>
 // The focus cue has its own section; listing it twice would read as two gaps.
 const openGaps = computed(() => gaps.value.filter((g) => g !== focus.value))
 
+// The strip counts what the Gaps section actually lists, and says "1 gap".
+// "mastered" is already a participle, so it never takes a plural.
+const gapsCount = computed(() =>
+  openGaps.value.length === 1 ? '1 gap' : `${openGaps.value.length} gaps`,
+)
+
 const subtopics = computed(() => {
   const map = props.profile?.subtopic_levels ?? {}
   return Object.keys(map).map((name) => ({
@@ -112,7 +118,7 @@ const expanded = ref(false)
           <span class="cue-strip-focus-word">{{ focus }}</span>
         </span>
         <span v-else class="cue-strip-focus cue-strip-focus--none">no focus cue yet</span>
-        <span class="cue-strip-count" data-tabular>{{ gaps.length }} gaps</span>
+        <span class="cue-strip-count" data-tabular>{{ gapsCount }}</span>
         <span class="cue-strip-count" data-tabular>{{ mastered.length }} mastered</span>
       </p>
       <button
@@ -123,7 +129,21 @@ const expanded = ref(false)
         :aria-label="expanded ? 'Hide what the tutor knows' : 'Show what the tutor knows'"
         @click="expanded = !expanded"
       >
-        <i class="pi" :class="expanded ? 'pi-chevron-up' : 'pi-chevron-down'" aria-hidden="true" />
+        <svg
+          class="cue-disclosure-mark"
+          viewBox="0 0 20 20"
+          width="20"
+          height="20"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path :d="expanded ? 'M5 12 L10 7 L15 12' : 'M5 8 L10 13 L15 8'" />
+        </svg>
       </button>
     </div>
 
@@ -418,6 +438,10 @@ const expanded = ref(false)
   border-radius: var(--radius-sm);
   color: var(--ink-learner);
   cursor: pointer;
+}
+
+.cue-disclosure-mark {
+  flex: 0 0 auto;
 }
 
 .cue-disclosure:focus-visible {

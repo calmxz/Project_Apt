@@ -232,17 +232,6 @@ function commitRenameFromKey() {
   background: var(--color-surface-soft);
 }
 
-/* The bookmark. The one side mark this world allows: 2px, blue, in the gutter. */
-.sb-row--current::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: var(--ink-learner);
-}
-
 .sb-row:hover :deep(.sb-row-menu-trigger),
 .sb-row:focus-within :deep(.sb-row-menu-trigger) {
   opacity: 1;

@@ -701,6 +701,7 @@ function onNewSession() {
   padding: 0;
   border-top: 1px solid var(--rule-strong);
   background: var(--ruled-bg);
+  background-position-y: var(--ruled-offset);
   background-attachment: local;
 }
 

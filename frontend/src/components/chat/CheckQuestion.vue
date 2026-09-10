@@ -45,130 +45,156 @@ watch(answered, async (is) => {
     :class="{ answered, correct, incorrect: answered && !correct }"
     data-testid="check-card"
   >
-    <p class="check-label">
-      Check question<template v-if="showProgress">
-        <span class="check-progress" data-tabular>
-          {{ check.viewIndex + 1 }}/{{ check.total }}</span
-        ></template
-      >
-    </p>
-    <p class="check-question">{{ item.question }}</p>
-
-    <div
-      class="sr-only"
-      role="status"
-      aria-live="polite"
-      aria-atomic="true"
-      data-testid="check-live"
-    >
-      <template v-if="graded">
-        {{ correct ? 'Correct.' : 'Not quite.' }} {{ item.explanation || '' }}
-      </template>
+    <div class="check-gutter">
+      <span class="role-tag">check</span>
     </div>
+    <div class="check-box">
+      <p class="check-question">{{ item.question }}</p>
 
-    <ul class="check-options">
-      <li v-for="(opt, i) in item.options" :key="i">
-        <button
-          type="button"
-          class="check-option"
-          :class="optionClass(i)"
-          data-testid="check-option"
-          :aria-disabled="answered ? 'true' : undefined"
-          @click="answered ? undefined : emit('answer', i)"
-        >
-          <span class="check-letter" aria-hidden="true">{{ LETTERS[i] ?? i + 1 }}.</span>
-          <span class="check-option-text">{{ opt }}</span>
-          <svg
-            v-if="optionClass(i) === 'is-correct'"
-            class="check-mark check-mark--tick"
-            viewBox="0 0 16 16"
-            width="16"
-            height="16"
-            aria-hidden="true"
-            focusable="false"
+      <div
+        class="sr-only"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        data-testid="check-live"
+      >
+        <template v-if="graded">
+          {{ correct ? 'Correct.' : 'Not quite.' }} {{ item.explanation || '' }}
+        </template>
+      </div>
+
+      <ul class="check-options">
+        <li v-for="(opt, i) in item.options" :key="i">
+          <button
+            type="button"
+            class="check-option"
+            :class="optionClass(i)"
+            data-testid="check-option"
+            :aria-disabled="answered ? 'true' : undefined"
+            @click="answered ? undefined : emit('answer', i)"
           >
-            <path d="M2.5 8.5 L6.3 12.2 L13.5 4" pathLength="1" />
-          </svg>
-          <svg
-            v-else-if="optionClass(i) === 'is-incorrect'"
-            class="check-mark check-mark--cross"
-            viewBox="0 0 16 16"
-            width="16"
-            height="16"
-            aria-hidden="true"
-            focusable="false"
-          >
-            <path d="M4 4 L12 12" pathLength="1" />
-            <path d="M12 4 L4 12" pathLength="1" />
-          </svg>
-        </button>
-      </li>
-    </ul>
+            <span class="check-letter" aria-hidden="true">{{ LETTERS[i] ?? i + 1 }}.</span>
+            <span class="check-option-text">{{ opt }}</span>
+            <svg
+              v-if="optionClass(i) === 'is-correct'"
+              class="check-mark check-mark--tick"
+              viewBox="0 0 16 16"
+              width="16"
+              height="16"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="M2.5 8.5 L6.3 12.2 L13.5 4" pathLength="1" />
+            </svg>
+            <svg
+              v-else-if="optionClass(i) === 'is-incorrect'"
+              class="check-mark check-mark--cross"
+              viewBox="0 0 16 16"
+              width="16"
+              height="16"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="M4 4 L12 12" pathLength="1" />
+              <path d="M12 4 L4 12" pathLength="1" />
+            </svg>
+          </button>
+        </li>
+      </ul>
 
-    <p v-if="graded" class="check-verdict" data-testid="check-verdict">
-      {{ correct ? 'Correct' : 'Not quite' }}
-    </p>
-    <p v-if="graded && item.explanation" class="check-explanation" data-testid="check-explanation">
-      {{ item.explanation }}
-    </p>
+      <p v-if="graded" class="check-verdict" data-testid="check-verdict">
+        {{ correct ? 'Correct' : 'Not quite' }}
+      </p>
+      <p
+        v-if="graded && item.explanation"
+        class="check-explanation"
+        data-testid="check-explanation"
+      >
+        {{ item.explanation }}
+      </p>
 
-    <button
-      v-if="!answered"
-      type="button"
-      class="check-skip"
-      data-testid="check-skip"
-      :disabled="busy"
-      @click="emit('skip')"
-    >
-      Skip this question
-    </button>
+      <button
+        v-if="!answered"
+        type="button"
+        class="check-skip"
+        data-testid="check-skip"
+        :disabled="busy"
+        @click="emit('skip')"
+      >
+        Skip this question
+      </button>
 
-    <button
-      v-if="answered && !isLast"
-      ref="nextBtn"
-      type="button"
-      class="check-next"
-      data-testid="check-next"
-      :disabled="busy"
-      @click="emit('next')"
-    >
-      Next
-    </button>
-    <button
-      v-if="answered && isLast"
-      ref="doneBtn"
-      type="button"
-      class="check-next"
-      data-testid="check-done"
-      :disabled="busy"
-      @click="emit('done')"
-    >
-      Done
-    </button>
+      <button
+        v-if="answered && !isLast"
+        ref="nextBtn"
+        type="button"
+        class="check-next"
+        data-testid="check-next"
+        :disabled="busy"
+        @click="emit('next')"
+      >
+        Next
+      </button>
+      <button
+        v-if="answered && isLast"
+        ref="doneBtn"
+        type="button"
+        class="check-next"
+        data-testid="check-done"
+        :disabled="busy"
+        @click="emit('done')"
+      >
+        Done
+      </button>
+
+      <p v-if="showProgress" class="check-progress" data-tabular>
+        {{ check.viewIndex + 1 }}/{{ check.total }}
+      </p>
+    </div>
   </section>
 </template>
 
 <style scoped>
+/* Same gutter grammar as the tutor and learner turns: the role sits in the
+   4rem gutter in pencil, the box holds the question. */
+.check-card {
+  display: grid;
+  grid-template-columns: 4rem minmax(0, 1fr);
+  gap: 0 0.75rem;
+  max-width: 100%;
+}
+
+.check-gutter {
+  min-width: 0;
+}
+
+.role-tag {
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  font-weight: 400;
+  line-height: var(--line-pitch);
+  color: var(--pencil);
+}
+
 /* A ruled box spanning the notes column: paper over the rules, 1px ink border,
    no radius. The check pauses the page. */
-.check-card {
+.check-box {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   padding: calc(var(--line-pitch) / 2) 1rem;
   border: 1px solid var(--ink);
   background: var(--color-background);
   font-family: var(--font-sans);
 }
 
-.check-label {
+/* The count is a page number at the foot of the box, not a heading above it. */
+.check-progress {
   margin: 0;
-  font-size: var(--fs-caption);
+  align-self: flex-end;
+  font-size: var(--fs-label);
   line-height: var(--line-pitch);
   color: var(--pencil);
-}
-
-.check-progress {
-  margin-left: 0.5rem;
 }
 
 .check-question {
@@ -307,6 +333,13 @@ watch(answered, async (is) => {
   .check-mark {
     animation: none;
     stroke-dashoffset: 0;
+  }
+}
+
+@media (max-width: 599px) {
+  .check-card {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
   }
 }
 </style>

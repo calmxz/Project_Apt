@@ -19,8 +19,40 @@
         :title="uploading ? 'Uploading...' : 'Attach a reference file (PDF, PPTX, TXT, MD)'"
         @click="openFilePicker"
       >
-        <i v-if="!uploading" class="pi pi-paperclip" aria-hidden="true" />
-        <i v-else class="pi pi-spin pi-spinner" aria-hidden="true" />
+        <svg
+          v-if="!uploading"
+          class="composer-icon"
+          viewBox="0 0 20 20"
+          width="20"
+          height="20"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path
+            d="M17.87 9.21 l-7.66 7.66 a5 5 0 0 1 -7.08 -7.08 l7.66 -7.66 a3.33 3.33 0 0 1 4.72 4.72 l-7.67 7.66 a1.67 1.67 0 0 1 -2.36 -2.36 l7.08 -7.07"
+          />
+        </svg>
+        <svg
+          v-else
+          class="composer-icon composer-spinner pi-spin"
+          viewBox="0 0 20 20"
+          width="20"
+          height="20"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path d="M17 10 A7 7 0 1 1 10 3" />
+        </svg>
       </button>
 
       <textarea
@@ -46,7 +78,26 @@
         :aria-label="sending ? 'Sending message' : 'Send message'"
         @click="emit('send')"
       >
-        <i :class="sending ? 'pi pi-spin pi-spinner' : 'pi pi-arrow-up'" aria-hidden="true" />
+        <svg
+          class="composer-icon"
+          :class="sending ? 'composer-spinner pi-spin' : ''"
+          viewBox="0 0 20 20"
+          width="20"
+          height="20"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path v-if="sending" d="M17 10 A7 7 0 1 1 10 3" />
+          <template v-else>
+            <path d="M10 16.5 L10 3.5" />
+            <path d="M4.5 9 L10 3.5 L15.5 9" />
+          </template>
+        </svg>
       </button>
 
       <button
@@ -58,7 +109,21 @@
         aria-label="Stop generating"
         @click="emit('stop')"
       >
-        <i class="pi pi-stop" aria-hidden="true" />
+        <svg
+          class="composer-icon"
+          viewBox="0 0 20 20"
+          width="20"
+          height="20"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <rect x="5" y="5" width="10" height="10" />
+        </svg>
       </button>
 
       <button
@@ -111,9 +176,7 @@ const COMPOSER_MAX_HEIGHT_PX = 224
 const nearCharLimit = computed(() => props.modelValue.length >= MAX_DRAFT_LEN * 0.9)
 
 const placeholder = computed(() =>
-  props.locked
-    ? 'Pick an answer above, or Skip...'
-    : 'Ask anything. Press Enter to send · Shift + Enter for a new line.',
+  props.locked ? 'Pick an answer above, or Skip...' : 'Ask anything.',
 )
 
 function autoResize() {
@@ -267,6 +330,11 @@ defineExpose({ focus })
   transition: color var(--motion-fast) ease;
 }
 
+/* Drawn strokes, not a glyph font: one weight, round ends, the button's ink. */
+.composer-icon {
+  flex: 0 0 auto;
+}
+
 .composer-attach {
   grid-column: 1;
   align-self: end;
@@ -337,6 +405,14 @@ defineExpose({ focus })
 .composer-skip:focus-visible {
   outline: 2px solid var(--color-accent-ring);
   outline-offset: 2px;
+}
+
+/* .pi-spin (primeicons, imported globally in main.js) does the rotation; the
+   arc is a whole <svg> so it turns about its own centre. */
+@media (prefers-reduced-motion: reduce) {
+  .composer-spinner {
+    animation: none;
+  }
 }
 
 @media (max-width: 599px) {

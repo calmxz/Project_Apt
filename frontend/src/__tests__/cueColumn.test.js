@@ -114,6 +114,24 @@ describe('CueColumn', () => {
     expect(w.findAll('.is-fresh')).toHaveLength(0)
   })
 
+  it('counts only the open gaps in the strip and says "1 gap"', () => {
+    // The default fixture has two confirmed gaps, one of which is the focus
+    // cue -- the strip must count the one gap the Gaps section actually lists.
+    const strip = mountCue().get('[data-testid="cue-strip"]').text()
+    expect(strip).toContain('1 gap')
+    expect(strip).not.toContain('1 gaps')
+    expect(strip).toContain('1 mastered')
+  })
+
+  it('says "0 gaps" when the only gap is the focus cue', () => {
+    const strip = mountCue(
+      profile({ confirmed_gaps: [entry('ATP yield')], focus_target_gap: 'ATP yield' }),
+    )
+      .get('[data-testid="cue-strip"]')
+      .text()
+    expect(strip).toContain('0 gaps')
+  })
+
   it('exposes the strip disclosure with aria-expanded', async () => {
     const w = mountCue()
     const btn = w.get('[data-testid="cue-disclosure"]')
