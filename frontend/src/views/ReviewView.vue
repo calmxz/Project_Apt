@@ -1,9 +1,11 @@
 <template>
   <section class="review">
+    <BackButton label="Back" fallback="/" />
     <header class="head">
       <span class="folio">spaced repetition</span>
       <h1 class="title">Review</h1>
       <p class="lede">Concepts due for a quick check.</p>
+      <p class="lede">Each check that you get right extends the gap before the next one.</p>
     </header>
 
     <p v-if="queue.total > 0" class="count" data-testid="review-count">
@@ -20,7 +22,10 @@
           @click="startReview(item)"
         >
           <span class="review-concept">{{ item.concept }}</span>
-          <span class="review-meta">{{ item.source_topic }} &middot; streak {{ item.streak }}</span>
+          <span class="review-meta">
+            {{ item.source_topic }} &middot;
+            {{ item.streak === 1 ? '1 correct in a row' : `${item.streak} correct in a row` }}
+          </span>
         </button>
       </li>
     </ul>
@@ -45,6 +50,7 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
+import BackButton from '../components/BackButton.vue'
 import { useSessionStore } from '../stores/session.js'
 import { getReviewQueue } from '../services/reviewApi.js'
 

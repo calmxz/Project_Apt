@@ -5,6 +5,7 @@ import { useSessionStore } from '@/stores/session.js'
 import { cardStory, cardChips, cardMeta } from '@/utils/sessionCard.js'
 import EmptyState from '@/components/EmptyState.vue'
 import SessionChips from '@/components/SessionChips.vue'
+import LibrarySkeletonGrid from '@/components/LibrarySkeletonGrid.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -178,14 +179,14 @@ defineExpose({ load }) // used by control/pagination tasks
 </script>
 
 <template>
-  <main class="library">
+  <section class="library" aria-labelledby="library-title">
     <header class="library-head">
       <RouterLink to="/" class="library-back" data-testid="library-back">
         <i class="pi pi-arrow-left" aria-hidden="true" />
         Back to home
       </RouterLink>
       <p class="library-folio">library</p>
-      <h1 class="library-title">All sessions</h1>
+      <h1 id="library-title" class="library-title">All sessions</h1>
     </header>
 
     <div class="library-controls">
@@ -227,7 +228,7 @@ defineExpose({ load }) // used by control/pagination tasks
       </select>
     </div>
 
-    <p v-if="loading && !items.length" class="muted" data-testid="library-loading">Loading...</p>
+    <LibrarySkeletonGrid v-if="loading && !items.length" :count="6" />
     <p v-else-if="error && !items.length" class="error" data-testid="library-error">
       {{ error }}
     </p>
@@ -285,7 +286,7 @@ defineExpose({ load }) // used by control/pagination tasks
       class="library-sentinel"
       data-testid="library-sentinel"
     >
-      <p v-if="loading" class="muted">Loading more...</p>
+      <LibrarySkeletonGrid v-if="loading" :count="3" />
       <template v-else-if="error">
         <p class="error">{{ error }}</p>
         <button type="button" class="library-pg-btn" data-testid="library-retry" @click="retryLoad">
@@ -296,7 +297,7 @@ defineExpose({ load }) // used by control/pagination tasks
         {{ total }} {{ total === 1 ? 'session' : 'sessions' }}
       </p>
     </div>
-  </main>
+  </section>
 </template>
 
 <style scoped>

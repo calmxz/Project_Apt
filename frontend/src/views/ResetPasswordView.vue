@@ -4,10 +4,16 @@
       <Logo size="lg" variant="mark-only" />
       <span class="folio">reset password</span>
       <h1 class="title">Set a new password</h1>
-      <p class="lede">Choose a new password for your account.</p>
+      <p class="lede">
+        {{
+          hasRecovery
+            ? 'Choose a new password for your account.'
+            : 'Reset links work once and expire after an hour.'
+        }}
+      </p>
     </header>
 
-    <form class="form" data-testid="reset-form" @submit.prevent="submit">
+    <form v-if="hasRecovery" class="form" data-testid="reset-form" @submit.prevent="submit">
       <div class="field">
         <label for="password" class="label">New password</label>
         <InputText
@@ -55,6 +61,13 @@
         </button>
       </div>
     </form>
+
+    <div v-else class="form" data-testid="reset-no-session">
+      <p class="error" role="alert">This reset link is invalid or has expired.</p>
+      <p class="swap">
+        <RouterLink to="/forgot" data-testid="reset-to-forgot">Request a new one</RouterLink>
+      </p>
+    </div>
   </section>
 </template>
 
@@ -74,6 +87,14 @@ const password = ref('')
 const confirm = ref('')
 const submitting = ref(false)
 const error = ref('')
+
+// Supabase exchanges the recovery hash asynchronously after init(), so the
+// hash itself counts as evidence of a valid link; the form must never hide
+// while "#...type=recovery" is in the URL.
+const recoveryHash = ref(
+  typeof window !== 'undefined' && window.location.hash.includes('type=recovery'),
+)
+const hasRecovery = computed(() => recoveryHash.value || !auth.ready || !!auth.session)
 
 const passwordValid = computed(() => password.value.length >= 8)
 const mismatch = computed(() => confirm.value.length > 0 && confirm.value !== password.value)

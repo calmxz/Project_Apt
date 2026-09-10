@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { stripAutoPrefix, cardMeta, cardStory, cardChips } from '@/utils/sessionCard.js'
+import {
+  stripAutoPrefix,
+  cardMeta,
+  cardStory,
+  cardChips,
+  cleanPreview,
+} from '@/utils/sessionCard.js'
 
 const active = (over = {}) => ({
   id: 's',
@@ -59,6 +65,36 @@ describe('cardStory', () => {
     expect(cardStory(ended)).toBe('Covered the Krebs cycle')
     const bare = active({ ended_at: '2026-06-02T00:00:00Z', last_session_summary: null })
     expect(cardStory(bare)).toBe('Completed')
+  })
+})
+
+describe('cleanPreview', () => {
+  it('replaces display and inline math with [formula]', () => {
+    expect(cleanPreview('Solve $$x = \\frac{-b}{2a}$$ then $y^2$ next')).toBe(
+      'Solve [formula] then [formula] next',
+    )
+  })
+  it('passes through plain text and null', () => {
+    expect(cleanPreview('hello there')).toBe('hello there')
+    expect(cleanPreview(null)).toBe('')
+  })
+})
+
+describe('cardStory (active)', () => {
+  it('falls back to the summary when the preview is very short', () => {
+    expect(
+      cardStory(
+        active({ last_message_preview: 'okay', last_session_summary: '[auto] Covered routers.' }),
+      ),
+    ).toBe('Covered routers.')
+  })
+  it('keeps a short preview when there is no summary', () => {
+    expect(cardStory(active({ last_message_preview: 'okay' }))).toBe('okay')
+  })
+  it('cleans math out of the preview', () => {
+    expect(cardStory(active({ last_message_preview: 'Here: $$a^2+b^2=c^2$$' }))).toBe(
+      'Here: [formula]',
+    )
   })
 })
 

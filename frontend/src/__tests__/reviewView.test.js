@@ -28,11 +28,14 @@ function makeReviewItem(concept, overrides = {}) {
   }
 }
 
+const stubs = {
+  RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
+  BackButton: { template: '<a data-testid="back-button" />' },
+}
+
 function mountView() {
   return mount(ReviewView, {
-    global: {
-      stubs: { RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' } },
-    },
+    global: { stubs },
   })
 }
 
@@ -168,5 +171,17 @@ describe('ReviewView', () => {
     expect(apiReviewQueue).toHaveBeenLastCalledWith({ limit: 100, offset: 0 })
     expect(wrapper.findAll('[data-testid="review-item"]')).toHaveLength(5)
     expect(wrapper.find('[data-testid="review-more"]').exists()).toBe(false)
+  })
+
+  it('labels the streak in plain words and renders a back control', async () => {
+    apiReviewQueue.mockResolvedValue({
+      total: 1,
+      items: [makeReviewItem('ATP yield', { streak: 2 })],
+    })
+    const w = mount(ReviewView, { global: { stubs } })
+    await flushPromises()
+    expect(w.get('[data-testid="review-item"]').text()).toContain('2 correct in a row')
+    expect(w.text()).not.toMatch(/streak \d/)
+    expect(w.find('[data-testid="back-button"]').exists()).toBe(true)
   })
 })

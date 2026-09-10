@@ -15,14 +15,32 @@ export function cardMeta(session) {
   return ts ? `${left} · last active ${formatRelative(ts)}` : left
 }
 
+const DISPLAY_MATH_RE = /\$\$[\s\S]*?\$\$/g
+const INLINE_MATH_RE = /\$[^$\n]+?\$/g
+const SHORT_PREVIEW = 12
+
+// Strips LaTeX source (display and inline math) down to a placeholder so card
+// previews never show raw formula syntax.
+export function cleanPreview(text) {
+  return (text || '')
+    .replace(DISPLAY_MATH_RE, '[formula]')
+    .replace(INLINE_MATH_RE, '[formula]')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 // Narrative line for home/library cards. Ended: summary (auto-stripped) -> 'Completed'.
-// Active: trimmed preview or '' (caller renders its own placeholder).
-// Structured signals (focus/mastered) never appear here — they are chips.
+// Active: cleaned preview, falling back to the summary when the preview is too
+// short to be useful (e.g. a one-word reply). Structured signals (focus/mastered)
+// never appear here — they are chips.
 export function cardStory(session) {
   if (session.ended_at) {
     return stripAutoPrefix(session.last_session_summary) || 'Completed'
   }
-  return (session.last_message_preview || '').trim()
+  const preview = cleanPreview(session.last_message_preview)
+  const summary = stripAutoPrefix(session.last_session_summary)
+  if (preview.length < SHORT_PREVIEW && summary) return summary
+  return preview
 }
 
 // Structured signals for chip rendering on both surfaces. Focus first, mastered second.

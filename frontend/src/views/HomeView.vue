@@ -2,8 +2,7 @@
   <section class="home">
     <h1 class="title">What do you want to learn?</h1>
 
-    <p v-if="store.loading && !store.sessions.length" class="muted">Loading...</p>
-    <p v-else-if="store.error && !store.sessions.length" class="error" data-testid="home-error">
+    <p v-if="store.error && !store.sessions.length" class="error" data-testid="home-error">
       {{ friendlyError(store.error) }}
     </p>
 

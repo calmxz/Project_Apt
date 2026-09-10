@@ -64,7 +64,12 @@ const props = defineProps({
 
 const maxDay = computed(() => Math.max(...props.usage.daily.map((d) => d.cost_usd), 0))
 
-const noSpend = computed(() => maxDay.value === 0 && props.usage.today_spend_usd === 0)
+const noSpend = computed(
+  () =>
+    maxDay.value === 0 &&
+    props.usage.today_spend_usd === 0 &&
+    (props.usage.top_sessions || []).length === 0,
+)
 
 const last7 = computed(() => props.usage.daily.slice(-7).reduce((acc, d) => acc + d.cost_usd, 0))
 

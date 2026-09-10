@@ -1,11 +1,14 @@
 <template>
   <aside class="ended-banner" data-testid="session-ended-banner">
     <span class="banner-icon" aria-hidden="true">
-      <i class="pi pi-clock" />
+      <i class="pi pi-check-circle" />
     </span>
     <div class="banner-text">
-      <p class="line">This session ended {{ formatDate(endedAt) }}.</p>
-      <p class="sub">Read-only. Continue the topic in a new session to keep the profile.</p>
+      <p class="line">Session ended {{ formatRelative(endedAt) }}.</p>
+      <p class="sub">
+        This transcript is kept as-is. Continue the topic in a new session to keep building the
+        profile.
+      </p>
     </div>
     <button
       v-if="hasGaps"
@@ -32,7 +35,7 @@
 </template>
 
 <script setup>
-import { formatDate } from '../utils/formatDate.js'
+import { formatRelative } from '../utils/formatDate.js'
 
 defineProps({
   endedAt: { type: String, required: true },
@@ -49,8 +52,8 @@ defineEmits(['resume', 'resume-gaps'])
   align-items: center;
   gap: 0.875rem;
   padding: 0.875rem 1.125rem;
-  background: rgba(255, 176, 32, 0.12);
-  border: 1px solid rgba(255, 176, 32, 0.35);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   flex-wrap: wrap;
 }
@@ -62,8 +65,8 @@ defineEmits(['resume', 'resume-gaps'])
   width: 2.25rem;
   height: 2.25rem;
   border-radius: var(--radius-pill);
-  background: var(--signal-warning);
-  color: #2A1F00;
+  background: var(--color-success-text);
+  color: var(--color-background);
   font-size: 1rem;
   flex-shrink: 0;
 }
@@ -97,14 +100,16 @@ defineEmits(['resume', 'resume-gaps'])
   gap: 0.4rem;
   padding: 0.5rem 1rem;
   border-radius: var(--radius-pill);
-  background: var(--signal-warning);
-  color: #2A1F00;
+  background: var(--color-accent-strong);
+  color: #fff;
   border: 0;
   font-family: var(--font-sans);
   font-weight: 600;
   font-size: 0.875rem;
   cursor: pointer;
-  transition: transform var(--motion-fast) var(--motion-bounce), filter var(--motion-fast) ease;
+  transition:
+    transform var(--motion-fast) var(--motion-bounce),
+    filter var(--motion-fast) ease;
 }
 
 .resume-btn:hover:not(:disabled) {
@@ -119,12 +124,12 @@ defineEmits(['resume', 'resume-gaps'])
 
 .gaps-btn {
   background: transparent;
-  border: 1px solid var(--signal-warning);
-  color: var(--color-heading);
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-accent-text);
 }
 
 .gaps-btn:hover:not(:disabled) {
-  background: rgba(255, 176, 32, 0.14);
+  background: var(--color-surface-raised);
   filter: none;
 }
 </style>

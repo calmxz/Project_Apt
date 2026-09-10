@@ -60,11 +60,13 @@ describe('HomeView', () => {
     expect(spy).toHaveBeenCalledWith()
   })
 
-  it('shows loading state', () => {
+  it('does not render bare Loading text while the store is loading', () => {
     const store = useSessionStore()
     store.loading = true
-    const wrapper = mountView()
-    expect(wrapper.text()).toContain('Loading')
+    store.sessions = []
+    const w = mountView()
+    expect(w.text()).not.toContain('Loading...')
+    expect(w.find('[data-testid="home-mode-quick"]').exists()).toBe(true)
   })
 
   it('shows error from store', () => {

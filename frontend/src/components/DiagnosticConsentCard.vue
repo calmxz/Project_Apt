@@ -57,7 +57,7 @@ const LABELS = { beginner: 'Beginner', intermediate: 'Intermediate', advanced: '
 <style scoped>
 .diag-card {
   border: 1px solid var(--color-border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 0.75rem 1rem;
   margin: 0.5rem 0;
   background: var(--color-surface);
@@ -84,6 +84,12 @@ const LABELS = { beginner: 'Beginner', intermediate: 'Intermediate', advanced: '
   font-size: 1.1rem;
   line-height: 1;
   color: var(--color-text-muted);
+  min-width: 2rem;
+  min-height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-pill);
 }
 .diag-actions {
   display: flex;

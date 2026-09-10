@@ -35,6 +35,7 @@ vi.mock('@/services/sessionsApi.js', () => ({ getSessionLibrary: vi.fn() }))
 
 import SessionsLibraryView from '@/views/SessionsLibraryView.vue'
 import * as sessionsApi from '@/services/sessionsApi.js'
+import { getSessionLibrary } from '@/services/sessionsApi.js'
 
 const stubs = {
   EmptyState: { template: '<div data-testid="empty-stub"><slot name="cta" /></div>' },
@@ -100,6 +101,23 @@ describe('SessionsLibraryView', () => {
     const card = wrapper.get('[data-testid="library-card-a"]')
     expect(card.find('.library-chips').text()).toContain('Focus: gap-a')
     expect(card.find('.library-desc').text()).toBe('No activity yet')
+  })
+
+  it('renders a skeleton grid, not text, while the first page loads', async () => {
+    getSessionLibrary.mockReturnValue(new Promise(() => {}))
+    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="library-loading"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="library-skeleton"]').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('Loading...')
+  })
+
+  it('does not render a nested main landmark', async () => {
+    sessionsApi.getSessionLibrary.mockResolvedValue(page([item('a')]))
+    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+    await flushPromises()
+    expect(wrapper.findAll('main').length).toBe(0)
+    expect(wrapper.find('section.library').exists()).toBe(true)
   })
 
   it('shows the empty state when no results', async () => {

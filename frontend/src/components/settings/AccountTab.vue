@@ -113,20 +113,21 @@
     </button>
   </section>
 
-  <section class="danger" data-testid="settings-danger">
-    <h2 class="card-title danger-title">
-      <i class="pi pi-exclamation-triangle card-icon" aria-hidden="true" />
-      Danger zone
+  <section class="card" data-testid="settings-preferences">
+    <h2 class="card-title">
+      <i class="pi pi-sliders-h card-icon" aria-hidden="true" />
+      Tutor preferences
     </h2>
-    <p class="danger-text">
-      Reset removes your local profile and runs onboarding again. Sessions on the server stay put.
+    <p class="card-sub">
+      Re-run the two-step setup to change your display name or how the tutor gives feedback.
+      Sessions are not affected.
     </p>
     <router-link
       to="/onboarding?retake=1"
-      class="danger-link"
+      class="secondary-link"
       data-testid="settings-retake-onboarding"
     >
-      <span>Retake onboarding</span>
+      <span>Edit name and feedback style</span>
       <i class="pi pi-arrow-right" aria-hidden="true" />
     </router-link>
   </section>
@@ -363,55 +364,30 @@ async function signOut() {
   color: var(--color-success-text);
 }
 
-/* Danger zone */
-.danger {
-  display: flex;
-  flex-direction: column;
-  gap: 0.625rem;
-  padding: 1.5rem;
-  border: 1px dashed var(--signal-error);
-  border-radius: var(--radius-card);
-  background: rgba(239, 68, 68, 0.04);
-}
-
-.danger-title {
-  color: var(--color-error-text);
-}
-
-.danger .card-icon {
-  color: var(--color-error-text);
-}
-
-.danger-text {
+.card-sub {
   margin: 0;
   color: var(--color-text-muted);
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
 }
-
-.danger-link {
-  align-self: flex-start;
+.secondary-link {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  padding: 0.5rem 1rem;
+  align-self: flex-start;
+  padding: 0.5rem 0.9rem;
   border-radius: var(--radius-pill);
-  background: transparent;
-  color: var(--color-error-text);
-  border: 1px solid var(--signal-error);
-  font-family: var(--font-sans);
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-accent-text);
   font-weight: 600;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   text-decoration: none;
-  transition:
-    background var(--motion-fast) ease,
-    color var(--motion-fast) ease,
-    transform var(--motion-fast) var(--motion-bounce);
 }
-
-.danger-link:hover {
-  background: var(--signal-error);
-  color: #ffffff;
-  transform: translateY(-1px);
+.secondary-link:hover {
+  border-color: var(--color-accent);
+}
+.secondary-link:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 /* Sign out */

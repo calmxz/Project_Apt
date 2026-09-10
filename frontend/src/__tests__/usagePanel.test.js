@@ -89,4 +89,22 @@ describe('UsagePanel', () => {
     expect(w.find('[data-testid="usage-empty"]').exists()).toBe(true)
     expect(w.find('[data-testid="usage-glance"]').exists()).toBe(false)
   })
+
+  it('does not show the empty-state copy when top_sessions has rows', () => {
+    const w = factory(
+      usage({
+        daily: [],
+        today_spend_usd: 0,
+        top_sessions: [{ session_id: 's1', topic: 'CSS', cost_usd: 0.02 }],
+      }),
+    )
+    expect(w.find('[data-testid="usage-empty"]').exists()).toBe(false)
+    expect(w.text()).toContain('Most expensive sessions')
+  })
+
+  it('shows the empty-state copy only when there is no spend anywhere', () => {
+    const w = factory(usage({ daily: [], today_spend_usd: 0, top_sessions: [] }))
+    expect(w.find('[data-testid="usage-empty"]').exists()).toBe(true)
+    expect(w.text()).not.toContain('Most expensive sessions')
+  })
 })

@@ -320,11 +320,12 @@ function onNewSession() {
       to="/review"
       class="sb-review"
       data-testid="sidebar-review"
+      :aria-label="`Review: ${reviewTotal} ${reviewTotal === 1 ? 'concept' : 'concepts'} due`"
       @click="closeDrawer"
     >
       <i class="pi pi-history" aria-hidden="true" />
       <span>Review</span>
-      <span class="sb-review-count">{{ reviewTotal }}</span>
+      <span class="sb-review-count" aria-hidden="true">{{ reviewTotal }}</span>
     </RouterLink>
 
     <div v-if="isExpanded" class="sb-search">
