@@ -102,6 +102,15 @@ function tickAt(i) {
   padding: var(--line-pitch) 0 0;
 }
 
+/* Same reason as the turn gutters: an inline role tag in a block would share
+   the 17px strut and make the row 28.5px. */
+.msg .msg-gutter {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+
 .role-tag {
   font-family: var(--font-sans);
   font-size: var(--fs-label);
@@ -109,8 +118,10 @@ function tickAt(i) {
   color: var(--pencil);
 }
 
+/* Block-level, not inline-flex: inline would sit on the body's baseline and
+   add half-leading on top of its own 28px. */
 .msg.typing .content {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 0.3rem;
   margin: 0;

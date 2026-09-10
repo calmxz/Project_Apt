@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { renderMarkdown } from '@/lib/markdownRenderer.js'
 import { splitSafePrefixIncremental, createSplitState } from '@/lib/markdownStreamBuffer.js'
 
@@ -18,6 +18,80 @@ const parts = computed(() => {
   }
   const { safe, deferred } = splitSafePrefixIncremental(props.text, splitState)
   return { safeHtml: renderMarkdown(safe), deferred }
+})
+
+// Blocks whose height is intrinsic (display math with fractions, images) cannot
+// be snapped to the 28px pitch by CSS alone, so their bottom margin is topped up
+// to the next whole pitch after render and whenever they resize. Everything else
+// in the notes column is already a whole multiple, so one block never drags the
+// rest of the page off the rules.
+const rootEl = ref(null)
+const SNAP_SELECTOR = '.katex-display, pre, table, img'
+let _ro = null
+
+function _pitch(el) {
+  const v = parseFloat(getComputedStyle(el).getPropertyValue('--line-pitch'))
+  return v > 0 ? v : 28
+}
+
+function snapBlocks() {
+  const root = rootEl.value
+  if (!root) return
+  const pitch = _pitch(root)
+  for (const el of root.querySelectorAll(SNAP_SELECTOR)) {
+    // The applied top-up is read back from the property we wrote, never from a
+    // measurement: clearing the style and re-measuring returns a transitioning
+    // value under prefers-reduced-motion (* { transition-duration: 0.01ms }
+    // makes every margin write animate), which compounds the pad on each pass.
+    const applied = parseFloat(el.style.getPropertyValue('--snap-pad')) || 0
+    const cs = getComputedStyle(el)
+    const total =
+      el.getBoundingClientRect().height +
+      (parseFloat(cs.marginTop) || 0) +
+      (parseFloat(cs.marginBottom) || 0)
+    const natural = total - applied
+    const pad = (pitch - (natural % pitch)) % pitch
+    // Only write on a real change, so the observer cannot drive itself.
+    if (Math.abs(pad - applied) > 0.01) {
+      if (pad > 0.01) el.style.setProperty('--snap-pad', `${pad}px`)
+      else el.style.removeProperty('--snap-pad')
+    }
+  }
+}
+
+// One pass per frame at most, and never re-entered from its own writes.
+let _frame = 0
+function scheduleSnap() {
+  if (_frame) return
+  _frame = requestAnimationFrame(() => {
+    _frame = 0
+    snapBlocks()
+  })
+}
+
+function observeBlocks() {
+  const root = rootEl.value
+  if (!root || typeof ResizeObserver === 'undefined') return
+  _ro?.disconnect()
+  _ro = _ro || new ResizeObserver(() => scheduleSnap())
+  for (const el of root.querySelectorAll(SNAP_SELECTOR)) _ro.observe(el)
+  snapBlocks()
+}
+
+// jsdom has no layout engine and no ResizeObserver; the snapper is a no-op there.
+if (typeof ResizeObserver !== 'undefined') {
+  onMounted(() => nextTick(observeBlocks))
+  watch(
+    () => parts.value.safeHtml,
+    () => nextTick(observeBlocks),
+  )
+}
+
+onBeforeUnmount(() => {
+  _ro?.disconnect()
+  _ro = null
+  if (_frame) cancelAnimationFrame(_frame)
+  _frame = 0
 })
 
 // F-03: the fence renderer emits a [data-copy-button] per code block, but
@@ -46,7 +120,7 @@ async function onRootClick(e) {
 
 <template>
   <div class="markdown-content" @click="onRootClick">
-    <div class="md-rendered" v-html="parts.safeHtml"></div>
+    <div ref="rootEl" class="md-rendered" v-html="parts.safeHtml"></div>
     <span v-if="parts.deferred" class="deferred">{{ parts.deferred }}</span>
   </div>
 </template>
@@ -61,6 +135,10 @@ async function onRootClick(e) {
    pre-wrap (set below) for faithful streaming display. */
 .md-rendered {
   white-space: normal;
+  /* A new formatting context, so a trailing block's bottom margin -- including
+     the top-up the snapper writes on display math or a table -- counts inside
+     this box instead of collapsing out of it and off the pitch. */
+  display: flow-root;
 }
 .md-rendered :deep(p) {
   margin: 0 0 var(--line-pitch);
@@ -110,8 +188,12 @@ async function onRootClick(e) {
   color: var(--ink);
   border: 1px solid var(--rule-strong);
   border-radius: var(--radius-sm);
-  padding: calc(var(--line-pitch) / 2) 0.875rem;
+  /* 13px + 1px border top and bottom = one pitch of frame, so a fence of n
+     lines is exactly 28(n+1) tall. */
+  padding: calc(var(--line-pitch) / 2 - 1px) 0.875rem;
+  padding-bottom: calc(var(--line-pitch) / 2 - 1px + var(--snap-pad, 0px));
   margin: 0 0 var(--line-pitch);
+  transition: none;
   font-family: var(--font-mono);
   font-size: 0.9375rem;
   line-height: var(--line-pitch);
@@ -134,6 +216,9 @@ async function onRootClick(e) {
   border-radius: var(--radius-sm);
   padding: 1px 8px;
   font: inherit;
+  /* 24px of leading + 1px padding + 1px border each side = one pitch, so the
+     fence header row is a single line tall. */
+  line-height: calc(var(--line-pitch) - 4px);
   cursor: pointer;
 }
 .md-rendered :deep(.code-block-copy:hover),
@@ -148,27 +233,51 @@ async function onRootClick(e) {
   font-family: var(--font-mono);
   font-size: 0.9em;
 }
+/* Display math has an intrinsic height (fractions, radicals), so the rule under
+   it is painted rather than laid out and the snapper below tops the block up to
+   the next whole pitch. */
 .md-rendered :deep(.katex-display) {
   margin: var(--line-pitch) 0;
-  padding-bottom: calc(var(--line-pitch) / 2);
-  border-bottom: 1px solid var(--rule-strong);
+  /* The snapper drives --snap-pad rather than writing margin-bottom directly:
+     padding never collapses out of the block and never animates, so the top-up
+     lands even where a global transition-duration is in force. */
+  padding-bottom: calc(var(--line-pitch) / 2 - 1px + var(--snap-pad, 0px));
+  box-shadow: inset 0 -1px 0 var(--rule-strong);
+  transition: none;
 }
 .md-rendered :deep(table) {
   border-collapse: collapse;
-  margin: 0 0 var(--line-pitch);
+  /* Collapsed borders make the browser ignore padding on the table box, so this
+     one block takes its top-up as margin. */
+  margin: 0 0 calc(var(--line-pitch) + var(--snap-pad, 0px));
+  transition: none;
 }
+/* Collapsed borders eat a pixel per row: 27px of leading plus the shared 1px
+   rule is one pitch per row. */
 .md-rendered :deep(th),
 .md-rendered :deep(td) {
   border: 1px solid var(--rule-strong);
   padding: 0 0.75rem;
-  line-height: var(--line-pitch);
+  line-height: calc(var(--line-pitch) - 1px);
   font-variant-numeric: tabular-nums;
+}
+/* Block, not inline: an inline image sits on a paragraph baseline and cannot be
+   snapped to the pitch. */
+.md-rendered :deep(img) {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  padding-bottom: var(--snap-pad, 0px);
+  transition: none;
 }
 .md-rendered :deep(th) {
   text-align: left;
   font-weight: 700;
 }
+/* Block, not inline: a mono tail inside the sans strut makes a taller line box
+   and the streaming text would drift off the rules mid-turn. */
 .deferred {
+  display: block;
   font-family: var(--font-mono);
   white-space: pre-wrap;
   color: var(--pencil);

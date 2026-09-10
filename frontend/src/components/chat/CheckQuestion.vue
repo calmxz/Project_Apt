@@ -165,6 +165,9 @@ watch(answered, async (is) => {
 }
 
 .check-gutter {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   min-width: 0;
 }
 
@@ -182,7 +185,9 @@ watch(answered, async (is) => {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: calc(var(--line-pitch) / 2) 1rem;
+  /* 13px + the 1px border = half a pitch of frame at each end, so the box is a
+     whole multiple of the pitch. */
+  padding: calc(var(--line-pitch) / 2 - 1px) 1rem;
   border: 1px solid var(--ink);
   background: var(--color-background);
   font-family: var(--font-sans);
@@ -219,7 +224,8 @@ watch(answered, async (is) => {
   text-align: left;
   background: transparent;
   border: 0;
-  border-bottom: 1px solid var(--rule);
+  /* Painted, not laid out: a border-bottom made every option 29px. */
+  box-shadow: inset 0 -1px 0 var(--rule);
   border-radius: 0;
   padding: 0;
   font-family: var(--font-sans);

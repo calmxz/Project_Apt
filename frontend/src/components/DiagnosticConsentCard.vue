@@ -68,14 +68,17 @@ const LETTERS = { beginner: 'A', intermediate: 'B', advanced: 'C' }
   display: flex;
   flex-direction: column;
   border: 1px solid var(--ink);
-  padding: calc(var(--line-pitch) / 2) 1rem;
+  /* 13px + the 1px border = half a pitch of frame at each end. */
+  padding: calc(var(--line-pitch) / 2 - 1px) 1rem;
   background: var(--color-background);
   font-family: var(--font-sans);
 }
 
+/* Centred, not baseline: the icon button has no text baseline, so aligning to
+   one made the head taller than a pitch. */
 .diag-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
 }
@@ -136,7 +139,8 @@ const LETTERS = { beginner: 'A', intermediate: 'B', advanced: 'C' }
   text-align: left;
   background: transparent;
   border: 0;
-  border-bottom: 1px solid var(--rule);
+  /* Painted, not laid out, so each action line is exactly one pitch. */
+  box-shadow: inset 0 -1px 0 var(--rule);
   border-radius: 0;
   padding: 0;
   font-family: var(--font-sans);

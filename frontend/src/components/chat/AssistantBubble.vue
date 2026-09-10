@@ -83,10 +83,10 @@ const visibleToolCalls = computed(() => {
 }
 
 .msg-gutter {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 4px;
   min-width: 0;
 }
 
@@ -98,7 +98,12 @@ const visibleToolCalls = computed(() => {
   color: var(--pencil);
 }
 
+/* The tick hangs under the role tag without adding height: in flow it made the
+   gutter 44px and knocked the turn off the 28px pitch. */
 .landed-tick {
+  position: absolute;
+  top: var(--line-pitch);
+  left: 0;
   fill: none;
   stroke: var(--ink-learner);
   stroke-width: 1.5;
@@ -160,6 +165,12 @@ const visibleToolCalls = computed(() => {
     flex-direction: row;
     align-items: center;
     gap: 0.5rem;
+  }
+
+  /* One row here, so the tick sits beside the label instead of over the first
+     line of the message; the row is still one pitch tall. */
+  .landed-tick {
+    position: static;
   }
 }
 </style>

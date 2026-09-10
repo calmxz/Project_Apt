@@ -71,15 +71,19 @@ function isYourAnswer(item, i) {
 .recap-card {
   display: flex;
   flex-direction: column;
-  padding: 0 0 calc(var(--line-pitch) / 2);
+  padding: 0 0 var(--line-pitch);
   font-family: var(--font-sans);
 }
 
+/* One pitch tall, and the hairline is painted rather than laid out: a
+   border-bottom plus baseline-aligned 22px and 14px text made the header 33px
+   and pushed every line below it off the rules. */
 .recap-header {
   display: flex;
   align-items: baseline;
   gap: 0.625rem;
-  border-bottom: 1px solid var(--rule-strong);
+  height: var(--line-pitch);
+  box-shadow: inset 0 -1px 0 var(--rule-strong);
 }
 
 .recap-score {
@@ -141,8 +145,11 @@ function isYourAnswer(item, i) {
   text-decoration-color: var(--ink-marker);
 }
 
+/* Not baseline-aligned: a 13px item on a 17px baseline adds half a pixel to
+   the option row. Its own line-height is a full pitch, so it still reads level. */
 .recap-tag {
   flex-shrink: 0;
+  align-self: flex-start;
   font-size: var(--fs-label);
   color: var(--pencil);
 }

@@ -28,7 +28,14 @@ defineProps({
   padding: var(--line-pitch) 0 0;
 }
 
+/* Flex column, not a block: an inline 13px role tag inside a 17px block shares
+   the block's strut, and the two half-leadings make the line box 28.5px, so
+   every turn drifted half a pixel off the rules. A flex item is blockified and
+   carries only its own strut, so the gutter is exactly one pitch. */
 .msg-gutter {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   min-width: 0;
 }
 

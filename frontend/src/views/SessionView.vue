@@ -1133,7 +1133,8 @@ function goHome() {
   padding: 0;
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
-  line-height: var(--line-pitch);
+  /* 27px + the 1px rule = one pitch, so the turns below still sit on the rules. */
+  line-height: calc(var(--line-pitch) - 1px);
   color: var(--ink-learner);
   cursor: pointer;
   text-align: left;
