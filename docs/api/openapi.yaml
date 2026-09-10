@@ -1004,44 +1004,96 @@ components:
         omitting it makes the patch fail. `subtopic` and `subtopic_level`
         must be provided together (service-enforced cross-field rule).
       properties:
-        session_id:           { type: string, maxLength: 64 }
+        session_id:
+          type: string
+          maxLength: 64
+          description: Ignored; the server injects the authoritative session id.
         knowledge_level:
           oneOf:
             - $ref: "#/components/schemas/KnowledgeLevel"
             - type: "null"
           default: null
-        add_confirmed_gap:    { type: [string, "null"], default: null, maxLength: 200 }
-        add_mastered_concept: { type: [string, "null"], default: null, maxLength: 200 }
-        focus_target_gap:     { type: [string, "null"], default: null, maxLength: 200 }
+          description: >-
+            New session-wide level. Requires evidence_type declared or tested;
+            the patch fails without it.
+        add_confirmed_gap:
+          type: [string, "null"]
+          default: null
+          maxLength: 200
+          description: >-
+            Concept the learner does not yet know. Short noun phrase. Upserted
+            into confirmed_gaps (an existing entry is refreshed, not
+            duplicated) and removed from mastered_concepts if present there.
+        add_mastered_concept:
+          type: [string, "null"]
+          default: null
+          maxLength: 200
+          description: >-
+            Concept the learner has demonstrated. Recorded only with
+            evidence_type declared (learner said so) or tested; inferred is
+            ignored server-side. Upserted into mastered_concepts and removed
+            from confirmed_gaps if present there.
+        focus_target_gap:
+          type: [string, "null"]
+          default: null
+          maxLength: 200
+          description: >-
+            Gap to concentrate on. Omit to leave focus unchanged. Send null
+            together with focus_clear_reason to clear it.
         focus_clear_reason:
           oneOf:
             - $ref: "#/components/schemas/FocusClearReason"
             - type: "null"
           default: null
+          description: >-
+            Required when focus_target_gap is null. tested_correct is accepted
+            only if a correct check answer for that gap was recorded this
+            session.
         evidence_type:
           oneOf:
             - $ref: "#/components/schemas/EvidenceType"
             - type: "null"
           default: null
+          description: >-
+            How you know. declared = learner stated it; inferred = observed
+            from engagement; tested = check-question outcome (server-owned;
+            if sent it is stored as declared). Optional for a focus-only patch.
         subtopic:
           type: [string, "null"]
           default: null
           minLength: 1
           maxLength: 100
+          description: >-
+            Subtopic name for a per-subtopic level. Short noun phrase; reuse an
+            existing name when one matches. Must be sent with subtopic_level.
         subtopic_level:
           oneOf:
             - $ref: "#/components/schemas/KnowledgeLevel"
             - type: "null"
           default: null
+          description: Learner's level on subtopic. Must be sent with subtopic.
 
     RetrieveChunksArgs:
       type: object
       additionalProperties: false
       required: [session_id, query]
       properties:
-        session_id: { type: string, maxLength: 64 }
-        query:      { type: string, maxLength: 500 }
-        k:          { type: integer, default: 5, minimum: 1, maximum: 20 }
+        session_id:
+          type: string
+          maxLength: 64
+          description: Ignored; the server injects the authoritative session id.
+        query:
+          type: string
+          maxLength: 500
+          description: >-
+            Natural-language search text. Phrase it as the learner's question
+            or the concept name, not as an instruction.
+        k:
+          type: integer
+          default: 5
+          minimum: 1
+          maximum: 20
+          description: Maximum number of chunks to return, 1-20. Default 5.
 
     AskCheckQuestionsArgs:
       type: object
@@ -1049,29 +1101,55 @@ components:
       required: [session_id, gap, items]
       description: |
         Register an ordered batch of 1..5 multiple-choice check-questions and end
-        the turn. The first question's text is also streamed as assistant text.
+        the turn. The card renders from this payload; any lead-in prose is the
+        model's own text in the same turn.
         Per-item correct_index must be < len(options); that cross-field rule is
         enforced in check_question_service, not here.
       properties:
-        session_id: { type: string, maxLength: 64 }
-        gap:        { type: string, maxLength: 200 }
+        session_id:
+          type: string
+          maxLength: 64
+          description: Ignored; the server injects the authoritative session id.
+        gap:
+          type: string
+          maxLength: 200
+          description: >-
+            The single confirmed gap every item probes. Use the exact name from
+            confirmed_gaps so grading updates the right profile entry.
         items:
           type: array
           minItems: 1
           maxItems: 5
+          description: Ordered batch of questions, all on gap. One batch per turn.
           items:
             type: object
             additionalProperties: false
             required: [question, options, correct_index, explanation]
             properties:
-              question:      { type: string, maxLength: 1000 }
+              question:
+                type: string
+                maxLength: 1000
+                description: >-
+                  The stem only. Do not number or letter the options inside
+                  it; the options array is rendered by the UI.
               options:
                 type: array
                 minItems: 2
                 maxItems: 4
                 items: { type: string, maxLength: 200 }
-              correct_index: { type: integer, minimum: 0 }
-              explanation:   { type: string, maxLength: 500 }
+                description: Answer choices, exactly one correct, all plausible.
+              correct_index:
+                type: integer
+                minimum: 0
+                description: >-
+                  0-based index into options of the correct answer. Must be
+                  less than the number of options.
+              explanation:
+                type: string
+                maxLength: 500
+                description: >-
+                  One sentence shown to the learner after they answer, whether
+                  right or wrong.
 
     PendingCheck:
       type: object

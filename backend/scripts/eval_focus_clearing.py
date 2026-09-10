@@ -12,7 +12,7 @@ Patterns:
 - vague_signal:        user says "ok got it" with no demonstration ->
                        focus should NOT clear
 
-Per CLAUDE.md line 105-107: PASS threshold is >=85% across patterns x replicates.
+Per the CLAUDE.md reliability checkpoints: PASS threshold is >=85% across patterns x replicates.
 
 Run:
     python backend/scripts/eval_focus_clearing.py --replicates 5
@@ -284,10 +284,10 @@ def _write_report(report_path: Path, block: str) -> None:
     else:
         existing = (
             "# Phase 3 MLP Checkpoint - focus_target_gap clearing reliability\n\n"
-            "Per CLAUDE.md line 105-107: gate threshold is >=85% across the four"
+            "Per the CLAUDE.md reliability checkpoints: gate threshold is >=85% across the four"
             " Design Doc S6.3 patterns. Below 85% triggers prompt iteration; if"
             " still failing after 2-3 iterations, swap default model to"
-            " `anthropic/claude-sonnet-4-6`.\n\n"
+            " `anthropic/claude-sonnet-5`.\n\n"
         )
     report_path.write_text(existing + block, encoding="utf-8")
 

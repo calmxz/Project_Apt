@@ -256,10 +256,11 @@ MODEL_RATES: dict[str, dict[str, Decimal]] = {
         "input_per_1k": Decimal("0.000250"),   # $0.25 / 1M tokens
         "output_per_1k": Decimal("0.001500"),  # $1.50 / 1M tokens
     },
-    # Anthropic Claude Sonnet 4.6 — project fallback model if gemini underperforms (verify at anthropic.com/pricing)
-    "anthropic/claude-sonnet-4-6": {
-        "input_per_1k": Decimal("0.003"),      # $3.00  / 1M tokens
-        "output_per_1k": Decimal("0.015"),     # $15.00 / 1M tokens
+    # Anthropic Claude Sonnet 5 — project fallback model if gemini underperforms
+    # (verified against the Claude API price table 2026-09-10)
+    "anthropic/claude-sonnet-5": {
+        "input_per_1k": Decimal("0.002"),      # $2.00  / 1M tokens
+        "output_per_1k": Decimal("0.010"),     # $10.00 / 1M tokens
     },
     # Google Gemini embedding model
     "gemini/gemini-embedding-2": {

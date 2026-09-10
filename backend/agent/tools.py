@@ -53,9 +53,15 @@ TOOLS = [
         "function": {
             "name": "retrieve_chunks",
             "description": (
-                "Vector search over the session's ingested documents."
-                " Returns chunks with doc_id, text, page, score. Call this"
-                " when RETRIEVAL is REQUIRED and INGESTION_STATUS is ready."
+                "Semantic search over the documents the learner uploaded to this"
+                " session. Returns up to k chunks, each with doc_id, doc_name,"
+                " page, text, and score. score is a cosine distance: lower means"
+                " a closer match, and results are already ordered best-first."
+                " Returns status=no_results when ingestion is not ready or"
+                " nothing matches; status=failed on a search error. Call it when"
+                " RETRIEVAL is REQUIRED and INGESTION_STATUS is ready, or when"
+                " the learner refers to their notes. Not needed when RETRIEVAL"
+                " is PROVIDED: those excerpts are already in the prompt."
             ),
             "parameters": _schema(RetrieveChunksArgs),
         },
@@ -65,12 +71,15 @@ TOOLS = [
         "function": {
             "name": "ask_check_questions",
             "description": (
-                "The ONLY way to quiz, test, or check the learner's understanding."
-                " Pose a BATCH of 1-5 multiple-choice questions probing one focus"
-                " gap via items[]. Each item: 2-4 plausible options, the 0-based"
-                " correct_index, and a one-sentence explanation shown after answering."
-                " This ends your turn. The learner answers each; the server grades"
-                " deterministically and updates the profile. You do NOT grade."
+                "Render an interactive multiple-choice check card for one"
+                " confirmed gap. items holds 1-5 questions; each has 2-4 options,"
+                " a 0-based correct_index, and a one-sentence explanation shown"
+                " after the learner answers. Calling it ends the turn. The server"
+                " grades every answer and updates the profile; results arrive in"
+                " the next turn as a [check results] user message. Only one batch"
+                " can be open at a time; a second call while one is open fails."
+                " Quizzes written as plain prose render no card, so this is the"
+                " mechanism for any check of understanding."
             ),
             "parameters": _schema(AskCheckQuestionsArgs),
         },
