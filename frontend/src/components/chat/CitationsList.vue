@@ -21,27 +21,48 @@ const grouped = computed(() => {
 
 <template>
   <div v-if="grouped.length" class="citations-list">
-    <div v-for="doc in grouped" :key="doc.doc_id" class="citation-doc">
+    <p v-for="(doc, i) in grouped" :key="doc.doc_id" class="citation-doc">
+      <sup class="citation-ref" data-tabular>{{ i + 1 }}</sup>
       <span class="citation-doc-name">{{ doc.doc_name }}</span>
       <span v-if="doc.pages.length" class="citation-pages">
-        <span v-for="(p, i) in doc.pages" :key="i" class="citation-page">p.{{ p }}</span>
+        <span v-for="(p, pi) in doc.pages" :key="pi" class="citation-page" data-tabular
+          >p.{{ p }}</span
+        >
       </span>
-    </div>
+    </p>
   </div>
 </template>
 
 <style scoped>
+/* Footnotes at the foot of the turn: pencil, on the rule, above a hairline. */
 .citations-list {
-  border-top: 1px dashed var(--color-border);
-  margin-top: 0.625rem;
-  padding-top: 0.5rem;
+  border-top: 1px solid var(--rule-strong);
+  margin-top: calc(var(--line-pitch) - 1px);
+  font-family: var(--font-sans);
   font-size: var(--fs-label);
-  color: var(--color-text-muted);
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
+  color: var(--pencil);
 }
-.citation-doc { display: flex; gap: 0.5rem; align-items: baseline; }
-.citation-doc-name { font-weight: 600; }
-.citation-pages { display: inline-flex; gap: 0.375rem; }
+
+.citation-doc {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  margin: 0;
+  line-height: var(--line-pitch);
+}
+
+.citation-ref {
+  flex: 0 0 auto;
+  font-size: 0.75em;
+  line-height: 1;
+}
+
+.citation-doc-name {
+  font-weight: 700;
+}
+
+.citation-pages {
+  display: inline-flex;
+  gap: 0.375rem;
+}
 </style>

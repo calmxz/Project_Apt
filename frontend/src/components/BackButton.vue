@@ -8,7 +8,7 @@
     :title="iconOnly ? label : null"
     @click="onClick"
   >
-    <span class="arrow" aria-hidden="true">&larr;</span>
+    <i class="pi pi-arrow-left arrow" aria-hidden="true" />
     <span v-if="!iconOnly" class="label">{{ label }}</span>
   </button>
 </template>
@@ -35,36 +35,27 @@ function onClick() {
 </script>
 
 <style scoped>
+/* A plain blue back line, not a labelled control block. */
 .back-btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.4rem;
   background: transparent;
   border: 0;
-  padding: 0.375rem 0.5rem;
-  margin: 0 0 0.75rem -0.5rem;
-  cursor: pointer;
-  color: var(--color-text-muted);
-  font-family: var(--font-mono);
-  font-size: var(--fs-label);
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-  border-radius: var(--radius-sm);
-  transition:
-    color 180ms ease,
-    background 180ms ease;
-}
-
-.back-btn.is-icon-only {
+  padding: 0;
   margin: 0;
-  padding: 0.375rem;
-  gap: 0;
+  cursor: pointer;
+  color: var(--ink-learner);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  line-height: var(--line-pitch);
+  border-radius: var(--radius-sm);
 }
 
-.back-btn:hover,
-.back-btn:focus-visible {
-  color: var(--color-heading);
-  background: var(--color-surface-soft);
+.back-btn:hover .label {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .back-btn:focus-visible {
@@ -73,7 +64,7 @@ function onClick() {
 }
 
 .arrow {
-  font-size: 1.05rem;
+  font-size: 0.875rem;
   line-height: 1;
 }
 </style>

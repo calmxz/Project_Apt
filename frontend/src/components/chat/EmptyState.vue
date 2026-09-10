@@ -1,23 +1,16 @@
 <template>
-  <div
-    v-if="!archived"
-    class="empty"
-    data-testid="session-empty"
-  >
+  <div v-if="!archived" class="empty" data-testid="session-empty">
     <svg
       class="empty-spark"
-      viewBox="0 0 24 24"
-      width="40"
-      height="40"
+      viewBox="0 0 48 28"
+      width="48"
+      height="28"
       aria-hidden="true"
       focusable="false"
     >
-      <path
-        d="M12 0.5 L13.6 10.4 L23.5 12 L13.6 13.6 L12 23.5 L10.4 13.6 L0.5 12 L10.4 10.4 Z"
-        fill="currentColor"
-      />
+      <path d="M0 4 H48 M0 14 H48 M0 24 H48" />
     </svg>
-    <span class="empty-eyebrow">begin</span>
+    <p class="empty-eyebrow">begin</p>
     <p class="empty-line">Send a question or share what you already know.</p>
     <div class="quick-prompts">
       <button
@@ -33,12 +26,9 @@
     </div>
   </div>
 
-  <div
-    v-else
-    class="empty archived-empty"
-  >
-    <span class="empty-eyebrow">archive</span>
-    <span class="empty-line">No transcript stored for this session.</span>
+  <div v-else class="empty archived-empty">
+    <p class="empty-eyebrow">archive</p>
+    <p class="empty-line">No transcript stored for this session.</p>
   </div>
 </template>
 
@@ -60,85 +50,73 @@ const quickPrompts = [
 </script>
 
 <style scoped>
+/* An empty sheet: three feint rules and a pencil prompt line. */
 .empty {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 0.625rem;
-  padding: 1.75rem 1rem 1.25rem;
-  margin: 0;
+  align-items: flex-start;
+  padding: var(--line-pitch) 0 0 4.75rem;
 }
 
 .empty-spark {
-  color: var(--color-accent);
-  margin-bottom: 0.125rem;
-  filter: drop-shadow(0 2px 12px rgba(255, 107, 92, 0.35));
-  animation: spark-breath 4.5s ease-in-out infinite;
-}
-
-@keyframes spark-breath {
-  0%, 100% { transform: rotate(0deg) scale(1); opacity: 0.9; }
-  50% { transform: rotate(18deg) scale(1.06); opacity: 1; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .empty-spark { animation: none; }
+  fill: none;
+  stroke: var(--rule-strong);
+  stroke-width: 1;
+  margin-bottom: 4px;
 }
 
 .empty-eyebrow {
+  margin: 0;
   font-family: var(--font-sans);
   font-size: var(--fs-label);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  font-weight: 600;
-  color: var(--color-accent-text);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
 }
 
 .empty-line {
-  font-family: var(--font-display);
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: var(--color-heading);
-  letter-spacing: var(--tracking-tight);
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--line-pitch);
+  color: var(--ink);
 }
 
-.archived-empty .empty-eyebrow {
-  color: var(--color-text-muted);
-}
 .archived-empty .empty-line {
-  color: var(--color-text-muted);
-  font-weight: 500;
+  color: var(--pencil);
 }
 
 .quick-prompts {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.5rem;
-  margin-top: 0.75rem;
-  max-width: 36rem;
+  flex-direction: column;
+  align-items: flex-start;
+  max-width: 42ch;
 }
 
 .quick-prompt {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  padding: 0.5rem 1rem;
+  background: transparent;
+  border: 0;
+  padding: 0;
   font-family: var(--font-sans);
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--color-text-muted);
+  font-size: var(--fs-body);
+  line-height: var(--line-pitch);
+  color: var(--ink-learner);
   cursor: pointer;
-  transition: background var(--motion-fast) ease, color var(--motion-fast) ease, border-color var(--motion-fast) ease, transform var(--motion-fast) var(--motion-bounce);
+  text-align: left;
 }
 
-.quick-prompt:hover,
+.quick-prompt:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .quick-prompt:focus-visible {
-  background: var(--color-accent-soft);
-  border-color: var(--color-accent-soft);
-  color: var(--color-accent);
-  transform: translateY(-1px);
-  outline: none;
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+}
+
+@media (max-width: 599px) {
+  .empty {
+    padding-left: 0;
+  }
 }
 </style>

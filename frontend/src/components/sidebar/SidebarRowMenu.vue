@@ -147,6 +147,8 @@ onBeforeUnmount(() => {
 .sb-row-menu {
   position: relative;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
 }
 
 .sb-row-menu-trigger {
@@ -155,16 +157,15 @@ onBeforeUnmount(() => {
   justify-content: center;
   width: 1.75rem;
   height: 1.75rem;
-  border: 1px solid transparent;
-  border-radius: var(--radius-pill);
+  border: 0;
+  border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--pencil);
   cursor: pointer;
   font-size: 0.875rem;
   opacity: 0;
   transition:
     opacity var(--motion-fast) ease,
-    background var(--motion-fast) ease,
     color var(--motion-fast) ease;
 }
 
@@ -172,12 +173,11 @@ onBeforeUnmount(() => {
 .sb-row-menu-trigger:focus-visible,
 .sb-row-menu-trigger:hover {
   opacity: 1;
-  background: var(--color-surface-soft);
-  color: var(--color-text);
+  color: var(--ink-learner);
 }
 
 /* On touch / coarse-pointer devices there is no hover to reveal the trigger, so
-   keep it visible — otherwise Rename/Pin/End are unreachable (a row tap just
+   keep it visible -- otherwise Rename/Pin/End are unreachable (a row tap just
    navigates). Fine pointers keep the opacity:0-until-hover behavior above. */
 @media (hover: none) {
   .sb-row-menu-trigger {
@@ -186,7 +186,7 @@ onBeforeUnmount(() => {
 }
 
 .sb-row-menu-trigger:focus-visible {
-  outline: 2px solid var(--color-accent-ring);
+  outline: 2px solid var(--ink-learner);
   outline-offset: 2px;
 }
 
@@ -195,38 +195,42 @@ onBeforeUnmount(() => {
   opacity: 0.5;
 }
 
+/* An overlay is the one thing allowed to lift off the page. */
 .sb-row-menu-popover {
   position: absolute;
   right: 0;
   top: calc(100% + 0.25rem);
   z-index: 40;
   min-width: 10rem;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-sm);
   box-shadow: var(--shadow-lift);
-  padding: 0.25rem;
+  padding: 0.25rem 0;
   display: flex;
   flex-direction: column;
-  gap: 0.125rem;
 }
 
 .sb-row-menu-item {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.5rem 0.625rem;
+  padding: 0 0.75rem;
+  min-height: var(--line-pitch);
   border: 0;
+  border-radius: 0;
   background: transparent;
-  border-radius: var(--radius-sm);
   font-family: var(--font-sans);
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   color: var(--color-text);
   cursor: pointer;
   text-align: left;
-  transition:
-    background var(--motion-fast) ease,
-    color var(--motion-fast) ease;
+  transition: background var(--motion-fast) ease;
+}
+
+.sb-row-menu-item .pi {
+  font-size: 0.8125rem;
+  color: var(--pencil);
 }
 
 .sb-row-menu-item:hover:not(:disabled) {
@@ -234,8 +238,9 @@ onBeforeUnmount(() => {
 }
 
 .sb-row-menu-item:focus-visible {
-  outline: 2px solid var(--color-accent-ring);
-  outline-offset: 2px;
+  outline: 2px solid var(--ink-learner);
+  outline-offset: -2px;
+  border-radius: 0;
 }
 
 .sb-row-menu-item:disabled {
@@ -243,12 +248,12 @@ onBeforeUnmount(() => {
   opacity: 0.5;
 }
 
-.sb-row-menu-item--danger {
+.sb-row-menu-item--danger,
+.sb-row-menu-item--danger .pi {
   color: var(--color-error-text);
 }
 
 .sb-row-menu-item--danger:hover:not(:disabled) {
-  background: rgba(239, 68, 68, 0.1);
-  color: var(--color-error-text);
+  background: color-mix(in srgb, var(--ink-marker) 10%, transparent);
 }
 </style>

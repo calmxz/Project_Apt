@@ -36,6 +36,7 @@ const { openDrawer } = useSidebar()
 </template>
 
 <style scoped>
+/* One rule across the top of the page: wordmark, menu, settings. No shadow. */
 .sb-strip {
   position: sticky;
   top: 0;
@@ -46,12 +47,13 @@ const { openDrawer } = useSidebar()
   height: var(--sidebar-mobile-strip-height, 3rem);
   padding: 0 0.5rem;
   background: var(--color-background);
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--rule-strong);
 }
 
 .sb-strip-brand {
   display: inline-flex;
   text-decoration: none;
+  color: var(--color-heading);
   margin-right: auto;
   padding: 0 0.25rem;
 }
@@ -68,27 +70,22 @@ const { openDrawer } = useSidebar()
   justify-content: center;
   width: 2.25rem;
   height: 2.25rem;
-  border-radius: var(--radius-pill);
-  border: 1px solid transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--color-text);
   text-decoration: none;
   cursor: pointer;
   font-size: 1rem;
-  transition:
-    background var(--motion-fast) ease,
-    color var(--motion-fast) ease,
-    border-color var(--motion-fast) ease;
+  transition: color var(--motion-fast) ease;
 }
 
 .sb-strip-btn:hover {
-  color: var(--color-accent-text);
-  background: var(--color-accent-soft);
-  border-color: var(--color-accent-soft);
+  color: var(--ink-learner);
 }
 
 .sb-strip-btn:focus-visible {
-  outline: 2px solid var(--color-accent-ring);
+  outline: 2px solid var(--ink-learner);
   outline-offset: 2px;
 }
 </style>

@@ -1,10 +1,5 @@
 <template>
-  <div
-    v-if="status"
-    class="ref-status"
-    :class="`is-${status}`"
-    data-testid="reference-status"
-  >
+  <div v-if="status" class="ref-status" :class="`is-${status}`" data-testid="reference-status">
     <button
       type="button"
       class="ref-header"
@@ -21,7 +16,9 @@
       <li v-for="doc in documents" :key="doc.id" class="ref-file-row">
         <span class="ref-file-name">{{ doc.filename }}</span>
         <span class="ref-file-status" :class="`is-${doc.status}`">{{ doc.status }}</span>
-        <span v-if="doc.status === 'failed' && doc.error" class="ref-file-error">{{ doc.error }}</span>
+        <span v-if="doc.status === 'failed' && doc.error" class="ref-file-error">{{
+          doc.error
+        }}</span>
         <button
           type="button"
           class="ref-file-delete"
@@ -140,27 +137,27 @@ defineExpose({ refresh })
 </script>
 
 <style scoped>
+/* Status caption grammar: one line, ink on paper, a full 1px rule. */
 .ref-status {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 0.5rem;
-  padding: 0.6rem 0.9rem;
-  border-radius: var(--radius-lg);
-  font-size: 0.875rem;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface-soft);
-  color: var(--color-text-muted);
+  padding: 0.25rem 0.75rem;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  line-height: var(--line-pitch);
+  border: 1px solid var(--rule-strong);
+  color: var(--ink);
 }
 
 .ref-status.is-ready {
-  color: var(--color-accent-text);
-  border-color: var(--color-accent-soft);
-  background: var(--color-accent-soft);
+  border-color: var(--signal-success);
 }
 
 .ref-status.is-failed {
-  color: var(--color-error-text);
+  border-color: var(--ink-marker);
+  color: var(--ink-marker-text);
 }
 
 .ref-header {
@@ -182,17 +179,18 @@ defineExpose({ refresh })
 }
 .ref-file-list {
   list-style: none;
-  margin: 0.6rem 0 0;
+  margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
 }
 .ref-file-row {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.8125rem;
+  font-size: var(--fs-label);
+  line-height: var(--line-pitch);
+  border-top: 1px solid var(--rule);
 }
 .ref-file-name {
   flex: 1;
@@ -202,25 +200,24 @@ defineExpose({ refresh })
   white-space: nowrap;
 }
 .ref-file-status {
-  color: var(--color-text-muted);
-  text-transform: capitalize;
+  color: var(--pencil);
 }
 .ref-file-status.is-failed {
-  color: var(--color-error-text);
+  color: var(--ink-marker-text);
 }
 .ref-file-error {
-  color: var(--color-error-text);
-  font-size: 0.75rem;
+  color: var(--ink-marker-text);
 }
 .ref-file-delete {
   background: none;
   border: none;
   cursor: pointer;
-  color: var(--color-text-muted);
+  color: var(--ink-learner);
   padding: 0.2rem;
   border-radius: var(--radius-sm);
 }
-.ref-file-delete:hover {
-  color: var(--color-error-text);
+.ref-file-delete:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 </style>

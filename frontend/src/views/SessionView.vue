@@ -1,153 +1,185 @@
 <template>
-  <section class="session">
+  <section class="session" :class="{ 'is-sheet': !notFound }">
     <div v-if="notFound" class="not-found" data-testid="session-not-found">
       <BackButton />
-      <span class="folio">404</span>
+      <span class="folio" data-tabular>404</span>
       <h1 class="topic">Session not found</h1>
       <p class="not-found-sub">
         The session id <code>{{ id }}</code> doesn't exist or was deleted.
       </p>
       <router-link to="/" class="home-link" data-testid="session-not-found-home">
-        &larr; Back to sessions
+        <i class="pi pi-arrow-left" aria-hidden="true" />
+        Back to sessions
       </router-link>
     </div>
 
     <template v-else>
-      <BackButton />
+      <div class="sheet-header">
+        <SessionHeader
+          :topic="headerTopic"
+          :session-id="props.id"
+          :started-at="startedAt"
+          :level="profileLevel"
+        />
+      </div>
 
-      <SessionHeader :topic="headerTopic" :session-id="props.id" />
+      <div class="sheet-cue">
+        <CueColumn
+          :profile="liveProfile"
+          :session-id="props.id"
+          :testing-gap="testingGap"
+          @landed="onCuesLanded"
+        />
+      </div>
 
-      <CapBanners />
+      <div class="sheet-margin-rule" aria-hidden="true"></div>
 
-      <SessionEndedBanner
-        v-if="isEnded"
-        :ended-at="store.currentSession.ended_at"
-        :loading="resuming"
-        :has-gaps="hasGaps"
-        @resume="resume"
-        @resume-gaps="resumeReviewGaps"
-      />
+      <div class="sheet-notes">
+        <div
+          ref="messagesEl"
+          class="messages"
+          :class="{ 'is-empty': !store.messages.length }"
+          data-testid="session-messages"
+        >
+          <div class="notes-measure">
+            <MessageListSkeleton v-if="store.detailLoading" />
+            <template v-else>
+              <button
+                v-if="store.hasMoreMessages && store.messages.length"
+                type="button"
+                class="load-earlier"
+                data-testid="load-earlier"
+                :disabled="store.loadingEarlier"
+                @click="onLoadEarlier"
+              >
+                <template v-if="store.loadingEarlier">Loading…</template>
+                <template v-else-if="store.loadEarlierError"
+                  >Could not load earlier messages — retry</template
+                >
+                <template v-else>Load earlier messages</template>
+              </button>
+              <ChatEmptyState
+                v-if="!store.messages.length"
+                :archived="isEnded"
+                @quick-prompt="useQuickPrompt"
+              />
+              <MessageList
+                v-if="store.messages.length || store.streamingMessage || awaitingResponse"
+                :messages="store.messages"
+                :streaming-message="store.streamingMessage"
+                :awaiting="awaitingResponse"
+                :landed="cuesLanded"
+              />
+            </template>
+          </div>
+        </div>
 
-      <GapPickerDialog
-        v-model:visible="gapPickerOpen"
-        :gaps="confirmedGaps"
-        @select="onGapPicked"
-      />
+        <div class="notes-foot">
+          <div class="notes-measure">
+            <CheckQuestion
+              v-if="store.pendingCheck && !store.detailLoading"
+              :check="store.pendingCheck"
+              :busy="store.streamState !== 'idle'"
+              @answer="onAnswerCheck"
+              @skip="onSkipCheck"
+              @next="store.nextCheck"
+              @done="onDoneCheck"
+            />
 
-      <div
-        ref="messagesEl"
-        class="messages"
-        :class="{ 'is-empty': !store.messages.length }"
-        data-testid="session-messages"
-      >
-        <MessageListSkeleton v-if="store.detailLoading" />
-        <template v-else>
-          <button
-            v-if="store.hasMoreMessages && store.messages.length"
-            type="button"
-            class="load-earlier"
-            data-testid="load-earlier"
-            :disabled="store.loadingEarlier"
-            @click="onLoadEarlier"
-          >
-            <template v-if="store.loadingEarlier">Loading…</template>
-            <template v-else-if="store.loadEarlierError"
-              >Could not load earlier messages — retry</template
-            >
-            <template v-else>Load earlier messages</template>
-          </button>
-          <ChatEmptyState
-            v-if="!store.messages.length"
-            :archived="isEnded"
-            @quick-prompt="useQuickPrompt"
-          />
-          <MessageList
-            v-if="store.messages.length || store.streamingMessage || awaitingResponse"
-            :messages="store.messages"
-            :streaming-message="store.streamingMessage"
-            :awaiting="awaitingResponse"
-          />
-        </template>
+            <DiagnosticConsentCard
+              v-if="showDiagnosticCard"
+              :busy="store.streamState !== 'idle' || !canSend || diagLevelBusy"
+              :error="diagError"
+              @quiz="onDiagQuiz"
+              @level="onDiagLevel"
+              @dismiss="dismissDiag()"
+            />
+
+            <!-- One status slot: persistent state (caps, send error) stays
+                 mounted because the composer's aria-describedby points at it;
+                 the transient captions below it land one at a time. -->
+            <div class="status-slot">
+              <CapBanners />
+
+              <div
+                v-if="store.error || lastError"
+                class="status-line is-alert"
+                role="alert"
+                data-testid="session-error"
+              >
+                <p class="error-message">{{ friendlyError(lastError || store.error) }}</p>
+                <button
+                  v-if="canRetry"
+                  type="button"
+                  class="error-retry"
+                  data-testid="session-error-retry"
+                  @click="retryLastMessage"
+                >
+                  Retry
+                </button>
+                <router-link
+                  v-if="store.duplicateReopen"
+                  :to="{ name: 'session', params: { id: store.duplicateReopen.sessionId } }"
+                  class="home-link"
+                  data-testid="go-to-active-session"
+                >
+                  Go to active session
+                </router-link>
+              </div>
+
+              <ReferenceStatusBanner ref="referenceBannerRef" :session-id="props.id" />
+
+              <UploadStatus v-if="topCaption === 'upload'" :upload="uploadStatus" />
+
+              <p
+                v-if="topCaption === 'followup'"
+                class="status-line followup-notice"
+                data-testid="followup-notice"
+                role="status"
+                aria-live="polite"
+              >
+                {{ store.followupNotice }}
+              </p>
+            </div>
+
+            <Composer
+              v-if="!isEnded"
+              ref="composerRef"
+              :model-value="draft"
+              @update:model-value="draft = $event"
+              :disabled="!canSend"
+              :uploading="uploading"
+              :sending="sending"
+              :stream-state="store.streamState"
+              :describedby="capDescribedby"
+              :locked="store.checkLocked"
+              @send="send"
+              @stop="store.stopStream"
+              @attach="onAttachFile"
+              @skip="onSkipCheck"
+            />
+
+            <SessionEndedBanner
+              v-if="isEnded"
+              :ended-at="store.currentSession.ended_at"
+              :summary="endedSummary"
+              :loading="resuming"
+              :has-gaps="hasGaps"
+              @resume="resume"
+              @resume-gaps="resumeReviewGaps"
+            />
+          </div>
+        </div>
       </div>
 
       <div class="sr-only" role="status" aria-live="polite" data-testid="stream-status">
         {{ streamAnnouncement }}
       </div>
 
-      <p
-        v-if="store.followupNotice"
-        class="followup-notice"
-        data-testid="followup-notice"
-        role="status"
-        aria-live="polite"
-      >
-        {{ store.followupNotice }}
-      </p>
-
-      <div
-        v-if="store.error || lastError"
-        class="error-banner"
-        role="alert"
-        data-testid="session-error"
-      >
-        <p class="error-message">{{ friendlyError(lastError || store.error) }}</p>
-        <button
-          v-if="canRetry"
-          type="button"
-          class="error-retry"
-          data-testid="session-error-retry"
-          @click="retryLastMessage"
-        >
-          Retry
-        </button>
-        <router-link
-          v-if="store.duplicateReopen"
-          :to="{ name: 'session', params: { id: store.duplicateReopen.sessionId } }"
-          class="home-link"
-          data-testid="go-to-active-session"
-        >
-          Go to active session
-        </router-link>
-      </div>
-
-      <ReferenceStatusBanner ref="referenceBannerRef" :session-id="props.id" />
-
-      <UploadStatus :upload="uploadStatus" />
-
-      <CheckQuestion
-        v-if="store.pendingCheck && !store.detailLoading"
-        :check="store.pendingCheck"
-        :busy="store.streamState !== 'idle'"
-        @answer="onAnswerCheck"
-        @skip="onSkipCheck"
-        @next="store.nextCheck"
-        @done="onDoneCheck"
-      />
-
-      <DiagnosticConsentCard
-        v-if="showDiagnosticCard"
-        :busy="store.streamState !== 'idle' || !canSend || diagLevelBusy"
-        :error="diagError"
-        @quiz="onDiagQuiz"
-        @level="onDiagLevel"
-        @dismiss="dismissDiag()"
-      />
-
-      <Composer
-        v-if="!isEnded"
-        ref="composerRef"
-        :model-value="draft"
-        @update:model-value="draft = $event"
-        :disabled="!canSend"
-        :uploading="uploading"
-        :sending="sending"
-        :stream-state="store.streamState"
-        :describedby="capDescribedby"
-        :locked="store.checkLocked"
-        @send="send"
-        @stop="store.stopStream"
-        @attach="onAttachFile"
-        @skip="onSkipCheck"
+      <GapPickerDialog
+        v-model:visible="gapPickerOpen"
+        :gaps="confirmedGaps"
+        @select="onGapPicked"
       />
 
       <Dialog
@@ -181,6 +213,7 @@ import CapBanners from '../components/chat/CapBanners.vue'
 import ChatEmptyState from '../components/chat/EmptyState.vue'
 import CheckQuestion from '../components/chat/CheckQuestion.vue'
 import Composer from '../components/chat/Composer.vue'
+import CueColumn from '../components/chat/CueColumn.vue'
 import DiagnosticConsentCard from '../components/DiagnosticConsentCard.vue'
 import GapPickerDialog from '../components/GapPickerDialog.vue'
 import MessageList from '../components/chat/MessageList.vue'
@@ -196,6 +229,7 @@ import { costBus } from '../services/costBus.js'
 import { getSessionProfile, patchProfile } from '../services/profileApi.js'
 import { getUploadStatus, uploadDocument, validateFile } from '../services/uploadApi.js'
 import { formatShortDateTime } from '../utils/formatDate.js'
+import { stripAutoPrefix } from '../utils/sessionCard.js'
 import { costCapToastMessage } from '../lib/capToast.js'
 
 const props = defineProps({ id: { type: String, required: true } })
@@ -298,22 +332,23 @@ watch(
 // via a refetch. Once the tutor's turn finishes, refetch so the card hides
 // itself and the cached etag stays fresh, instead of lingering with a stale
 // null level until the next explicit reload.
+// The same refetch is what keeps the cue column live: the store only writes
+// topic_profile on loadSession, so a turn that recorded a gap, a mastered
+// concept or a level would otherwise never reach the cues. Runs every turn,
+// not only while the level is unset; the implicit-decline accounting below
+// still reads the pre-refetch copy, exactly as before.
 watch(
   () => store.streamState,
   (next, prev) => {
     if (prev === 'idle' || next !== 'idle') return
-    if (
+    const stillUnset =
       diagProfile.value &&
       diagProfile.value.profile?.knowledge_level == null &&
       !diagDismissed.value
-    ) {
-      diagNullTurns += 1
-      if (diagNullTurns >= 2) {
-        dismissDiag()
-        return
-      }
-      loadDiagProfile(props.id)
-    }
+    loadDiagProfile(props.id)
+    if (!stillUnset) return
+    diagNullTurns += 1
+    if (diagNullTurns >= 2) dismissDiag()
   },
 )
 
@@ -325,6 +360,21 @@ watch(
 const isEnded = computed(() =>
   store.currentSession?.id === props.id ? Boolean(store.currentSession.ended_at) : false,
 )
+// The one profile the frontend holds. The store's copy is only written on
+// loadSession, so the per-turn GET /profile/:id refetch (diagProfile) is the
+// fresher of the two and wins when present; both are already discriminated on
+// props.id, so a switch never paints the previous session's cues.
+const liveProfile = computed(() => {
+  if (diagProfile.value?.profile) return diagProfile.value.profile
+  return store.currentSession?.id === props.id ? (store.currentSession.topic_profile ?? null) : null
+})
+const profileLevel = computed(() => liveProfile.value?.knowledge_level || '')
+const startedAt = computed(() =>
+  store.currentSession?.id === props.id ? store.currentSession.created_at || '' : '',
+)
+const endedSummary = computed(() => stripAutoPrefix(liveProfile.value?.last_session_summary))
+// While a check batch is open, the cue it tests carries the red underline.
+const testingGap = computed(() => store.pendingCheck?.gap || '')
 // Gates the "Review my gaps" CTA — only meaningful once we're showing the
 // ended banner for this session, so read confirmed_gaps off the same
 // discriminator-checked currentSession rather than re-deriving it.
@@ -345,6 +395,22 @@ const canEnd = computed(
   () => store.currentSession?.id === props.id && !store.currentSession.ended_at,
 )
 const canSend = computed(() => canEnd.value && !store.dailyCapReached && !store.costCapReached)
+
+// Cue-lands: CueColumn diffs the live profile and tells us when new cues were
+// written; the gutter of the latest tutor turn then carries the blue tick
+// until the learner writes again.
+const cuesLanded = ref(false)
+function onCuesLanded() {
+  cuesLanded.value = true
+}
+
+// One caption slot, one caption at a time: an upload report outranks a
+// follow-up notice (it is the newer, more specific event).
+const topCaption = computed(() => {
+  if (uploadStatus.value) return 'upload'
+  if (store.followupNotice) return 'followup'
+  return null
+})
 
 // Optimistic header: while the detail fetch is in flight, store.currentSession
 // still holds the PREVIOUS session (it is overwritten only after the await
@@ -489,6 +555,7 @@ async function loadCurrent(id) {
   // loadSession entry. loadCurrent only runs on mount + id-change, so a same-
   // session send-error stays retryable.
   lastError.value = null
+  cuesLanded.value = false
   diagProfile.value = null
   diagNullTurns = 0
   try {
@@ -499,7 +566,7 @@ async function loadCurrent(id) {
   diagError.value = ''
   diagLevelBusy.value = false
   loadDiagProfile(id) // deliberately not awaited: card is best-effort
-  const startedAt = import.meta.env.DEV ? performance.now() : 0
+  const startedAtMs = import.meta.env.DEV ? performance.now() : 0
   try {
     await store.loadSession(id)
     if (import.meta.env.DEV) {
@@ -508,7 +575,7 @@ async function loadCurrent(id) {
       // decides whether the retention tail (warm prefetch + SWR cache) is worth
       // building (see Task 5). Remove once that decision is recorded.
       console.debug(
-        `[perf] session ${id} detail painted in ${Math.round(performance.now() - startedAt)}ms`,
+        `[perf] session ${id} detail painted in ${Math.round(performance.now() - startedAtMs)}ms`,
       )
     }
   } catch (e) {
@@ -597,6 +664,8 @@ async function send() {
   draft.value = ''
   lastSentText.value = text
   lastError.value = null
+  // The learner is writing again: the previous turn's landed tick is spent.
+  cuesLanded.value = false
   sending.value = true
   try {
     await store.sendMessageStreaming({ text })
@@ -949,62 +1018,68 @@ function goHome() {
 :global(body.chat-locked .page) {
   min-height: 0;
 }
+/* The sheet owns its own edges: no page padding, no measure cap. */
 :global(body.chat-locked .page-inner) {
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  padding-top: clamp(1rem, 3vw, 1.75rem);
-  padding-bottom: 0;
+  padding: 0;
 }
 
-.session {
-  width: 100%;
-  max-width: 64rem;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
+/* The sheet: cue column, red margin rule, notes column, one header across. */
+.session.is-sheet {
+  display: grid;
+  grid-template-columns: 232px 2px minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   flex: 1;
   min-height: 0;
+  width: 100%;
 }
 
-.folio {
-  font-family: var(--font-sans);
-  font-size: var(--fs-label);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  font-weight: 600;
-  color: var(--color-accent-text);
+.sheet-header {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  min-width: 0;
 }
 
-.topic {
-  font-family: var(--font-display);
-  font-size: clamp(1.875rem, 4vw, 2.25rem);
-  font-weight: 700;
-  letter-spacing: var(--tracking-display);
-  line-height: 1.1;
-  color: var(--color-heading);
-  margin: 0;
-  overflow-wrap: anywhere;
+.sheet-cue {
+  grid-column: 1;
+  grid-row: 2;
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+  padding-left: clamp(1rem, 3vw, 1.5rem);
+}
+
+/* Page structure, not a card border: the red rule divides cue from notes. */
+.sheet-margin-rule {
+  grid-column: 2;
+  grid-row: 2;
+  background: var(--margin-rule);
+}
+
+.sheet-notes {
+  grid-column: 3;
+  grid-row: 2;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 0;
+  min-width: 0;
 }
 
 .messages {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
   /* Sole scroller in the app-shell. min-height: 0 lets it shrink within the
-     flex column instead of forcing the page to overflow. */
-  flex: 1 1 auto;
+     grid row instead of forcing the page to overflow. The feint rules are
+     painted on the scrolling content so text keeps sitting on them. */
   min-height: 0;
   overflow-y: auto;
-  /* Reserve the scrollbar gutter whether or not the chat overflows, so the
-     message column is the same fixed width in every session. Without this, a
-     scrolling session loses ~10px to the scrollbar that a short one keeps. */
   scrollbar-gutter: stable;
-  padding: 0.5rem 0.25rem;
+  background-image: var(--ruled-bg);
+  background-attachment: local;
+  padding: 0 clamp(1rem, 3vw, 2rem);
   scrollbar-width: thin;
-  scrollbar-color: var(--color-border-strong) transparent;
+  scrollbar-color: var(--rule-strong) transparent;
 }
 
 .messages::-webkit-scrollbar {
@@ -1019,32 +1094,53 @@ function goHome() {
   background: transparent;
 }
 .messages::-webkit-scrollbar-thumb {
-  background: var(--color-border-strong);
-  border-radius: var(--radius-pill);
+  background: var(--rule-strong);
   border: 2px solid transparent;
   background-clip: padding-box;
 }
-.messages::-webkit-scrollbar-thumb:hover {
-  background: var(--color-text-faint);
+
+/* The measure: the notes gutter plus a 72ch text column. */
+.notes-measure {
+  max-width: calc(4rem + 72ch);
+}
+
+.notes-foot {
+  border-top: 1px solid var(--rule-strong);
+  padding: 0 clamp(1rem, 3vw, 2rem) var(--line-pitch);
+  min-width: 0;
+}
+
+.notes-foot .notes-measure {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-top: 0.75rem;
+}
+
+/* The slot is a grouping wrapper only: its children join the foot's own
+   column so an empty slot costs no vertical space. */
+.status-slot {
+  display: contents;
 }
 
 .load-earlier {
-  align-self: stretch;
+  display: block;
   width: 100%;
-  flex: 0 0 auto;
   background: transparent;
-  border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-md);
-  padding: 0.4rem 0.75rem;
+  border: 0;
+  border-bottom: 1px solid var(--rule-strong);
+  padding: 0;
   font-family: var(--font-sans);
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
+  font-size: var(--fs-caption);
+  line-height: var(--line-pitch);
+  color: var(--ink-learner);
   cursor: pointer;
-  transition: background var(--motion-fast) ease;
+  text-align: left;
 }
 
 .load-earlier:hover:not(:disabled) {
-  background: var(--color-surface-soft);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .load-earlier:focus-visible {
@@ -1054,55 +1150,57 @@ function goHome() {
 
 .load-earlier:disabled {
   cursor: default;
-  opacity: 0.7;
+  color: var(--pencil);
 }
 
-.messages.is-empty {
-  /* When the conversation is empty, let the empty-state anchor naturally
-     near the top of the conversation area instead of being orphaned in a
-     vertically-centered void. */
-  justify-content: flex-start;
-}
-
-/* Banners */
-.error-banner {
+/* Status captions: one line each, ink on paper inside a full 1px rule. */
+.status-line {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 0.75rem;
-  padding: 0.875rem 1.125rem;
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  border-radius: var(--radius-lg);
-  color: var(--color-text);
+  margin: 0;
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  line-height: var(--line-pitch);
+  color: var(--ink);
+  animation: status-land var(--motion-ink) cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.status-line.is-alert {
+  border-color: var(--ink-marker);
+}
+
+@keyframes status-land {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0);
+  }
 }
 
 .error-message {
   margin: 0;
   flex: 1 1 auto;
-  font-family: var(--font-sans);
-  font-size: 0.9375rem;
+  min-width: 0;
 }
 
 .error-retry {
   flex: 0 0 auto;
-  background: var(--color-error-text);
-  color: #ffffff;
+  background: transparent;
+  color: var(--ink-learner);
   border: 0;
-  border-radius: var(--radius-pill);
-  padding: 0.4rem 0.875rem;
+  padding: 0;
   font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 0.8125rem;
+  font-size: var(--fs-caption);
+  font-weight: 700;
   cursor: pointer;
-  transition:
-    filter var(--motion-fast) ease,
-    transform var(--motion-fast) var(--motion-bounce);
-}
-
-.error-retry:hover {
-  filter: brightness(1.08);
-  transform: translateY(-1px);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .error-retry:focus-visible {
@@ -1110,26 +1208,17 @@ function goHome() {
   outline-offset: 2px;
 }
 
-.error {
-  color: var(--color-error-text);
-  margin: 0;
-  font-size: var(--fs-caption);
-}
-
 .followup-notice {
-  margin: 0;
-  padding: 0.5rem 0.875rem;
-  font-size: 0.8125rem;
-  color: var(--color-text-muted);
+  color: var(--pencil);
 }
 
 /* End-session summary dialog */
 .summary {
   white-space: pre-wrap;
   font-family: var(--font-sans);
-  font-size: 1rem;
-  line-height: 1.6;
-  color: var(--color-text);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--ink);
   padding: 0.5rem 0;
 }
 
@@ -1137,41 +1226,95 @@ function goHome() {
 .not-found {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  padding: 2rem 0;
-  max-width: 36rem;
+  gap: 0.25rem;
+  padding: var(--line-pitch) clamp(1rem, 4vw, 2.5rem);
+  max-width: 40rem;
+}
+
+.folio {
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
+}
+
+.topic {
+  font-family: var(--font-display);
+  font-size: var(--fs-display);
+  font-weight: 600;
+  letter-spacing: var(--tracking-display);
+  line-height: var(--lh-display);
+  color: var(--ink);
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .not-found-sub {
   margin: 0;
-  color: var(--color-text-muted);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
 }
 
 .not-found code {
   font-family: var(--font-mono);
   font-size: 0.875em;
   padding: 0.125rem 0.4rem;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  background: var(--color-surface-soft);
+  border: 1px solid var(--rule-strong);
   border-radius: var(--radius-sm);
 }
 
 .home-link {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   margin-top: 0.75rem;
   font-family: var(--font-sans);
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--color-accent-text);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  color: var(--ink-learner);
   text-decoration: none;
 }
 
 .home-link:hover {
-  color: var(--color-accent-hover);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .home-link:focus-visible {
   outline: 2px solid var(--color-accent-ring);
   outline-offset: 2px;
+}
+
+/* Under 900px the cue column becomes a strip under the header. */
+@media (max-width: 899px) {
+  .session.is-sheet {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr);
+  }
+
+  .sheet-cue {
+    grid-column: 1;
+    grid-row: 2;
+    display: block;
+    padding-left: 0;
+    max-height: 50vh;
+    overflow-y: auto;
+  }
+
+  .sheet-margin-rule {
+    display: none;
+  }
+
+  .sheet-notes {
+    grid-column: 1;
+    grid-row: 3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-line {
+    animation: none;
+  }
 }
 </style>

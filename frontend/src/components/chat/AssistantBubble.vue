@@ -8,6 +8,8 @@ import CheckRecap from './CheckRecap.vue'
 const props = defineProps({
   message: { type: Object, required: true },
   streaming: { type: Boolean, default: false },
+  // Cue-lands: this turn changed the profile, so its gutter carries the tick.
+  landed: { type: Boolean, default: false },
 })
 
 // A failed tool call that was retried successfully in the same message is
@@ -26,16 +28,22 @@ const visibleToolCalls = computed(() => {
     :class="['msg', 'assistant', { streaming }]"
     :data-testid="streaming ? 'msg-streaming' : 'msg-assistant'"
   >
-    <span class="msg-avatar" aria-hidden="true">
-      <svg viewBox="0 0 24 24" width="18" height="18" focusable="false">
-        <path
-          d="M12 0.5 L13.6 10.4 L23.5 12 L13.6 13.6 L12 23.5 L10.4 13.6 L0.5 12 L10.4 10.4 Z"
-          fill="currentColor"
-        />
-      </svg>
-    </span>
-    <div class="msg-body">
+    <div class="msg-gutter">
       <span class="role-tag">tutor</span>
+      <svg
+        v-if="landed"
+        class="landed-tick"
+        viewBox="0 0 12 12"
+        width="12"
+        height="12"
+        aria-hidden="true"
+        focusable="false"
+        data-testid="msg-landed-tick"
+      >
+        <path d="M2 6.5 L4.8 9.2 L10 3.2" pathLength="1" />
+      </svg>
+    </div>
+    <div class="msg-body">
       <template v-if="message.check_batch">
         <CheckRecap :batch="message.check_batch" />
         <MarkdownContent
@@ -64,76 +72,94 @@ const visibleToolCalls = computed(() => {
 </template>
 
 <style scoped>
+/* No bubble and no avatar: the tutor writes on the rules, its name sits in
+   the gutter in pencil. */
 .msg {
-  display: flex;
-  gap: 0.625rem;
+  display: grid;
+  grid-template-columns: 4rem minmax(0, 1fr);
+  gap: 0 0.75rem;
   max-width: 100%;
-  align-items: flex-start;
+  padding: var(--line-pitch) 0 0;
 }
 
-.msg-avatar {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: var(--radius-pill);
-  background: var(--color-accent-soft);
-  color: var(--color-accent-text);
-  margin-top: 0.125rem;
-}
-
-.msg-body {
+.msg-gutter {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  align-items: flex-start;
+  gap: 4px;
   min-width: 0;
-  flex: 1 1 auto;
-  max-width: calc(100% - 2.6rem);
 }
 
 .role-tag {
   font-family: var(--font-sans);
   font-size: var(--fs-label);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  font-weight: 600;
-  color: var(--color-text-faint);
+  font-weight: 400;
+  line-height: var(--line-pitch);
+  color: var(--pencil);
+}
+
+.landed-tick {
+  fill: none;
+  stroke: var(--ink-learner);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  animation: tick-draw var(--motion-base) cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes tick-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.msg-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .content {
   margin: 0;
-  white-space: pre-wrap;
   font-family: var(--font-sans);
-  font-size: 0.9375rem;
-  line-height: 1.6;
-  color: var(--color-text);
-}
-
-.msg.assistant {
-  align-self: stretch;
-  width: 100%;
-  max-width: 100%;
-}
-
-.msg.assistant .content {
-  background: var(--color-surface-raised);
-  border: none;
-  padding: 0.875rem 1.125rem;
-  border-radius: var(--radius-sm) var(--radius-lg) var(--radius-lg) var(--radius-lg);
-  box-shadow: none;
+  font-size: var(--fs-body);
+  line-height: var(--line-pitch);
+  color: var(--ink);
 }
 
 .tool-call-row {
-  display: inline-flex;
-  margin: 0 0 0.4rem;
+  display: block;
 }
 
 .cancelled-marker {
-  font-size: 0.8125rem;
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
   font-style: italic;
-  color: var(--color-text-muted, #888);
-  margin-top: 0.125rem;
+  line-height: var(--line-pitch);
+  color: var(--pencil);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landed-tick {
+    animation: none;
+  }
+}
+
+@media (max-width: 599px) {
+  .msg {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .msg-gutter {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+  }
 }
 </style>
