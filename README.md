@@ -101,7 +101,7 @@ flowchart LR
     subgraph Tools["Agent tools (LiteLLM tool-call)"]
       T1[retrieve_chunks]
       T2[update_topic_profile]
-      T3[record_learning_event]
+      T3[ask_check_questions]
     end
     LLM -.->|tool calls| Tools
     Tools -.->|execute| BE
@@ -115,7 +115,7 @@ flowchart LR
 4. Backend executes each tool call:
    - `retrieve_chunks` → pgvector cosine search, returns top-_k_ chunks with citations.
    - `update_topic_profile` → Pydantic-validated patch over the profile row.
-   - `record_learning_event` → insert a LearningEvent row; trigger mastery demotion if applicable.
+   - `ask_check_questions` → registers a multiple-choice batch and ends the turn; the server grades answers, writes LearningEvents, and demotes a mastered concept on an incorrect retest.
 5. Tool results go back to Gemini, which produces the final assistant message.
 6. Backend persists the user + assistant messages and returns `{assistant_message, message_id, tool_calls, citations}` to the frontend.
 
@@ -125,7 +125,7 @@ The agent has three tools, no more:
 |---|---|
 | `retrieve_chunks(session_id, query, k=5)` | pgvector cosine search over the user's uploaded PDF chunks |
 | `update_topic_profile(...)` | Patch the learner's topic profile; clearing `focus_target_gap` requires `focus_clear_reason` |
-| `record_learning_event(session_id, gap_tested, question, correct)` | Logs check-question outcomes; incorrect retest on a mastered concept demotes it server-side |
+| `ask_check_questions(session_id, gap, items[1..5])` | Registers a multiple-choice batch and ends the turn; the server grades answers, writes LearningEvents, and demotes a mastered concept on an incorrect retest |
 
 The system prompt is split: an immutable rules block (`backend/agent/prompts.py`) plus dynamic context rebuilt per turn. Splitting keeps the immutable half cache-friendly. Full detail in [the design doc §3.3](docs/superpowers/specs/2026-05-03-crux-v1-design.md).
 
@@ -226,7 +226,7 @@ The backend reads `.env` at the repo root. For the production stack, the same `.
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `MODEL` | LiteLLM-prefixed chat model id. Swap to `anthropic/claude-sonnet-4-6` if reliability checkpoints fail. | `gemini/gemini-3.5-flash-lite` |
+| `MODEL` | LiteLLM-prefixed chat model id. Swap to `anthropic/claude-sonnet-5` if reliability checkpoints fail. | `gemini/gemini-3.5-flash-lite` |
 | `EMBEDDING_MODEL` | Embedding model used by pgvector ingestion + retrieval. | `gemini/gemini-embedding-2` |
 | `DAILY_CAP` | Per-user daily request cap. | `50` |
 | `DATABASE_URL` | SQLAlchemy connection string (Supabase pooler URI; bare `postgresql://` auto-converted to `postgresql+psycopg://`). | `sqlite:///./data/app.db` (legacy default; Phase 7+ requires Supabase Postgres URL) |
