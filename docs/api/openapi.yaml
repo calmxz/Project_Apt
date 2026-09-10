@@ -84,11 +84,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "429":
-          description: Daily rate or cost cap reached.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/RateLimited"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "503":
@@ -375,6 +371,8 @@ paths:
                 $ref: "#/components/schemas/SessionEndResponse"
         "404":
           $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "503":
@@ -525,6 +523,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "503":
@@ -799,7 +799,15 @@ components:
         application/json:
           schema: { $ref: "#/components/schemas/ErrorResponse" }
     RateLimited:
-      description: Daily usage cap reached.
+      description: >
+        Rate limited. Error codes: daily_cap_reached, daily_cost_cap_reached,
+        global_cost_cap_reached (daily caps, reset at midnight UTC), or
+        too_many_requests (per-user burst limit; body carries retry_after_s
+        and the Retry-After header is set).
+      headers:
+        Retry-After:
+          description: Seconds until the burst window admits another request. Present only for too_many_requests.
+          schema: { type: integer }
       content:
         application/json:
           schema: { $ref: "#/components/schemas/ErrorResponse" }

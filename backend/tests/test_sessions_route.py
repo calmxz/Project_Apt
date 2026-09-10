@@ -8,7 +8,8 @@ from agent.types import ToolContext
 from config import settings
 from contracts import AskCheckQuestionsArgs, TopicProfile
 from db.models import ChatMessage, Document, Session as SessionModel, UsageCounter, User
-from services import check_question_service, summary_service
+from lib.error_codes import TOO_MANY_REQUESTS
+from services import check_question_service, summary_service, velocity_limit
 
 
 USER_ID = "u1"
@@ -33,6 +34,30 @@ def test_post_fresh_creates_session(client):
     assert body["topic_profile"]["mastered_concepts"] == []
     assert body["topic_profile"]["last_session_summary"] is None
     assert body["ended_at"] is None
+
+
+def test_post_sessions_velocity_limited(client, seeded_user, monkeypatch):
+    """FIX A: POST /sessions can trigger a full-transcript summary LLM call
+    on the resume path (see create_session), so it must carry the same
+    velocity_limit guard as the other paid routes."""
+    velocity_limit.reset()
+    monkeypatch.setattr(settings, "burst_limit_per_minute", 1)
+    try:
+        r1 = client.post(
+            "/api/sessions",
+            json={"user_id": USER_ID, "topic": "sql joins", "seed_mode": "fresh"},
+        )
+        assert r1.status_code == 201, r1.text
+
+        r2 = client.post(
+            "/api/sessions",
+            json={"user_id": USER_ID, "topic": "sql outer joins", "seed_mode": "fresh"},
+        )
+        assert r2.status_code == 429, r2.text
+        assert r2.json()["detail"]["code"] == TOO_MANY_REQUESTS
+        assert int(r2.headers["Retry-After"]) >= 1
+    finally:
+        velocity_limit.reset()
 
 
 def test_post_resume_without_prior_400(client, seeded_user):

@@ -17,10 +17,43 @@ from agent.types import ToolContext
 from config import settings
 from contracts import RetrieveChunksArgs, ToolResult
 from db.models import ChunkEmbedding
+from lib import llm_retry
 from services import cost_meter, documents_service, pgvector_store
 
 
 log = logging.getLogger(__name__)
+
+
+def _unwrap_embedding(resp) -> list[float]:
+    d = resp.data[0]
+    return d["embedding"] if isinstance(d, dict) else d.embedding
+
+
+def _embed_query(query: str):
+    """Sync embed of a single query string. Returns (resp, vector) so callers
+    can meter the raw response while also getting the unwrapped vector."""
+    resp = llm_retry.retry_sync(
+        lambda: litellm.embedding(
+            model=settings.embedding_model,
+            input=[query],
+            dimensions=settings.embedding_dim,
+            timeout=settings.embedding_timeout_s,
+        )
+    )
+    return resp, _unwrap_embedding(resp)
+
+
+async def _aembed_query(query: str):
+    """Async embed of a single query string. Returns (resp, vector)."""
+    resp = await llm_retry.retry_async(
+        lambda: litellm.aembedding(
+            model=settings.embedding_model,
+            input=[query],
+            dimensions=settings.embedding_dim,
+            timeout=settings.embedding_timeout_s,
+        )
+    )
+    return resp, _unwrap_embedding(resp)
 
 
 def retrieve(db: Session, ctx: ToolContext, args: RetrieveChunksArgs) -> ToolResult:
@@ -41,17 +74,7 @@ def retrieve(db: Session, ctx: ToolContext, args: RetrieveChunksArgs) -> ToolRes
         )
 
     try:
-        resp = litellm.embedding(
-            model=settings.embedding_model,
-            input=[args.query],
-            dimensions=settings.embedding_dim,
-            timeout=settings.embedding_timeout_s,
-        )
-        query_vec = (
-            resp.data[0]["embedding"]
-            if isinstance(resp.data[0], dict)
-            else resp.data[0].embedding
-        )
+        resp, query_vec = _embed_query(args.query)
         cost_meter.meter_embedding_response(
             db, resp, user_id=ctx.user_id, session_id=ctx.session_id,
             texts=[args.query],
@@ -133,17 +156,7 @@ async def prefetch_for_prompt(
         if not documents_service.has_ready_document(db, session_id):
             return None
         if query_vec is None:
-            resp = await litellm.aembedding(
-                model=settings.embedding_model,
-                input=[query],
-                dimensions=settings.embedding_dim,
-                timeout=settings.embedding_timeout_s,
-            )
-            query_vec = (
-                resp.data[0]["embedding"]
-                if isinstance(resp.data[0], dict)
-                else resp.data[0].embedding
-            )
+            resp, query_vec = await _aembed_query(query)
             cost = cost_meter.meter_embedding_response(
                 db, resp, user_id=user_id, session_id=session_id, texts=[query],
             )
@@ -199,17 +212,7 @@ async def semantic_fallback_required(
         centroid = _session_centroid(db, session_id)
         if centroid is None:
             return False, None
-        resp = await litellm.aembedding(
-            model=settings.embedding_model,
-            input=[query],
-            dimensions=settings.embedding_dim,
-            timeout=settings.embedding_timeout_s,
-        )
-        query_vec = (
-            resp.data[0]["embedding"]
-            if isinstance(resp.data[0], dict)
-            else resp.data[0].embedding
-        )
+        resp, query_vec = await _aembed_query(query)
         if user_id is not None:
             cost = cost_meter.meter_embedding_response(
                 db, resp, user_id=user_id, session_id=session_id, texts=[query],

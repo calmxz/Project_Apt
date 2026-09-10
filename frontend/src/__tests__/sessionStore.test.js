@@ -859,6 +859,7 @@ describe('session store — streaming', () => {
       soft_cap_usd: '2.0',
       hard_cap_usd: '3.0',
       resets_at: null,
+      scope: 'user',
     })
     expect(s.costCapReached).toBe(true)
     expect(s.streamState).toBe('idle')

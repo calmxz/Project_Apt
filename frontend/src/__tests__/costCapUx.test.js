@@ -113,6 +113,7 @@ describe('session store cost-cap envelope (streaming)', () => {
       soft_cap_usd: '2.0',
       hard_cap_usd: '3.0',
       resets_at: '2026-05-24T00:00:00Z',
+      scope: 'user',
     })
     expect(s.error).toBeTruthy()
     expect(s.streamState).toBe('idle')
@@ -132,8 +133,7 @@ const stubs = {
   SessionEndedBanner: { template: '<div />' },
   Button: {
     props: ['disabled', 'loading', 'label'],
-    template:
-      '<button :disabled="disabled"><slot>{{ label }}</slot></button>',
+    template: '<button :disabled="disabled"><slot>{{ label }}</slot></button>',
   },
   Dialog: {
     props: ['visible'],
@@ -141,8 +141,7 @@ const stubs = {
   },
   Textarea: {
     props: ['modelValue', 'disabled'],
-    template:
-      '<textarea :value="modelValue" :disabled="disabled" />',
+    template: '<textarea :value="modelValue" :disabled="disabled" />',
   },
   RouterLink: { template: '<a><slot /></a>' },
 }
@@ -200,9 +199,7 @@ describe('SessionView cost-cap UX', () => {
     const wrapper = (lastWrapper = mount(SessionView, { props: { id: 's1' }, global: { stubs } }))
     await flushPromises()
     expect(wrapper.find('[data-testid="session-cost-cap-banner"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="session-cost-cap-banner"]').text()).toContain(
-      '$3.50',
-    )
+    expect(wrapper.find('[data-testid="session-cost-cap-banner"]').text()).toContain('$3.50')
     expect(showError).toHaveBeenCalled()
   })
 

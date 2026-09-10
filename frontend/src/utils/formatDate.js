@@ -14,8 +14,7 @@ const SHORT_FMT = new Intl.DateTimeFormat(undefined, {
   timeStyle: 'short',
 })
 
-export const formatShortDateTime = (iso) =>
-  iso ? SHORT_FMT.format(new Date(iso)) : ''
+export const formatShortDateTime = (iso) => (iso ? SHORT_FMT.format(new Date(iso)) : '')
 
 const RTF = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
 
@@ -39,34 +38,4 @@ export const formatRelative = (iso) => {
     }
   }
   return RTF.format(Math.round(diffSec / 31557600), 'year')
-}
-
-const SHORT_UNITS = { second: 's', minute: 'm', hour: 'h', day: 'd', week: 'w', month: 'mo', year: 'y' }
-
-// Compact rail variant of formatRelative: "5m ago", "2h ago", "3d ago".
-// Same STEPS thresholds; sub-minute renders as "now".
-export const formatRelativeShort = (iso) => {
-  if (!iso) return ''
-  const absSec = Math.abs((Date.now() - new Date(iso).getTime()) / 1000)
-  if (isNaN(absSec)) return ''
-  if (absSec < 60) return 'now'
-  for (const { limit, divisor, unit } of STEPS) {
-    if (absSec < limit) {
-      return `${Math.round(absSec / divisor)}${SHORT_UNITS[unit]} ago`
-    }
-  }
-  return `${Math.round(absSec / 31557600)}y ago`
-}
-
-export const shortId = (id) => (typeof id === 'string' ? id.slice(0, 8) : '')
-
-export const normalizeTopicKey = (topic) => (topic || '').toLowerCase().trim()
-
-export const findActiveSessionByTopic = (sessions, topic) => {
-  const key = normalizeTopicKey(topic)
-  if (!key) return null
-  return (
-    sessions.find((s) => !s.ended_at && normalizeTopicKey(s.topic) === key) ||
-    null
-  )
 }

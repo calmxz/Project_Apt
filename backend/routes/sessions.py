@@ -50,6 +50,7 @@ from services import (
     profile_service,
     rate_limit,
     summary_service,
+    velocity_limit,
 )
 from services.auth import accepted_terms_from_request, current_user_id
 from services.session_enrichment import aware_utc as _aware_utc, compute_enrichment
@@ -122,6 +123,7 @@ def _active_session_on_topic(
     "/sessions",
     response_model=SessionResponse,
     status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(velocity_limit.enforce_velocity)],
 )
 async def create_session(
     req: SessionCreateRequest,
@@ -447,7 +449,11 @@ def _claim_end(db: Session, session_id: str) -> bool:
     return result.rowcount == 1
 
 
-@router.post("/sessions/{session_id}/end", response_model=SessionEndResponse)
+@router.post(
+    "/sessions/{session_id}/end",
+    response_model=SessionEndResponse,
+    dependencies=[Depends(velocity_limit.enforce_velocity)],
+)
 async def end_session(
     session_id: str,
     response: Response,
@@ -656,7 +662,10 @@ def _recent_history(db: Session, session_id: str) -> list[dict]:
     return [{"role": m.role, "content": m.content} for m in reversed(rows)]
 
 
-@router.post("/sessions/{session_id}/check/complete")
+@router.post(
+    "/sessions/{session_id}/check/complete",
+    dependencies=[Depends(velocity_limit.enforce_velocity)],
+)
 async def complete_check(
     session_id: str,
     request: Request,

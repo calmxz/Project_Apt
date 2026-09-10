@@ -8,8 +8,8 @@
   >
     <strong>Daily limit reached.</strong>
     <span v-if="store.dailyCapInfo">
-      {{ store.dailyCapInfo.used }}/{{ store.dailyCapInfo.cap }} requests today.
-      Resets at {{ formatShortDateTime(store.dailyCapInfo.resets_at) || 'midnight UTC' }}.
+      {{ store.dailyCapInfo.used }}/{{ store.dailyCapInfo.cap }} requests today. Resets at
+      {{ formatShortDateTime(store.dailyCapInfo.resets_at) || 'midnight UTC' }}.
     </span>
   </div>
 
@@ -20,9 +20,12 @@
     role="alert"
     data-testid="session-cost-cap-banner"
   >
-    <strong>Daily cost limit reached.</strong>
+    <strong v-if="store.costCapInfo?.scope === 'global'">Service daily budget reached.</strong>
+    <strong v-else>Daily cost limit reached.</strong>
     <span v-if="store.costCapInfo">
-      ${{ store.costCapInfo.used_usd }} of ${{ store.costCapInfo.hard_cap_usd }} spent today.
+      <template v-if="store.costCapInfo.scope !== 'global'">
+        ${{ store.costCapInfo.used_usd }} of ${{ store.costCapInfo.hard_cap_usd }} spent today.
+      </template>
       Resets at {{ formatShortDateTime(store.costCapInfo.resets_at) || 'midnight UTC' }}.
     </span>
   </div>

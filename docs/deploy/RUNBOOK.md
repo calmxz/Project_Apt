@@ -111,3 +111,10 @@ Rate limiting: nginx throttles `/api/` at 10 requests/second per IP (burst 20,
 HTTP 429 beyond). This applies to nginx-fronted deploys only; the Render
 backend has no per-request throttle -- its spend guard is the daily LLM
 cost cap and rate counter.
+
+On Render there is no nginx tier. The equivalent guard is the in-process
+per-user burst limiter (`BURST_LIMIT_PER_MINUTE`, default 20 on Render, 0 =
+off locally). It is process-local: keep the API at one instance and one
+uvicorn worker, or move the window to Postgres before scaling out. The same
+single-process assumption already applies to the in-process ingest loop and
+to `alembic upgrade head` running from `entrypoint.sh` on every start.

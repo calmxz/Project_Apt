@@ -196,6 +196,7 @@ import { costBus } from '../services/costBus.js'
 import { getSessionProfile, patchProfile } from '../services/profileApi.js'
 import { getUploadStatus, uploadDocument, validateFile } from '../services/uploadApi.js'
 import { formatShortDateTime } from '../utils/formatDate.js'
+import { costCapToastMessage } from '../lib/capToast.js'
 
 const props = defineProps({ id: { type: String, required: true } })
 
@@ -383,10 +384,8 @@ watch(
   (now) => {
     if (!now || !store.costCapInfo) return
     const when = formatShortDateTime(store.costCapInfo.resets_at) || 'midnight UTC'
-    showError(
-      `Daily cost limit reached ($${store.costCapInfo.used_usd} / $${store.costCapInfo.hard_cap_usd}). Resets at ${when}.`,
-      { summary: 'Cost cap reached', life: 8000 },
-    )
+    const { message, summary } = costCapToastMessage(store.costCapInfo, when)
+    showError(message, { summary, life: 8000 })
   },
 )
 

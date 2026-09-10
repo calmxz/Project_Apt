@@ -17,6 +17,20 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: crux
+          POSTGRES_PASSWORD: crux
+          POSTGRES_DB: crux_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U crux -d crux_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
@@ -41,7 +55,17 @@ jobs:
           # Catch untracked new files codegen may emit
           test -z "$(git status --porcelain backend/contracts/)"
 
+      - name: Migrate test Postgres (alembic upgrade head)
+        env:
+          DATABASE_URL: postgresql://crux:crux@localhost:5432/crux_test
+          CRUX_SKIP_DOTENV: "1"
+        run: alembic upgrade head
+
       - name: Test
+        env:
+          # Only the pgvector integration module reads this; everything else
+          # stays on SQLite so the suite is unchanged apart from un-skipping it.
+          TEST_DATABASE_URL: postgresql://crux:crux@localhost:5432/crux_test
         run: pytest -v --cov-report=xml
 
       - name: Upload coverage to Codecov
