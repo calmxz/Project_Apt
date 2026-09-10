@@ -406,13 +406,13 @@ onMounted(load)
 }
 
 .level-pill[data-level='intermediate'] {
-  background: var(--accent-coral-100);
-  color: var(--accent-coral-700);
-  border-color: var(--accent-coral-200);
+  background: var(--color-accent-soft);
+  color: var(--color-accent-text);
+  border-color: var(--color-border-strong);
 }
 :root[data-theme='dark'] .level-pill[data-level='intermediate'] {
   background: rgba(255, 119, 102, 0.2);
-  color: var(--accent-coral-300);
+  color: var(--color-accent-text);
   border-color: rgba(255, 119, 102, 0.35);
 }
 
@@ -444,8 +444,8 @@ onMounted(load)
   align-items: center;
   gap: 0.875rem;
   padding: 0.875rem 1.125rem;
-  background: linear-gradient(135deg, var(--accent-coral-100) 0%, var(--accent-coral-50) 100%);
-  border: 1px solid var(--accent-coral-200);
+  background: var(--color-accent-soft);
+  border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-lg);
   align-self: flex-start;
   box-shadow: var(--shadow-paper);
@@ -481,10 +481,10 @@ onMounted(load)
   text-transform: uppercase;
   letter-spacing: var(--tracking-label);
   font-weight: 600;
-  color: var(--accent-coral-700);
+  color: var(--color-accent-text);
 }
 :root[data-theme='dark'] .focus-label {
-  color: var(--accent-coral-300);
+  color: var(--color-accent-text);
 }
 
 .focus-gap {
@@ -743,13 +743,13 @@ onMounted(load)
   align-items: center;
   gap: 0.5rem;
   padding: 0.4rem 0.875rem;
-  border: 1px solid var(--accent-coral-200);
+  border: 1px solid var(--color-border-strong);
   border-radius: var(--radius-pill);
   font-family: var(--font-sans);
   font-size: 0.8125rem;
   font-weight: 600;
-  background: var(--accent-coral-100);
-  color: var(--accent-coral-700);
+  background: var(--color-accent-soft);
+  color: var(--color-accent-text);
   cursor: pointer;
   transition:
     transform var(--motion-fast) var(--motion-bounce),
@@ -758,12 +758,12 @@ onMounted(load)
 
 .review-gaps-btn:hover {
   transform: translateY(-1px);
-  background: var(--accent-coral-200);
+  background: var(--color-accent-soft);
 }
 
 :root[data-theme='dark'] .review-gaps-btn {
   background: rgba(255, 119, 102, 0.18);
-  color: var(--accent-coral-300);
+  color: var(--color-accent-text);
   border-color: rgba(255, 119, 102, 0.35);
 }
 :root[data-theme='dark'] .review-gaps-btn:hover {

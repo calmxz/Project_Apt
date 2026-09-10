@@ -344,14 +344,14 @@ async function saveFeedback() {
 }
 
 .stat-coral {
-  background: linear-gradient(180deg, var(--accent-coral-50) 0%, var(--color-surface) 60%);
+  background: var(--color-accent-soft);
 }
 :root[data-theme='dark'] .stat-coral {
   background: linear-gradient(180deg, rgba(255, 107, 92, 0.18) 0%, var(--color-surface) 70%);
 }
 .stat-coral .stat-glyph {
-  background: var(--accent-coral-200);
-  color: var(--accent-coral-700);
+  background: var(--color-accent-soft);
+  color: var(--color-accent-text);
 }
 
 .stat-green {

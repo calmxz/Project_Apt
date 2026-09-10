@@ -17,20 +17,31 @@ defineProps({
 
 <template>
   <span class="logo" :data-size="size" :data-variant="variant">
-    <svg
-      class="logo-mark"
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path
-        d="M12 0.5 L13.6 10.4 L23.5 12 L13.6 13.6 L12 23.5 L10.4 13.6 L0.5 12 L10.4 10.4 Z"
-        fill="currentColor"
+    <svg class="logo-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <rect
+        x="2.5"
+        y="1.5"
+        width="19"
+        height="21"
+        rx="2"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1"
+        vector-effect="non-scaling-stroke"
       />
-      <path
-        d="M19 2.5 L19.7 5.3 L22.5 6 L19.7 6.7 L19 9.5 L18.3 6.7 L15.5 6 L18.3 5.3 Z"
-        fill="currentColor"
-        opacity="0.55"
+      <g stroke="var(--color-border-strong)" stroke-width="1">
+        <line x1="11" y1="7.5" x2="18.5" y2="7.5" vector-effect="non-scaling-stroke" />
+        <line x1="11" y1="12" x2="18.5" y2="12" vector-effect="non-scaling-stroke" />
+        <line x1="11" y1="16.5" x2="18.5" y2="16.5" vector-effect="non-scaling-stroke" />
+      </g>
+      <line
+        x1="8"
+        y1="1.5"
+        x2="8"
+        y2="22.5"
+        stroke="var(--margin-rule)"
+        stroke-width="2"
+        vector-effect="non-scaling-stroke"
       />
     </svg>
     <span v-if="variant === 'full'" class="logo-name">Crux</span>
@@ -44,7 +55,7 @@ defineProps({
   gap: 0.625rem;
   color: var(--color-wordmark, var(--color-heading));
   font-family: var(--font-display);
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: var(--tracking-tight);
   line-height: 1;
 }
@@ -63,7 +74,7 @@ defineProps({
 
 .logo-mark {
   flex-shrink: 0;
-  color: var(--color-accent-text);
+  color: currentColor;
 }
 
 .logo[data-size='sm'] .logo-mark {

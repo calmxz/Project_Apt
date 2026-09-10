@@ -16,6 +16,9 @@ const route = useRoute()
 const { isDesktop, closeDrawer } = useSidebar()
 
 const showShell = computed(() => route.meta?.sidebar !== false)
+// Sheet routes are the page itself: they run edge to edge so the ruled ground
+// and the margin rule reach the full width of the shell.
+const isSheet = computed(() => route.meta?.sheet === true)
 const { drawerOpen } = useSidebar()
 
 // Close mobile drawer on every route change so tapping a session row
@@ -59,7 +62,7 @@ onBeforeUnmount(() => errorBus.removeEventListener('api-error', onApiError))
     <div class="shell-main">
       <SidebarMobileTopStrip v-if="!isDesktop" />
       <main id="main-content" class="page" tabindex="-1">
-        <div class="page-inner">
+        <div class="page-inner" :class="{ 'page-inner-sheet': isSheet }">
           <RouterView v-slot="{ Component }">
             <transition name="fade">
               <component :is="Component" />
@@ -105,17 +108,22 @@ onBeforeUnmount(() => errorBus.removeEventListener('api-error', onApiError))
   padding: clamp(2rem, 6vw, 4.5rem) clamp(1rem, 4vw, 2.5rem) 4rem;
 }
 
+/* Full-width escape for sheet routes: the page runs to both edges. */
+.page-inner-sheet {
+  max-width: none;
+  padding-left: 0;
+  padding-right: 0;
+}
+
 /* U-02: enter-only route fade. The former mode="out-in" + leave transition
    could stall with a fully blank pane until the next re-render (leaving view
    removed, entering view never inserted) -- with no leave phase and no out-in
-   gap, the old view drops instantly and the new one fades in. */
+   gap, the old view drops instantly and the new one fades in.
+   Opacity only: in this world ink appears, it never slides. */
 .fade-enter-active {
-  transition:
-    opacity var(--motion-base) ease,
-    transform var(--motion-base) var(--motion-bounce);
+  transition: opacity 160ms ease;
 }
 .fade-enter-from {
   opacity: 0;
-  transform: translateY(8px);
 }
 </style>

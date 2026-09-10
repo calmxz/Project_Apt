@@ -1,32 +1,156 @@
-/* F-19: one dialog identity for every modal (summary, gap picker). Extracted
-   from SessionView's scoped :global(.summary-dialog ...) overrides. */
+/* PrimeVue teleported surfaces (dialog, confirm, toast, inputs) written into
+   the page world. These sit outside PrimeVue's cascade layer, so plain
+   selectors win without !important. */
+
 .crux-dialog .p-dialog,
-.p-dialog.crux-dialog {
-  border-radius: var(--radius-card);
-  border: 1px solid var(--color-border);
+.p-dialog.crux-dialog,
+.p-confirmdialog {
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
   box-shadow: var(--shadow-lift);
 }
 
 .crux-dialog .p-dialog-header,
-.p-dialog.crux-dialog .p-dialog-header {
+.p-dialog.crux-dialog .p-dialog-header,
+.p-confirmdialog .p-dialog-header {
   font-family: var(--font-display);
-  font-weight: 700;
-  letter-spacing: var(--tracking-tight);
-  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: var(--tracking-display);
+  font-size: var(--fs-h2);
+  color: var(--color-heading);
+  background: transparent;
   padding: 1.25rem 1.5rem 0.75rem;
 }
 
 .crux-dialog .p-dialog-content,
-.p-dialog.crux-dialog .p-dialog-content {
+.p-dialog.crux-dialog .p-dialog-content,
+.p-confirmdialog .p-dialog-content {
+  background: transparent;
+  color: var(--color-text);
   padding: 0.5rem 1.5rem 1.25rem;
 }
 
+.crux-dialog .p-dialog-footer,
+.p-dialog.crux-dialog .p-dialog-footer,
+.p-confirmdialog .p-dialog-footer {
+  background: transparent;
+  border-top: 1px solid var(--color-border);
+  padding: 0.875rem 1.5rem 1.125rem;
+}
+
 .crux-dialog .p-dialog-footer .p-button,
-.p-dialog.crux-dialog .p-dialog-footer .p-button {
+.p-dialog.crux-dialog .p-dialog-footer .p-button,
+.p-confirmdialog .p-dialog-footer .p-button {
   background: var(--color-accent-strong);
-  color: #ffffff;
+  color: var(--color-text-on-accent);
   border: 0;
-  border-radius: var(--radius-pill);
-  padding: 0.625rem 1.5rem;
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 1.25rem;
+  font-family: var(--font-sans);
   font-weight: 600;
+}
+
+/* Fields sit on a rule, not in a rounded well. */
+.p-inputtext,
+.p-textarea,
+.p-select,
+.p-password-input {
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  caret-color: var(--ink-learner);
+}
+
+.p-inputtext:focus,
+.p-textarea:focus,
+.p-select:focus,
+.p-password-input:focus {
+  border-color: var(--ink-learner);
+  box-shadow: none;
+  outline: 2px solid var(--ink-learner);
+  outline-offset: 1px;
+}
+
+.p-inputtext::placeholder,
+.p-textarea::placeholder {
+  color: var(--color-text-muted);
+}
+
+/* A toast is a status caption: one line of ink on paper inside a full 1px
+   rule. No severity tints, no coloured edge. */
+.p-toast .p-toast-message {
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border-strong);
+  border-left-width: 1px;
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  box-shadow: var(--shadow-lift);
+  backdrop-filter: none;
+}
+
+.p-toast .p-toast-message-info,
+.p-toast .p-toast-message-success,
+.p-toast .p-toast-message-warn,
+.p-toast .p-toast-message-error,
+.p-toast .p-toast-message-secondary,
+.p-toast .p-toast-message-contrast {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+}
+
+.p-toast .p-toast-message-content {
+  gap: 0.5rem;
+  padding: 0.75rem 0.875rem;
+  align-items: flex-start;
+}
+
+.p-toast .p-toast-summary {
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  font-weight: 700;
+  color: var(--color-heading);
+}
+
+.p-toast .p-toast-detail {
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  color: var(--color-text-muted);
+}
+
+.p-toast .p-toast-message-icon,
+.p-toast .p-toast-close-button {
+  color: var(--color-text-muted);
+}
+
+/* Ink appears: the caption is revealed left to right, and leaves by fading.
+   The preset's own enter state translates upward and its leave state collapses
+   max-height, so both are named here or the reveal would ride on a slide and
+   the fade would never be seen. */
+.p-toast-message-enter-from {
+  opacity: 1;
+  transform: none;
+  clip-path: inset(0 100% 0 0);
+}
+.p-toast-message-enter-active {
+  transition: clip-path var(--motion-ink) var(--motion-bounce);
+  transform: none;
+}
+.p-toast-message-enter-to {
+  transform: none;
+  clip-path: inset(0);
+}
+.p-toast-message-leave-active {
+  transition:
+    opacity var(--motion-base) ease,
+    max-height var(--motion-base) ease,
+    margin-bottom var(--motion-base) ease;
+}
+.p-toast-message-leave-to {
+  opacity: 0;
 }

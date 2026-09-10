@@ -133,7 +133,7 @@ const markerPct = (v) => pctOfHard(v)
   display: block;
   height: 100%;
   border-radius: var(--radius-pill);
-  background: var(--accent-coral-400);
+  background: var(--color-accent);
 }
 
 .tier-marker {
