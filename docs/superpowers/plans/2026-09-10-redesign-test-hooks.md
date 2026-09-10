@@ -189,3 +189,111 @@ These ARIA attributes are tested for presence or specific values. Removing or ch
 - **15** ARIA attributes across 6 components (a11y-critical)
 
 **Design requirement:** Keep or explicitly migrate all CSS class selectors listed in Table 1. For copy strings, update test assertions where UI copy intentionally changes. For ARIA attributes, verify no attributes are removed or renamed without updating tests.
+
+---
+
+## Phase C: Views, Settings, Profile, Auth & Components
+
+**In-Scope Phase C Components:**
+- Views: HomeView, SessionsLibraryView, ReviewView, SettingsView, LoginView, RegisterView, ForgotPasswordView, ResetPasswordView, OnboardingView, ProfileView, TosView, PrivacyView
+- Settings components: AccountTab, AppearanceTab, ProfileTab, UsageTab
+- Profile components: UsagePanel
+- Other components: FeedbackStylePicker, RouteProgressBar, LibrarySkeletonGrid
+- Utils: sessionCard.js
+
+---
+
+### Table 1C: CSS Class Selectors by Component (Phase C)
+
+| Component | CSS Class Selector |
+|-----------|------------------|
+| FeedbackStylePicker | .selected |
+| FeedbackStylePicker | .radio-sub |
+| SessionsLibraryView | .library-card-link |
+| SessionsLibraryView | .library-chips |
+| SessionsLibraryView | .library-desc |
+| SessionsLibraryView | .library-title |
+
+**Total CSS class selectors (Phase C):** 6 across 2 components
+
+---
+
+### Table 2C: Literal Copy Strings in Test Assertions (Phase C)
+
+| Component | Literal String | Test File | Line |
+|-----------|----------------|-----------|------|
+| FeedbackStylePicker | Hints | feedbackStylePicker.test.js | 48 |
+| HomeView | Build a subject | homeView.test.js | 105 |
+| HomeView | Due for review | homeView.test.js | 117 |
+| LoginView | Invalid login credentials | loginView.test.js | 89 |
+| LoginView | Show password | loginView.test.js | 124 |
+| LoginView | Hide password | loginView.test.js | 127 |
+| LoginView | password | loginView.test.js | 123 |
+| LoginView | text | loginView.test.js | 126 |
+| OnboardingView | Welcome to | onboardingView.test.js | 45 |
+| OnboardingView | Crux | onboardingView.test.js | 46 |
+| OnboardingView | nudge | onboardingView.test.js | 66 |
+| OnboardingView | explain | onboardingView.test.js | 68 |
+| ProfileTab | 2 beginner · 1 intermediate | profileTab.test.js | 143 |
+| ProfileTab | advanced | profileTab.test.js | 144 |
+| ProfileTab | unknown | profileTab.test.js | 145 |
+| ProfileTab | formal analysis | profileTab.test.js | 177 |
+| ProfileTab | boom | profileTab.test.js | 191 |
+| ProfileTab | joins | profileTab.test.js | 213 |
+| ProfileTab | ×3 | profileTab.test.js | 214 |
+| ProfileTab | select | profileTab.test.js | 215 |
+| ProfileTab | window-fns | profileTab.test.js | 217 |
+| ProfileTab | ×2 | profileTab.test.js | 218 |
+| ProfileTab | sql joins | profileTab.test.js | 219 |
+| ProfileTab | Nothing mastered yet | profileTab.test.js | 233 |
+| RegisterView | me@example.com | registerView.test.js | 58 |
+| ReviewView | 2 concepts | reviewView.test.js | 79 |
+| ReviewView | mitosis | reviewView.test.js | 81 |
+| ReviewView | 2 correct in a row | reviewView.test.js | 183 |
+| ReviewView | 5 | reviewView.test.js | 93 |
+| SessionsLibraryView | Focus: gap-a | sessionsLibraryView.test.js | 102 |
+| SessionsLibraryView | No activity yet | sessionsLibraryView.test.js | 103 |
+| SessionsLibraryView | Loading... | sessionsLibraryView.test.js | 112 |
+| SessionsLibraryView | Covered the Krebs cycle | sessionsLibraryView.test.js | 186 |
+| SessionsLibraryView | Completed | sessionsLibraryView.test.js | 187 |
+| SessionsLibraryView | Untitled | sessionsLibraryView.test.js | 276 |
+| SessionsLibraryView | Failed to load sessions | sessionsLibraryView.test.js | 283 |
+| SessionsLibraryView | / | sessionsLibraryView.test.js | 291 |
+| SessionsLibraryView | library | sessionsLibraryView.test.js | 299 |
+| SessionsLibraryView | All sessions | sessionsLibraryView.test.js | 300 |
+| SessionsLibraryView | Continue topic | sessionsLibraryView.test.js | 436 |
+| SettingsView | account | settingsView.test.js | 91 |
+| SettingsView | usage | settingsView.test.js | 98 |
+| UsageTab | Usage data is unavailable right now. | usageTab.test.js | 35 |
+
+**Total string assertions (Phase C):** 44 across 9 components
+
+---
+
+### Table 3C: ARIA Attributes Referenced in Tests (Phase C)
+
+| Component | ARIA Attribute |
+|-----------|----------------|
+| AccountTab | role |
+| ForgotPasswordView | role |
+| LoginView | aria-label |
+| LoginView | role |
+| RegisterView | role |
+| ResetPasswordView | role |
+| RouteProgressBar | aria-hidden |
+| SettingsView | aria-selected |
+| SettingsView | role |
+| SessionsLibraryView | aria-pressed |
+| SessionsLibraryView | role |
+
+**Total aria attributes (Phase C):** 11 across 8 components
+
+---
+
+## Phase C Summary
+
+- **6** CSS class selectors across 2 components (redesign-critical)
+- **44** literal copy strings across 9 components (copy-change-sensitive)
+- **11** ARIA attributes across 8 components (a11y-critical)
+
+**Design requirement:** Maintain .library-* and .selected / .radio-sub classes if redesigning those components. Update test assertions if any UI copy changes. Preserve all aria-* attributes and role values across authentication and navigation elements.
