@@ -62,7 +62,7 @@
           <p class="glance-line" data-testid="glance-mastery">{{ masteryLine }}</p>
 
           <template v-if="attentionItems.length">
-            <h3 class="sec-title">Needs attention</h3>
+            <h3 class="sec-title sec-title--attn">Needs attention</h3>
             <ul class="cue-list" data-testid="glance-attention">
               <li v-for="c in attentionItems" :key="c.concept" class="cue-entry">
                 <router-link
@@ -356,6 +356,12 @@ async function saveFeedback() {
   font-weight: 700;
   line-height: var(--line-pitch);
   color: var(--ink);
+}
+
+/* "Needs attention" follows the "At a glance" mastery line inside the same
+   .sec; it gets its own top pitch like every other .sec on the page. */
+.sec-title--attn {
+  margin-top: var(--line-pitch);
 }
 
 .glance-line {

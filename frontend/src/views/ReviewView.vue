@@ -195,20 +195,27 @@ async function expand() {
   color: var(--pencil);
 }
 
+/* Rows sit one pitch apart so stacked covers are separated by ruled ground
+   and never butt frames: 56px row + 28px gap = three pitches per entry. */
 .review-list {
   list-style: none;
   margin: 0;
   padding: 0;
+  display: grid;
+  row-gap: var(--line-pitch);
   background-image: var(--ruled-bg);
   background-position-y: var(--ruled-offset);
   background-attachment: local;
 }
 
+/* Every row is exactly two pitches in both states, so lifting a cover never
+   reflows the list. */
 .review-row {
   display: grid;
   grid-template-columns: minmax(0, 20rem) minmax(0, 1fr);
   align-items: start;
   column-gap: 1rem;
+  min-height: calc(2 * var(--line-pitch));
 }
 
 /* The cue itself: a blue cue word on the rule, and the control that starts
@@ -256,11 +263,20 @@ async function expand() {
   display: flex;
   align-items: baseline;
   gap: 0.75rem;
-  min-height: var(--line-pitch);
+  min-height: calc(2 * var(--line-pitch));
+}
+
+/* Lifted, the cell keeps its two pitches: the aside on line one, Cover
+   written on line two. */
+.review-answer.lifted {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
 }
 
 .review-detail {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
+  width: 100%;
   min-width: 0;
   margin: 0;
   font-family: var(--font-sans);
@@ -316,7 +332,7 @@ async function expand() {
   padding: 0;
   border: 0;
   background: transparent;
-  text-align: right;
+  text-align: left;
 }
 
 .review-cover:hover {
