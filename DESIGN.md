@@ -137,6 +137,12 @@ components:
     textColor: "{colors.ink}"
     typography: "{typography.body}"
     rounded: "{rounded.control}"
+  select-written:
+    backgroundColor: "transparent"
+    textColor: "{colors.ink-learner}"
+    typography: "{typography.caption}"
+    rounded: "{rounded.page}"
+    padding: "0 1.125rem 0 0"
   status-caption:
     backgroundColor: "transparent"
     textColor: "{colors.ink}"
@@ -149,6 +155,18 @@ components:
     typography: "{typography.body}"
     rounded: "{rounded.page}"
     padding: "13px 1rem"
+  review-cover:
+    backgroundColor: "{colors.page}"
+    textColor: "{colors.ink-learner}"
+    typography: "{typography.caption}"
+    rounded: "{rounded.page}"
+    padding: "13px 1rem"
+  lettered-option:
+    backgroundColor: "transparent"
+    textColor: "{colors.ink}"
+    typography: "{typography.body}"
+    rounded: "{rounded.page}"
+    padding: "0"
   contents-row:
     backgroundColor: "transparent"
     textColor: "{colors.ink}"
@@ -189,43 +207,43 @@ components:
 
 **Creative North Star: "The Cornell Page"**
 
-The session is one Cornell note page, and the page is the product's memory made visible. The tutor writes in the notes column; what the tutor knows about you lives in the cue column beside it; the summary strip at the foot closes the sheet. There is no bubble stream, no avatar per row, and no profile hidden behind a drawer. Structure comes from rules, columns and ink, never from cards, fills or shadows. The sidebar is the notebook's contents page: session rows on ruled lines, the current one in bold.
+The session is one Cornell note page, and the page is the product's memory made visible. The tutor writes in the notes column; what the tutor knows about you lives in the cue column beside it; the summary strip at the foot closes the sheet. There is no bubble stream, no avatar per row, and no profile hidden behind a drawer. Structure comes from rules, columns and ink, never from cards, fills or shadows. The sidebar is the notebook's contents page: session rows on ruled lines, the current one in bold. Every other route is a page from the same notebook: Home is a fresh sheet, Review is a recitation page with covered answers, the library and the profile are contents pages and the cue column at full width, the legal documents are a ruled reading column, and the auth and onboarding screens are the inside cover.
 
 The page is white notebook paper, not cream, with feint blue rules at a 28px pitch behind every line of notes and one 2px red margin rule dividing cue from notes. Three inks each own one role and nothing else: graphite is the tutor and all body text; blue ballpoint is the learner (your messages, your cue words, your answers, every control, link and focus ring); red pen is the margin rule and the marker's marks. Pencil grey carries dates, counts and hints. The dark theme is the same desk with the lamp off: same rules, same three roles, inks re-tuned so every text ink still clears 4.5:1 (the token contrast test asserts this on both blocks of base.css).
 
-Motion is ink appearing. A new cue writes itself into the column left to right (clip-path reveal, 320ms), grading draws a red tick or cross as a stroke (stroke-dashoffset, 240ms), routes fade in (160ms opacity). Nothing slides, bounces or scales; reduced motion shows the final state.
+Motion is ink appearing. A new cue writes itself into the column left to right (clip-path reveal, 320ms), grading draws a red tick or cross as a stroke (stroke-dashoffset, 240ms), routes fade in (160ms opacity), a cover's lifted aside writes itself onto the rules, the inside cover fills in line by line (opacity, staggered 60ms). Nothing slides, bounces or scales; reduced motion shows the final state.
 
 **Key Characteristics:**
 - Ruled ground: a 28px line pitch behind the notes, every text block a whole multiple of it.
 - Three inks with fixed roles (graphite tutor, blue learner, red marker) plus pencil for asides.
 - No cards, no bubbles, no avatars, no eyebrow labels, no icon tiles; rules and columns carry structure.
 - Paper does not float: shadows only on teleported overlays (dialog, toast, row menu, mobile drawer).
-- Controls are written, not stamped: the default button is a line of blue text; the filled blue button is reserved for dialog footers and the skip link.
-- Marks are drawn strokes (tick, cross, focus dash, level stroke at five weights), never glyph fonts.
+- Controls are written, not stamped: the default button is a line of blue text; the filled blue button is reserved for dialog footers and the skip link, and no view carries one.
+- Marks are drawn strokes (tick, cross, focus dash, level stroke at five weights), never glyph fonts; the PrimeIcons font is loaded by no Vue file.
 
 ## Colors
 
 A white page, three inks and a pencil; the palette is a stationery drawer, not a brand ramp.
 
 ### Primary
-- **Blue Ballpoint** (`ink-learner`, light #1d4fc4 / dark #8fb0ff): the learner's ink. Learner turns, the "you" gutter tag, cue words, answer letters, links, text buttons, icon buttons, the composer caret and text, the focus ring, the blue mastered tick. This is the only interactive colour on the page.
-- **Blue Fill** (`accent-strong`, light #1d4fc4 / dark #3b63d6): the filled control. Dark theme uses a deeper blue than the dark learner ink so white label text (`text-on-accent`) clears AA; never fill with `ink-learner` directly.
+- **Blue Ballpoint** (`ink-learner`, light #1d4fc4 / dark #8fb0ff): the learner's ink. Learner turns, the "you" gutter tag, cue words, answer letters, links, text buttons, icon buttons, the composer caret and text, the focus ring, the blue mastered tick, the review cue word and the "Lift" written on its cover. This is the only interactive colour on the page.
+- **Blue Fill** (`accent-strong`, light #1d4fc4 / dark #3b63d6): the filled control. Dark theme uses a deeper blue than the dark learner ink so white label text (`text-on-accent`) clears AA; never fill with `ink-learner` directly. After phase C it is declared in two places only: the dialog footer (dialogs.css) and the skip link (base.css).
 - **Blue Hover** (`accent-hover`): the hover shift for links and blue text.
 - **Blue Wash** (`accent-soft`): text selection only.
-- **Blue Ring** (`accent-ring`, 35% light / 45% dark): the softer focus ring used inside the notes column.
+- **Blue Ring** (`accent-ring`, 35% light / 45% dark): the softer focus ring used inside the notes column and on every written control on the other pages.
 
 ### Secondary
-- **Red Pen, mark** (`ink-marker`, light #d8433a / dark #ff6a5e): the margin rule, the focus underline under a cue word, the grading tick and cross, alert borders on a status caption. A drawn mark only; it does not clear 4.5:1 on paper and is excluded from the contrast test for that reason.
-- **Red Pen, text** (`ink-marker-text`, light #b8352c / dark #ff6a5e): the text-safe red. "Not quite", the recap score, the stop control, the near-limit character count, failed-upload copy, the destructive confirm fill (#b8352c with white label in both themes). In the dark theme the two reds are the same value.
+- **Red Pen, mark** (`ink-marker`, light #d8433a / dark #ff6a5e): the margin rule, the focus underline under a cue word, the grading tick and cross, alert borders on a status caption, the "needs attention" dash on the profile. A drawn mark only; it does not clear 4.5:1 on paper and is excluded from the contrast test for that reason.
+- **Red Pen, text** (`ink-marker-text`, light #b8352c / dark #ff6a5e): the text-safe red. "Not quite", the recap score, the stop control, the near-limit character count, failed-upload copy, every page's error line, the destructive confirm fill (#b8352c with white label in both themes). In the dark theme the two reds are the same value.
 
 ### Neutral
-- **Graphite** (`ink`, light #1b1b1a / dark #ecebe6): the tutor and all body text, headings, cue section headings, the border of a ruled box, the summary strip's closing rule.
-- **Pencil** (`pencil`, light #63635e / dark #a3a39c): dates, counts, hints, role tags ("tutor", "check"), placeholders, footnotes, disabled text, the unset level stroke, the gap circle mark.
-- **Page** (`page`, light #fcfcfa / dark #141518): the ground of everything, including the sidebar, header and ruled boxes.
-- **Soft Surface** (`surface-soft`): code fences, inline code, sidebar row hover, overlay item hover. The only tonal fill on the page.
+- **Graphite** (`ink`, light #1b1b1a / dark #ecebe6): the tutor and all body text, headings, cue section headings, the border of a ruled box and of a review cover, the summary strip's closing rule, the level stroke.
+- **Pencil** (`pencil`, light #63635e / dark #a3a39c): dates, counts, hints, role tags ("tutor", "check"), placeholders, footnotes, disabled text, the unset level stroke, the gap circle mark, ledes and field labels on the other pages, the lifted aside on a review row.
+- **Page** (`page`, light #fcfcfa / dark #141518): the ground of everything, including the sidebar, header, ruled boxes and covers.
+- **Soft Surface** (`surface-soft`): code fences, inline code, sidebar and library row hover, overlay item hover. The only tonal fill on the page.
 - **Raised Surface** (`surface-raised`): overlays only (dialogs, toasts, row menu).
-- **Feint Rule** (`rule`, light #d3dfee / dark #262a33): the ruled ground, painted option separators, the hairline under an answer line.
-- **Strong Rule** (`rule-strong`, light #b9c6da / dark #363b47): borders that structure the page: header underline, notes-foot rule, sidebar edge and section rules, code fence border, table cells, footnote rule, the composer line at rest, scrollbar thumbs, skeleton bars.
+- **Feint Rule** (`rule`, light #d3dfee / dark #262a33): the ruled ground, painted option separators, painted separators under lettered lines and recent-topic rows, the hairline under an answer line.
+- **Strong Rule** (`rule-strong`, light #b9c6da / dark #363b47): borders that structure the page: header underline, notes-foot rule, sidebar edge and section rules, the rule under a cover's head and under a legal page's back line, code fence border, table cells, footnote rule, the composer line and every field line at rest, scrollbar thumbs, skeleton bars.
 
 ### Signals
 - **Ready Green** (`signal-success`) and **Warning Ochre** (`signal-warning`): AA-tested, and on the anchor used only as the border of a status caption whose file is ready. They never set text and never fill. (The contract named three inks; the build kept a fourth for the ready edge.)
@@ -246,20 +264,20 @@ A white page, three inks and a pencil; the palette is a stationery drawer, not a
 **Character:** A hyperlegible reading face for hours of notes, a compact grotesk for the one line that names the page, and a mono that appears only inside a fence. No tracked labels, no uppercase, no eyebrows; a heading carries its own weight at normal tracking.
 
 ### Hierarchy
-- **Display** (600, 2.25rem, 1.15): the not-found sheet's title. Reserved for a page that has no header strip.
-- **Headline** (600, 1.75rem, 1.15, -0.01em): the session topic in the 72px page header; drops to 1.375rem under 900px.
+- **Display** (600, 2.25rem, 1.15): the not-found sheet's title, the cover title on auth and onboarding, the h1 of a legal document (on a two-pitch line). Reserved for a page that has no header strip.
+- **Headline** (600, 1.75rem, 1.15, -0.01em): the session topic in the 72px page header, and the one-line title of every other page (Home, Review, the library, Settings, the session profile); drops to 1.375rem under 900px.
 - **Title** (600, 1.375rem, 28px): the recap score, the summary strip's "Session ended" line, dialog headers.
-- **Subhead** (600, 1.125rem, 28px): headings inside a tutor turn (all markdown h1-h4 collapse to this).
-- **Body** (400, 1.0625rem, 28px): notes, cue words, options, the composer. Bold (700) for a check question, a verdict, a section heading. Measure is 72ch beside a 4rem gutter.
-- **Contents** (400, 0.9375rem, 28px): the sidebar's own size for session rows, search, the new-session line, menu items; current row at 700.
-- **Caption** (400, 0.875rem, 28px): header meta, cue section headings (700), status captions, text buttons (700), footnote-adjacent copy, the recap's gap name.
-- **Label** (400, 0.8125rem, 28px): gutter role tags, composer hints, citations, the three-cell label on session rows, code fence header.
+- **Subhead** (600, 1.125rem, 28px): headings inside a tutor turn (all markdown h1-h4 collapse to this), and the h2 of a legal document, set in the body face.
+- **Body** (400, 1.0625rem, 28px): notes, cue words, options, the composer, review cue words, lettered lines, ledes. Bold (700) for a check question, a verdict, a section heading, a selected lettered line. Measure is 72ch beside a 4rem gutter.
+- **Contents** (400, 0.9375rem, 28px): the sidebar's own size for session rows, search, the new-session line, menu items; also the topic on Home, library and recent-topic rows; current row at 700.
+- **Caption** (400, 0.875rem, 28px): header meta, cue section headings (700), status captions, text buttons (700), the written select (700), footnote-adjacent copy, the recap's gap name, "Lift" and "Cover" on a review row.
+- **Label** (400, 0.8125rem, 28px): gutter role tags, composer hints, citations, the three-cell label on session rows, code fence header, field labels on the covers, the lifted aside on a review row, level counts.
 - **Mono** (400, 0.9375rem in fences, 0.9em inline, 28px): code only.
 
 ### Named Rules
 **The Pitch Rule.** Every line of text in the notes column, cue column, sidebar list and status slot has `line-height: 28px` (`--line-pitch`), including captions and labels, so that everything sits on the rules. A block whose height is intrinsic (display math, a fence, a table, an image) is topped up to the next whole pitch by the `--snap-pad` snapper in MarkdownContent.
 
-**The One Display Line Rule.** Familjen Grotesk appears once per sheet as the headline, and otherwise only at title size for a closing line, a score or an overlay header. Body copy, cues and controls are never set in the display face.
+**The One Display Line Rule.** Familjen Grotesk appears once per sheet as the headline, and otherwise only at title size for a closing line, a score or an overlay header. Body copy, cues and controls are never set in the display face. On a legal document the display face is the h1 alone; every h2 is the Subhead in the body face (1.125rem, 600, one pitch).
 
 ## Layout
 
@@ -269,15 +287,17 @@ The sheet is a grid of `232px / 2px / minmax(0, 1fr)` with a 72px header row spa
 
 Inside the notes column, every turn is a two-column row: a 4rem gutter for the role tag, then the text at a maximum of `4rem + 72ch`. Turns are separated by one pitch of top padding, never by margins that could collapse. The notes foot (check box, consent box, status slot, composer or summary strip) sits under a 1px strong rule with 0.75rem gaps and one pitch of bottom padding.
 
-Ruled offset: the rule paints at the foot of each box but the baseline sits 7.32px above it at 17px, so every consumer of `--ruled-bg` also sets `background-position-y: var(--ruled-offset)` (-7px). Where a laid-out 1px border would make a line 29px, the rule is painted instead (`box-shadow: inset 0 -1px 0`), or the line-height is reduced by the border (`calc(var(--line-pitch) - 1px)`); a fence and a ruled box use `13px + 1px border` for half a pitch of frame at each end.
+The other pages are centred columns inside `.page-inner`: Home and Review at 44rem, the profile at 72rem, a legal document at `72ch + 2rem`, the auth and onboarding covers at 26rem centred in the viewport. Each opens with one pitch of top padding, stacks its sections one pitch apart (`gap: var(--line-pitch)` or a pitch of top padding per section), and paints the ruled ground only under its lists (recent rows, review rows, library rows, the legal body) rather than under the whole page. A section that follows a strong rule subtracts the border from its pitch (`calc(var(--line-pitch) - 1px)`).
 
-Breakpoints: under 900px the cue column becomes a one-line strip under the header (focus cue, gap count, mastered count, a disclosure chevron) that expands in place, the margin rule is hidden, and the header drops to 0.75rem padding with the title at 1.375rem. Under 600px the 4rem gutter collapses and the role tag sits above the text; the composer hint is hidden. The sidebar becomes a 3rem top strip (menu, wordmark, settings) and a drawer that fades in over a 45% graphite backdrop.
+Ruled offset: the rule paints at the foot of each box but the baseline sits 7.32px above it at 17px, so every consumer of `--ruled-bg` also sets `background-position-y: var(--ruled-offset)` (-7px). Where a laid-out 1px border would make a line 29px, the rule is painted instead (`box-shadow: inset 0 -1px 0`), or the line-height is reduced by the border (`calc(var(--line-pitch) - 1px)`); a fence, a ruled box and a review cover use `13px + 1px border` for half a pitch of frame at each end.
 
-Spacing is the pitch and whole 4px multiples: 0.25 / 0.5 / 0.75 / 1 / 1.25 / 1.5rem for gaps and insets, 28px and 14px for anything that must stay on the rules. The `--space-*` scale in base.css is used only by the library view; the anchor does not consume it.
+Breakpoints: under 900px the cue column becomes a one-line strip under the header (focus cue, gap count, mastered count, a disclosure chevron) that expands in place, the margin rule is hidden, and the header drops to 0.75rem padding with the title at 1.375rem. Under 600px the 4rem gutter collapses and the role tag sits above the text; the composer hint is hidden; review and library rows drop to one column. The sidebar becomes a 3rem top strip (menu, wordmark, settings) and a drawer that fades in over a 45% graphite backdrop.
+
+Spacing is the pitch and whole 4px multiples: 0.25 / 0.5 / 0.75 / 1 / 1.25 / 1.5rem for gaps and insets, 28px and 14px for anything that must stay on the rules. The `--space-*` scale is still declared in base.css but after phase C no surface consumes it; every surface writes the literal rem value.
 
 ## Elevation & Depth
 
-Paper does not float. The page, sidebar, header, ruled boxes and status captions are all flat on the same ground; depth comes from rule weight (feint, strong, ink) and from ink weight (pencil, graphite, bold). `--shadow-paper` is `none` by definition. The single shadow token, `--shadow-lift` (`0 12px 24px -12px rgba(0,0,0,0.25)`, 0.7 alpha in dark), is reserved for surfaces that are literally lifted off the page: PrimeVue dialogs and confirm, toasts, the sidebar row menu popover, and the mobile drawer.
+Paper does not float. The page, sidebar, header, ruled boxes, covers and status captions are all flat on the same ground; depth comes from rule weight (feint, strong, ink) and from ink weight (pencil, graphite, bold). `--shadow-paper` is `none` by definition. The single shadow token, `--shadow-lift` (`0 12px 24px -12px rgba(0,0,0,0.25)`, 0.7 alpha in dark), is reserved for surfaces that are literally lifted off the page: PrimeVue dialogs and confirm, toasts, the sidebar row menu popover, and the mobile drawer. No view stylesheet declares a shadow.
 
 ### Shadow Vocabulary
 - **Lift** (`box-shadow: 0 12px 24px -12px rgba(0, 0, 0, 0.25)`; dark `rgba(0, 0, 0, 0.7)`): teleported or absolutely positioned overlays only, always with a 1px strong-rule border and `surface-raised` background.
@@ -289,17 +309,19 @@ Paper does not float. The page, sidebar, header, ruled boxes and status captions
 
 ## Shapes
 
-The page has no radius: sheet, header, sidebar, ruled boxes, composer line, session rows, turn rows and the summary strip are all square. Controls that need a hit target (icon buttons, the skip link, fields, status captions, overlays, code fences, inline code, scrollbar thumbs) use one radius, 4px. There is no pill, no circle and no large radius on the anchor; the typing indicator's 5px dots and the gap mark's circle are drawn marks, not shapes.
+The page has no radius: sheet, header, sidebar, ruled boxes, review covers, composer line, session rows, turn rows, lettered lines and the summary strip are all square. Controls that need a hit target (icon buttons, the skip link, boxed fields, status captions, overlays, code fences, inline code, scrollbar thumbs) use one radius, 4px. Fields on a rule and the written select explicitly reset to 0. There is no pill, no circle and no large radius; the typing indicator's 5px dots and the gap mark's circle are drawn marks, not shapes.
 
-Borders are the form language: 1px `rule-strong` for page structure, 1px `ink` for a ruled box or the summary strip's closing rule, 2px `margin-rule` red for the one vertical divider, a 2px red underline for a marked cue, a 2px graphite underline for the active status tab. Marks are stroked SVG paths with round caps at 1.5px (ticks, circles, chevrons, attach and send) or 2px (red marks); the level mark is one diagonal stroke `M2 17 L22 7` at five weights (0.75 / 1.5 / 2.25 / 3 / 3.75), pencil when unset.
+Borders are the form language: 1px `rule-strong` for page structure, 1px `ink` for a ruled box, a review cover or the summary strip's closing rule, 2px `margin-rule` red for the one vertical divider, a 2px red underline for a marked cue, a 2px graphite underline for the active status tab or library filter. Marks are stroked SVG paths with round caps at 1.5px (ticks, circles, chevrons, arrows, attach and send) or 2px (red marks); the level mark is one diagonal stroke `M2 17 L22 7` at five weights (0.75 / 1.5 / 2.25 / 3 / 3.75, `LEVEL_STEPS` in levelMark.js with `LEVEL_STEP_INDEX` beginner 1 / intermediate 2 / advanced 4), pencil when unset.
 
 ## Components
 
 ### Buttons
-Written, not stamped. The default action in this world is a line of blue text.
-- **Text button** (the default): transparent, no border, no padding, caption size at 700 in `ink-learner`, underlined with a 3px offset, `line-height: 28px`. Used for Skip, Next, Done, Retry, Resume, Review my gaps, View all, New session, load earlier. Disabled: pencil, no underline, no pointer. Focus: 2px `accent-ring` outline, offset 2px (sidebar variants use solid `ink-learner`).
-- **Filled blue button**: `accent-strong` fill, white label, 600 weight, 4px radius, `0.5rem 1.25rem`. Dialog footers and the skip link only. Destructive confirm: `#b8352c` fill, `#94271f` on hover, white label.
+Written, not stamped. The default action in this world is a line of blue text, on every page.
+- **Text button** (the default): transparent, no border, no padding, caption size at 700 in `ink-learner`, underlined with a 3px offset, `line-height: 28px`. Used for Skip, Next, Done, Retry, Resume, Review my gaps, View all, New session, load earlier and load more, Continue on a library row, Lift and Cover on a review row, Save feedback style, the back line. Disabled: pencil, no underline, no pointer. Focus: 2px `accent-ring` outline, offset 2px (sidebar variants use solid `ink-learner`).
+- **Page CTA** (Home "Start", onboarding "Begin"): the same text button with a drawn 18px arrow (1.5px stroke, round caps, `currentColor`) 0.375rem after the word; only the word is underlined, the arrow is not.
+- **Filled blue button**: `accent-strong` fill, white label, 600 weight, 4px radius, `0.5rem 1.25rem`. Dialog footers (dialogs.css) and the skip link (base.css) only; no stylesheet under views/ declares one. Destructive confirm: `#b8352c` fill, `#94271f` on hover, white label.
 - **Icon button**: a drawn 20px SVG stroke (1.5px, round caps) in `ink-learner`, 2rem wide by one pitch tall, transparent, 4px radius. Attach, send, stop (stop in `ink-marker-text`), the cue disclosure, the consent dismiss. Disabled: pencil.
+- **Filter toggle** (sidebar Active / Ended, library Active / Ended): a caption-700 blue text line; the one in force turns graphite with a 2px graphite underline at 3px offset. Nothing is filled.
 - **Hover:** blue text gains an underline or shifts to `accent-hover`; nothing moves or lifts.
 
 ### Sheet
@@ -307,6 +329,12 @@ The session page: header strip, cue column, margin rule, notes column, foot. Gri
 
 ### Cue Column
 What the tutor knows, as cue words. Four sections one pitch apart, each with a bold caption-size graphite heading (Focus, Gaps, Mastered, Level). Entries are body size on the pitch with a drawn mark and 0.5rem gap: focus is a red 2px dash and the word in graphite with a red underline; a gap is a pencil circle and the word in blue; mastered is a blue tick and the word in blue; the cue under an open check takes the red underline. Empty sections say "no focus cue yet" / "none open" / "none yet" in pencil. Level is the diagonal stroke at its weight beside the level word in pencil, with subtopic strokes listed under it. A newly recorded cue lands with a 320ms clip-path reveal; below 900px the column is a strip (focus, "N gaps", "N mastered", chevron) that expands in place.
+
+### Aggregate Profile (ProfileTab)
+The cue column at full width. A pencil caption lede and counts line, then sections one pitch apart, each a caption-700 graphite heading over cue entries. Knowledge level distribution is not a sentence: each level present is a cue entry with the level stroke at its own weight (`levelStroke(key)`, 18 by 12 viewport of the 24-box, graphite; pencil for "unknown"), the level word in pencil body, the count in pencil label; levels with zero sessions stay off the page. "Needs attention" follows the mastery line inside the same section and carries its own top pitch (`.sec-title--attn`); each item is one link, a red 2px dash, the concept in graphite under the red underline, the accuracy in pencil label. Gaps and Mastered run as two columns (`minmax(18rem, 1fr)`) of cue entries with the session count in pencil label (`x3`) and the first-seen topic in pencil under the word. Recent topics are contents rows with a painted feint rule. Feedback style sits under a strong rule as lettered lines with a Save text button.
+
+### Lettered Lines (FeedbackStylePicker)
+The shared choice control on Settings and onboarding (`data-testid="onboarding-feedback"`). Native radios, visually hidden, in a fieldset; each option is one line on the pitch in a `1.5rem / 1fr / auto` grid: a blue 700 letter ("A."), the label in graphite body (700 when selected) with a pencil label description under it, and a drawn blue tick at the right when selected. Lines are separated by a painted feint rule; hover underlines the label; focus-visible on the hidden input draws the `accent-ring` outline around the whole line via `:has()`. No card, no dot, no fill. It is the same grammar as the check-question options on the sheet.
 
 ### Ruled Notes
 Turns on the rules. A tutor turn: gutter tag "tutor" in pencil label size, text in graphite; markdown paragraphs and lists carry a 28px bottom margin, headings 28px top, blockquotes are set in 1.5em and pencil italic. A learner turn: gutter tag "you" and text both in `ink-learner`. No bubble, no avatar, no background. A landed tick (blue, drawn in 240ms) hangs under "tutor" on the latest turn that changed the profile. Tool activity is a pencil aside (a 12px dash and text), citations are a footnote block under a strong rule in pencil label size with superscript refs. Code fences: `surface-soft` fill, 1px strong rule, 4px radius, 13px + 1px frame, mono 0.9375rem, a pencil header row with a "copy" outline button one pitch tall. Display math is followed by a painted strong rule and topped up to the pitch.
@@ -317,14 +345,17 @@ The 4rem gutter before every turn, check and skeleton row holds one word at labe
 ### Ruled Box (checks and the consent card)
 A check pauses the page. A 1px graphite border, page background over the rules, no radius, `13px + 1px` vertical frame and 1rem sides, spanning the notes measure beside a "check" gutter tag. The question is body 700 graphite; options are full-width transparent buttons one pitch tall with a painted feint rule underneath, a blue 700 letter ("A.") and graphite text; hover underlines the text. Grading draws a red tick on the correct line and a red cross on a wrong pick (2px stroke, 240ms), the wrong text goes pencil, the verdict reads "Correct" in graphite or "Not quite" in text-safe red, and the explanation appears only once graded. Skip / Next / Done are text buttons; "2/3" progress is a pencil label at the foot right. The diagnostic consent card is the same box with a Q. / A. / B. / C. option list.
 
+### Drawn Cover (review rows)
+Recitation: the cue stays readable, the answer beside it is covered until the learner lifts that one cover. The review list paints the ruled ground; each row is a `minmax(0, 20rem) / 1fr` grid, exactly two pitches (56px) tall in both states, rows one pitch apart so stacked covers never butt frames (three pitches per entry). Left, the cue word is a blue body-size text button (hover underline, `accent-hover`) that starts the check. Right, covered: a ruled box in the check's own frame, 1px graphite border, page ground, no radius, `13px + 1px` at top and bottom around one 28px line, with "Lift" written inside as a caption-700 blue line. Lifted: the box is gone; line one is the pencil aside (source topic, streak) at label size written onto the rules with the 320ms clip-path reveal (`review-land`, none under reduced motion), line two is "Cover" as a plain blue text button; the cell keeps its 56px so lifting never reflows the list. "View all N" is a text button under the list; the empty state is a pencil body line with a blue "Back home" link.
+
 ### Check Recap
 The marked-up sheet inside a tutor turn: a one-pitch header with the score in title size, text-safe red, beside the gap name in pencil caption, a painted strong rule under it; then each question with its options, the correct one ticked in red and tagged "correct", the learner's wrong pick in blue struck through in red and tagged "your answer"; explanations in pencil.
 
 ### Status Caption
-One line of ink on paper inside a full 1px rule, 4px radius, `0.25rem 0.75rem`, caption size on the pitch. At rest the rule is `rule-strong`; an alert (cap reached, send error, failed upload) uses `ink-marker` for the rule with a text-safe red lead; a ready file uses `signal-success` for the rule. It lands with the 320ms clip-path reveal, one caption at a time in the status slot (upload outranks follow-up), and leaves clean. The PrimeVue toast is the same caption lifted: raised surface, strong rule, no severity tint, no coloured edge, body 700 summary with pencil detail, same reveal.
+One line of ink on paper inside a full 1px rule, 4px radius, `0.25rem 0.75rem`, caption size on the pitch. At rest the rule is `rule-strong`; an alert (cap reached, send error, failed upload) uses `ink-marker` for the rule with a text-safe red lead; a ready file uses `signal-success` for the rule. It lands with the 320ms clip-path reveal, one caption at a time in the status slot (upload outranks follow-up), and leaves clean. The PrimeVue toast is the same caption lifted: raised surface, strong rule, no severity tint, no coloured edge, body 700 summary with pencil detail, same reveal. The onboarding cover's status line is the same caption without the reveal.
 
 ### Contents Row (sidebar sessions)
-A ruled line on the contents page. Transparent, no radius, one pitch minimum, `0 0.25rem 0 0.75rem`; line one is the topic at contents size in graphite with the mastered count in pencil label size on the right; line two, when present, is the focus cue at label size in graphite with the red 2px underline. Current row is 700, nothing else marks it; ended rows go pencil; hover and focus-within fill the row with `surface-soft` and reveal the pencil ellipsis menu trigger. Collapsed rail: a 1rem by 2px pencil stroke, blue for the current row, strong-rule for ended. The three-cell label (SessionChips) is focus / level / mastered at label size with drawn marks: focus in graphite with a red dash, level in pencil with the graphite stroke, mastered in pencil with a blue tick; the level cell is owed on session rows until Issue #289.
+A ruled line on the contents page. Transparent, no radius, one pitch minimum, `0 0.25rem 0 0.75rem`; line one is the topic at contents size in graphite with the mastered count in pencil label size on the right; line two, when present, is the focus cue at label size in graphite with the red 2px underline. Current row is 700, nothing else marks it; ended rows go pencil; hover and focus-within fill the row with `surface-soft` and reveal the pencil ellipsis menu trigger. Collapsed rail: a 1rem by 2px pencil stroke, blue for the current row, strong-rule for ended. The three-cell label (SessionChips) is focus / level / mastered at label size with drawn marks: focus in graphite with a red dash, level in pencil with the graphite stroke, mastered in pencil with a blue tick; the level cell is owed on session rows until Issue #289. Home's recent list and the library list are the same row on the same ruled ground; the library row adds a Continue text button in a right-hand column and a two-line pencil description.
 
 ### Contents Page (sidebar shell)
 Page background, 1px strong rule on the right, the wordmark (page mark: an outlined page with a red margin line and three feint rules) at the top. New session is a blue text line with a drawn plus; Review is a blue line with a pencil count at the right; search is a field on a rule; Active / Ended are two blue caption-700 toggles, the one in force in graphite with a 2px graphite underline. The list paints the ruled ground with the same offset. Settings sits in a footer under a strong rule.
@@ -333,18 +364,22 @@ Page background, 1px strong rule on the right, the wordmark (page mark: an outli
 The sheet closes under a 1px graphite rule. Half a pitch of top padding, then "Session ended 3 days ago." in title size graphite, the summary in body graphite, the keep-as-is note in pencil caption, and Review my gaps / Resume topic as text buttons 1.25rem apart. It reads as a completed sheet, not a locked one.
 
 ### Inputs / Fields
-- **Field on a rule** (composer, sidebar search, row rename): transparent, no border except a 1px `rule-strong` bottom rule, no padding, body size on the pitch, text and caret in `ink-learner`, placeholder in pencil; on focus-within the rule turns `ink-learner` (rename thickens to 2px). The composer is a three-column line, attach on the left, send or stop on the right, a Skip text button while a check is open, and pencil label hints beneath ("Enter to send, Shift + Enter for a new line", the count turning text-safe red at 90% of 4000).
+- **Field on a rule** (composer, sidebar search, row rename, Home topic, library search, the cover's name field): transparent, `appearance: none`, no border except a 1px `rule-strong` bottom rule, radius 0, no padding, body size on the pitch (line-height `28px - 1px` where the rule is laid out), text and caret in `ink-learner`, placeholder in pencil; on focus-within the rule turns `ink-learner` (rename thickens to 2px). A pencil label-size caption sits on the pitch above the line where the field needs a name. The composer is a three-column line, attach on the left, send or stop on the right, a Skip text button while a check is open, and pencil label hints beneath ("Enter to send, Shift + Enter for a new line", the count turning text-safe red at 90% of 4000).
+- **Written select** (library sort): a native `<select>` with `appearance: none`, transparent, no border, radius 0, caption-700 in `ink-learner` on the pitch, `1.125rem` of right padding under a drawn 1.5px blue chevron positioned absolutely at the right edge (`pointer-events: none`). The platform arrow is dropped; the control keeps native behaviour.
 - **Boxed field** (PrimeVue InputText / Textarea / Select in overlays and forms): page background, 1px `rule-strong` border, 4px radius, body size, blue caret; focus is a blue border plus a 2px blue outline at 1px offset, no glow. Placeholder in pencil.
 - **Error:** copy in text-safe red on its own pitch line; no red fill.
 
 ### Navigation
-Text links in `ink-learner`, 1px underline at 3px offset, `accent-hover` on hover; the session topic in the header is a link that gains a 2px red underline on hover and opens the profile. The back control is a blue caption-700 line with an arrow. Route changes fade in over 160ms, no leave phase.
+Text links in `ink-learner`, 1px underline at 3px offset, `accent-hover` on hover; the session topic in the header is a link that gains a 2px red underline on hover and opens the profile. The back control is a blue caption-700 line with a drawn arrow; on a legal page or a cover it sits on its own line above a strong rule. Route changes fade in over 160ms, no leave phase.
+
+### Reading Column (legal documents)
+Terms and Privacy are one ruled column: the back line, a strong rule, then the markdown set on the feint rules at body size and the pitch. The h1 is the display face on a two-pitch line; every h2 is the Subhead in the body face with one pitch above; paragraphs and lists carry one pitch below; emphasis is pencil italic; links are blue underlined. No card, no chrome.
 
 ### Overlays (Dialog, ConfirmDialog, row menu)
 Raised surface, 1px strong rule, 4px radius, lift shadow. Dialog header in the display face at title size, content at body, footer under a feint rule with the filled blue button. Menu items one pitch tall at contents size, pencil glyph, `surface-soft` on hover, End session in text-safe red with a 10% red wash on hover. Gap picker entries are cue words on ruled lines (pencil circle, blue word), not boxed options.
 
 ### Skeletons and Empty States
-Pencil-weight bars: 1px `rule-strong` lines on the pitch in the turn geometry, no shimmer. The empty sheet shows three feint rules, a prompt line in graphite and three quick prompts as blue text lines.
+Pencil-weight bars: 1px `rule-strong` lines on the pitch in the turn geometry, no shimmer. The empty sheet shows three feint rules, a prompt line in graphite and three quick prompts as blue text lines; Home's quick picks are the same blue body-size lines on one rule, 1.25rem apart.
 
 ### Page Mark
 An outlined page (1px current-colour stroke, 2px corner) with a 2px red margin line and three `rule-strong` note lines; the wordmark "Crux" in the display face at 600 beside it. 22 / 28 / 56px sizes.
@@ -354,10 +389,12 @@ An outlined page (1px current-colour stroke, 2px corner) with a 2px red margin l
 ### Do:
 - **Do** set every line in a ruled area to `line-height: 28px` and keep every block a whole multiple of the pitch; paint a separator (`inset 0 -1px 0`) or subtract it from the line-height rather than adding a border.
 - **Do** pair `background-image: var(--ruled-bg)` with `background-position-y: var(--ruled-offset)` and `background-attachment: local` on every ruled scroller.
-- **Do** make the default action a blue text line (caption, 700, underline offset 3px) and reserve the filled blue button for dialog footers and the skip link.
+- **Do** make the default action a blue text line (caption, 700, underline offset 3px) on every page, and reserve the filled blue button for dialog footers and the skip link.
 - **Do** draw marks as stroked SVG paths (1.5px round caps; 2px for red) and animate them with stroke-dashoffset over 240ms; reveal new ink with `clip-path: inset(0 100% 0 0)` to `inset(0)` over 320ms on `cubic-bezier(0.16, 1, 0.3, 1)`.
+- **Do** draw an icon inline on the element that needs it (a chevron over an `appearance: none` select, an arrow after a CTA word, a tick beside a chosen line); the PrimeIcons font is loaded by no Vue file.
 - **Do** use `accent-strong` (not `ink-learner`) behind white text, and keep every new text ink in base.css so tokenContrast.test.js asserts it in both themes.
 - **Do** carry the three-cell label (focus / level / mastered) on every session row and card, with the focus cue in graphite under a red underline.
+- **Do** keep a two-state control the same height in both states (the review cover is 56px covered and lifted) so toggling never reflows the list.
 - **Do** keep test hooks (data-testid, aria attributes, asserted class names, copy strings) unchanged when extending a surface.
 
 ### Don't:
@@ -365,6 +402,7 @@ An outlined page (1px current-colour stroke, 2px corner) with a 2px red margin l
 - **Don't** set text in `ink-marker`; use `ink-marker-text`, and use red only for the margin rule, marks, underlines and verdicts.
 - **Don't** add eyebrow or kicker labels, uppercase tracked labels, or a second accent colour.
 - **Don't** slide, scale or bounce anything; motion is opacity, clip-path or a stroke draw, and reduced motion shows the final state.
-- **Don't** round the page: 0 on sheets, rows, boxes and strips; 4px only on hit targets, fields, captions and overlays.
+- **Don't** round the page: 0 on sheets, rows, boxes, covers and strips; 4px only on hit targets, boxed fields, captions and overlays.
 - **Don't** fill a hover; underline it or shift to `accent-hover`. The only hover fill is `surface-soft` on a contents row or overlay item.
-- **Don't** mix glyph icon fonts into a surface built in this world; use drawn SVG strokes.
+- **Don't** mix glyph icon fonts into a surface built in this world; use drawn SVG strokes. No `pi pi-` class remains in src.
+- **Don't** set a page's section headings in the display face; one display line per page, and the rest is the body face at caption 700 or Subhead.
