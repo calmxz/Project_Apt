@@ -291,12 +291,14 @@ describe('SessionsLibraryView', () => {
     expect(back.attributes('to') || back.attributes('href')).toBe('/')
   })
 
-  it('renders a folio eyebrow above the display title', async () => {
-    sessionsApi.getSessionLibrary.mockResolvedValue(page([item('a')]))
+  // Redesign C1: the Cornell Page world bans eyebrow and kicker labels
+  // (DESIGN.md, "Don't add eyebrow or kicker labels"), so the folio line is
+  // gone and the display title stands on its own.
+  it('renders the display title with no folio eyebrow above it', async () => {
+    getSessionLibrary.mockResolvedValue(page([]))
     const wrapper = mount(SessionsLibraryView, { global: { stubs } })
     await flushPromises()
-    const folio = wrapper.get('.library-folio')
-    expect(folio.text()).toBe('library')
+    expect(wrapper.find('.library-folio').exists()).toBe(false)
     expect(wrapper.get('.library-title').text()).toBe('All sessions')
   })
 

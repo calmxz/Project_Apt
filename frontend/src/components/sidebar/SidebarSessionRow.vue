@@ -185,16 +185,41 @@ function commitRenameFromKey() {
         <template v-else>
           <span class="sb-row-label">
             <span class="sb-row-topic">
-              <i
+              <svg
                 v-if="session.pinned && !session.ended_at"
-                class="pi pi-bookmark-fill sb-row-pin"
+                class="sb-row-pin"
+                viewBox="0 0 20 20"
+                width="12"
+                height="12"
+                fill="currentColor"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
                 aria-hidden="true"
-              />
+                focusable="false"
+              >
+                <path d="M6 3.5 H14 V16.5 L10 13.5 L6 16.5 Z" />
+              </svg>
               {{ session.topic || 'Untitled' }}
             </span>
-            <span v-if="masteredCount" class="sb-row-mastered" data-tabular aria-hidden="true"
-              ><i class="pi pi-check" />{{ masteredCount }}</span
-            >
+            <span v-if="masteredCount" class="sb-row-mastered" data-tabular aria-hidden="true">
+              <svg
+                class="sb-row-mastered-icon"
+                viewBox="0 0 12 12"
+                width="10"
+                height="10"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                focusable="false"
+              >
+                <path d="M2 6.5 L4.8 9.2 L10 3.2" />
+              </svg>
+              {{ masteredCount }}
+            </span>
           </span>
           <span v-if="focusCue" class="sb-row-focus" aria-hidden="true">{{ focusCue }}</span>
         </template>
@@ -297,8 +322,9 @@ function commitRenameFromKey() {
   color: var(--pencil);
 }
 
-.sb-row-mastered .pi {
-  font-size: 0.6875rem;
+.sb-row-mastered-icon {
+  flex-shrink: 0;
+  color: var(--ink-learner);
 }
 
 /* Line two: the focus cue, in ink and marked in red, never set in red. */
@@ -370,7 +396,8 @@ function commitRenameFromKey() {
 }
 
 .sb-row-pin {
-  font-size: 0.75rem;
+  flex-shrink: 0;
+  vertical-align: middle;
   color: var(--pencil);
   margin-right: 0.25rem;
 }

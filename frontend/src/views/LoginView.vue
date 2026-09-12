@@ -1,88 +1,128 @@
 <template>
-  <section class="login">
-    <header class="head">
-      <Logo size="lg" variant="mark-only" />
-      <span class="folio">sign in</span>
-      <h1 class="title">Welcome to Crux</h1>
-      <p class="lede">Sign in with your email and password.</p>
-    </header>
+  <section class="cover">
+    <div class="sheet">
+      <header class="cover-head">
+        <Logo size="md" variant="full" />
+        <h1 class="cover-title">Welcome to Crux</h1>
+        <p class="cover-lede">Sign in with your email and password.</p>
+      </header>
 
-    <form class="form" data-testid="login-form" @submit.prevent="submit">
-      <p v-if="resetDone" class="sent" data-testid="login-reset-done">
-        Password updated — sign in with your new password.
-      </p>
+      <form class="form" data-testid="login-form" @submit.prevent="submit">
+        <p v-if="resetDone" class="status is-done" data-testid="login-reset-done">
+          Password updated — sign in with your new password.
+        </p>
 
-      <div class="field">
-        <label for="email" class="label">Email</label>
-        <InputText
-          id="email"
-          v-model="email"
-          type="email"
-          data-testid="login-email"
-          autocomplete="email"
-          placeholder="you@example.com"
-          required
-          class="input"
-        />
-      </div>
+        <div class="field">
+          <label for="email" class="field-label">Email</label>
+          <div class="field-line">
+            <InputText
+              id="email"
+              v-model="email"
+              type="email"
+              data-testid="login-email"
+              autocomplete="email"
+              placeholder="you@example.com"
+              required
+              class="field-input"
+            />
+          </div>
+        </div>
 
-      <div class="field">
-        <label for="password" class="label">Password</label>
-        <div class="pwd-wrap">
-          <InputText
-            id="password"
-            v-model="password"
-            :type="showPassword ? 'text' : 'password'"
-            data-testid="login-password"
-            autocomplete="current-password"
-            placeholder="Your password"
-            required
-            class="input pwd-input"
-          />
+        <div class="field">
+          <label for="password" class="field-label">Password</label>
+          <div class="field-line has-glyph">
+            <InputText
+              id="password"
+              v-model="password"
+              :type="showPassword ? 'text' : 'password'"
+              data-testid="login-password"
+              autocomplete="current-password"
+              placeholder="Your password"
+              required
+              class="field-input"
+            />
+            <button
+              type="button"
+              class="field-glyph"
+              data-testid="login-toggle-password"
+              :aria-label="showPassword ? 'Hide password' : 'Show password'"
+              :aria-pressed="showPassword"
+              @click="showPassword = !showPassword"
+            >
+              <svg
+                viewBox="0 0 20 20"
+                width="20"
+                height="20"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <path d="M1.5 10 C4 5.5 6.9 3.5 10 3.5 C13.1 3.5 16 5.5 18.5 10" />
+                <path d="M18.5 10 C16 14.5 13.1 16.5 10 16.5 C6.9 16.5 4 14.5 1.5 10" />
+                <circle cx="10" cy="10" r="2.75" />
+                <path v-if="showPassword" d="M3.5 16.5 L16.5 3.5" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <p v-if="error" class="status is-alert" role="alert" data-testid="login-error">
+          {{ error }}
+        </p>
+        <p v-if="needsConfirm" class="line">
+          <button type="button" class="linkbtn" data-testid="login-resend" @click="resend">
+            Resend confirmation email
+          </button>
+        </p>
+        <p v-if="resent" class="status is-done" data-testid="login-resent">
+          Confirmation email re-sent to <strong>{{ email.trim() }}</strong
+          >.
+        </p>
+
+        <div class="actions">
           <button
-            type="button"
-            class="pwd-toggle"
-            data-testid="login-toggle-password"
-            :aria-label="showPassword ? 'Hide password' : 'Show password'"
-            :aria-pressed="showPassword"
-            @click="showPassword = !showPassword"
+            type="submit"
+            class="cta"
+            data-testid="login-submit"
+            :disabled="!canSubmit || submitting"
           >
-            <i :class="showPassword ? 'pi pi-eye-slash' : 'pi pi-eye'" aria-hidden="true" />
+            <span>{{ submitting ? 'Signing in…' : 'Sign in' }}</span>
+            <svg
+              class="cta-arrow"
+              viewBox="0 0 20 20"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="M3.5 10 L16.5 10" />
+              <path d="M11 4.5 L16.5 10 L11 15.5" />
+            </svg>
           </button>
         </div>
-      </div>
 
-      <p v-if="error" class="error" role="alert" data-testid="login-error">{{ error }}</p>
-      <p v-if="needsConfirm" class="hint">
-        <button type="button" class="linkbtn" data-testid="login-resend" @click="resend">
-          Resend confirmation email
-        </button>
-      </p>
-      <p v-if="resent" class="sent" data-testid="login-resent">
-        Confirmation email re-sent to <strong>{{ email.trim() }}</strong
-        >.
-      </p>
-
-      <div class="actions">
-        <button
-          type="submit"
-          class="cta"
-          data-testid="login-submit"
-          :disabled="!canSubmit || submitting"
-        >
-          <span>{{ submitting ? 'Signing in…' : 'Sign in' }}</span>
-          <i class="pi pi-arrow-right" aria-hidden="true" />
-        </button>
-      </div>
-
-      <p class="swap">
-        <RouterLink to="/forgot" data-testid="login-to-forgot">Forgot password?</RouterLink>
-      </p>
-      <p class="swap">
-        New here?
-        <RouterLink to="/register" data-testid="login-to-register">Create an account</RouterLink>
-      </p>
-    </form>
+        <p class="line">
+          <RouterLink class="link" to="/forgot" data-testid="login-to-forgot"
+            >Forgot password?</RouterLink
+          >
+        </p>
+        <p class="line">
+          New here?
+          <RouterLink class="link" to="/register" data-testid="login-to-register"
+            >Create an account</RouterLink
+          >
+        </p>
+      </form>
+    </div>
   </section>
 </template>
 
@@ -151,122 +191,146 @@ async function resend() {
 </script>
 
 <style scoped>
-.login {
-  max-width: 30rem;
-  margin: 0 auto;
+/* The notebook cover: one centred sheet on the page ground. No card, no
+   shadow -- the fields' rules are the only lines, and the head sits above a
+   strong rule the way the sheet header does. */
+.cover {
   min-height: 100dvh;
-  /* Larger bottom padding biases the flex-centered block upward so the card,
-     not the header+card group, sits near the optical center of the viewport. */
-  padding: 2rem 1.25rem calc(2rem + 12vh);
   box-sizing: border-box;
   display: flex;
-  flex-direction: column;
+  align-items: center;
   justify-content: center;
-  gap: 1.75rem;
+  padding: var(--line-pitch) 1rem calc(var(--line-pitch) * 2);
+  background: var(--color-background);
 }
 
-.head {
+.sheet {
+  width: 100%;
+  max-width: 26rem;
+}
+
+.cover-head {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 0.5rem;
+  gap: 0;
+  padding-bottom: calc(var(--line-pitch) - 1px);
+  border-bottom: 1px solid var(--rule-strong);
 }
 
-.folio {
-  font-family: var(--font-sans);
-  font-size: var(--fs-label);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  font-weight: 600;
-  color: var(--color-accent-text);
-}
-
-.title {
+.cover-title {
+  margin: var(--line-pitch) 0 0;
   font-family: var(--font-display);
-  font-size: clamp(1.875rem, 4vw, 2.5rem);
-  font-weight: 700;
+  font-size: var(--fs-h1);
+  font-weight: 600;
   letter-spacing: var(--tracking-display);
-  line-height: 1.1;
-  margin: 0;
-  color: var(--color-heading);
+  line-height: var(--line-pitch);
+  color: var(--ink);
 }
 
-.lede {
+.cover-lede {
   margin: 0;
-  font-size: 1rem;
-  color: var(--color-text-muted);
-  max-width: 24rem;
-  line-height: var(--lh-body);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
 }
 
 .form {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
-  padding: 1.75rem;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-lift);
+  gap: var(--line-pitch);
+  padding-top: var(--line-pitch);
 }
 
+/* A field is a label written in pencil above a line the learner writes on. */
 .field {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
 }
 
-.label {
+.field-label {
   font-family: var(--font-sans);
   font-size: var(--fs-label);
-  font-weight: 600;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-  color: var(--color-text-muted);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
 }
 
-.input :deep(input),
-.input.p-inputtext {
-  font-family: var(--font-sans);
-  font-size: 1rem;
-  background: var(--color-surface-soft);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  padding: 0.7rem 1.1rem;
+.field-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: end;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--rule-strong);
+  transition: border-color var(--motion-fast) ease;
+}
+
+.field-line.has-glyph {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.field-line:focus-within {
+  border-bottom-color: var(--ink-learner);
+}
+
+.field-input :deep(input),
+.field-input.p-inputtext {
   width: 100%;
+  height: var(--line-pitch);
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  outline: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--line-pitch);
+  color: var(--ink-learner);
+  caret-color: var(--ink-learner);
 }
 
-.pwd-wrap {
-  position: relative;
+.field-input :deep(input):focus,
+.field-input.p-inputtext:focus {
+  box-shadow: none;
+  outline: 0;
+  border: 0;
 }
 
-.pwd-input :deep(input),
-.pwd-input.p-inputtext {
-  padding-right: 3rem;
+.field-input :deep(input)::placeholder,
+.field-input.p-inputtext::placeholder {
+  color: var(--pencil);
+  opacity: 1;
 }
 
-.pwd-toggle {
-  position: absolute;
-  top: 50%;
-  right: 0.5rem;
-  transform: translateY(-50%);
+/* A drawn glyph in the learner's ink at the end of the line, not a glyph font. */
+.field-glyph {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.25rem;
-  height: 2.25rem;
-  border: 0;
-  border-radius: 50%;
+  width: 2rem;
+  height: var(--line-pitch);
+  flex-shrink: 0;
   background: transparent;
-  color: var(--color-text-muted);
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--ink-learner);
   cursor: pointer;
   transition: color var(--motion-fast) ease;
 }
 
-.pwd-toggle:hover,
-.pwd-toggle:focus-visible {
-  color: var(--color-heading);
+.field-glyph:hover {
+  color: var(--color-accent-hover);
+}
+
+.field-glyph:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+}
+
+/* The one filled control on the cover. */
+.actions {
+  display: flex;
 }
 
 .cta {
@@ -274,64 +338,88 @@ async function resend() {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  padding: 0.75rem 1.5rem;
-  border-radius: var(--radius-pill);
-  background: var(--color-accent-strong);
-  color: #fff;
+  padding: 0.5rem 1.25rem;
   border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-strong);
+  color: var(--color-text-on-accent);
   font-family: var(--font-sans);
+  font-size: var(--fs-caption);
   font-weight: 600;
-  font-size: 0.9375rem;
+  line-height: var(--line-pitch);
   cursor: pointer;
-  transition: filter var(--motion-fast) ease;
-}
-
-.cta:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-  box-shadow: none;
+  transition: background var(--motion-fast) ease;
 }
 
 .cta:not(:disabled):hover {
-  filter: brightness(1.08);
+  background: var(--color-accent-hover);
 }
 
-.actions {
-  display: flex;
-  justify-content: flex-end;
+.cta:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 
-.error {
+.cta:disabled {
+  background: var(--color-surface-soft);
+  color: var(--pencil);
+  cursor: not-allowed;
+}
+
+.cta-arrow {
+  flex: 0 0 auto;
+}
+
+/* One line of ink on paper inside a full rule. */
+.status {
   margin: 0;
-  color: var(--color-error-text);
-  font-size: 0.875rem;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-sm);
+  padding: 0.25rem 0.75rem;
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  line-height: var(--line-pitch);
+  color: var(--ink);
 }
 
-.sent {
+.status.is-alert {
+  border-color: var(--ink-marker);
+  color: var(--ink-marker-text);
+}
+
+.status.is-done {
+  border-color: var(--signal-success);
+}
+
+.line {
   margin: 0;
-  font-size: 0.875rem;
-  color: var(--color-success-text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
 }
 
-.hint {
-  margin: 0;
-  font-size: 0.875rem;
-}
-
+.link,
 .linkbtn {
   background: none;
   border: 0;
   padding: 0;
   font: inherit;
-  color: var(--color-accent-text);
+  font-weight: 700;
+  color: var(--ink-learner);
   cursor: pointer;
   text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
-.swap {
-  margin: 0;
-  font-size: 0.875rem;
-  color: var(--color-text-muted);
-  text-align: center;
+.link:hover,
+.linkbtn:hover {
+  color: var(--color-accent-hover);
+}
+
+.link:focus-visible,
+.linkbtn:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 </style>

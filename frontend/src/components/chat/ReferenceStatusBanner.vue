@@ -7,9 +7,74 @@
       :aria-expanded="expanded"
       @click="expanded = !expanded"
     >
-      <i :class="iconClass" aria-hidden="true" />
+      <svg
+        v-if="status === 'pending'"
+        class="ref-icon ref-spinner pi-spin"
+        viewBox="0 0 20 20"
+        width="16"
+        height="16"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path d="M17 10 A7 7 0 1 1 10 3" />
+      </svg>
+      <svg
+        v-else-if="status === 'failed'"
+        class="ref-icon"
+        viewBox="0 0 20 20"
+        width="16"
+        height="16"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path d="M10 2.5 L18 17 H2 Z" />
+        <path d="M10 8 L10 12" />
+        <path d="M10 14.5 L10 14.6" />
+      </svg>
+      <svg
+        v-else-if="status === 'ready'"
+        class="ref-icon"
+        viewBox="0 0 20 20"
+        width="16"
+        height="16"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <circle cx="10" cy="10" r="7.5" />
+        <path d="M6.8 10.2 L9 12.5 L13.2 7.5" />
+      </svg>
       <span class="ref-text" role="status" aria-live="polite">{{ message }}</span>
-      <i class="pi" :class="expanded ? 'pi-chevron-up' : 'pi-chevron-down'" aria-hidden="true" />
+      <svg
+        class="ref-icon ref-chevron"
+        viewBox="0 0 20 20"
+        width="16"
+        height="16"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path v-if="expanded" d="M5 12.5 L10 7.5 L15 12.5" />
+        <path v-else d="M5 7.5 L10 12.5 L15 7.5" />
+      </svg>
     </button>
 
     <ul v-if="expanded" class="ref-file-list" data-testid="ref-file-list">
@@ -26,7 +91,23 @@
           :aria-label="`Delete ${doc.filename}`"
           @click="confirmDelete(doc)"
         >
-          <i class="pi pi-trash" aria-hidden="true" />
+          <svg
+            class="ref-icon"
+            viewBox="0 0 20 20"
+            width="16"
+            height="16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <path
+              d="M4 5.5 H16 M8 5.5 V4 a1 1 0 0 1 1 -1 h2 a1 1 0 0 1 1 1 v1.5 M6 5.5 L6.7 16 a1 1 0 0 0 1 0.9 h4.6 a1 1 0 0 0 1 -0.9 L14 5.5"
+            />
+          </svg>
         </button>
       </li>
     </ul>
@@ -68,13 +149,6 @@ const message = computed(() => {
   if (status.value === 'ready') {
     return `${readyCount.value} reference${readyCount.value === 1 ? '' : 's'} ready.`
   }
-  return ''
-})
-
-const iconClass = computed(() => {
-  if (status.value === 'pending') return 'pi pi-spin pi-spinner'
-  if (status.value === 'failed') return 'pi pi-exclamation-triangle'
-  if (status.value === 'ready') return 'pi pi-check-circle'
   return ''
 })
 
@@ -173,9 +247,17 @@ defineExpose({ refresh })
   font: inherit;
   text-align: left;
 }
-.ref-header .pi-chevron-up,
-.ref-header .pi-chevron-down {
+/* Drawn strokes, not a glyph font: one weight, round ends, the caption's ink. */
+.ref-icon {
+  flex-shrink: 0;
+}
+.ref-chevron {
   margin-left: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ref-spinner {
+    animation: none;
+  }
 }
 .ref-file-list {
   list-style: none;

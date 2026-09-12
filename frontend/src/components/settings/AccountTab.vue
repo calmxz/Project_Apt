@@ -1,10 +1,7 @@
 <template>
   <form class="form" @submit.prevent="save">
-    <section class="card">
-      <h2 class="card-title">
-        <i class="pi pi-user card-icon" aria-hidden="true" />
-        Account
-      </h2>
+    <section class="sec">
+      <h2 class="sec-title">Account</h2>
       <div class="field">
         <label class="lbl" for="set-name">Display name</label>
         <input
@@ -23,15 +20,23 @@
     <div class="actions">
       <button
         type="submit"
-        class="save-btn"
+        class="text-btn"
         data-testid="settings-save"
         :disabled="!dirty || saving"
       >
-        <i class="pi pi-check" aria-hidden="true" />
-        <span>Save name</span>
+        Save name
       </button>
       <span v-if="savedFlash" class="saved-flash" data-testid="settings-saved">
-        <i class="pi pi-check-circle" aria-hidden="true" />
+        <svg
+          class="tick"
+          viewBox="0 0 12 12"
+          width="12"
+          height="12"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path d="M2 6.5 L4.8 9.2 L10 3.2" />
+        </svg>
         Saved.
       </span>
     </div>
@@ -41,11 +46,8 @@
     </p>
   </form>
 
-  <section v-if="authStore.isAuthenticated" class="card" data-testid="settings-security">
-    <h2 class="card-title">
-      <i class="pi pi-lock card-icon" aria-hidden="true" />
-      Security
-    </h2>
+  <section v-if="authStore.isAuthenticated" class="sec sec--ruled" data-testid="settings-security">
+    <h2 class="sec-title">Security</h2>
     <form class="pw-form" @submit.prevent="changePassword">
       <div class="field">
         <label class="lbl" for="pw-current">Current password</label>
@@ -84,51 +86,54 @@
       <p v-if="pwMismatch" class="hint" data-testid="settings-pw-mismatch">
         New passwords do not match.
       </p>
-      <p v-if="pwError" class="pw-error" role="alert" data-testid="settings-pw-error">
+      <p v-if="pwError" class="error" role="alert" data-testid="settings-pw-error">
         {{ pwError }}
       </p>
       <p v-if="pwSuccess" class="saved-flash" role="status" data-testid="settings-pw-success">
-        <i class="pi pi-check-circle" aria-hidden="true" />
+        <svg
+          class="tick"
+          viewBox="0 0 12 12"
+          width="12"
+          height="12"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path d="M2 6.5 L4.8 9.2 L10 3.2" />
+        </svg>
         Password updated.
       </p>
       <div class="actions">
         <button
           type="button"
-          class="save-btn"
+          class="text-btn"
           data-testid="settings-pw-submit"
           :disabled="!pwCanSubmit || pwSubmitting"
           @click="changePassword"
         >
-          <i class="pi pi-lock" aria-hidden="true" />
-          <span>{{ pwSubmitting ? 'Updating…' : 'Update password' }}</span>
+          {{ pwSubmitting ? 'Updating…' : 'Update password' }}
         </button>
       </div>
     </form>
   </section>
 
-  <section v-if="authStore.isAuthenticated" class="signout" data-testid="settings-signout-section">
-    <button type="button" class="signout-btn" data-testid="settings-sign-out" @click="signOut">
-      <i class="pi pi-sign-out" aria-hidden="true" />
-      <span>Sign out</span>
+  <section
+    v-if="authStore.isAuthenticated"
+    class="sec sec--ruled"
+    data-testid="settings-signout-section"
+  >
+    <button type="button" class="text-btn" data-testid="settings-sign-out" @click="signOut">
+      Sign out
     </button>
   </section>
 
-  <section class="card" data-testid="settings-preferences">
-    <h2 class="card-title">
-      <i class="pi pi-sliders-h card-icon" aria-hidden="true" />
-      Tutor preferences
-    </h2>
-    <p class="card-sub">
+  <section class="sec sec--ruled" data-testid="settings-preferences">
+    <h2 class="sec-title">Tutor preferences</h2>
+    <p class="hint">
       Re-run the two-step setup to change your display name or how the tutor gives feedback.
       Sessions are not affected.
     </p>
-    <router-link
-      to="/onboarding?retake=1"
-      class="secondary-link"
-      data-testid="settings-retake-onboarding"
-    >
-      <span>Edit name and feedback style</span>
-      <i class="pi pi-arrow-right" aria-hidden="true" />
+    <router-link to="/onboarding?retake=1" class="link" data-testid="settings-retake-onboarding">
+      Edit name and feedback style
     </router-link>
   </section>
 </template>
@@ -228,213 +233,170 @@ async function signOut() {
 </script>
 
 <style scoped>
+/* Account is a ruled page: sections divided by one hairline, fields written on
+   a rule, and every action a line of blue text. No card, no fill, no glyph
+   font. */
 .form {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
 }
 
-.card {
+.sec {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  padding: 1.5rem;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-paper);
+  align-items: flex-start;
 }
 
-.card-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-family: var(--font-display);
-  font-size: 1.125rem;
-  font-weight: 700;
-  letter-spacing: var(--tracking-tight);
-  color: var(--color-heading);
+.sec--ruled {
+  margin-top: var(--line-pitch);
+  padding-top: calc(var(--line-pitch) - 1px);
+  border-top: 1px solid var(--rule-strong);
+}
+
+.sec-title {
   margin: 0;
-}
-
-.card-icon {
-  font-size: 1rem;
-  color: var(--color-accent-text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  line-height: var(--line-pitch);
+  color: var(--ink);
 }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  width: 100%;
+  max-width: 28rem;
 }
 
 .lbl {
   font-family: var(--font-sans);
   font-size: var(--fs-label);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  color: var(--color-text-muted);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
 }
 
+/* Field on a rule: no box, one bottom rule that inks up on focus. */
 .input {
   width: 100%;
-  padding: 0.75rem 1rem;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-border);
-  background: var(--color-surface-soft);
-  color: var(--color-heading);
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--rule-strong);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-learner);
+  caret-color: var(--ink-learner);
   font-family: var(--font-sans);
-  font-size: 1rem;
-  transition:
-    border-color var(--motion-fast) ease,
-    box-shadow var(--motion-fast) ease;
+  font-size: var(--fs-body);
+  line-height: calc(var(--line-pitch) - 1px);
 }
 
 .input::placeholder {
-  color: var(--color-text-faint);
+  color: var(--pencil);
 }
 
 .input:focus {
   outline: none;
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 4px var(--color-accent-ring);
+  border-bottom-color: var(--ink-learner);
 }
 
 .hint {
   margin: 0;
   font-family: var(--font-sans);
-  font-size: 0.8125rem;
-  color: var(--color-text-muted);
+  font-size: var(--fs-label);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
 }
 
-/* Actions */
 .actions {
   display: inline-flex;
-  align-items: center;
-  gap: 0.875rem;
+  align-items: baseline;
+  gap: 1.25rem;
   flex-wrap: wrap;
+  min-height: var(--line-pitch);
 }
 
-.save-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1.5rem;
-  border-radius: var(--radius-pill);
-  background: var(--color-accent-strong);
-  color: #ffffff;
+/* The default action in this world is a line of blue text. */
+.text-btn {
+  padding: 0;
   border: 0;
+  background: transparent;
+  color: var(--ink-learner);
   font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 0.9375rem;
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  line-height: var(--line-pitch);
+  text-decoration: underline;
+  text-underline-offset: 3px;
   cursor: pointer;
-  transition:
-    filter var(--motion-fast) ease,
-    opacity var(--motion-fast) ease;
 }
 
-.save-btn:hover:not(:disabled) {
-  filter: brightness(1.08);
+.text-btn:hover:not(:disabled) {
+  color: var(--color-accent-hover);
 }
 
-.save-btn:active:not(:disabled) {
-  filter: brightness(0.95);
+.text-btn:disabled {
+  color: var(--pencil);
+  text-decoration: none;
+  cursor: default;
 }
 
-.save-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  box-shadow: none;
+.text-btn:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+}
+
+.link {
+  color: var(--ink-learner);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  line-height: var(--line-pitch);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.link:hover {
+  color: var(--color-accent-hover);
+}
+
+.link:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 
 .error {
   margin: 0;
-  color: var(--color-error-text);
-  font-size: 0.875rem;
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  line-height: var(--line-pitch);
+  color: var(--ink-marker-text);
 }
 
 .saved-flash {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
-  font-family: var(--font-sans);
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--color-success-text);
-}
-
-.card-sub {
   margin: 0;
-  color: var(--color-text-muted);
-  font-size: 0.875rem;
-}
-.secondary-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  align-self: flex-start;
-  padding: 0.5rem 0.9rem;
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--color-border-strong);
-  color: var(--color-accent-text);
-  font-weight: 600;
-  font-size: 0.875rem;
-  text-decoration: none;
-}
-.secondary-link:hover {
-  border-color: var(--color-accent);
-}
-.secondary-link:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
-
-/* Sign out */
-.signout {
-  display: flex;
-}
-
-.signout-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.5rem 1rem;
-  border-radius: var(--radius-pill);
-  background: transparent;
-  color: var(--color-text-muted);
-  border: 1px solid var(--color-border-strong);
   font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 0.8125rem;
-  cursor: pointer;
-  transition:
-    background var(--motion-fast) ease,
-    color var(--motion-fast) ease,
-    border-color var(--motion-fast) ease,
-    transform var(--motion-fast) var(--motion-bounce);
+  font-size: var(--fs-caption);
+  line-height: var(--line-pitch);
+  color: var(--ink);
 }
 
-.signout-btn:hover {
-  color: var(--color-heading);
-  border-color: var(--color-text-muted);
-  transform: translateY(-1px);
-}
-
-.signout-btn:focus-visible {
-  outline: 2px solid var(--color-accent-ring);
-  outline-offset: 2px;
+.tick {
+  flex: 0 0 auto;
+  fill: none;
+  stroke: var(--ink-learner);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .pw-form {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-}
-
-.pw-error {
-  margin: 0;
-  color: var(--color-error-text);
-  font-size: 0.875rem;
+  align-items: flex-start;
+  width: 100%;
 }
 </style>

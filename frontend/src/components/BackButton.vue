@@ -8,7 +8,21 @@
     :title="iconOnly ? label : null"
     @click="onClick"
   >
-    <i class="pi pi-arrow-left arrow" aria-hidden="true" />
+    <svg
+      class="arrow"
+      viewBox="0 0 20 20"
+      width="14"
+      height="14"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.5"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M16 10 L4 10 M9 4.5 L4 10 L9 15.5" />
+    </svg>
     <span v-if="!iconOnly" class="label">{{ label }}</span>
   </button>
 </template>
@@ -64,7 +78,6 @@ function onClick() {
 }
 
 .arrow {
-  font-size: 0.875rem;
-  line-height: 1;
+  flex-shrink: 0;
 }
 </style>

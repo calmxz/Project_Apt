@@ -3,69 +3,43 @@ defineProps({ count: { type: Number, default: 6 } })
 </script>
 
 <template>
-  <ul class="library-grid skel-grid" aria-hidden="true" data-testid="library-skeleton">
-    <li v-for="i in count" :key="i" class="skel-card">
+  <ul class="library-skel" aria-hidden="true" data-testid="library-skeleton">
+    <li v-for="i in count" :key="i" class="skel-row">
       <span class="skel-line skel-topic" />
-      <span class="skel-line skel-body" />
-      <span class="skel-line skel-body short" />
-      <span class="skel-line skel-meta" />
+      <span class="skel-line skel-focus" />
     </li>
   </ul>
 </template>
 
 <style scoped>
-.skel-grid {
+/* Pencil-weight bars on the rules, in the row geometry they stand in for.
+   No shimmer, no card, no radius: a page waiting to be written on. */
+.library-skel {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
-  gap: 1rem;
+  background-image: var(--ruled-bg);
+  background-position-y: var(--ruled-offset);
+  background-attachment: local;
 }
-.skel-card {
-  padding: 1rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  background: var(--color-surface);
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  min-height: 7rem;
+
+.skel-row {
+  padding: 0 0.25rem 0 0.75rem;
 }
+
 .skel-line {
   display: block;
-  height: 0.75rem;
-  border-radius: var(--radius-pill);
-  background: var(--color-surface-raised);
-  animation: skel-pulse 1.4s ease-in-out infinite;
+  height: 1px;
+  background: var(--rule-strong);
 }
+
 .skel-topic {
-  width: 55%;
-  height: 0.9rem;
+  width: 42%;
+  margin: calc(var(--line-pitch) / 2 - 1px) 0 calc(var(--line-pitch) / 2);
 }
-.skel-body {
-  width: 92%;
-}
-.skel-body.short {
-  width: 70%;
-}
-.skel-meta {
-  width: 40%;
-  height: 0.6rem;
-  margin-top: auto;
-}
-@keyframes skel-pulse {
-  0%,
-  100% {
-    opacity: 0.55;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .skel-line {
-    animation: none;
-  }
+
+.skel-focus {
+  width: 26%;
+  margin: calc(var(--line-pitch) / 2 - 1px) 0 calc(var(--line-pitch) / 2);
 }
 </style>

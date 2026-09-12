@@ -280,7 +280,28 @@ function onNewSession() {
         data-testid="sidebar-collapse-toggle"
         @click="toggleDesktop"
       >
-        <i :class="isExpanded ? 'pi pi-angle-double-left' : 'pi pi-angle-double-right'" />
+        <svg
+          class="sb-toggle-icon"
+          viewBox="0 0 20 20"
+          width="14"
+          height="14"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <template v-if="isExpanded">
+            <path d="M12.5 4.5 L7 10 L12.5 15.5" />
+            <path d="M17 4.5 L11.5 10 L17 15.5" />
+          </template>
+          <template v-else>
+            <path d="M7.5 4.5 L13 10 L7.5 15.5" />
+            <path d="M3 4.5 L8.5 10 L3 15.5" />
+          </template>
+        </svg>
       </button>
       <button
         v-if="showDrawerClose"
@@ -291,7 +312,21 @@ function onNewSession() {
         data-testid="sidebar-drawer-close"
         @click="closeDrawer"
       >
-        <i class="pi pi-times" />
+        <svg
+          class="sb-toggle-icon"
+          viewBox="0 0 20 20"
+          width="14"
+          height="14"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path d="M5 5 L15 15 M15 5 L5 15" />
+        </svg>
       </button>
     </div>
 
@@ -304,7 +339,21 @@ function onNewSession() {
         data-testid="sidebar-new-session"
         @click="onNewSession"
       >
-        <i class="pi pi-plus" />
+        <svg
+          class="sb-inline-icon"
+          viewBox="0 0 20 20"
+          width="16"
+          height="16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path d="M10 4 L10 16 M4 10 L16 10" />
+        </svg>
         <span v-if="isExpanded">New session</span>
       </button>
     </div>
@@ -317,13 +366,43 @@ function onNewSession() {
       :aria-label="`Review: ${reviewTotal} ${reviewTotal === 1 ? 'concept' : 'concepts'} due`"
       @click="closeDrawer"
     >
-      <i class="pi pi-history" aria-hidden="true" />
+      <svg
+        class="sb-inline-icon"
+        viewBox="0 0 20 20"
+        width="14"
+        height="14"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <circle cx="10" cy="10.5" r="7" />
+        <path d="M10 6.5 L10 10.5 L13 12.5" />
+      </svg>
       <span>Review</span>
       <span class="sb-review-count" aria-hidden="true">{{ reviewTotal }}</span>
     </RouterLink>
 
     <div v-if="isExpanded" class="sb-search">
-      <i class="pi pi-search" aria-hidden="true" />
+      <svg
+        class="sb-inline-icon"
+        viewBox="0 0 20 20"
+        width="13"
+        height="13"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <circle cx="8.5" cy="8.5" r="6" />
+        <path d="M13 13 L17.5 17.5" />
+      </svg>
       <input
         v-model="searchQuery"
         type="search"
@@ -410,7 +489,22 @@ function onNewSession() {
               data-testid="sidebar-section-pinned"
             >
               <h3 class="sb-section-label label">
-                <i class="pi pi-bookmark-fill" aria-hidden="true" /> Pinned
+                <svg
+                  class="sb-inline-icon"
+                  viewBox="0 0 20 20"
+                  width="12"
+                  height="12"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <path d="M6 3.5 H14 V16.5 L10 13.5 L6 16.5 Z" />
+                </svg>
+                Pinned
                 <span class="sb-section-count">({{ cappedPinnedActive.length }})</span>
               </h3>
               <ul class="sb-session-list">
@@ -513,7 +607,24 @@ function onNewSession() {
         data-testid="sidebar-settings"
         @click="closeDrawer"
       >
-        <i class="pi pi-cog" />
+        <svg
+          class="sb-inline-icon"
+          viewBox="0 0 20 20"
+          width="16"
+          height="16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <circle cx="10" cy="10" r="2.5" />
+          <path
+            d="M10 3.5 V5.5 M10 14.5 V16.5 M16.5 10 H14.5 M5.5 10 H3.5 M14.7 5.3 L13.3 6.7 M6.7 13.3 L5.3 14.7 M14.7 14.7 L13.3 13.3 M6.7 6.7 L5.3 5.3"
+          />
+        </svg>
         <span v-if="isExpanded" class="sb-icon-label">Settings</span>
       </RouterLink>
     </footer>
@@ -727,9 +838,14 @@ function onNewSession() {
   color: var(--color-text);
 }
 
-.sb-section-label .pi {
-  font-size: 0.75rem;
+.sb-section-label .sb-inline-icon {
   color: var(--pencil);
+}
+
+/* Drawn strokes, not a glyph font: one weight, round ends, the control's ink. */
+.sb-inline-icon,
+.sb-toggle-icon {
+  flex-shrink: 0;
 }
 
 .sb-section-count {
@@ -845,10 +961,6 @@ function onNewSession() {
   border-bottom-color: var(--ink-learner);
 }
 
-.sb-search .pi {
-  font-size: 0.8125rem;
-}
-
 .sb-search-input {
   flex: 1;
   min-width: 0;
@@ -936,10 +1048,6 @@ function onNewSession() {
 .sb-review:focus-visible {
   outline: 2px solid var(--ink-learner);
   outline-offset: 2px;
-}
-
-.sb-review .pi {
-  font-size: 0.8125rem;
 }
 
 .sb-review-count {

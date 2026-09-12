@@ -2,9 +2,10 @@
 import { computed, useId } from 'vue'
 
 // Shared feedback-style control used by both Settings and Onboarding. Native
-// radio cards (not a PrimeVue SelectButton) so the two screens stay consistent
-// and accessible. Each option needs `value` + `label`; an optional `sub`
-// renders as a description line.
+// radios (not a PrimeVue SelectButton) so the two screens stay consistent and
+// accessible. Each option needs `value` + `label`; an optional `sub` renders
+// as a description line. Visually the options are lettered lines, the same
+// grammar as the check-question options on the sheet.
 const props = defineProps({
   modelValue: { type: String, default: '' },
   options: { type: Array, required: true },
@@ -20,6 +21,11 @@ const emit = defineEmits(['update:modelValue'])
 const generatedId = useId()
 const groupName = computed(() => props.name || `fsp-${generatedId}`)
 
+// A. / B. / C. -- the option letters used by every check on the sheet.
+function letter(i) {
+  return String.fromCharCode(65 + i)
+}
+
 function select(value) {
   emit('update:modelValue', value)
 }
@@ -29,7 +35,7 @@ function select(value) {
   <fieldset class="radio-group">
     <legend class="sr-only">Feedback style</legend>
     <label
-      v-for="opt in options"
+      v-for="(opt, i) in options"
       :key="opt.value"
       :class="['radio-row', { selected: modelValue === opt.value }]"
     >
@@ -42,13 +48,22 @@ function select(value) {
         class="radio-input"
         @change="select(opt.value)"
       />
-      <span class="radio-dot" aria-hidden="true">
-        <span class="radio-dot-inner" />
-      </span>
+      <span class="radio-letter" aria-hidden="true">{{ letter(i) }}.</span>
       <span class="radio-body">
         <span class="radio-label">{{ opt.label }}</span>
         <span v-if="opt.sub" class="radio-sub">{{ opt.sub }}</span>
       </span>
+      <svg
+        v-if="modelValue === opt.value"
+        class="radio-tick"
+        viewBox="0 0 12 12"
+        width="12"
+        height="12"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path d="M2 6.5 L4.8 9.2 L10 3.2" />
+      </svg>
     </label>
   </fieldset>
 </template>
@@ -66,41 +81,25 @@ function select(value) {
   border: 0;
 }
 
-/* Radio cards */
+/* Two lettered lines, each on the pitch, separated by a painted feint rule so
+   the line stays 28px tall. No card, no dot, no fill. */
 .radio-group {
   border: 0;
   padding: 0;
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.625rem;
 }
 
 .radio-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-  padding: 0.875rem 1rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  display: grid;
+  grid-template-columns: 1.5rem minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: 0.5rem;
+  padding: 0;
   cursor: pointer;
-  background: var(--color-surface-soft);
-  transition: border-color var(--motion-fast) ease, background var(--motion-fast) ease, transform var(--motion-fast) var(--motion-bounce);
-}
-
-.radio-row:hover {
-  border-color: var(--color-accent-soft);
-  transform: translateY(-1px);
-}
-
-.radio-row.selected {
-  border-color: var(--color-accent);
-  background: var(--color-accent-soft);
-}
-
-.radio-row:has(.radio-input:focus-visible) {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
+  background: transparent;
+  box-shadow: inset 0 -1px 0 var(--rule);
 }
 
 .radio-input {
@@ -110,55 +109,56 @@ function select(value) {
   height: 0;
 }
 
-.radio-dot {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.25rem;
-  height: 1.25rem;
-  border-radius: var(--radius-pill);
-  border: 2px solid var(--color-border-strong);
-  background: var(--color-surface);
-  margin-top: 0.125rem;
-  transition: border-color var(--motion-fast) ease;
-}
-
-.radio-row.selected .radio-dot {
-  border-color: var(--color-accent);
-}
-
-.radio-dot-inner {
-  width: 0.625rem;
-  height: 0.625rem;
-  border-radius: var(--radius-pill);
-  background: var(--color-accent);
-  transform: scale(0);
-  transition: transform var(--motion-fast) var(--motion-bounce);
-}
-
-.radio-row.selected .radio-dot-inner {
-  transform: scale(1);
+.radio-letter {
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  font-weight: 700;
+  line-height: var(--line-pitch);
+  color: var(--ink-learner);
 }
 
 .radio-body {
   display: flex;
   flex-direction: column;
-  gap: 0.125rem;
   min-width: 0;
 }
 
 .radio-label {
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 1rem;
-  color: var(--color-heading);
-  letter-spacing: var(--tracking-tight);
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--line-pitch);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.radio-row.selected .radio-label {
+  font-weight: 700;
+}
+
+.radio-row:hover .radio-label {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .radio-sub {
   font-family: var(--font-sans);
-  font-size: 0.8125rem;
-  color: var(--color-text-muted);
+  font-size: var(--fs-label);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
+}
+
+.radio-tick {
+  align-self: center;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: var(--ink-learner);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.radio-row:has(.radio-input:focus-visible) {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 </style>

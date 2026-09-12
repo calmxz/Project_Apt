@@ -1,57 +1,108 @@
 <template>
-  <section class="onboarding">
-    <header class="head">
-      <Logo size="lg" variant="mark-only" />
-      <span class="folio">welcome</span>
-      <h1 class="title">Welcome to Crux.</h1>
-      <p class="lede">Tell us how you like to learn — we'll tune the tutor before you begin.</p>
-    </header>
-
-    <form class="form" @submit.prevent="submit">
-      <div class="field" style="--delay: 0ms">
-        <label for="display-name" class="label">What we call you</label>
-        <InputText
-          id="display-name"
-          v-model="displayName"
-          data-testid="onboarding-name"
-          placeholder="Learner"
-          autocomplete="off"
-          class="input"
-        />
-      </div>
-
-      <div class="field" style="--delay: 60ms">
-        <span class="label">When you get stuck</span>
-        <FeedbackStylePicker
-          v-model="feedback"
-          :options="feedbackOptions"
-          data-testid="onboarding-feedback"
-        />
-        <p class="help">
-          {{
-            feedback === 'hints'
-              ? 'Tutor will nudge you toward the answer.'
-              : 'Tutor will explain the answer outright when asked.'
-          }}
+  <section class="cover">
+    <div class="sheet">
+      <header class="cover-head">
+        <Logo size="md" variant="full" />
+        <h1 class="cover-title">Welcome to Crux.</h1>
+        <p class="cover-lede">
+          Tell us how you like to learn — we'll tune the tutor before you begin.
         </p>
-      </div>
+      </header>
 
-      <div class="actions" style="--delay: 120ms">
-        <button
-          type="submit"
-          class="cta"
-          data-testid="onboarding-submit"
-          :disabled="!canSubmit || submitting"
-        >
-          <span>Begin</span>
-          <i class="pi pi-arrow-right" aria-hidden="true" />
-        </button>
-      </div>
+      <form class="form" @submit.prevent="submit">
+        <div class="field stagger" style="--delay: 0ms">
+          <label for="display-name" class="field-label">What we call you</label>
+          <div class="field-line">
+            <InputText
+              id="display-name"
+              v-model="displayName"
+              data-testid="onboarding-name"
+              placeholder="Learner"
+              autocomplete="off"
+              class="field-input"
+            />
+          </div>
+        </div>
 
-      <p v-if="submitError" class="error" role="alert" data-testid="onboarding-error">
-        {{ submitError }}
-      </p>
-    </form>
+        <div class="field stagger" style="--delay: 60ms">
+          <fieldset class="choice" data-testid="onboarding-feedback">
+            <legend class="field-label">When you get stuck</legend>
+            <label
+              v-for="(opt, i) in feedbackOptions"
+              :key="opt.value"
+              class="choice-line"
+              :class="{ 'is-selected': feedback === opt.value }"
+            >
+              <input
+                type="radio"
+                name="feedback-style"
+                class="choice-input"
+                :value="opt.value"
+                :checked="feedback === opt.value"
+                :data-testid="`feedback-style-${opt.value}`"
+                @change="feedback = opt.value"
+              />
+              <span class="choice-letter" aria-hidden="true">{{ letters[i] }}.</span>
+              <span class="choice-label">{{ opt.label }}</span>
+              <svg
+                v-if="feedback === opt.value"
+                class="choice-tick"
+                viewBox="0 0 20 20"
+                width="20"
+                height="20"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <path d="M3.5 10.5 L8 15 L16.5 5" />
+              </svg>
+            </label>
+          </fieldset>
+          <p class="help">
+            {{
+              feedback === 'hints'
+                ? 'Tutor will nudge you toward the answer.'
+                : 'Tutor will explain the answer outright when asked.'
+            }}
+          </p>
+        </div>
+
+        <div class="actions stagger" style="--delay: 120ms">
+          <button
+            type="submit"
+            class="cta"
+            data-testid="onboarding-submit"
+            :disabled="!canSubmit || submitting"
+          >
+            <span>Begin</span>
+            <svg
+              class="cta-arrow"
+              viewBox="0 0 20 20"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="M3.5 10 L16.5 10" />
+              <path d="M11 4.5 L16.5 10 L11 15.5" />
+            </svg>
+          </button>
+        </div>
+
+        <p v-if="submitError" class="status is-alert" role="alert" data-testid="onboarding-error">
+          {{ submitError }}
+        </p>
+      </form>
+    </div>
   </section>
 </template>
 
@@ -61,7 +112,6 @@ import { useRouter } from 'vue-router'
 
 import InputText from 'primevue/inputtext'
 
-import FeedbackStylePicker from '../components/FeedbackStylePicker.vue'
 import Logo from '../components/Logo.vue'
 import { friendlyError } from '@/lib/errors.js'
 import { useUserStore } from '../stores/user.js'
@@ -74,6 +124,7 @@ const feedbackOptions = [
   { label: 'Hints', value: 'hints' },
   { label: 'Direct answers', value: 'direct_answers' },
 ]
+const letters = ['A', 'B']
 const feedback = ref(userStore.interactionPreferences?.feedback || 'hints')
 
 const canSubmit = computed(() => Boolean(feedback.value))
@@ -102,182 +153,269 @@ async function submit() {
 </script>
 
 <style scoped>
-.onboarding {
-  max-width: 38rem;
-  margin: 0 auto;
+/* The inside cover: the same centred sheet as the auth covers, with the two
+   feedback styles written out as lettered lines on the rules. */
+.cover {
+  min-height: 100dvh;
+  box-sizing: border-box;
   display: flex;
-  flex-direction: column;
-  gap: 2.5rem;
-}
-
-.head {
-  display: flex;
-  flex-direction: column;
   align-items: center;
-  text-align: center;
-  gap: 0.625rem;
+  justify-content: center;
+  padding: var(--line-pitch) 1rem calc(var(--line-pitch) * 2);
+  background: var(--color-background);
 }
 
-.head :deep(.logo-mark) {
-  filter: drop-shadow(0 4px 16px rgba(255, 107, 92, 0.35));
-  animation: gentle-spin 8s ease-in-out infinite;
+.sheet {
+  width: 100%;
+  max-width: 26rem;
 }
 
-@keyframes gentle-spin {
-  0%,
-  100% {
-    transform: rotate(0deg);
-  }
-  50% {
-    transform: rotate(12deg);
-  }
+.cover-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding-bottom: calc(var(--line-pitch) - 1px);
+  border-bottom: 1px solid var(--rule-strong);
 }
 
-.folio {
-  font-family: var(--font-sans);
-  font-size: var(--fs-label);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  font-weight: 600;
-  color: var(--color-accent-text);
-}
-
-.title {
+.cover-title {
+  margin: var(--line-pitch) 0 0;
   font-family: var(--font-display);
-  font-size: clamp(2.25rem, 5vw, 3rem);
-  font-weight: 700;
+  font-size: var(--fs-h1);
+  font-weight: 600;
   letter-spacing: var(--tracking-display);
-  line-height: 1.05;
-  color: var(--color-heading);
-  margin: 0;
+  line-height: var(--line-pitch);
+  color: var(--ink);
 }
 
-.lede {
+.cover-lede {
   margin: 0;
-  font-size: 1.0625rem;
-  color: var(--color-text-muted);
-  max-width: 30rem;
-  line-height: var(--lh-body);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
 }
 
 .form {
   display: flex;
   flex-direction: column;
-  gap: 1.75rem;
-  padding: 2rem;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-lift);
+  gap: var(--line-pitch);
+  padding-top: var(--line-pitch);
 }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: 0.625rem;
-  opacity: 0;
-  animation: rise 420ms cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
-  animation-delay: var(--delay, 0ms);
 }
 
-.label {
+.field-label {
+  display: block;
+  padding: 0;
   font-family: var(--font-sans);
   font-size: var(--fs-label);
-  font-weight: 600;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-  color: var(--color-text-muted);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
+}
+
+.field-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: end;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--rule-strong);
+  transition: border-color var(--motion-fast) ease;
+}
+
+.field-line:focus-within {
+  border-bottom-color: var(--ink-learner);
+}
+
+.field-input :deep(input),
+.field-input.p-inputtext {
+  width: 100%;
+  height: var(--line-pitch);
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  outline: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--line-pitch);
+  color: var(--ink-learner);
+  caret-color: var(--ink-learner);
+}
+
+.field-input :deep(input):focus,
+.field-input.p-inputtext:focus {
+  box-shadow: none;
+  outline: 0;
+  border: 0;
+}
+
+.field-input :deep(input)::placeholder,
+.field-input.p-inputtext::placeholder {
+  color: var(--pencil);
+  opacity: 1;
+}
+
+/* Two lettered lines on the rules; the rule is painted so each line stays a
+   whole pitch tall. */
+.choice {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.choice-line {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1.25rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem;
+  height: var(--line-pitch);
+  box-shadow: inset 0 -1px 0 var(--rule);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--line-pitch);
+  color: var(--ink);
+}
+
+.choice-input {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+}
+
+.choice-letter {
+  font-weight: 700;
+  color: var(--ink-learner);
+}
+
+.choice-line.is-selected .choice-label {
+  font-weight: 700;
+}
+
+.choice-line:hover .choice-label {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.choice-line:has(.choice-input:focus-visible) {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+}
+
+/* A drawn tick in the learner's ink, not a glyph font. */
+.choice-tick {
+  flex: 0 0 auto;
+  color: var(--ink-learner);
+}
+
+.choice-tick path {
+  stroke-dasharray: 26;
+  stroke-dashoffset: 26;
+  animation: tick-draw var(--motion-base) ease forwards;
+}
+
+@keyframes tick-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
 }
 
 .help {
   margin: 0;
-  font-size: 0.8125rem;
-  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
 }
 
 .actions {
   display: flex;
-  justify-content: flex-end;
-  padding-top: 0.5rem;
-  opacity: 0;
-  animation: rise 420ms cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
-  animation-delay: var(--delay, 0ms);
-}
-
-.error {
-  margin: 0;
-  color: var(--color-error-text);
-  font-size: 0.875rem;
-}
-
-.input :deep(input),
-.input.p-inputtext {
-  font-family: var(--font-sans);
-  font-size: 1.0625rem;
-  font-weight: 500;
-  background: var(--color-surface-soft);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  padding: 0.75rem 1.25rem;
-  color: var(--color-heading);
-  width: 100%;
-  transition:
-    border-color var(--motion-fast) ease,
-    box-shadow var(--motion-fast) ease;
-}
-
-.input :deep(input):focus,
-.input.p-inputtext:focus {
-  border-color: var(--color-accent);
-  outline: none;
-  box-shadow: 0 0 0 4px var(--color-accent-ring);
 }
 
 .cta {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0.5rem;
-  padding: 0.9rem 1.75rem;
-  border-radius: var(--radius-pill);
-  background: var(--color-accent-strong);
-  color: #ffffff;
+  padding: 0.5rem 1.25rem;
   border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-strong);
+  color: var(--color-text-on-accent);
   font-family: var(--font-sans);
+  font-size: var(--fs-caption);
   font-weight: 600;
-  font-size: 1rem;
+  line-height: var(--line-pitch);
   cursor: pointer;
-  transition:
-    filter var(--motion-fast) ease,
-    opacity var(--motion-fast) ease;
+  transition: background var(--motion-fast) ease;
 }
 
-.cta:hover:not(:disabled) {
-  filter: brightness(1.08);
-}
-
-.cta:active:not(:disabled) {
-  filter: brightness(0.95);
-}
-
-.cta:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  box-shadow: none;
+.cta:not(:disabled):hover {
+  background: var(--color-accent-hover);
 }
 
 .cta:focus-visible {
   outline: 2px solid var(--color-accent-ring);
-  outline-offset: 3px;
+  outline-offset: 2px;
 }
 
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
+.cta:disabled {
+  background: var(--color-surface-soft);
+  color: var(--pencil);
+  cursor: not-allowed;
+}
+
+.cta-arrow {
+  flex: 0 0 auto;
+}
+
+.status {
+  margin: 0;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-sm);
+  padding: 0.25rem 0.75rem;
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  line-height: var(--line-pitch);
+  color: var(--ink);
+}
+
+.status.is-alert {
+  border-color: var(--ink-marker);
+  color: var(--ink-marker-text);
+}
+
+/* Ink appears: the sheet fills in line by line, nothing moves. */
+.stagger {
+  opacity: 0;
+  animation: ink-in var(--motion-ink) var(--motion-bounce) forwards;
+  animation-delay: var(--delay, 0ms);
+}
+
+@keyframes ink-in {
   to {
     opacity: 1;
-    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stagger {
+    opacity: 1;
+    animation: none;
+  }
+
+  .choice-tick path {
+    stroke-dashoffset: 0;
+    animation: none;
   }
 }
 </style>

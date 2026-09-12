@@ -1,16 +1,18 @@
 <template>
   <div v-if="!archived" class="empty" data-testid="session-empty">
-    <svg
-      class="empty-spark"
-      viewBox="0 0 48 28"
-      width="48"
-      height="28"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path d="M0 4 H48 M0 14 H48 M0 24 H48" />
-    </svg>
-    <p class="empty-eyebrow">begin</p>
+    <div class="empty-head">
+      <svg
+        class="empty-spark"
+        viewBox="0 0 48 28"
+        width="48"
+        height="28"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path d="M0 4 H48 M0 14 H48 M0 24 H48" />
+      </svg>
+      <p class="empty-eyebrow">begin</p>
+    </div>
     <p class="empty-line">Send a question or share what you already know.</p>
     <div class="quick-prompts">
       <button
@@ -27,7 +29,9 @@
   </div>
 
   <div v-else class="empty archived-empty">
-    <p class="empty-eyebrow">archive</p>
+    <div class="empty-head">
+      <p class="empty-eyebrow">archive</p>
+    </div>
     <p class="empty-line">No transcript stored for this session.</p>
   </div>
 </template>
@@ -58,13 +62,20 @@ const quickPrompts = [
   padding: var(--line-pitch) 0 0 4.75rem;
 }
 
+.empty-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 4px;
+}
+
 .empty-spark {
   fill: none;
   stroke: var(--rule-strong);
   stroke-width: 1;
-  margin-bottom: 4px;
 }
 
+/* A pencil aside beside the drawn mark, not a stacked eyebrow label. */
 .empty-eyebrow {
   margin: 0;
   font-family: var(--font-sans);

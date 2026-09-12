@@ -1,55 +1,79 @@
 <template>
-  <section class="login">
-    <header class="head">
-      <Logo size="lg" variant="mark-only" />
-      <span class="folio">reset password</span>
-      <h1 class="title">Forgot your password?</h1>
-      <p class="lede">Enter your email and we'll send you a reset link.</p>
-    </header>
+  <section class="cover">
+    <div class="sheet">
+      <header class="cover-head">
+        <Logo size="md" variant="full" />
+        <h1 class="cover-title">Forgot your password?</h1>
+        <p class="cover-lede">Enter your email and we'll send you a reset link.</p>
+      </header>
 
-    <form v-if="!sent" class="form" data-testid="forgot-form" @submit.prevent="submit">
-      <div class="field">
-        <label for="email" class="label">Email</label>
-        <InputText
-          id="email"
-          v-model="email"
-          type="email"
-          data-testid="forgot-email"
-          autocomplete="email"
-          placeholder="you@example.com"
-          required
-          class="input"
-        />
+      <form v-if="!sent" class="form" data-testid="forgot-form" @submit.prevent="submit">
+        <div class="field">
+          <label for="email" class="field-label">Email</label>
+          <div class="field-line">
+            <InputText
+              id="email"
+              v-model="email"
+              type="email"
+              data-testid="forgot-email"
+              autocomplete="email"
+              placeholder="you@example.com"
+              required
+              class="field-input"
+            />
+          </div>
+        </div>
+
+        <p v-if="error" class="status is-alert" role="alert" data-testid="forgot-error">
+          {{ error }}
+        </p>
+
+        <div class="actions">
+          <button
+            type="submit"
+            class="cta"
+            data-testid="forgot-submit"
+            :disabled="!canSubmit || submitting"
+          >
+            <span>{{ submitting ? 'Sending…' : 'Send reset link' }}</span>
+            <svg
+              class="cta-arrow"
+              viewBox="0 0 20 20"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="M3.5 10 L16.5 10" />
+              <path d="M11 4.5 L16.5 10 L11 15.5" />
+            </svg>
+          </button>
+        </div>
+
+        <p class="line">
+          Remembered it?
+          <RouterLink class="link" to="/login" data-testid="forgot-to-login"
+            >Back to sign in</RouterLink
+          >
+        </p>
+      </form>
+
+      <div v-else class="form" data-testid="forgot-sent">
+        <p class="status is-done">
+          If an account exists for <strong>{{ email.trim() }}</strong
+          >, a password reset link is on its way. Check your inbox.
+        </p>
+        <p class="line">
+          <RouterLink class="link" to="/login" data-testid="forgot-sent-to-login"
+            >Back to sign in</RouterLink
+          >
+        </p>
       </div>
-
-      <p v-if="error" class="error" role="alert" data-testid="forgot-error">{{ error }}</p>
-
-      <div class="actions">
-        <button
-          type="submit"
-          class="cta"
-          data-testid="forgot-submit"
-          :disabled="!canSubmit || submitting"
-        >
-          <span>{{ submitting ? 'Sending…' : 'Send reset link' }}</span>
-          <i class="pi pi-arrow-right" aria-hidden="true" />
-        </button>
-      </div>
-
-      <p class="swap">
-        Remembered it?
-        <RouterLink to="/login" data-testid="forgot-to-login">Back to sign in</RouterLink>
-      </p>
-    </form>
-
-    <div v-else class="form" data-testid="forgot-sent">
-      <p class="sent">
-        If an account exists for <strong>{{ email.trim() }}</strong
-        >, a password reset link is on its way. Check your inbox.
-      </p>
-      <p class="swap">
-        <RouterLink to="/login" data-testid="forgot-sent-to-login">Back to sign in</RouterLink>
-      </p>
     </div>
   </section>
 </template>
@@ -87,85 +111,114 @@ async function submit() {
 </script>
 
 <style scoped>
-.login {
-  max-width: 30rem;
-  margin: 0 auto;
-  padding: 2rem 0;
+/* The notebook cover: one centred sheet on the page ground. No card, no
+   shadow -- the fields' rules are the only lines. */
+.cover {
+  min-height: 100dvh;
+  box-sizing: border-box;
   display: flex;
-  flex-direction: column;
-  gap: 1.75rem;
-}
-
-.head {
-  display: flex;
-  flex-direction: column;
   align-items: center;
-  text-align: center;
-  gap: 0.5rem;
+  justify-content: center;
+  padding: var(--line-pitch) 1rem calc(var(--line-pitch) * 2);
+  background: var(--color-background);
 }
 
-.folio {
-  font-family: var(--font-sans);
-  font-size: var(--fs-label);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  font-weight: 600;
-  color: var(--color-accent-text);
+.sheet {
+  width: 100%;
+  max-width: 26rem;
 }
 
-.title {
+.cover-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding-bottom: calc(var(--line-pitch) - 1px);
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+.cover-title {
+  margin: var(--line-pitch) 0 0;
   font-family: var(--font-display);
-  font-size: clamp(1.875rem, 4vw, 2.5rem);
-  font-weight: 700;
+  font-size: var(--fs-h1);
+  font-weight: 600;
   letter-spacing: var(--tracking-display);
-  line-height: 1.1;
-  margin: 0;
-  color: var(--color-heading);
+  line-height: var(--line-pitch);
+  color: var(--ink);
 }
 
-.lede {
+.cover-lede {
   margin: 0;
-  font-size: 1rem;
-  color: var(--color-text-muted);
-  max-width: 24rem;
-  line-height: var(--lh-body);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
 }
 
 .form {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
-  padding: 1.75rem;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-lift);
+  gap: var(--line-pitch);
+  padding-top: var(--line-pitch);
 }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
 }
 
-.label {
+.field-label {
   font-family: var(--font-sans);
   font-size: var(--fs-label);
-  font-weight: 600;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-  color: var(--color-text-muted);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
 }
 
-.input :deep(input),
-.input.p-inputtext {
-  font-family: var(--font-sans);
-  font-size: 1rem;
-  background: var(--color-surface-soft);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  padding: 0.7rem 1.1rem;
+.field-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: end;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--rule-strong);
+  transition: border-color var(--motion-fast) ease;
+}
+
+.field-line:focus-within {
+  border-bottom-color: var(--ink-learner);
+}
+
+.field-input :deep(input),
+.field-input.p-inputtext {
   width: 100%;
+  height: var(--line-pitch);
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  outline: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--line-pitch);
+  color: var(--ink-learner);
+  caret-color: var(--ink-learner);
+}
+
+.field-input :deep(input):focus,
+.field-input.p-inputtext:focus {
+  box-shadow: none;
+  outline: 0;
+  border: 0;
+}
+
+.field-input :deep(input)::placeholder,
+.field-input.p-inputtext::placeholder {
+  color: var(--pencil);
+  opacity: 1;
+}
+
+.actions {
+  display: flex;
 }
 
 .cta {
@@ -173,56 +226,79 @@ async function submit() {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  padding: 0.75rem 1.5rem;
-  border-radius: var(--radius-pill);
-  background: var(--color-accent-strong);
-  color: #fff;
+  padding: 0.5rem 1.25rem;
   border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-strong);
+  color: var(--color-text-on-accent);
   font-family: var(--font-sans);
+  font-size: var(--fs-caption);
   font-weight: 600;
-  font-size: 0.9375rem;
+  line-height: var(--line-pitch);
   cursor: pointer;
-  transition: filter var(--motion-fast) ease;
-}
-
-.cta:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-  box-shadow: none;
+  transition: background var(--motion-fast) ease;
 }
 
 .cta:not(:disabled):hover {
-  filter: brightness(1.08);
+  background: var(--color-accent-hover);
 }
 
-.actions {
-  display: flex;
-  justify-content: flex-end;
+.cta:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 
-.error {
+.cta:disabled {
+  background: var(--color-surface-soft);
+  color: var(--pencil);
+  cursor: not-allowed;
+}
+
+.cta-arrow {
+  flex: 0 0 auto;
+}
+
+.status {
   margin: 0;
-  color: var(--color-error-text);
-  font-size: 0.875rem;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-sm);
+  padding: 0.25rem 0.75rem;
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  line-height: var(--line-pitch);
+  color: var(--ink);
 }
 
-.hint {
-  margin: 0;
-  font-size: 0.875rem;
-  color: var(--color-text-muted);
+.status.is-alert {
+  border-color: var(--ink-marker);
+  color: var(--ink-marker-text);
 }
 
-.sent {
-  margin: 0;
-  font-size: 0.9375rem;
-  color: var(--color-success-text);
-  line-height: var(--lh-body);
+.status.is-done {
+  border-color: var(--signal-success);
 }
 
-.swap {
+.line {
   margin: 0;
-  font-size: 0.875rem;
-  color: var(--color-text-muted);
-  text-align: center;
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
+}
+
+.link {
+  font-weight: 700;
+  color: var(--ink-learner);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.link:hover {
+  color: var(--color-accent-hover);
+}
+
+.link:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 </style>

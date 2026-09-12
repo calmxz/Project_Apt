@@ -16,7 +16,21 @@ const { openDrawer } = useSidebar()
       data-testid="sidebar-mobile-hamburger"
       @click="openDrawer"
     >
-      <i class="pi pi-bars" />
+      <svg
+        class="sb-strip-icon"
+        viewBox="0 0 20 20"
+        width="16"
+        height="16"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path d="M3.5 6 H16.5 M3.5 10 H16.5 M3.5 14 H16.5" />
+      </svg>
     </button>
     <RouterLink to="/" class="sb-strip-brand" aria-label="Crux home">
       <Logo size="sm" variant="full" />
@@ -29,7 +43,24 @@ const { openDrawer } = useSidebar()
         title="Settings"
         data-testid="strip-settings"
       >
-        <i class="pi pi-cog" />
+        <svg
+          class="sb-strip-icon"
+          viewBox="0 0 20 20"
+          width="16"
+          height="16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <circle cx="10" cy="10" r="2.5" />
+          <path
+            d="M10 3.5 V5.5 M10 14.5 V16.5 M16.5 10 H14.5 M5.5 10 H3.5 M14.7 5.3 L13.3 6.7 M6.7 13.3 L5.3 14.7 M14.7 14.7 L13.3 13.3 M6.7 6.7 L5.3 5.3"
+          />
+        </svg>
       </RouterLink>
     </div>
   </div>

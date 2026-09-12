@@ -1,7 +1,6 @@
 <template>
   <section class="settings" data-testid="settings">
     <header class="head">
-      <span class="folio">preferences</span>
       <h1 class="title">Settings</h1>
     </header>
 
@@ -27,7 +26,6 @@
           @click="activate(i)"
           @keydown="onKeydown($event, i)"
         >
-          <i :class="['pi', t.icon]" aria-hidden="true" />
           <span>{{ t.label }}</span>
         </button>
       </nav>
@@ -62,11 +60,12 @@ const props = defineProps({
 
 const router = useRouter()
 
+// The rail is the contents list of this section: one row per page, no icons.
 const tabs = [
-  { slug: 'profile', label: 'Profile', icon: 'pi-user', component: ProfileTab },
-  { slug: 'usage', label: 'Usage', icon: 'pi-wallet', component: UsageTab },
-  { slug: 'account', label: 'Account', icon: 'pi-lock', component: AccountTab },
-  { slug: 'appearance', label: 'Appearance', icon: 'pi-moon', component: AppearanceTab },
+  { slug: 'profile', label: 'Profile', component: ProfileTab },
+  { slug: 'usage', label: 'Usage', component: UsageTab },
+  { slug: 'account', label: 'Account', component: AccountTab },
+  { slug: 'appearance', label: 'Appearance', component: AppearanceTab },
 ]
 
 const activeComponent = computed(
@@ -100,105 +99,129 @@ function onKeydown(e, i) {
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
 }
 
+/* The sheet header: one display line under a strong rule. */
 .head {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-}
-
-.folio {
-  font-family: var(--font-sans);
-  font-size: var(--fs-label);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  font-weight: 600;
-  color: var(--color-accent-text);
+  padding-bottom: var(--line-pitch);
+  border-bottom: 1px solid var(--rule-strong);
 }
 
 .title {
   font-family: var(--font-display);
-  font-size: clamp(2rem, 4vw, 2.5rem);
-  font-weight: 700;
+  font-size: var(--fs-h1);
+  font-weight: 600;
   letter-spacing: var(--tracking-display);
-  line-height: 1.05;
-  color: var(--color-heading);
+  line-height: var(--lh-display);
+  color: var(--ink);
   margin: 0;
 }
 
+/* Cue column width on the left, the page on the right: the same 232px
+   measure the session sheet gives its cue column. */
 .layout {
   display: grid;
-  grid-template-columns: 12rem 1fr;
-  gap: 2rem;
-  align-items: start;
+  grid-template-columns: 232px minmax(0, 1fr);
+  padding-top: var(--line-pitch);
 }
 
 .rail {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  align-self: start;
   position: sticky;
-  top: 1rem;
+  top: var(--line-pitch);
+  padding-right: 1.5rem;
 }
 
+/* Contents rows: one page per line, the line at the pitch, nothing stamped. */
 .rail-tab {
   display: flex;
   align-items: center;
-  gap: 0.625rem;
-  padding: 0.625rem 0.875rem;
+  padding: 0 0.25rem 0 0.75rem;
   border: 0;
-  border-radius: var(--radius-md);
+  border-radius: 0;
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--ink);
   font-family: var(--font-sans);
-  font-weight: 600;
+  /* contents size: the sidebar's own size for a list of pages */
   font-size: 0.9375rem;
+  font-weight: 400;
+  line-height: var(--line-pitch);
   text-align: left;
   cursor: pointer;
-  transition:
-    background var(--motion-fast) ease,
-    color var(--motion-fast) ease;
 }
 
 .rail-tab:hover {
   background: var(--color-surface-soft);
-  color: var(--color-heading);
 }
 
 .rail-tab--active {
-  background: var(--color-accent-soft);
-  color: var(--color-accent-text);
+  font-weight: 700;
 }
 
 .rail-tab:focus-visible {
-  outline: 2px solid var(--color-accent-ring);
-  outline-offset: 2px;
+  outline: 2px solid var(--ink-learner);
+  outline-offset: -2px;
 }
 
+/* The rule between contents and page runs the full height of the sheet, the
+   way the sidebar edge and the margin rule do. */
 .panel {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: var(--line-pitch);
+  padding-left: 1.5rem;
+  border-left: 1px solid var(--rule-strong);
 }
 
+.panel:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+}
+
+/* Under 48rem the contents list lies down as one ruled tab line and the page
+   runs full width beneath it. */
 @media (max-width: 48rem) {
   .layout {
-    grid-template-columns: 1fr;
-    gap: 1rem;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .rail {
     position: static;
     flex-direction: row;
+    gap: 1.25rem;
     overflow-x: auto;
-    padding-bottom: 0.25rem;
+    padding-right: 0;
+    border-bottom: 1px solid var(--rule-strong);
   }
 
   .rail-tab {
     flex-shrink: 0;
+    padding: 0;
+    color: var(--ink-learner);
+    font-size: var(--fs-caption);
+    font-weight: 700;
+  }
+
+  .rail-tab:hover {
+    background: transparent;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .rail-tab--active {
+    color: var(--ink);
+    box-shadow: inset 0 -2px 0 var(--ink);
+  }
+
+  .panel {
+    padding-left: 0;
+    padding-top: var(--line-pitch);
+    border-left: 0;
   }
 }
 </style>

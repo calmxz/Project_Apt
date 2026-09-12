@@ -180,7 +180,10 @@ describe('ReviewView', () => {
     })
     const w = mount(ReviewView, { global: { stubs } })
     await flushPromises()
-    expect(w.get('[data-testid="review-item"]').text()).toContain('2 correct in a row')
+    // Redesign C1: the row is a Cornell recitation pair -- the cue button
+    // (review-item) carries the concept, and the streak sits in the covered
+    // answer cell beside it. Same copy, asserted on the row that holds both.
+    expect(w.get('[data-testid="review-row"]').text()).toContain('2 correct in a row')
     expect(w.text()).not.toMatch(/streak \d/)
     expect(w.find('[data-testid="back-button"]').exists()).toBe(true)
   })
