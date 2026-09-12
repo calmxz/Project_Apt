@@ -289,30 +289,40 @@ function startQuick() {
   line-height: var(--line-pitch);
 }
 
+/* Written, not stamped: the default action is a line of blue text with a
+   drawn arrow after the word. */
 .cta-primary {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1.25rem;
+  gap: 0.375rem;
+  padding: 0;
   border: 0;
-  border-radius: var(--radius-sm);
-  background: var(--color-accent-strong);
-  color: var(--color-text-on-accent);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-learner);
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
-  font-weight: 600;
+  font-weight: 700;
   line-height: var(--line-pitch);
   cursor: pointer;
 }
 
+.cta-primary > span {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .cta-primary:hover:not(:disabled) {
-  background: var(--color-accent-hover);
+  color: var(--color-accent-hover);
 }
 
 .cta-primary:disabled {
-  background: transparent;
   color: var(--pencil);
   cursor: default;
+}
+
+.cta-primary:disabled > span {
+  text-decoration: none;
 }
 
 .cta-mark {

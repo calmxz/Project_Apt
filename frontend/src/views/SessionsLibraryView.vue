@@ -30,6 +30,23 @@ async function continueSession(s) {
   }
 }
 
+// Row label cells, the same three-cell label Home and the sidebar carry:
+// topic + mastered count on line one, the focus cue underneath. The mastered
+// chip is dropped from the chip row so the count is written once per row.
+function masteredOf(s) {
+  return s?.progress?.mastered_count || 0
+}
+
+function rowChips(s) {
+  return cardChips(s).filter((c) => c.type !== 'mastered')
+}
+
+// Status is no longer a word beside the topic; under the All filter it reads
+// off the pencil meta line instead.
+function rowMeta(s) {
+  return s.ended_at ? `${cardMeta(s)} · ended` : cardMeta(s)
+}
+
 const items = ref([])
 const total = ref(0)
 const limit = ref(20)
@@ -223,17 +240,29 @@ defineExpose({ load }) // used by control/pagination tasks
         @input="onSearchInput"
       />
 
-      <select
-        v-model="sort"
-        class="library-sort"
-        data-testid="library-sort"
-        aria-label="Sort sessions"
-        @change="onSortChange"
-      >
-        <option value="last_activity">Last active</option>
-        <option value="created">Newest</option>
-        <option value="topic">Topic</option>
-      </select>
+      <span class="library-sort-field">
+        <select
+          v-model="sort"
+          class="library-sort"
+          data-testid="library-sort"
+          aria-label="Sort sessions"
+          @change="onSortChange"
+        >
+          <option value="last_activity">Last active</option>
+          <option value="created">Newest</option>
+          <option value="topic">Topic</option>
+        </select>
+        <svg
+          class="library-sort-mark"
+          viewBox="0 0 12 12"
+          width="12"
+          height="12"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path d="M3 4.75 L6 7.75 L9 4.75" />
+        </svg>
+      </span>
     </div>
 
     <LibrarySkeletonGrid v-if="loading && !items.length" :count="6" />
@@ -253,14 +282,28 @@ defineExpose({ load }) // used by control/pagination tasks
         <RouterLink class="library-card-link" :to="{ name: 'session', params: { id: s.id } }">
           <span class="library-card-head">
             <span class="library-topic">{{ s.topic || 'Untitled' }}</span>
-            <span class="library-status" :class="{ ended: !!s.ended_at }">
-              {{ s.ended_at ? 'Ended' : 'Active' }}
+            <span v-if="masteredOf(s)" class="library-mastered" data-tabular aria-hidden="true">
+              <svg
+                class="library-mastered-mark"
+                viewBox="0 0 12 12"
+                width="10"
+                height="10"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                focusable="false"
+              >
+                <path d="M2 6.5 L4.8 9.2 L10 3.2" />
+              </svg>
+              {{ masteredOf(s) }}
             </span>
           </span>
           <SessionChips
-            v-if="cardChips(s).length"
+            v-if="rowChips(s).length"
             class="library-chips"
-            :chips="cardChips(s)"
+            :chips="rowChips(s)"
             variant="card"
           />
           <span
@@ -272,7 +315,7 @@ defineExpose({ load }) // used by control/pagination tasks
           >
             {{ cardStory(s) || 'No activity yet' }}
           </span>
-          <span class="library-meta">{{ cardMeta(s) }}</span>
+          <span class="library-meta">{{ rowMeta(s) }}</span>
         </RouterLink>
         <button
           v-if="s.ended_at"
@@ -439,10 +482,23 @@ defineExpose({ load }) // used by control/pagination tasks
   border-bottom-color: var(--ink-learner);
 }
 
+/* The sort control is written, not stamped: the native select keeps its
+   behaviour, the platform arrow is dropped and a drawn chevron takes its
+   place. */
+.library-sort-field {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: baseline;
+}
+
 .library-sort {
   flex: 0 0 auto;
-  padding: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 0 1.125rem 0 0;
   border: 0;
+  border-radius: 0;
   background: transparent;
   color: var(--ink-learner);
   font-family: var(--font-sans);
@@ -450,6 +506,18 @@ defineExpose({ load }) // used by control/pagination tasks
   font-weight: 700;
   line-height: var(--line-pitch);
   cursor: pointer;
+}
+
+.library-sort-mark {
+  position: absolute;
+  right: 0;
+  top: calc(50% - 6px);
+  fill: none;
+  stroke: var(--ink-learner);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
 }
 
 /* Ruled entries. */
@@ -506,11 +574,20 @@ defineExpose({ load }) // used by control/pagination tasks
   text-overflow: ellipsis;
 }
 
-.library-status {
+/* Line one's right-hand cell: the mastered count, as on Home and the sidebar. */
+.library-mastered {
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
   font-family: var(--font-sans);
   font-size: var(--fs-label);
   color: var(--pencil);
+}
+
+.library-mastered-mark {
+  flex: 0 0 auto;
+  color: var(--ink-learner);
 }
 
 .library-chips {

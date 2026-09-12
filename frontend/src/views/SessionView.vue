@@ -8,7 +8,20 @@
         The session id <code>{{ id }}</code> doesn't exist or was deleted.
       </p>
       <router-link to="/" class="home-link" data-testid="session-not-found-home">
-        <i class="pi pi-arrow-left" aria-hidden="true" />
+        <svg
+          viewBox="0 0 20 20"
+          width="14"
+          height="14"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path d="M16 10 L4 10 M9 4.5 L4 10 L9 15.5" />
+        </svg>
         Back to sessions
       </router-link>
     </div>

@@ -25,43 +25,14 @@
         </div>
 
         <div class="field stagger" style="--delay: 60ms">
-          <fieldset class="choice" data-testid="onboarding-feedback">
-            <legend class="field-label">When you get stuck</legend>
-            <label
-              v-for="(opt, i) in feedbackOptions"
-              :key="opt.value"
-              class="choice-line"
-              :class="{ 'is-selected': feedback === opt.value }"
-            >
-              <input
-                type="radio"
-                name="feedback-style"
-                class="choice-input"
-                :value="opt.value"
-                :checked="feedback === opt.value"
-                :data-testid="`feedback-style-${opt.value}`"
-                @change="feedback = opt.value"
-              />
-              <span class="choice-letter" aria-hidden="true">{{ letters[i] }}.</span>
-              <span class="choice-label">{{ opt.label }}</span>
-              <svg
-                v-if="feedback === opt.value"
-                class="choice-tick"
-                viewBox="0 0 20 20"
-                width="20"
-                height="20"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.5"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-                focusable="false"
-              >
-                <path d="M3.5 10.5 L8 15 L16.5 5" />
-              </svg>
-            </label>
-          </fieldset>
+          <div class="choice" data-testid="onboarding-feedback">
+            <p class="field-label">When you get stuck</p>
+            <FeedbackStylePicker
+              v-model="feedback"
+              :options="feedbackOptions"
+              name="feedback-style"
+            />
+          </div>
           <p class="help">
             {{
               feedback === 'hints'
@@ -112,6 +83,7 @@ import { useRouter } from 'vue-router'
 
 import InputText from 'primevue/inputtext'
 
+import FeedbackStylePicker from '../components/FeedbackStylePicker.vue'
 import Logo from '../components/Logo.vue'
 import { friendlyError } from '@/lib/errors.js'
 import { useUserStore } from '../stores/user.js'
@@ -124,7 +96,6 @@ const feedbackOptions = [
   { label: 'Hints', value: 'hints' },
   { label: 'Direct answers', value: 'direct_answers' },
 ]
-const letters = ['A', 'B']
 const feedback = ref(userStore.interactionPreferences?.feedback || 'hints')
 
 const canSubmit = computed(() => Boolean(feedback.value))
@@ -261,72 +232,14 @@ async function submit() {
   opacity: 1;
 }
 
-/* Two lettered lines on the rules; the rule is painted so each line stays a
-   whole pitch tall. */
+/* The lettered lines come from the shared FeedbackStylePicker, so the
+   grammar has one source; this wrapper only carries the pencil label. */
 .choice {
   min-width: 0;
+}
+
+.choice .field-label {
   margin: 0;
-  padding: 0;
-  border: 0;
-}
-
-.choice-line {
-  position: relative;
-  display: grid;
-  grid-template-columns: 1.25rem minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.5rem;
-  height: var(--line-pitch);
-  box-shadow: inset 0 -1px 0 var(--rule);
-  cursor: pointer;
-  font-family: var(--font-sans);
-  font-size: var(--fs-body);
-  line-height: var(--line-pitch);
-  color: var(--ink);
-}
-
-.choice-input {
-  position: absolute;
-  width: 0;
-  height: 0;
-  opacity: 0;
-}
-
-.choice-letter {
-  font-weight: 700;
-  color: var(--ink-learner);
-}
-
-.choice-line.is-selected .choice-label {
-  font-weight: 700;
-}
-
-.choice-line:hover .choice-label {
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.choice-line:has(.choice-input:focus-visible) {
-  outline: 2px solid var(--color-accent-ring);
-  outline-offset: 2px;
-}
-
-/* A drawn tick in the learner's ink, not a glyph font. */
-.choice-tick {
-  flex: 0 0 auto;
-  color: var(--ink-learner);
-}
-
-.choice-tick path {
-  stroke-dasharray: 26;
-  stroke-dashoffset: 26;
-  animation: tick-draw var(--motion-base) ease forwards;
-}
-
-@keyframes tick-draw {
-  to {
-    stroke-dashoffset: 0;
-  }
 }
 
 .help {
@@ -337,6 +250,8 @@ async function submit() {
   color: var(--pencil);
 }
 
+/* Written, not stamped: the cover's action is a line of blue text with a
+   drawn arrow after the word. Filled blue stays in dialog footers. */
 .actions {
   display: flex;
 }
@@ -344,23 +259,27 @@ async function submit() {
 .cta {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1.25rem;
+  gap: 0.375rem;
+  padding: 0;
   border: 0;
-  border-radius: var(--radius-sm);
-  background: var(--color-accent-strong);
-  color: var(--color-text-on-accent);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-learner);
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
-  font-weight: 600;
+  font-weight: 700;
   line-height: var(--line-pitch);
   cursor: pointer;
-  transition: background var(--motion-fast) ease;
+  transition: color var(--motion-fast) ease;
+}
+
+.cta > span {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .cta:not(:disabled):hover {
-  background: var(--color-accent-hover);
+  color: var(--color-accent-hover);
 }
 
 .cta:focus-visible {
@@ -369,9 +288,12 @@ async function submit() {
 }
 
 .cta:disabled {
-  background: var(--color-surface-soft);
   color: var(--pencil);
-  cursor: not-allowed;
+  cursor: default;
+}
+
+.cta:disabled > span {
+  text-decoration: none;
 }
 
 .cta-arrow {
@@ -410,11 +332,6 @@ async function submit() {
 @media (prefers-reduced-motion: reduce) {
   .stagger {
     opacity: 1;
-    animation: none;
-  }
-
-  .choice-tick path {
-    stroke-dashoffset: 0;
     animation: none;
   }
 }

@@ -56,10 +56,12 @@ const html = renderMarkdown(source)
   color: var(--ink);
 }
 
+/* One Display Line Rule: the display face stays on the h1; section headings
+   are the Subhead in the body face. */
 .legal :deep(h2) {
   margin: var(--line-pitch) 0 0;
-  font-family: var(--font-display);
-  font-size: var(--fs-h3);
+  font-family: var(--font-sans);
+  font-size: 1.125rem;
   font-weight: 600;
   letter-spacing: var(--tracking-display);
   line-height: var(--line-pitch);

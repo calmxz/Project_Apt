@@ -252,7 +252,8 @@ async function submit() {
   opacity: 1;
 }
 
-/* The one filled control on the cover. */
+/* Written, not stamped: the cover's action is a line of blue text with a
+   drawn arrow after the word. Filled blue stays in dialog footers. */
 .actions {
   display: flex;
 }
@@ -260,23 +261,27 @@ async function submit() {
 .cta {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1.25rem;
+  gap: 0.375rem;
+  padding: 0;
   border: 0;
-  border-radius: var(--radius-sm);
-  background: var(--color-accent-strong);
-  color: var(--color-text-on-accent);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-learner);
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
-  font-weight: 600;
+  font-weight: 700;
   line-height: var(--line-pitch);
   cursor: pointer;
-  transition: background var(--motion-fast) ease;
+  transition: color var(--motion-fast) ease;
+}
+
+.cta > span {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .cta:not(:disabled):hover {
-  background: var(--color-accent-hover);
+  color: var(--color-accent-hover);
 }
 
 .cta:focus-visible {
@@ -285,9 +290,12 @@ async function submit() {
 }
 
 .cta:disabled {
-  background: var(--color-surface-soft);
   color: var(--pencil);
-  cursor: not-allowed;
+  cursor: default;
+}
+
+.cta:disabled > span {
+  text-decoration: none;
 }
 
 .cta-arrow {

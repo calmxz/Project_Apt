@@ -206,7 +206,7 @@ async function expand() {
 
 .review-row {
   display: grid;
-  grid-template-columns: 13rem minmax(0, 1fr);
+  grid-template-columns: minmax(0, 20rem) minmax(0, 1fr);
   align-items: start;
   column-gap: 1rem;
 }
@@ -243,11 +243,11 @@ async function expand() {
   outline-offset: 2px;
 }
 
+/* The cue takes its own width and wraps on the pitch; a cue word is never
+   truncated -- it is the thing the learner has to recall. */
 .review-concept {
   display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 /* The answer area. Covered, it is a blank sheet over the rules with the way
@@ -272,10 +272,34 @@ async function expand() {
   white-space: nowrap;
 }
 
+/* Lifted, the aside is written onto the rules left to right. v-show keeps the
+   copy in the DOM, so the animation restarts each time display returns. */
+.review-answer.lifted .review-detail {
+  animation: review-land var(--motion-ink) var(--motion-bounce) both;
+}
+
+@keyframes review-land {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .review-answer.lifted .review-detail {
+    animation: none;
+  }
+}
+
+/* Covered, the answer cell is a ruled box: a graphite frame with page ground
+   over the rules and the way in written inside it. */
 .review-cover {
   flex: 1 1 auto;
-  padding: 0;
-  border: 0;
+  padding: 13px 1rem;
+  border: 1px solid var(--ink);
+  border-radius: 0;
   background: var(--color-background);
   color: var(--ink-learner);
   font-family: var(--font-sans);
@@ -284,13 +308,14 @@ async function expand() {
   line-height: var(--line-pitch);
   text-align: left;
   cursor: pointer;
-  box-shadow: inset 0 -1px 0 var(--rule);
 }
 
+/* Lifted, the box is gone and Cover is a plain blue text line. */
 .review-answer.lifted .review-cover {
   flex: 0 0 auto;
+  padding: 0;
+  border: 0;
   background: transparent;
-  box-shadow: none;
   text-align: right;
 }
 

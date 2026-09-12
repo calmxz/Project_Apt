@@ -29,32 +29,62 @@
       <template v-else>
         <p class="counts" data-testid="agg-stats" data-tabular>
           {{ plural(data.total_sessions, 'session') }} ({{ data.active_sessions }} active,
-          {{ data.ended_sessions }} ended) ·
-          {{ data.combined_mastered_concepts.length }} mastered ·
+          {{ data.ended_sessions }} ended) · {{ data.combined_mastered_concepts.length }} mastered ·
           {{ plural(data.combined_confirmed_gaps.length, 'gap') }} ·
           {{ plural(data.total_learning_events, 'check-question') }}
         </p>
 
         <section class="sec" data-testid="agg-dist">
           <h2 class="sec-title">Knowledge level distribution</h2>
-          <p v-if="distLine" class="glance-line">{{ distLine }}</p>
+          <ul v-if="distEntries.length" class="cue-list">
+            <li v-for="e in distEntries" :key="e.key" class="cue-entry" data-testid="dist-entry">
+              <span class="cue-line">
+                <svg
+                  class="lvl-mark"
+                  :class="{ 'lvl-mark--unset': e.key === 'unknown' }"
+                  viewBox="0 0 24 24"
+                  width="18"
+                  height="12"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <path d="M2 17 L22 7" :stroke-width="levelStroke(e.key)" />
+                </svg>
+                <span class="lvl-word">{{ e.key }}</span>
+                <span class="lvl-count" data-tabular>{{ e.count }}</span>
+              </span>
+            </li>
+          </ul>
         </section>
 
         <section class="sec" data-testid="agg-insights">
-          <h2 class="sr-only">At a glance</h2>
+          <h2 class="sec-title">At a glance</h2>
           <p class="glance-line" data-testid="glance-mastery">{{ masteryLine }}</p>
-          <p v-if="attentionItems.length" class="glance-line" data-testid="glance-attention">
-            <span>Needs attention: </span>
-            <template v-for="(c, i) in attentionItems" :key="c.concept">
-              <span v-if="i > 0">, </span>
-              <router-link
-                :to="{ name: 'session-profile', params: { id: c.first_seen_session_id } }"
-                class="glance-link"
-                >{{ c.concept }}</router-link
-              >
-              <span> ({{ c.pct }}%)</span>
-            </template>
-          </p>
+
+          <template v-if="attentionItems.length">
+            <h3 class="sec-title">Needs attention</h3>
+            <ul class="cue-list" data-testid="glance-attention">
+              <li v-for="c in attentionItems" :key="c.concept" class="cue-entry">
+                <router-link
+                  :to="{ name: 'session-profile', params: { id: c.first_seen_session_id } }"
+                  class="attn-link"
+                >
+                  <svg
+                    class="cue-mark cue-mark--attn"
+                    viewBox="0 0 12 12"
+                    width="12"
+                    height="12"
+                    aria-hidden="true"
+                    focusable="false"
+                  >
+                    <path d="M1 6 L11 6" />
+                  </svg>
+                  <span class="attn-word">{{ c.concept }}</span>
+                  <span class="attn-pct" data-tabular>({{ c.pct }}%)</span>
+                </router-link>
+              </li>
+            </ul>
+          </template>
         </section>
 
         <div class="cue-cols">
@@ -173,6 +203,7 @@ import { computed, onMounted, ref } from 'vue'
 
 import EmptyState from '../EmptyState.vue'
 import FeedbackStylePicker from '../FeedbackStylePicker.vue'
+import { levelStroke } from '../chat/levelMark.js'
 import { friendlyError } from '../../lib/errors.js'
 import { getAggregateProfile } from '../../services/profileApi.js'
 import { formatRelative } from '../../utils/formatDate.js'
@@ -188,12 +219,12 @@ const error = ref('')
 
 const levelKeys = ['beginner', 'intermediate', 'advanced', 'unknown']
 
-const distLine = computed(() => {
+// The distribution is written as cue entries: the level stroke at its own
+// weight, the level word in pencil, the count in pencil label. Levels nobody
+// sits at stay off the page rather than reading "0 advanced".
+const distEntries = computed(() => {
   const d = data.value?.knowledge_level_distribution || {}
-  return levelKeys
-    .filter((k) => (d[k] || 0) > 0)
-    .map((k) => `${d[k]} ${k}`)
-    .join(' · ')
+  return levelKeys.filter((k) => (d[k] || 0) > 0).map((k) => ({ key: k, count: d[k] }))
 })
 
 const masteryLine = computed(() => {
@@ -335,14 +366,68 @@ async function saveFeedback() {
   color: var(--ink);
 }
 
-.glance-link {
-  color: var(--ink-learner);
-  text-decoration: underline;
-  text-underline-offset: 3px;
+/* Needs attention: a cue entry per concept, the whole line the link. The cue
+   stays in graphite and is marked in red -- never set in red. */
+.attn-link {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
 }
 
-.glance-link:hover {
-  color: var(--color-accent-hover);
+.attn-link:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+}
+
+.attn-word {
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--line-pitch);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+  text-decoration: underline;
+  text-decoration-color: var(--ink-marker);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+
+.attn-pct {
+  flex: 0 0 auto;
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
+}
+
+/* The level stroke at its weight, then the level word and count in pencil. */
+.lvl-mark {
+  flex: 0 0 auto;
+  align-self: center;
+  fill: none;
+  stroke: var(--ink);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.lvl-mark--unset {
+  stroke: var(--pencil);
+}
+
+.lvl-word {
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
+}
+
+.lvl-count {
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
 }
 
 .cue-cols {
@@ -385,6 +470,12 @@ async function saveFeedback() {
 
 .cue-mark--tick {
   stroke: var(--ink-learner);
+}
+
+/* The needs-attention dash: the marker's 2px red stroke. */
+.cue-mark--attn {
+  stroke: var(--ink-marker);
+  stroke-width: 2;
 }
 
 .cue-word {

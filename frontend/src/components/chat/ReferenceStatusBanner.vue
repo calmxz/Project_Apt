@@ -180,7 +180,7 @@ function confirmDelete(doc) {
   confirm.require({
     message: `Remove "${doc.filename}" from this chat? This deletes the file and its indexed content.`,
     header: 'Delete file',
-    icon: 'pi pi-exclamation-triangle',
+    // No glyph icon font in this world -- the dialog carries no mark.
     rejectLabel: 'Cancel',
     acceptLabel: 'Delete',
     // Neutral cancel (drops the default primary/coral fill); darker destructive

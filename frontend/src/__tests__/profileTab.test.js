@@ -140,15 +140,46 @@ describe('ProfileTab', () => {
     expect(wrapper.find('[data-testid="glance-mastery"]').text()).toBe(
       '1 mastered this week · 2 total',
     )
-    expect(wrapper.find('[data-testid="agg-dist"]').text()).toContain('2 beginner · 1 intermediate')
+    // Redesign finish fix 2: the distribution is cue entries (level stroke at
+    // its weight + word + count), not one "2 beginner · 1 intermediate" line.
+    // Levels with a zero count are still left off the page.
+    const dist = wrapper.findAll('[data-testid="dist-entry"]')
+    expect(dist).toHaveLength(2)
+    expect(dist[0].text()).toContain('beginner')
+    expect(dist[0].text()).toContain('2')
+    expect(dist[0].find('path').attributes('stroke-width')).toBe('1.5')
+    expect(dist[1].text()).toContain('intermediate')
+    expect(dist[1].find('path').attributes('stroke-width')).toBe('2.25')
     expect(wrapper.find('[data-testid="agg-dist"]').text()).not.toContain('advanced')
     expect(wrapper.find('[data-testid="agg-dist"]').text()).not.toContain('unknown')
+
+    // Needs attention is a bold caption heading over cue entries, so the copy
+    // is no longer one comma-joined sentence; the same strings are asserted.
+    expect(wrapper.find('[data-testid="agg-insights"]').text()).toContain('Needs attention')
     const attention = wrapper.find('[data-testid="glance-attention"]').text()
-    expect(attention).toBe(
-      'Needs attention: formal analysis (31%), data transmission (33%), CSS selectors (67%)',
-    )
+    expect(attention).toContain('formal analysis')
+    expect(attention).toContain('(31%)')
+    expect(attention).toContain('data transmission')
+    expect(attention).toContain('(33%)')
+    expect(attention).toContain('CSS selectors')
+    expect(attention).toContain('(67%)')
     expect(attention).not.toContain('fourth concept')
     expect(attention).not.toContain('single try')
+  })
+
+  // The section heading is drawn on the page now, not hidden for screen
+  // readers only (DESIGN.md: no sr-only stand-ins for a visible heading).
+  it('gives the at-a-glance section a visible heading', async () => {
+    seedUser()
+    vi.spyOn(profileApi, 'getAggregateProfile').mockResolvedValue(nonEmptyAggregatePayload())
+
+    const wrapper = mount(ProfileTab, { global: { stubs } })
+    await flushPromises()
+
+    const section = wrapper.get('[data-testid="agg-insights"]')
+    expect(section.find('.sr-only').exists()).toBe(false)
+    expect(section.get('h2').classes()).toContain('sec-title')
+    expect(section.get('h2').text()).toBe('At a glance')
   })
 
   it('clamps the mastered-this-week count to the mastered total', async () => {
@@ -174,7 +205,9 @@ describe('ProfileTab', () => {
 
     const links = wrapper.find('[data-testid="glance-attention"]').findAllComponents(RouterLinkStub)
     expect(links).toHaveLength(3)
-    expect(links[0].text()).toBe('formal analysis')
+    // The whole cue row is the link now, so its text carries the percentage too.
+    expect(links[0].text()).toContain('formal analysis')
+    expect(links[0].text()).toContain('(31%)')
     expect(links[0].props('to')).toEqual({ name: 'session-profile', params: { id: 's1' } })
     expect(links[2].props('to')).toEqual({ name: 'session-profile', params: { id: 's2' } })
   })

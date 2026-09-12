@@ -302,6 +302,33 @@ describe('SessionsLibraryView', () => {
     expect(wrapper.get('.library-title').text()).toBe('All sessions')
   })
 
+  // Redesign finish fix 3: the status word is gone from line one -- the
+  // right-hand cell carries the mastered count so Library, Home and the
+  // sidebar share one three-cell label. Ended rows read "ended" off the
+  // pencil meta line, which is what the All filter needs.
+  it('line one carries the mastered count, not a status word', async () => {
+    sessionsApi.getSessionLibrary.mockResolvedValue(
+      page([
+        item('a', { progress: { focus_target_gap: 'gap-a', mastered_count: 4 } }),
+        item('z', { ended_at: '2026-06-02T00:00:00Z' }),
+      ]),
+    )
+    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+    await flushPromises()
+
+    const active = wrapper.get('[data-testid="library-card-a"]')
+    expect(active.find('.library-status').exists()).toBe(false)
+    expect(active.text()).not.toContain('Active')
+    expect(active.get('.library-mastered').text()).toBe('4')
+    // Written once per row: the chip row keeps focus only.
+    expect(active.get('.library-chips').text()).toContain('Focus: gap-a')
+    expect(active.find('.library-chips').text()).not.toContain('mastered')
+
+    const ended = wrapper.get('[data-testid="library-card-z"]')
+    expect(ended.text()).not.toContain('Ended')
+    expect(ended.get('.library-meta').text()).toContain('· ended')
+  })
+
   it('ended card shows Continue button; active card does not', async () => {
     sessionsApi.getSessionLibrary.mockResolvedValue(
       page([item('active1'), item('ended1', { ended_at: '2026-06-02T00:00:00Z' })]),
