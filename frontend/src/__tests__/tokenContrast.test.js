@@ -71,5 +71,72 @@ describe('base.css tokens', () => {
         ).toBeGreaterThanOrEqual(4.5)
       })
     })
+
+    it(`${themeName}: --color-text-on-accent is >= 4.5:1 on --ink-marker-text-hover`, () => {
+      const fills = hex('--ink-marker-text-hover', block)
+      const labels = hex('--color-text-on-accent', block)
+      expect(labels.length).toBe(fills.length)
+      labels.forEach((label, i) => {
+        expect(
+          ratio(label, fills[i]),
+          `confirm-delete hover label (${themeName})`,
+        ).toBeGreaterThanOrEqual(4.5)
+      })
+    })
   }
+})
+
+// --- Drift guard: dark tokens are declared twice (attribute override +
+// prefers-color-scheme media query, for users who never toggle explicitly).
+// This walks the raw file by selector, not the light/dark slices above, so it
+// can tell the two dark blocks apart from each other and from :root.
+function blockBody(fullCss, selectorMarker) {
+  const start = fullCss.indexOf(selectorMarker)
+  if (start === -1) throw new Error(`selector "${selectorMarker}" not found in base.css`)
+  const braceStart = fullCss.indexOf('{', start)
+  let depth = 1
+  let i = braceStart + 1
+  while (depth > 0) {
+    if (fullCss[i] === '{') depth++
+    else if (fullCss[i] === '}') depth--
+    i++
+  }
+  return fullCss.slice(braceStart + 1, i - 1)
+}
+
+function customPropNames(body) {
+  const re = /--[a-z0-9-]+(?=\s*:)/g
+  return new Set([...body.matchAll(re)].map((m) => m[0]))
+}
+
+function setDiff(a, b) {
+  return [...a].filter((x) => !b.has(x))
+}
+
+describe('base.css dark-token drift guard', () => {
+  // :root { ... } — matched with a trailing space+brace so it does not also
+  // match :root[data-theme='dark'] or :root:not([data-theme='light']).
+  const lightNames = customPropNames(blockBody(css, ':root {'))
+  const darkAttrNames = customPropNames(blockBody(css, ":root[data-theme='dark']"))
+  const darkMediaNames = customPropNames(blockBody(css, ":root:not([data-theme='light'])"))
+
+  it('declares the same tokens in the attribute-dark and media-dark blocks', () => {
+    const onlyInAttr = setDiff(darkAttrNames, darkMediaNames)
+    const onlyInMedia = setDiff(darkMediaNames, darkAttrNames)
+    expect(
+      onlyInAttr.length + onlyInMedia.length,
+      `tokens only in :root[data-theme='dark']: ${onlyInAttr.join(', ') || '(none)'}; tokens only in the prefers-color-scheme block: ${onlyInMedia.join(', ') || '(none)'}`,
+    ).toBe(0)
+  })
+
+  // The light :root block additionally carries non-colour tokens (spacing,
+  // motion, typography, radii) that dark never overrides, so the strictest
+  // assertion that holds is subset-of, not set-equals.
+  it('every dark-block token is also declared in :root (light)', () => {
+    const missingFromLight = setDiff(darkAttrNames, lightNames)
+    expect(
+      missingFromLight,
+      `dark tokens missing from :root: ${missingFromLight.join(', ') || '(none)'}`,
+    ).toEqual([])
+  })
 })

@@ -23,9 +23,9 @@ defineProps({
       <span class="empty-rule" />
       <span class="empty-rule" />
     </div>
-    <h3 v-if="$slots.headline || headline" class="empty-headline">
+    <h2 v-if="$slots.headline || headline" class="empty-headline">
       <slot name="headline">{{ headline }}</slot>
-    </h3>
+    </h2>
     <p v-if="$slots.subtext || subtext" class="empty-subtext">
       <slot name="subtext">{{ subtext }}</slot>
     </p>

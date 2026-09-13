@@ -30,6 +30,7 @@
   --ink-learner: #1d4fc4;
   --ink-marker: #d8433a;
   --ink-marker-text: #b8352c;
+  --ink-marker-text-hover: #94271f;
   --pencil: #63635e;
   --rule: #d3dfee;
   --rule-strong: #b9c6da;
@@ -130,6 +131,9 @@
   --ink-learner: #8fb0ff;
   --ink-marker: #ff6a5e;
   --ink-marker-text: #ff6a5e;
+  /* #ff6a5e itself fails 4.5:1 against white text; #c9463b clears it (see
+     tokenContrast.test.js). */
+  --ink-marker-text-hover: #c9463b;
   --pencil: #a3a39c;
   --rule: #262a33;
   --rule-strong: #363b47;
@@ -177,6 +181,7 @@
     --ink-learner: #8fb0ff;
     --ink-marker: #ff6a5e;
     --ink-marker-text: #ff6a5e;
+    --ink-marker-text-hover: #c9463b;
     --pencil: #a3a39c;
     --rule: #262a33;
     --rule-strong: #363b47;
@@ -385,14 +390,26 @@ body.sb-scroll-lock {
    base.css sits outside PrimeVue's cascade layer, so it wins without
    !important. */
 .p-button.confirm-delete-strong {
-  background: #b8352c;
-  border-color: #b8352c;
-  color: #ffffff;
+  background: var(--ink-marker-text);
+  border-color: var(--ink-marker-text);
+  color: var(--color-text-on-accent);
 }
 .p-button.confirm-delete-strong:hover {
-  background: #94271f;
-  border-color: #94271f;
-  color: #ffffff;
+  background: var(--ink-marker-text-hover);
+  border-color: var(--ink-marker-text-hover);
+  color: var(--color-text-on-accent);
+}
+
+/* Spin animation for inline loading spinners (composer send, reference
+   status banner). Replaces primeicons' .pi-spin so the icon font is not
+   needed for a single keyframe. */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.spin {
+  animation: spin 1s linear infinite;
 }
 
 /* Visually hidden but screen-reader-accessible. F-18: discrete stream

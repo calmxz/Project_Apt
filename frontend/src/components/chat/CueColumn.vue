@@ -458,16 +458,26 @@ const expanded = ref(false)
 }
 
 @media (max-width: 899px) {
+  /* R2: the strip stays put while the body under it scrolls, so the disclosure
+     control is always reachable without hunting for it. */
   .cue-strip {
     display: grid;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--color-surface);
     padding: 0 clamp(1rem, 3vw, 1.5rem);
   }
 
+  /* R2: the expanded profile is capped here rather than on the parent strip.
+     Without the cap a long profile pushed the notes column down in flow, which
+     collapsed the transcript to 0px and put the composer below the viewport. */
   .cue-body {
     display: none;
     padding: 0 clamp(1rem, 3vw, 1.5rem) 0.5rem;
     gap: 0.5rem;
-    overflow-y: visible;
+    max-height: 40vh;
+    overflow-y: auto;
   }
 
   .cue.is-expanded .cue-body {

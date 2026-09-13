@@ -131,4 +131,12 @@ describe('Composer', () => {
     const wrapper = mountComposer({ modelValue: '' })
     expect(wrapper.get('[data-testid="session-input"]').attributes('maxlength')).toBe('4000')
   })
+
+  // A1: textarea must have an accessible name for screen readers.
+  it('has an accessible name on the textarea', () => {
+    const wrapper = mountComposer()
+    expect(wrapper.get('[data-testid="session-input"]').attributes('aria-label')).toBe(
+      'Message the tutor',
+    )
+  })
 })

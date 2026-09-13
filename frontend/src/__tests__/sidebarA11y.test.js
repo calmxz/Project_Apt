@@ -226,6 +226,32 @@ describe('Sidebar a11y — review badge unit', () => {
   })
 })
 
+describe('Sidebar a11y — heading levels (S1)', () => {
+  let wrapper
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    localStorage.clear()
+    setViewport(1400)
+    sidebarTest._setExpanded(true)
+    routeRef.meta = {}
+    routeRef.params = {}
+  })
+  afterEach(() => wrapper?.unmount())
+
+  it('section label is a level-2 heading and no h3 is rendered', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'a1', topic: 'X', created_at: '2026-05-20T10:00:00Z', ended_at: null, pinned: true },
+    ]
+    wrapper = mount(Sidebar, { attachTo: document.body })
+    await flushPromises()
+    expect(wrapper.findAll('h3').length).toBe(0)
+    const sectionHeading = wrapper.find('[data-testid="sidebar-section-pinned"] h2')
+    expect(sectionHeading.exists()).toBe(true)
+    expect(sectionHeading.text()).toContain('Pinned')
+  })
+})
+
 describe('Sidebar a11y — rename focus management', () => {
   let wrapper
   beforeEach(() => {

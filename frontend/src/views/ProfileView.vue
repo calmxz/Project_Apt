@@ -178,6 +178,7 @@
               data-testid="add-mastered"
               class="add-input"
               placeholder="Add a concept"
+              aria-label="Add a mastered concept"
               maxlength="200"
               @keydown.enter="addMastered"
             />
@@ -238,6 +239,7 @@
               data-testid="add-gap"
               class="add-input"
               placeholder="Add a gap"
+              aria-label="Add a gap"
               maxlength="200"
               @keydown.enter="addGap"
             />

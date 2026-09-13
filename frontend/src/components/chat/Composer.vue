@@ -39,7 +39,7 @@
         </svg>
         <svg
           v-else
-          class="composer-icon composer-spinner pi-spin"
+          class="composer-icon composer-spinner spin"
           viewBox="0 0 20 20"
           width="20"
           height="20"
@@ -64,6 +64,7 @@
         :placeholder="placeholder"
         :disabled="disabled"
         :maxlength="MAX_DRAFT_LEN"
+        aria-label="Message the tutor"
         :aria-describedby="describedby || undefined"
         @input="onInput"
         @keydown="onKeydown"
@@ -80,7 +81,7 @@
       >
         <svg
           class="composer-icon"
-          :class="sending ? 'composer-spinner pi-spin' : ''"
+          :class="sending ? 'composer-spinner spin' : ''"
           viewBox="0 0 20 20"
           width="20"
           height="20"
@@ -407,8 +408,8 @@ defineExpose({ focus })
   outline-offset: 2px;
 }
 
-/* .pi-spin (primeicons, imported globally in main.js) does the rotation; the
-   arc is a whole <svg> so it turns about its own centre. */
+/* .spin (base.css) does the rotation; the arc is a whole <svg> so it turns
+   about its own centre. */
 @media (prefers-reduced-motion: reduce) {
   .composer-spinner {
     animation: none;
