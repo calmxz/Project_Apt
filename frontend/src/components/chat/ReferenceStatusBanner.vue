@@ -254,9 +254,11 @@ defineExpose({ refresh })
 .ref-chevron {
   margin-left: auto;
 }
+/* A still arc says nothing, and .ref-text already spells the state out beside
+   it, so the spinner simply leaves rather than freezing. */
 @media (prefers-reduced-motion: reduce) {
   .ref-spinner {
-    animation: none;
+    display: none;
   }
 }
 .ref-file-list {

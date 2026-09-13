@@ -145,4 +145,10 @@ onBeforeUnmount(() => errorBus.removeEventListener('api-error', onApiError))
 .fade-enter-from {
   opacity: 0;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-enter-active {
+    transition: none;
+  }
+}
 </style>

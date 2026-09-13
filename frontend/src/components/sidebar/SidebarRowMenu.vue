@@ -261,6 +261,13 @@ onBeforeUnmount(() => {
   color: var(--ink-learner);
 }
 
+/* The trigger appears at once instead of fading in. */
+@media (prefers-reduced-motion: reduce) {
+  .sb-row-menu-trigger {
+    transition: none;
+  }
+}
+
 /* On touch / coarse-pointer devices there is no hover to reveal the trigger, so
    keep it visible -- otherwise Rename/Pin/End are unreachable (a row tap just
    navigates). Fine pointers keep the opacity:0-until-hover behavior above. */

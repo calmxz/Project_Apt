@@ -792,11 +792,19 @@ async function onSignOut() {
   }
 }
 
+/* The contents, the backdrop and the drawer all arrive at their final state at
+   once: full opacity, no fade. Visibility still flips, so the closed drawer
+   stays out of the tab order. */
 @media (prefers-reduced-motion: reduce) {
   .sb-backdrop,
   .sidebar--expanded > *,
   .sidebar--collapsed > * {
     animation: none;
+  }
+
+  .sidebar--drawer,
+  .sidebar--drawer-open {
+    transition: visibility 0s;
   }
 }
 

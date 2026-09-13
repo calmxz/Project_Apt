@@ -141,6 +141,18 @@
 
     <div class="composer-hints" :class="{ 'is-near-limit': nearCharLimit }">
       <span class="composer-hint">Enter to send, Shift + Enter for a new line</span>
+      <!-- The spinner's caption in words. Hidden visually while the arc turns;
+           under reduced motion the arc goes and this line takes its place. The
+           buttons carry the same wording as their accessible name, so this is
+           never announced twice. -->
+      <span
+        v-if="uploading || sending"
+        class="composer-busy"
+        aria-hidden="true"
+        data-testid="composer-busy"
+      >
+        {{ uploading ? 'Uploading file' : 'Sending message' }}
+      </span>
       <span v-if="modelValue.length" class="composer-count" aria-live="polite" data-tabular>
         {{ modelValue.length.toLocaleString() }} / {{ MAX_DRAFT_LEN.toLocaleString() }}
       </span>
@@ -409,10 +421,36 @@ defineExpose({ focus })
 }
 
 /* .spin (base.css) does the rotation; the arc is a whole <svg> so it turns
-   about its own centre. */
+   about its own centre. The caption beside it is out of sight while it turns. */
+.composer-busy {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* A still arc says nothing, so under reduced motion it leaves and its caption
+   is written on the hint line instead, in pencil on the pitch. */
 @media (prefers-reduced-motion: reduce) {
   .composer-spinner {
-    animation: none;
+    display: none;
+  }
+
+  .composer-busy {
+    position: static;
+    width: auto;
+    height: auto;
+    margin: 0;
+    overflow: visible;
+    clip: auto;
+    font-size: var(--fs-label);
+    line-height: var(--line-pitch);
+    color: var(--pencil);
   }
 }
 

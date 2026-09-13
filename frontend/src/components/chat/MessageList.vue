@@ -159,9 +159,17 @@ function tickAt(i) {
   }
 }
 
+/* The dots stop pulsing and settle between the two ends of the pulse, so the
+   row still reads as pencil-weight waiting ink rather than a frozen frame. */
 @media (prefers-reduced-motion: reduce) {
   .typing-dots span {
     animation: none;
+    opacity: 0.6;
+  }
+
+  .msg-fade-enter-active,
+  .msg-fade-leave-active {
+    transition: none;
   }
 }
 

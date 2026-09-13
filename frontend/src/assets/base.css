@@ -373,14 +373,21 @@ body.sb-scroll-lock {
   overflow: hidden;
 }
 
+/* Reduced motion is an alternative, not a blanket kill (WCAG 2.3.3). A global
+   near-zero duration on every element froze the spinners on their first frame
+   and left a static arc with no replacement, so it is gone: every surface that
+   moves now declares its own final state beside its own keyframes, and only
+   the rules that belong to this file live here. reducedMotion.test.js keeps
+   the blanket from coming back. */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
+  html {
+    scroll-behavior: auto;
+  }
+
+  /* The skip link is the one control that travels; under reduced motion it
+     simply appears at its focused position. */
+  .skip-link {
+    transition: none;
   }
 }
 
@@ -410,6 +417,14 @@ body.sb-scroll-lock {
 }
 .spin {
   animation: spin 1s linear infinite;
+}
+
+/* A frozen arc says nothing, so each spinner's own stylesheet hides it under
+   reduced motion and shows its caption in words instead. */
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
 }
 
 /* Visually hidden but screen-reader-accessible. F-18: discrete stream
