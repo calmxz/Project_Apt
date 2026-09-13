@@ -13,13 +13,22 @@ import RouteProgressBar from './components/RouteProgressBar.vue'
 
 const { showError } = useToast()
 const route = useRoute()
-const { isDesktop, closeDrawer } = useSidebar()
+const { isDesktop, mode, closeDrawer } = useSidebar()
 
 const showShell = computed(() => route.meta?.sidebar !== false)
 // Sheet routes are the page itself: they run edge to edge so the ruled ground
 // and the margin rule reach the full width of the shell.
 const isSheet = computed(() => route.meta?.sheet === true)
 const { drawerOpen } = useSidebar()
+
+// Drives the shell's grid-template-columns transition (see .shell CSS below).
+// On mobile the drawer is position: fixed and out of flow, so no class is
+// applied and the column keeps its default "auto" (collapses to zero).
+const shellSidebarClass = computed(() => {
+  if (mode.value === 'expanded') return 'shell--sb-expanded'
+  if (mode.value === 'collapsed') return 'shell--sb-collapsed'
+  return null
+})
 
 // Close mobile drawer on every route change so tapping a session row
 // dismisses the overlay (mobile UX expectation).
@@ -56,7 +65,7 @@ onBeforeUnmount(() => errorBus.removeEventListener('api-error', onApiError))
 
 <template>
   <RouteProgressBar />
-  <div v-if="showShell" class="shell">
+  <div v-if="showShell" class="shell" :class="shellSidebarClass">
     <a class="skip-link" href="#main-content" data-testid="skip-link"> Skip to main content </a>
     <Sidebar />
     <div class="shell-main">
@@ -84,9 +93,24 @@ onBeforeUnmount(() => errorBus.removeEventListener('api-error', onApiError))
 <style>
 .shell {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: var(--shell-sidebar-col, auto) 1fr;
   min-height: 100vh;
   align-items: stretch;
+  transition: grid-template-columns var(--motion-base) ease;
+}
+
+.shell--sb-expanded {
+  --shell-sidebar-col: var(--sidebar-width-expanded, 18rem);
+}
+
+.shell--sb-collapsed {
+  --shell-sidebar-col: var(--sidebar-width-collapsed, 3rem);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell {
+    transition: none;
+  }
 }
 
 .shell-main {

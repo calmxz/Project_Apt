@@ -13,12 +13,15 @@ def _seed(db):
     base = datetime(2026, 6, 1, tzinfo=timezone.utc)
     prof = {
         "focus_target_gap": "ATP yield",
+        "knowledge_level": "intermediate",
         "mastered_concepts": ["a", "b", "c"],
         "confirmed_gaps": [],
         "last_session_summary": "[auto] recap of glycolysis",
     }
     db.add(SessionModel(id="s_rich", user_id=USER_ID, topic="Glycolysis",
                         topic_profile_json=json.dumps(prof)))
+    db.add(SessionModel(id="s_garbage", user_id=USER_ID, topic="Garbage",
+                        topic_profile_json=json.dumps({"knowledge_level": "expert"})))
     db.add(ChatMessage(session_id="s_rich", role="user", content="hi", created_at=base))
     db.add(ChatMessage(session_id="s_rich", role="assistant",
                        content="glycolysis nets 2 ATP per glucose",
@@ -44,6 +47,7 @@ def test_compute_enrichment_fields(db_session):
     assert rich.last_activity_at is not None
     assert rich.last_activity_at.tzinfo is not None
     assert rich.progress.focus_target_gap == "ATP yield"
+    assert rich.progress.level == "intermediate"
     assert rich.progress.mastered_count == 3
     # Backend stores the summary raw (with any [auto] prefix); stripping is frontend-side.
     assert rich.last_session_summary == "[auto] recap of glycolysis"
@@ -55,6 +59,11 @@ def test_compute_enrichment_fields(db_session):
     assert empty.last_session_summary is None
     assert empty.progress.mastered_count == 0
     assert empty.progress.focus_target_gap is None
+    assert empty.progress.level is None
+
+    garbage = enr["s_garbage"]
+    # Unrecognized knowledge_level value must not crash enrichment or leak through.
+    assert garbage.progress.level is None
 
 
 def test_compute_enrichment_empty_rows(db_session):

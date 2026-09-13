@@ -622,6 +622,34 @@ def aggregate_for_user(
         )
 
     session_ids = [s.id for s in sessions]
+
+    # Issue #288: a concept must never surface as both mastered and a confirmed
+    # gap. Most-recent-event-wins: the newest LearningEvent for the concept
+    # across this user's sessions decides. Correct -> mastered only, incorrect
+    # -> gap only. No event (or nothing decisive) -> gap only, the conservative
+    # reading. One query covers every conflicting concept.
+    conflicts = set(mastered_counts) & set(gap_counts)
+    if conflicts and session_ids:
+        rows = db.execute(
+            select(LearningEvent.gap_tested, LearningEvent.correct)
+            .where(
+                LearningEvent.session_id.in_(session_ids),
+                LearningEvent.gap_tested.in_(conflicts),
+            )
+            .order_by(LearningEvent.created_at.desc(), LearningEvent.id.desc())
+        ).all()
+        newest: dict[str, bool] = {}
+        for name, correct in rows:
+            if name not in newest:
+                newest[name] = bool(correct)
+    else:
+        newest = {}
+    for name in conflicts:
+        if newest.get(name) is True:
+            gap_counts.pop(name, None)
+        else:
+            mastered_counts.pop(name, None)
+
     concept_accuracy, weekly_mastery = _learning_insights(
         db, session_ids, now or datetime.now(timezone.utc)
     )

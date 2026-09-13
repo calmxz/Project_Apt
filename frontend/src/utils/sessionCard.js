@@ -77,13 +77,21 @@ export function cardStory(session) {
   return preview
 }
 
-// Structured signals for chip rendering on both surfaces. Focus first, mastered second.
-// Chip appears only when its signal is meaningful (focus set / mastered > 0).
+function capitalize(s) {
+  return s.charAt(0).toUpperCase() + s.slice(1)
+}
+
+// Structured signals for chip rendering on both surfaces. Focus, then level,
+// then mastered. Chip appears only when its signal is meaningful (focus set /
+// level set / mastered > 0).
 export function cardChips(session) {
   const chips = []
   const progress = session.progress
   if (progress && progress.focus_target_gap) {
     chips.push({ type: 'focus', label: progress.focus_target_gap })
+  }
+  if (progress && progress.level) {
+    chips.push({ type: 'level', label: capitalize(progress.level), level: progress.level })
   }
   const mastered = (progress && progress.mastered_count) || 0
   if (mastered > 0) {

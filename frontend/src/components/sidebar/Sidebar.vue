@@ -715,15 +715,14 @@ async function onSignOut() {
   border-right: 1px solid var(--rule-strong);
   z-index: 30;
   overflow: hidden;
-  transition: width var(--motion-base) ease;
 }
 
 .sidebar--expanded {
-  width: var(--sidebar-width-expanded, 18rem);
+  width: 100%;
 }
 
 .sidebar--collapsed {
-  width: var(--sidebar-width-collapsed, 3rem);
+  width: 100%;
 }
 
 /* Mobile drawer: the same paper, laid over the page. It appears and leaves in
@@ -774,10 +773,6 @@ async function onSignOut() {
 @media (prefers-reduced-motion: reduce) {
   .sb-backdrop {
     animation: none;
-  }
-
-  .sidebar {
-    transition: none;
   }
 }
 

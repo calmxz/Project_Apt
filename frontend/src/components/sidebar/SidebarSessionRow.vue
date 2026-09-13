@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useSidebar } from '@/composables/useSidebar.js'
 import { useSessionStore } from '@/stores/session.js'
 import { useToast } from '@/composables/useToast.js'
+import { levelStroke } from '@/components/chat/levelMark.js'
 import SidebarRowMenu from './SidebarRowMenu.vue'
 
 const props = defineProps({
@@ -29,13 +30,16 @@ const isCollapsed = computed(() => mode.value === 'collapsed')
 
 const tooltip = computed(() => props.session.topic || 'Untitled')
 
-// Row label cells. SessionListItem.progress carries only focus_target_gap and
-// mastered_count, so a row reads: topic, mastered count, focus cue underneath.
+// Row label cells. SessionListItem.progress carries focus_target_gap, level,
+// and mastered_count, so a row reads: topic, level mark, mastered count, focus
+// cue underneath.
 const masteredCount = computed(() => props.session.progress?.mastered_count || 0)
 const focusCue = computed(() => props.session.progress?.focus_target_gap || '')
+const level = computed(() => props.session.progress?.level || null)
 
 const rowLabel = computed(() => {
   const parts = [`Open session: ${props.session.topic || 'Untitled'}`]
+  if (level.value) parts.push(`level ${level.value}`)
   if (focusCue.value) parts.push(`focus ${focusCue.value}`)
   if (masteredCount.value) parts.push(`${masteredCount.value} mastered`)
   return parts.join(', ')
@@ -203,6 +207,21 @@ function commitRenameFromKey() {
               </svg>
               {{ session.topic || 'Untitled' }}
             </span>
+            <span v-if="level" class="sb-row-level" aria-hidden="true">
+              <svg
+                class="sb-row-level-icon"
+                viewBox="0 0 24 24"
+                width="14"
+                height="10"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                focusable="false"
+              >
+                <path d="M2 17 L22 7" :stroke-width="levelStroke(level)" />
+              </svg>
+            </span>
             <span v-if="masteredCount" class="sb-row-mastered" data-tabular aria-hidden="true">
               <svg
                 class="sb-row-mastered-icon"
@@ -311,6 +330,17 @@ function commitRenameFromKey() {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.sb-row-level {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+}
+
+.sb-row-level-icon {
+  flex-shrink: 0;
+  color: var(--pencil);
 }
 
 .sb-row-mastered {

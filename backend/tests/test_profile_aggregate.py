@@ -417,6 +417,94 @@ def test_weekly_mastery_diagnostic_correct_not_counted(db_session):
     assert sum(p.count for p in resp.weekly_mastery) == 0
 
 
+# --- issue #288: a concept must never appear in both aggregate lists ---
+
+
+def _seed_conflict_sessions(db):
+    """Session A lists "osmosis" as mastered; session B lists it as a gap."""
+    db.add(User(id=USER_ID))
+    db.flush()
+    _mk_session(
+        db,
+        "conf_a",
+        topic="conf-a",
+        created_at=T0,
+        profile=TopicProfile(
+            mastered_concepts=[{"name": "osmosis"}, {"name": "mitosis"}],
+            confirmed_gaps=[{"name": "meiosis"}],
+        ),
+    )
+    _mk_session(
+        db,
+        "conf_b",
+        topic="conf-b",
+        created_at=T0 + timedelta(days=1),
+        profile=TopicProfile(
+            mastered_concepts=[{"name": "mitosis"}],
+            confirmed_gaps=[{"name": "osmosis"}],
+        ),
+    )
+    db.commit()
+
+
+def _conflict_body(client):
+    r = client.get("/api/profile/aggregate", params={"user_id": USER_ID})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    return (
+        {c["concept"]: c for c in body["combined_mastered_concepts"]},
+        {g["concept"]: g for g in body["combined_confirmed_gaps"]},
+    )
+
+
+def test_conflict_newest_event_incorrect_keeps_gap_only(client, db_session):
+    _seed_conflict_sessions(db_session)
+    _seed_event_for_insights(db_session, "conf_a", "osmosis", True, T0)
+    _seed_event_for_insights(
+        db_session, "conf_b", "osmosis", False, T0 + timedelta(hours=1)
+    )
+
+    mastered, gaps = _conflict_body(client)
+    assert "osmosis" in gaps
+    assert "osmosis" not in mastered
+
+
+def test_conflict_newest_event_correct_keeps_mastered_only(client, db_session):
+    _seed_conflict_sessions(db_session)
+    _seed_event_for_insights(db_session, "conf_a", "osmosis", False, T0)
+    _seed_event_for_insights(
+        db_session, "conf_b", "osmosis", True, T0 + timedelta(hours=1)
+    )
+
+    mastered, gaps = _conflict_body(client)
+    assert "osmosis" in mastered
+    assert "osmosis" not in gaps
+
+
+def test_conflict_with_no_events_keeps_gap_only(client, db_session):
+    _seed_conflict_sessions(db_session)
+
+    mastered, gaps = _conflict_body(client)
+    assert "osmosis" in gaps
+    assert "osmosis" not in mastered
+
+
+def test_conflict_resolution_leaves_non_conflicting_concepts_untouched(
+    client, db_session
+):
+    _seed_conflict_sessions(db_session)
+    _seed_event_for_insights(
+        db_session, "conf_b", "osmosis", False, T0 + timedelta(hours=1)
+    )
+
+    mastered, gaps = _conflict_body(client)
+    assert mastered["mitosis"]["count"] == 2
+    assert mastered["mitosis"]["first_seen_session_id"] == "conf_a"
+    assert "mitosis" not in gaps
+    assert gaps["meiosis"]["count"] == 1
+    assert "meiosis" not in mastered
+
+
 def test_aggregate_makes_no_llm_call(client, db_session, monkeypatch):
     import litellm
 

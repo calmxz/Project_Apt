@@ -18,7 +18,7 @@ export function start() {
   routeProgress.progress = 0
   showTimer = setTimeout(() => {
     routeProgress.visible = true
-    // The component's CSS width transition animates the trickle toward 85%.
+    // The component's CSS transform transition animates the trickle toward 85%.
     routeProgress.progress = 0.85
   }, SHOW_DELAY_MS)
 }

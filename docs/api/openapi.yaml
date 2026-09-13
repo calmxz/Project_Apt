@@ -1300,6 +1300,11 @@ components:
       description: Lightweight learning-progress signal for a session card.
       properties:
         focus_target_gap: { type: [string, "null"], default: null }
+        level:
+          oneOf:
+            - $ref: "#/components/schemas/KnowledgeLevel"
+            - type: "null"
+          default: null
         mastered_count:   { type: integer, default: 0 }
 
     SessionListItem:
