@@ -123,7 +123,7 @@ const expanded = ref(false)
       </p>
       <button
         type="button"
-        class="cue-disclosure"
+        class="cue-disclosure hit-44"
         data-testid="cue-disclosure"
         :aria-expanded="expanded ? 'true' : 'false'"
         :aria-label="expanded ? 'Hide what the tutor knows' : 'Show what the tutor knows'"

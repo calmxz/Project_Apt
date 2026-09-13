@@ -10,7 +10,7 @@ const { openDrawer } = useSidebar()
   <div class="sb-strip" data-testid="sidebar-mobile-strip">
     <button
       type="button"
-      class="sb-strip-btn"
+      class="sb-strip-btn hit-44"
       aria-label="Open sessions sidebar"
       title="Sessions"
       data-testid="sidebar-mobile-hamburger"
@@ -38,7 +38,7 @@ const { openDrawer } = useSidebar()
     <div class="sb-strip-actions">
       <RouterLink
         to="/settings"
-        class="sb-strip-btn"
+        class="sb-strip-btn hit-44"
         aria-label="Settings"
         title="Settings"
         data-testid="strip-settings"

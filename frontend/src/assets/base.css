@@ -123,6 +123,20 @@
   --color-warning-text: #8a5a00;
   --color-info-text: #1d4fc4;
   --color-info-strong: #1d4fc4;
+
+  /* T3: theme-swatch preview inks (AppearanceTab). These draw the OTHER
+     theme's page regardless of which theme is active, so they cannot come
+     from the live semantic tokens above; declared once here, in plain
+     :root only, so the dark-token drift guard (tokenContrast.test.js) does
+     not see them as a dark-theme override. */
+  --sw-light-paper: #fcfcfa;
+  --sw-light-ink: #b9c6da;
+  --sw-light-rule: #d3dfee;
+  --sw-light-margin: #d8433a;
+  --sw-dark-paper: #141518;
+  --sw-dark-ink: #363b47;
+  --sw-dark-rule: #262a33;
+  --sw-dark-margin: #ff6a5e;
 }
 
 :root[data-theme='dark'] {
@@ -424,6 +438,19 @@ body.sb-scroll-lock {
 @media (prefers-reduced-motion: reduce) {
   .spin {
     animation: none;
+  }
+}
+
+/* R1: touch targets. Drawn box stays on the 28px pitch; the hit area grows
+   to >= 44px on coarse pointers via an invisible pseudo-element. */
+.hit-44 {
+  position: relative;
+}
+@media (pointer: coarse) {
+  .hit-44::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
   }
 }
 

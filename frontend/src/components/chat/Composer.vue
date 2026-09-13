@@ -12,7 +12,7 @@
     <div class="composer" :class="{ 'is-disabled': disabled }">
       <button
         type="button"
-        class="composer-attach"
+        class="composer-attach hit-44"
         data-testid="session-upload-btn"
         :disabled="disabled || uploading || locked"
         :aria-label="uploading ? 'Uploading file' : 'Attach a reference file'"
@@ -73,7 +73,7 @@
       <button
         v-if="streamState === 'idle'"
         type="button"
-        class="composer-send"
+        class="composer-send hit-44"
         data-testid="session-send"
         :disabled="disabled || !modelValue.trim() || sending"
         :aria-label="sending ? 'Sending message' : 'Send message'"
@@ -104,7 +104,7 @@
       <button
         v-else
         type="button"
-        class="composer-stop"
+        class="composer-stop hit-44"
         data-testid="session-stop"
         :disabled="streamState === 'stopping'"
         aria-label="Stop generating"

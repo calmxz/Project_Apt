@@ -318,7 +318,7 @@ async function onSignOut() {
       <button
         v-if="showCollapseToggle"
         type="button"
-        class="sb-toggle"
+        class="sb-toggle hit-44"
         :aria-label="isExpanded ? 'Collapse sidebar' : 'Expand sidebar'"
         :title="isExpanded ? 'Collapse sidebar' : 'Expand sidebar'"
         data-testid="sidebar-collapse-toggle"
@@ -350,7 +350,7 @@ async function onSignOut() {
       <button
         v-if="showDrawerClose"
         type="button"
-        class="sb-toggle sb-toggle--end"
+        class="sb-toggle sb-toggle--end hit-44"
         aria-label="Close sessions sidebar"
         title="Close"
         data-testid="sidebar-drawer-close"

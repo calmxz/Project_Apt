@@ -68,7 +68,7 @@ onBeforeUnmount(() => {
     <button
       ref="triggerEl"
       type="button"
-      class="sb-row-menu-trigger"
+      class="sb-row-menu-trigger hit-44"
       :class="{ 'is-open': open }"
       :aria-expanded="open"
       :aria-label="state === 'active' ? 'Session actions' : 'Ended session actions'"
