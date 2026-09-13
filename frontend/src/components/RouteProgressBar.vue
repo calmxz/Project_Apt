@@ -12,7 +12,7 @@ import { routeProgress } from '@/services/routeProgress.js'
     <div
       class="route-progress-bar"
       :class="{ done: routeProgress.progress >= 1 }"
-      :style="{ width: routeProgress.progress * 100 + '%' }"
+      :style="{ transform: 'scaleX(' + routeProgress.progress + ')' }"
     />
   </div>
 </template>
@@ -32,15 +32,17 @@ import { routeProgress } from '@/services/routeProgress.js'
 }
 
 .route-progress-bar {
+  width: 100%;
   height: 100%;
   background: var(--ink-learner);
+  transform-origin: left;
   /* Slow ease-out = the rule extends toward 85% while the chunk loads. */
-  transition: width 8s cubic-bezier(0.1, 0.6, 0.2, 1);
+  transition: transform 8s cubic-bezier(0.1, 0.6, 0.2, 1);
 }
 
 .route-progress-bar.done {
   transition:
-    width 150ms ease,
+    transform 150ms ease,
     opacity var(--motion-fast) linear;
   opacity: 0;
 }

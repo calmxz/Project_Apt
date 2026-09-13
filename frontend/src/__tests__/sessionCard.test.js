@@ -156,4 +156,21 @@ describe('cardChips', () => {
   it('handles null progress safely', () => {
     expect(cardChips(active({ progress: null }))).toEqual([])
   })
+
+  it('includes a level chip, ordered focus then level then mastered', () => {
+    const s = active({
+      progress: { focus_target_gap: 'ATP yield', level: 'intermediate', mastered_count: 2 },
+    })
+    expect(cardChips(s)).toEqual([
+      { type: 'focus', label: 'ATP yield' },
+      { type: 'level', label: 'Intermediate', level: 'intermediate' },
+      { type: 'mastered', label: '2 mastered', count: 2 },
+    ])
+  })
+
+  it('omits the level chip when level is null', () => {
+    expect(
+      cardChips(active({ progress: { focus_target_gap: null, level: null, mastered_count: 0 } })),
+    ).toEqual([])
+  })
 })

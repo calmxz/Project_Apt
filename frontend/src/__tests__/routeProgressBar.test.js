@@ -15,13 +15,13 @@ describe('RouteProgressBar', () => {
     expect(wrapper.find('[data-testid="route-progress"]').exists()).toBe(false)
   })
 
-  it('renders with width bound to progress and aria-hidden', async () => {
+  it('renders with transform bound to progress and aria-hidden', async () => {
     const wrapper = mount(RouteProgressBar)
     routeProgress.visible = true
     routeProgress.progress = 0.85
     await nextTick()
     const bar = wrapper.get('[data-testid="route-progress"]')
     expect(bar.attributes('aria-hidden')).toBe('true')
-    expect(bar.get('.route-progress-bar').attributes('style')).toContain('width: 85%')
+    expect(bar.get('.route-progress-bar').attributes('style')).toContain('transform: scaleX(0.85)')
   })
 })

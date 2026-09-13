@@ -375,6 +375,7 @@ class SessionProgress(BaseModel):
         extra="forbid",
     )
     focus_target_gap: str | None = None
+    level: Literal["beginner", "intermediate", "advanced"] | None = None
     mastered_count: int
 
 

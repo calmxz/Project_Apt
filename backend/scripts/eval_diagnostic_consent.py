@@ -5,12 +5,13 @@ Drives the tutor agent through the three consent assertions from the
 
 - content_question: first user turn is a substantive content question while
   DIAGNOSTIC is REQUIRED. The tutor must NOT force-fire ask_check_questions,
-  must include a genuine answer (LLM-judged), and must still make the offer.
+  must include a genuine answer (LLM-judged), and must NOT ask for the level
+  or offer a check in prose (issue #287: the app renders the consent card
+  under the reply, so a prose offer duplicates it).
 - explicit_quiz:    user explicitly asks to be quizzed. ask_check_questions
   must fire in that same turn with exactly 3 items.
-- decline_respected: user declines the offer conversationally. Later turns
-  must teach without re-offering the diagnostic and without unprompted
-  check questions.
+- decline_respected: user declines conversationally. Later turns must teach
+  without offering the diagnostic and without unprompted check questions.
 
 Per CLAUDE.md: PASS threshold is >=85% across assertions x replicates.
 
@@ -48,9 +49,9 @@ QUIZ_REQUEST = "Quiz me to find my level."
 DECLINE = "No thanks, just teach me."
 DEEPER = "Go deeper on how resistance affects current in a simple circuit."
 
-# The offer, in any phrasing the prompt allows: a quick check or telling the
-# tutor your level. Used both positively (A1 must offer) and negatively
-# (A3 later turns must not re-offer).
+# A prose level ask or check offer in any phrasing. Always a failure now:
+# A1 (first reply) and A3 (later turns) must both stay free of it, because
+# the consent card carries the choice (issue #287).
 OFFER_RE = re.compile(
     r"(3[- ]question|three[- ]question|quick check|tell me your (current )?level"
     r"|what('s| is) your (current )?level|beginner.{0,30}intermediate.{0,30}advanced)",
@@ -200,7 +201,7 @@ async def _trial_content_question() -> dict:
     offered = bool(OFFER_RE.search(text))
     answered = await _judge_answers_question(CONTENT_QUESTION, text)
     return {
-        "pass": (not forced) and offered and answered,
+        "pass": (not forced) and (not offered) and answered,
         "forced_quiz": forced,
         "offered": offered,
         "answered": answered,
