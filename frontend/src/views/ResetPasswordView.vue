@@ -1,60 +1,101 @@
 <template>
-  <section class="login">
-    <header class="head">
-      <Logo size="lg" variant="mark-only" />
-      <span class="folio">reset password</span>
-      <h1 class="title">Set a new password</h1>
-      <p class="lede">Choose a new password for your account.</p>
-    </header>
+  <section class="cover">
+    <div class="sheet">
+      <header class="cover-head">
+        <Logo size="md" variant="full" />
+        <h1 class="cover-title">Set a new password</h1>
+        <p class="cover-lede">
+          {{
+            hasRecovery
+              ? 'Choose a new password for your account.'
+              : 'Reset links work once and expire after an hour.'
+          }}
+        </p>
+      </header>
 
-    <form class="form" data-testid="reset-form" @submit.prevent="submit">
-      <div class="field">
-        <label for="password" class="label">New password</label>
-        <InputText
-          id="password"
-          v-model="password"
-          type="password"
-          data-testid="reset-password"
-          autocomplete="new-password"
-          placeholder="At least 8 characters"
-          required
-          class="input"
-        />
+      <form v-if="hasRecovery" class="form" data-testid="reset-form" @submit.prevent="submit">
+        <div class="field">
+          <label for="password" class="field-label">New password</label>
+          <div class="field-line">
+            <InputText
+              id="password"
+              v-model="password"
+              type="password"
+              data-testid="reset-password"
+              autocomplete="new-password"
+              placeholder="At least 8 characters"
+              required
+              class="field-input"
+            />
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="confirm" class="field-label">Confirm new password</label>
+          <div class="field-line">
+            <InputText
+              id="confirm"
+              v-model="confirm"
+              type="password"
+              data-testid="reset-confirm"
+              autocomplete="new-password"
+              placeholder="Re-enter password"
+              required
+              class="field-input"
+            />
+          </div>
+        </div>
+
+        <p v-if="mismatch" class="field-error" data-testid="reset-mismatch">
+          Passwords do not match.
+        </p>
+        <p v-if="error" class="status is-alert" role="alert" data-testid="reset-error">
+          {{ error }}
+        </p>
+        <p v-if="error" class="line">
+          Link expired?
+          <RouterLink class="link" to="/forgot" data-testid="reset-to-forgot"
+            >Request a new one</RouterLink
+          >
+        </p>
+
+        <div class="actions">
+          <button
+            type="submit"
+            class="cta"
+            data-testid="reset-submit"
+            :disabled="!canSubmit || submitting"
+          >
+            <span>{{ submitting ? 'Updating…' : 'Update password' }}</span>
+            <svg
+              class="cta-arrow"
+              viewBox="0 0 20 20"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="M3.5 10 L16.5 10" />
+              <path d="M11 4.5 L16.5 10 L11 15.5" />
+            </svg>
+          </button>
+        </div>
+      </form>
+
+      <div v-else class="form" data-testid="reset-no-session">
+        <p class="status is-alert" role="alert">This reset link is invalid or has expired.</p>
+        <p class="line">
+          <RouterLink class="link" to="/forgot" data-testid="reset-to-forgot"
+            >Request a new one</RouterLink
+          >
+        </p>
       </div>
-
-      <div class="field">
-        <label for="confirm" class="label">Confirm new password</label>
-        <InputText
-          id="confirm"
-          v-model="confirm"
-          type="password"
-          data-testid="reset-confirm"
-          autocomplete="new-password"
-          placeholder="Re-enter password"
-          required
-          class="input"
-        />
-      </div>
-
-      <p v-if="mismatch" class="hint" data-testid="reset-mismatch">Passwords do not match.</p>
-      <p v-if="error" class="error" role="alert" data-testid="reset-error">{{ error }}</p>
-      <p v-if="error" class="swap">
-        Link expired?
-        <RouterLink to="/forgot" data-testid="reset-to-forgot">Request a new one</RouterLink>
-      </p>
-
-      <div class="actions">
-        <button
-          type="submit"
-          class="cta"
-          data-testid="reset-submit"
-          :disabled="!canSubmit || submitting"
-        >
-          <span>{{ submitting ? 'Updating…' : 'Update password' }}</span>
-          <i class="pi pi-arrow-right" aria-hidden="true" />
-        </button>
-      </div>
-    </form>
+    </div>
   </section>
 </template>
 
@@ -74,6 +115,14 @@ const password = ref('')
 const confirm = ref('')
 const submitting = ref(false)
 const error = ref('')
+
+// Supabase exchanges the recovery hash asynchronously after init(), so the
+// hash itself counts as evidence of a valid link; the form must never hide
+// while "#...type=recovery" is in the URL.
+const recoveryHash = ref(
+  typeof window !== 'undefined' && window.location.hash.includes('type=recovery'),
+)
+const hasRecovery = computed(() => recoveryHash.value || !auth.ready || !!auth.session)
 
 const passwordValid = computed(() => password.value.length >= 8)
 const mismatch = computed(() => confirm.value.length > 0 && confirm.value !== password.value)
@@ -96,142 +145,209 @@ async function submit() {
 </script>
 
 <style scoped>
-.login {
-  max-width: 30rem;
-  margin: 0 auto;
-  padding: 2rem 0;
+/* The notebook cover: one centred sheet on the page ground. No card, no
+   shadow -- the fields' rules are the only lines. */
+.cover {
+  min-height: 100dvh;
+  box-sizing: border-box;
   display: flex;
-  flex-direction: column;
-  gap: 1.75rem;
-}
-
-.head {
-  display: flex;
-  flex-direction: column;
   align-items: center;
-  text-align: center;
-  gap: 0.5rem;
+  justify-content: center;
+  padding: var(--line-pitch) 1rem calc(var(--line-pitch) * 2);
+  background: var(--color-background);
 }
 
-.folio {
-  font-family: var(--font-sans);
-  font-size: var(--fs-label);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  font-weight: 600;
-  color: var(--color-accent-text);
+.sheet {
+  width: 100%;
+  max-width: 26rem;
 }
 
-.title {
+.cover-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding-bottom: calc(var(--line-pitch) - 1px);
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+.cover-title {
+  margin: var(--line-pitch) 0 0;
   font-family: var(--font-display);
-  font-size: clamp(1.875rem, 4vw, 2.5rem);
-  font-weight: 700;
+  font-size: var(--fs-h1);
+  font-weight: 600;
   letter-spacing: var(--tracking-display);
-  line-height: 1.1;
-  margin: 0;
-  color: var(--color-heading);
+  line-height: var(--line-pitch);
+  color: var(--ink);
 }
 
-.lede {
+.cover-lede {
   margin: 0;
-  font-size: 1rem;
-  color: var(--color-text-muted);
-  max-width: 24rem;
-  line-height: var(--lh-body);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
 }
 
 .form {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
-  padding: 1.75rem;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-lift);
+  gap: var(--line-pitch);
+  padding-top: var(--line-pitch);
 }
 
+/* A field is a label written in pencil above a line the learner writes on. */
 .field {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
 }
 
-.label {
+.field-label {
   font-family: var(--font-sans);
   font-size: var(--fs-label);
-  font-weight: 600;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-  color: var(--color-text-muted);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
 }
 
-.input :deep(input),
-.input.p-inputtext {
-  font-family: var(--font-sans);
-  font-size: 1rem;
-  background: var(--color-surface-soft);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  padding: 0.7rem 1.1rem;
+.field-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: end;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--rule-strong);
+  transition: border-color var(--motion-fast) ease;
+}
+
+.field-line:focus-within {
+  border-bottom-color: var(--ink-learner);
+}
+
+.field-input :deep(input),
+.field-input.p-inputtext {
   width: 100%;
+  height: var(--line-pitch);
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  outline: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--line-pitch);
+  color: var(--ink-learner);
+  caret-color: var(--ink-learner);
+}
+
+.field-input :deep(input):focus,
+.field-input.p-inputtext:focus {
+  box-shadow: none;
+  outline: 0;
+  border: 0;
+}
+
+.field-input :deep(input)::placeholder,
+.field-input.p-inputtext::placeholder {
+  color: var(--pencil);
+  opacity: 1;
+}
+
+/* Written, not stamped: the cover's action is a line of blue text with a
+   drawn arrow after the word. Filled blue stays in dialog footers. */
+.actions {
+  display: flex;
 }
 
 .cta {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1.5rem;
-  border-radius: var(--radius-pill);
-  background: var(--color-accent-strong);
-  color: #fff;
+  gap: 0.375rem;
+  padding: 0;
   border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-learner);
   font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 0.9375rem;
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  line-height: var(--line-pitch);
   cursor: pointer;
-  transition: filter var(--motion-fast) ease;
+  transition: color var(--motion-fast) ease;
 }
 
-.cta:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-  box-shadow: none;
+.cta > span {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .cta:not(:disabled):hover {
-  filter: brightness(1.08);
+  color: var(--color-accent-hover);
 }
 
-.actions {
-  display: flex;
-  justify-content: flex-end;
+.cta:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 
-.error {
+.cta:disabled {
+  color: var(--pencil);
+  cursor: default;
+}
+
+.cta:disabled > span {
+  text-decoration: none;
+}
+
+.cta-arrow {
+  flex: 0 0 auto;
+}
+
+/* One line of ink on paper inside a full rule. */
+.status {
   margin: 0;
-  color: var(--color-error-text);
-  font-size: 0.875rem;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-sm);
+  padding: 0.25rem 0.75rem;
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  line-height: var(--line-pitch);
+  color: var(--ink);
 }
 
-.hint {
-  margin: 0;
-  font-size: 0.875rem;
-  color: var(--color-text-muted);
+.status.is-alert {
+  border-color: var(--ink-marker);
+  color: var(--ink-marker-text);
 }
 
-.sent {
+.field-error {
   margin: 0;
-  font-size: 0.9375rem;
-  color: var(--color-success-text);
-  line-height: var(--lh-body);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  line-height: var(--line-pitch);
+  color: var(--ink-marker-text);
 }
 
-.swap {
+.line {
   margin: 0;
-  font-size: 0.875rem;
-  color: var(--color-text-muted);
-  text-align: center;
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
+}
+
+.link {
+  font-weight: 700;
+  color: var(--ink-learner);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.link:hover {
+  color: var(--color-accent-hover);
+}
+
+.link:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 </style>

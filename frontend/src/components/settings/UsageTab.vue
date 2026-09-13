@@ -1,11 +1,12 @@
 <template>
   <div class="usage-tab">
     <div v-if="loading" class="skel" data-testid="usage-tab-loading" aria-hidden="true">
-      <span class="skel-block skel-row-tall" />
+      <span class="skel-block" />
+      <span class="skel-block" />
       <span class="skel-block skel-short" />
     </div>
     <span v-if="loading" class="sr-only" role="status">Loading</span>
-    <p v-else-if="error" class="muted" data-testid="usage-error">
+    <p v-else-if="error" class="error" data-testid="usage-error">
       Usage data is unavailable right now.
     </p>
     <UsagePanel v-else-if="usage" :usage="usage" />
@@ -35,39 +36,29 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.muted {
-  color: var(--color-text-muted);
+/* A failed read is a line of text-safe red on the pitch, not a banner. */
+.error {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--line-pitch);
+  color: var(--ink-marker-text);
 }
 
+/* Skeleton: pencil-weight rules on the pitch, no shimmer and no fill. */
 .skel {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
 }
 
 .skel-block {
-  height: 1.25rem;
-  border-radius: var(--radius-md);
-  background: var(--color-surface-soft);
-  animation: skel-pulse 1.4s ease-in-out infinite;
-}
-
-.skel-row-tall {
-  height: 5.5rem;
+  display: block;
+  height: calc(var(--line-pitch) - 1px);
+  border-bottom: 1px solid var(--rule-strong);
 }
 
 .skel-short {
   width: 55%;
-}
-
-@keyframes skel-pulse {
-  0%,
-  100% {
-    opacity: 0.65;
-  }
-  50% {
-    opacity: 0.35;
-  }
 }
 
 .sr-only {

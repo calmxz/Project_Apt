@@ -1,9 +1,8 @@
 <template>
   <section class="home">
-    <h1 class="title">What do you want to learn?</h1>
+    <h1 class="home-head">What do you want to learn?</h1>
 
-    <p v-if="store.loading && !store.sessions.length" class="muted">Loading...</p>
-    <p v-else-if="store.error && !store.sessions.length" class="error" data-testid="home-error">
+    <p v-if="store.error && !store.sessions.length" class="error" data-testid="home-error">
       {{ friendlyError(store.error) }}
     </p>
 
@@ -15,12 +14,12 @@
           v-model="quickTopic"
           class="quick-input"
           data-testid="home-quick-topic"
-          placeholder="e.g. Recursion, the Krebs cycle, French passe compose..."
+          placeholder="a topic, a chapter, a thing that will not stick..."
           autocomplete="off"
           @keydown.enter="startQuick"
         />
 
-        <div class="quick-picks" aria-label="Quick topic ideas">
+        <p class="quick-picks" role="group" aria-label="Quick topic ideas">
           <button
             v-for="pick in quickPicks"
             :key="pick"
@@ -30,18 +29,29 @@
           >
             {{ pick }}
           </button>
-        </div>
+        </p>
 
-        <button
-          type="button"
-          class="cta-primary"
-          data-testid="home-quick-go"
-          :disabled="busy"
-          @click="startQuick"
-        >
-          <span>{{ startLabel }}</span
-          ><i class="pi pi-arrow-right" aria-hidden="true" />
-        </button>
+        <p class="quick-go">
+          <button
+            type="button"
+            class="cta-primary"
+            data-testid="home-quick-go"
+            :disabled="busy"
+            @click="startQuick"
+          >
+            <span>{{ startLabel }}</span>
+            <svg
+              class="cta-mark"
+              viewBox="0 0 20 20"
+              width="18"
+              height="18"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="M4 10 L15 10 M10.5 5.5 L15 10 L10.5 14.5" />
+            </svg>
+          </button>
+        </p>
       </div>
       <StartTopicIntercept
         v-if="stage === 'intercept'"
@@ -53,6 +63,45 @@
         @start-fresh="startFresh"
         @cancel="cancel"
       />
+
+      <section v-if="recent.length" class="recent" data-testid="home-recent">
+        <h2 class="recent-head">Recent</h2>
+        <ul class="recent-list">
+          <li
+            v-for="s in recent"
+            :key="s.id"
+            class="recent-row"
+            :class="{ 'recent-row--ended': !!s.ended_at }"
+            :data-testid="`home-recent-${s.id}`"
+          >
+            <RouterLink
+              class="recent-link"
+              :to="{ name: 'session', params: { id: s.id } }"
+              :aria-label="recentLabel(s)"
+            >
+              <span class="recent-label">
+                <span class="recent-topic">{{ s.topic || 'Untitled' }}</span>
+                <span v-if="masteredOf(s)" class="recent-mastered" data-tabular aria-hidden="true">
+                  <svg
+                    class="recent-mark recent-mark--tick"
+                    viewBox="0 0 12 12"
+                    width="10"
+                    height="10"
+                    aria-hidden="true"
+                    focusable="false"
+                  >
+                    <path d="M2 6.5 L4.8 9.2 L10 3.2" />
+                  </svg>
+                  {{ masteredOf(s) }}
+                </span>
+              </span>
+              <span v-if="focusOf(s)" class="recent-focus" aria-hidden="true">{{
+                focusOf(s)
+              }}</span>
+            </RouterLink>
+          </li>
+        </ul>
+      </section>
     </template>
   </section>
 </template>
@@ -69,6 +118,8 @@ import { friendlyError } from '../lib/errors.js'
 const router = useRouter()
 const store = useSessionStore()
 const quickTopic = ref('')
+
+const RECENT_LIMIT = 5
 
 const quickPicks = [
   'Recursion',
@@ -95,6 +146,27 @@ watch(quickTopic, () => cancel())
 
 const startLabel = computed(() => (busy.value ? 'Starting...' : 'Start'))
 
+// The contents rows under the prompt. SessionListItem.progress carries only
+// focus_target_gap and mastered_count, so a row reads: topic, mastered count,
+// focus cue underneath -- the same three-cell label the sidebar uses, minus
+// the level cell the API does not serve here.
+const recent = computed(() => (store.sessions || []).slice(0, RECENT_LIMIT))
+
+function masteredOf(s) {
+  return s?.progress?.mastered_count || 0
+}
+
+function focusOf(s) {
+  return s?.progress?.focus_target_gap || ''
+}
+
+function recentLabel(s) {
+  const parts = [`Open session: ${s.topic || 'Untitled'}`]
+  if (focusOf(s)) parts.push(`focus ${focusOf(s)}`)
+  if (masteredOf(s)) parts.push(`${masteredOf(s)} mastered`)
+  return parts.join(', ')
+}
+
 onMounted(() => {
   // U-05: boot-path load - failure is handled locally (store error state), so
   // a transient backend hiccup must not toast on Home's first mount. Silence
@@ -109,44 +181,38 @@ function startQuick() {
 </script>
 
 <style scoped>
+/* A fresh sheet: the question is the one display line, the topic is written on
+   the rule under it, and what you studied before sits below as contents rows. */
 .home {
-  max-width: 42rem;
-  /* Fill the viewport minus .page-inner's top/bottom padding (App.vue) so
-     the prompt block sits vertically centered rather than pinned to the top. */
-  min-height: calc(100dvh - clamp(2rem, 6vw, 4.5rem) - 4rem);
+  max-width: 44rem;
   margin: 0 auto;
+  padding-top: var(--line-pitch);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2rem;
+  gap: var(--line-pitch);
 }
 
-.title {
-  font-family: var(--font-display);
-  font-size: clamp(2.25rem, 4vw, 2.75rem);
-  font-weight: 700;
-  letter-spacing: var(--tracking-display);
-  line-height: 1.05;
-  color: var(--color-heading);
-  text-align: center;
+.home-head {
   margin: 0;
-}
-
-.muted {
-  color: var(--color-text-muted);
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: var(--tracking-display);
+  line-height: var(--lh-display);
+  color: var(--ink);
 }
 
 .error {
-  color: var(--color-error-text);
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--line-pitch);
+  color: var(--ink-marker-text);
 }
 
 .quick {
-  width: 100%;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 1rem;
 }
 
 .sr-only {
@@ -161,60 +227,55 @@ function startQuick() {
   border: 0;
 }
 
+/* Field on a rule: no box, no radius, one bottom rule that inks on focus. */
 .quick-input {
   display: block;
   width: 100%;
-  padding: 1.125rem 1.5rem;
-  border-radius: var(--radius-pill);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  color: var(--color-heading);
-  font-family: var(--font-display);
-  font-size: 1.25rem;
-  font-weight: 500;
-  letter-spacing: var(--tracking-tight);
-  box-shadow: var(--shadow-paper);
-  transition: border-color var(--motion-fast) ease;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--rule-strong);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-learner);
+  caret-color: var(--ink-learner);
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: calc(var(--line-pitch) - 1px);
 }
 
 .quick-input::placeholder {
-  color: var(--color-text-faint);
-  font-weight: 400;
-}
-
-.quick-input:hover {
-  border-color: var(--color-border-strong);
+  color: var(--pencil);
 }
 
 .quick-input:focus {
   outline: none;
-  border-color: var(--color-accent);
+  border-bottom-color: var(--ink-learner);
 }
 
+/* Quick picks are cue words on the next rule, not chips. */
 .quick-picks {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.5rem;
+  gap: 0 1.25rem;
+  margin: 0;
+  line-height: var(--line-pitch);
 }
 
 .quick-pick {
-  padding: 0.375rem 0.875rem;
-  border-radius: var(--radius-pill);
+  padding: 0;
+  border: 0;
   background: transparent;
-  border: 1px solid var(--color-border);
-  color: var(--color-text-muted);
+  color: var(--ink-learner);
   font-family: var(--font-sans);
-  font-size: 0.8125rem;
+  font-size: var(--fs-body);
+  line-height: var(--line-pitch);
   cursor: pointer;
-  transition:
-    border-color var(--motion-fast) ease,
-    color var(--motion-fast) ease;
 }
 
 .quick-pick:hover {
-  border-color: var(--color-border-strong);
-  color: var(--color-heading);
+  color: var(--color-accent-hover);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .quick-pick:focus-visible {
@@ -222,39 +283,165 @@ function startQuick() {
   outline-offset: 2px;
 }
 
+.quick-go {
+  margin: 0;
+  padding-top: var(--line-pitch);
+  line-height: var(--line-pitch);
+}
+
+/* Written, not stamped: the default action is a line of blue text with a
+   drawn arrow after the word. */
 .cta-primary {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1.625rem;
-  border-radius: var(--radius-pill);
-  background: var(--color-accent-strong);
-  color: #ffffff;
+  gap: 0.375rem;
+  padding: 0;
   border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-learner);
   font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 0.9375rem;
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  line-height: var(--line-pitch);
   cursor: pointer;
-  transition:
-    filter var(--motion-fast) ease,
-    opacity var(--motion-fast) ease;
+}
+
+.cta-primary > span {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .cta-primary:hover:not(:disabled) {
-  filter: brightness(1.08);
-}
-
-.cta-primary:active:not(:disabled) {
-  filter: brightness(0.95);
+  color: var(--color-accent-hover);
 }
 
 .cta-primary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+  color: var(--pencil);
+  cursor: default;
+}
+
+.cta-primary:disabled > span {
+  text-decoration: none;
+}
+
+.cta-mark {
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .cta-primary:focus-visible {
   outline: 2px solid var(--color-accent-ring);
-  outline-offset: 3px;
+  outline-offset: 2px;
+}
+
+/* Contents rows on the ruled ground. */
+.recent-head {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  line-height: var(--line-pitch);
+  color: var(--ink);
+}
+
+.recent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background-image: var(--ruled-bg);
+  background-position-y: var(--ruled-offset);
+  background-attachment: local;
+}
+
+.recent-row {
+  margin: 0;
+}
+
+.recent-row:hover {
+  background: var(--color-surface-soft);
+}
+
+.recent-link {
+  display: flex;
+  flex-direction: column;
+  min-height: var(--line-pitch);
+  padding: 0 0.25rem 0 0.75rem;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.recent-link:focus-visible {
+  outline: 2px solid var(--ink-learner);
+  outline-offset: -2px;
+}
+
+.recent-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  line-height: var(--line-pitch);
+}
+
+.recent-topic {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recent-row--ended .recent-topic {
+  color: var(--pencil);
+}
+
+.recent-mastered {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3125rem;
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  color: var(--pencil);
+}
+
+.recent-mark {
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.recent-mark--tick {
+  stroke: var(--ink-learner);
+}
+
+/* Line two: the focus cue in ink, marked in red, never set in red. */
+.recent-focus {
+  min-width: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  line-height: var(--line-pitch);
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-decoration: underline;
+  text-decoration-color: var(--ink-marker);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
+@media (max-width: 599px) {
+  .quick-picks {
+    gap: 0 1rem;
+  }
 }
 </style>

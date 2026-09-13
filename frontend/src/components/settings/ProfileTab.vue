@@ -6,7 +6,7 @@
     <p v-else class="lede">Snapshot of everything the tutor has learned about you.</p>
 
     <div v-if="loading" class="skel" data-testid="agg-loading" aria-hidden="true">
-      <span class="skel-block skel-row-tall" />
+      <span class="skel-block" />
       <span class="skel-block" />
       <span class="skel-block skel-short" />
     </div>
@@ -18,122 +18,153 @@
         v-if="data.total_sessions === 0"
         data-testid="agg-empty"
         tone="celebrate"
-        eyebrow="page 01"
         headline="No sessions yet"
         subtext="Start one — your profile builds itself as you go."
       >
         <template #cta>
-          <router-link to="/new" class="cta-primary">
-            <span>Start your first session</span>
-            <i class="pi pi-arrow-right" aria-hidden="true" />
-          </router-link>
+          <router-link to="/new" class="link">Start your first session</router-link>
         </template>
       </EmptyState>
 
       <template v-else>
-        <div class="stats" data-testid="agg-stats">
-          <div class="stat stat-coral">
-            <span class="stat-glyph"><i class="pi pi-bookmark" aria-hidden="true" /></span>
-            <span class="stat-label">Sessions</span>
-            <span class="stat-value">{{ data.total_sessions }}</span>
-            <span class="stat-sub">
-              {{ data.active_sessions }} active · {{ data.ended_sessions }} ended
-            </span>
-          </div>
-          <div class="stat stat-green">
-            <span class="stat-glyph"><i class="pi pi-check-circle" aria-hidden="true" /></span>
-            <span class="stat-label">Mastered</span>
-            <span class="stat-value">{{ data.combined_mastered_concepts.length }}</span>
-            <span class="stat-sub">unique concepts</span>
-          </div>
-          <div class="stat stat-yellow">
-            <span class="stat-glyph"><i class="pi pi-bolt" aria-hidden="true" /></span>
-            <span class="stat-label">Gaps</span>
-            <span class="stat-value">{{ data.combined_confirmed_gaps.length }}</span>
-            <span class="stat-sub">to revisit</span>
-          </div>
-          <div class="stat stat-blue">
-            <span class="stat-glyph"><i class="pi pi-comments" aria-hidden="true" /></span>
-            <span class="stat-label">Events</span>
-            <span class="stat-value">{{ data.total_learning_events }}</span>
-            <span class="stat-sub">check-questions</span>
-          </div>
-        </div>
+        <p class="counts" data-testid="agg-stats" data-tabular>
+          {{ plural(data.total_sessions, 'session') }} ({{ data.active_sessions }} active,
+          {{ data.ended_sessions }} ended) · {{ data.combined_mastered_concepts.length }} mastered ·
+          {{ plural(data.combined_confirmed_gaps.length, 'gap') }} ·
+          {{ plural(data.total_learning_events, 'check-question') }}
+        </p>
 
-        <div class="dist" data-testid="agg-dist">
-          <h2 class="section-title">Knowledge level distribution</h2>
-          <p v-if="distLine" class="glance-line">{{ distLine }}</p>
-        </div>
-
-        <div class="glance" data-testid="agg-insights">
-          <h2 class="sr-only">At a glance</h2>
-          <p class="glance-line" data-testid="glance-mastery">{{ masteryLine }}</p>
-          <p v-if="attentionItems.length" class="glance-line" data-testid="glance-attention">
-            <span>Needs attention: </span>
-            <template v-for="(c, i) in attentionItems" :key="c.concept">
-              <span v-if="i > 0">, </span>
-              <router-link
-                :to="{ name: 'session-profile', params: { id: c.first_seen_session_id } }"
-                class="glance-link"
-                >{{ c.concept }}</router-link
-              >
-              <span> ({{ c.pct }}%)</span>
-            </template>
-          </p>
-        </div>
-
-        <div class="two-col">
-          <div class="col" data-testid="agg-mastered">
-            <h2 class="section-title">
-              <i class="pi pi-check-circle col-icon col-icon-green" aria-hidden="true" />
-              Mastered concepts
-            </h2>
-            <p v-if="!data.combined_mastered_concepts.length" class="muted">None yet.</p>
-            <ul v-else class="chip-list">
-              <li
-                v-for="item in data.combined_mastered_concepts"
-                :key="`m-${item.concept}`"
-                class="chip chip-mastered"
-              >
-                <span class="chip-name">{{ item.concept }}</span>
-                <router-link
-                  :to="{ name: 'session-profile', params: { id: item.first_seen_session_id } }"
-                  class="chip-meta"
-                  :title="`seen in ${item.count} ${item.count === 1 ? 'session' : 'sessions'}`"
+        <section class="sec" data-testid="agg-dist">
+          <h2 class="sec-title">Knowledge level distribution</h2>
+          <ul v-if="distEntries.length" class="cue-list">
+            <li v-for="e in distEntries" :key="e.key" class="cue-entry" data-testid="dist-entry">
+              <span class="cue-line">
+                <svg
+                  class="lvl-mark"
+                  :class="{ 'lvl-mark--unset': e.key === 'unknown' }"
+                  viewBox="0 0 24 24"
+                  width="18"
+                  height="12"
+                  aria-hidden="true"
+                  focusable="false"
                 >
-                  ×{{ item.count }}
+                  <path d="M2 17 L22 7" :stroke-width="levelStroke(e.key)" />
+                </svg>
+                <span class="lvl-word">{{ e.key }}</span>
+                <span class="lvl-count" data-tabular>{{ e.count }}</span>
+              </span>
+            </li>
+          </ul>
+        </section>
+
+        <section class="sec" data-testid="agg-insights">
+          <h2 class="sec-title">At a glance</h2>
+          <p class="glance-line" data-testid="glance-mastery">{{ masteryLine }}</p>
+
+          <template v-if="attentionItems.length">
+            <h3 class="sec-title sec-title--attn">Needs attention</h3>
+            <ul class="cue-list" data-testid="glance-attention">
+              <li v-for="c in attentionItems" :key="c.concept" class="cue-entry">
+                <router-link
+                  :to="{ name: 'session-profile', params: { id: c.first_seen_session_id } }"
+                  class="attn-link"
+                >
+                  <svg
+                    class="cue-mark cue-mark--attn"
+                    viewBox="0 0 12 12"
+                    width="12"
+                    height="12"
+                    aria-hidden="true"
+                    focusable="false"
+                  >
+                    <path d="M1 6 L11 6" />
+                  </svg>
+                  <span class="attn-word">{{ c.concept }}</span>
+                  <span class="attn-pct" data-tabular>({{ c.pct }}%)</span>
                 </router-link>
               </li>
             </ul>
-          </div>
+          </template>
+        </section>
 
-          <div class="col" data-testid="agg-gaps">
-            <h2 class="section-title">
-              <i class="pi pi-bolt col-icon col-icon-yellow" aria-hidden="true" />
-              Confirmed gaps
-            </h2>
-            <p v-if="!data.combined_confirmed_gaps.length" class="muted">None yet.</p>
-            <ul v-else class="chip-list">
+        <div class="cue-cols">
+          <section class="sec" data-testid="agg-gaps">
+            <h2 class="sec-title">Gaps</h2>
+            <p v-if="!data.combined_confirmed_gaps.length" class="cue-none">None yet.</p>
+            <ul v-else class="cue-list">
               <li
                 v-for="item in data.combined_confirmed_gaps"
                 :key="`g-${item.concept}`"
-                class="chip chip-gap"
+                class="cue-entry"
               >
-                <span class="chip-name">{{ item.concept }}</span>
-                <router-link
-                  :to="{ name: 'session-profile', params: { id: item.first_seen_session_id } }"
-                  class="chip-meta"
-                  :title="`seen in ${item.count} ${item.count === 1 ? 'session' : 'sessions'}`"
-                >
-                  ×{{ item.count }}
-                </router-link>
+                <span class="cue-line">
+                  <svg
+                    class="cue-mark cue-mark--gap"
+                    viewBox="0 0 12 12"
+                    width="12"
+                    height="12"
+                    aria-hidden="true"
+                    focusable="false"
+                  >
+                    <circle cx="6" cy="6" r="4" />
+                  </svg>
+                  <span class="cue-word">{{ item.concept }}</span>
+                  <router-link
+                    :to="{ name: 'session-profile', params: { id: item.first_seen_session_id } }"
+                    class="cue-count"
+                    data-tabular
+                    :title="`seen in ${item.count} ${item.count === 1 ? 'session' : 'sessions'}`"
+                  >
+                    ×{{ item.count }}
+                  </router-link>
+                </span>
+                <span v-if="topicFor(item.first_seen_session_id)" class="cue-sub">
+                  {{ topicFor(item.first_seen_session_id) }}
+                </span>
               </li>
             </ul>
-          </div>
+          </section>
+
+          <section class="sec" data-testid="agg-mastered">
+            <h2 class="sec-title">Mastered</h2>
+            <p v-if="!data.combined_mastered_concepts.length" class="cue-none">None yet.</p>
+            <ul v-else class="cue-list">
+              <li
+                v-for="item in data.combined_mastered_concepts"
+                :key="`m-${item.concept}`"
+                class="cue-entry"
+              >
+                <span class="cue-line">
+                  <svg
+                    class="cue-mark cue-mark--tick"
+                    viewBox="0 0 12 12"
+                    width="12"
+                    height="12"
+                    aria-hidden="true"
+                    focusable="false"
+                  >
+                    <path d="M2 6.5 L4.8 9.2 L10 3.2" />
+                  </svg>
+                  <span class="cue-word">{{ item.concept }}</span>
+                  <router-link
+                    :to="{ name: 'session-profile', params: { id: item.first_seen_session_id } }"
+                    class="cue-count"
+                    data-tabular
+                    :title="`seen in ${item.count} ${item.count === 1 ? 'session' : 'sessions'}`"
+                  >
+                    ×{{ item.count }}
+                  </router-link>
+                </span>
+                <span v-if="topicFor(item.first_seen_session_id)" class="cue-sub">
+                  {{ topicFor(item.first_seen_session_id) }}
+                </span>
+              </li>
+            </ul>
+          </section>
         </div>
 
-        <div class="recent" data-testid="agg-recent">
-          <h2 class="section-title">Recent topics</h2>
+        <section class="sec" data-testid="agg-recent">
+          <h2 class="sec-title">Recent topics</h2>
           <ul class="recent-list">
             <li v-for="t in data.recent_topics" :key="t.id" class="recent-row">
               <router-link
@@ -142,30 +173,25 @@
               >
                 <span class="recent-topic">{{ t.topic || 'untitled' }}</span>
                 <span class="recent-when">{{ formatRelative(t.created_at) }}</span>
-                <i class="pi pi-arrow-right recent-arrow" aria-hidden="true" />
               </router-link>
             </li>
           </ul>
-        </div>
+        </section>
       </template>
     </template>
 
-    <section class="card" data-testid="profile-feedback">
-      <h2 class="card-title">
-        <i class="pi pi-comments card-icon" aria-hidden="true" />
-        Feedback style
-      </h2>
+    <section class="sec sec--ruled" data-testid="profile-feedback">
+      <h2 class="sec-title">Feedback style</h2>
       <FeedbackStylePicker v-model="feedback" :options="feedbackOptions" />
       <div class="actions">
         <button
           type="button"
-          class="save-btn"
+          class="text-btn"
           data-testid="profile-feedback-save"
           :disabled="!feedbackDirty || savingFeedback"
           @click="saveFeedback"
         >
-          <i class="pi pi-check" aria-hidden="true" />
-          <span>Save feedback style</span>
+          Save feedback style
         </button>
       </div>
     </section>
@@ -177,6 +203,7 @@ import { computed, onMounted, ref } from 'vue'
 
 import EmptyState from '../EmptyState.vue'
 import FeedbackStylePicker from '../FeedbackStylePicker.vue'
+import { levelStroke } from '../chat/levelMark.js'
 import { friendlyError } from '../../lib/errors.js'
 import { getAggregateProfile } from '../../services/profileApi.js'
 import { formatRelative } from '../../utils/formatDate.js'
@@ -192,12 +219,12 @@ const error = ref('')
 
 const levelKeys = ['beginner', 'intermediate', 'advanced', 'unknown']
 
-const distLine = computed(() => {
+// The distribution is written as cue entries: the level stroke at its own
+// weight, the level word in pencil, the count in pencil label. Levels nobody
+// sits at stay off the page rather than reading "0 advanced".
+const distEntries = computed(() => {
   const d = data.value?.knowledge_level_distribution || {}
-  return levelKeys
-    .filter((k) => (d[k] || 0) > 0)
-    .map((k) => `${d[k]} ${k}`)
-    .join(' · ')
+  return levelKeys.filter((k) => (d[k] || 0) > 0).map((k) => ({ key: k, count: d[k] }))
 })
 
 const masteryLine = computed(() => {
@@ -209,6 +236,20 @@ const masteryLine = computed(() => {
   const thisWeek = Math.min(weeks.length ? weeks[weeks.length - 1].count : 0, total)
   return `${thisWeek} mastered this week · ${total} total`
 })
+
+// Counts are written the way the cue column writes them: "1 gap", not
+// "1 gaps". "mastered" is a participle and never takes a plural.
+function plural(n, word) {
+  return `${n} ${word}${n === 1 ? '' : 's'}`
+}
+
+// The session a cue was first written in, when it is one of the recent topics
+// the payload carries; the aggregate API sends ids, not names.
+function topicFor(sessionId) {
+  if (!sessionId) return ''
+  const hit = (data.value?.recent_topics || []).find((t) => t.id === sessionId)
+  return hit?.topic || ''
+}
 
 const attentionItems = computed(() =>
   (data.value?.concept_accuracy || [])
@@ -261,381 +302,340 @@ async function saveFeedback() {
 </script>
 
 <style scoped>
+/* The aggregate profile is the cue column at full width: what the tutor knows
+   about you across every session, written as cue words on the pitch. No stat
+   cards, no chips, no fills. */
 .profile-tab {
   max-width: 72rem;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 1.75rem;
 }
 
 .lede {
   margin: 0;
-  color: var(--color-text-muted);
-  max-width: 32rem;
-  font-size: 1rem;
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
 }
 
-.muted {
-  color: var(--color-text-muted);
+.counts {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
 }
+
 .error {
-  color: var(--color-error-text);
-}
-
-.cta-primary {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1.375rem;
-  border-radius: var(--radius-pill);
-  background: var(--color-accent-strong);
-  color: #ffffff;
-  border: 0;
+  margin: 0;
   font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 0.9375rem;
-  text-decoration: none;
-  cursor: pointer;
-  transition: filter var(--motion-fast) ease;
+  font-size: var(--fs-body);
+  line-height: var(--line-pitch);
+  color: var(--ink-marker-text);
 }
 
-.cta-primary:hover {
-  filter: brightness(1.08);
-}
-
-/* Colorful stat cards */
-.stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-  gap: 1rem;
-}
-
-.stat {
-  position: relative;
+.sec {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  padding: 1.125rem 1.25rem;
-  border-radius: var(--radius-card);
-  border: 1px solid var(--color-border);
-  box-shadow: var(--shadow-lift);
-  background: var(--color-surface);
-  overflow: hidden;
-  transition: transform var(--motion-base) var(--motion-bounce);
+  align-items: flex-start;
+  padding-top: var(--line-pitch);
 }
 
-.stat:hover {
-  transform: translateY(-2px);
+.sec--ruled {
+  margin-top: var(--line-pitch);
+  padding-top: calc(var(--line-pitch) - 1px);
+  border-top: 1px solid var(--rule-strong);
 }
 
-.stat-glyph {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
-  width: 2rem;
-  height: 2rem;
-  border-radius: var(--radius-pill);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.95rem;
-  opacity: 0.85;
-}
-
-.stat-coral {
-  background: linear-gradient(180deg, var(--accent-coral-50) 0%, var(--color-surface) 60%);
-}
-:root[data-theme='dark'] .stat-coral {
-  background: linear-gradient(180deg, rgba(255, 107, 92, 0.18) 0%, var(--color-surface) 70%);
-}
-.stat-coral .stat-glyph {
-  background: var(--accent-coral-200);
-  color: var(--accent-coral-700);
-}
-
-.stat-green {
-  background: linear-gradient(180deg, rgba(34, 197, 94, 0.15) 0%, var(--color-surface) 60%);
-}
-:root[data-theme='dark'] .stat-green {
-  background: linear-gradient(180deg, rgba(52, 215, 123, 0.16) 0%, var(--color-surface) 70%);
-}
-.stat-green .stat-glyph {
-  background: rgba(34, 197, 94, 0.25);
-  color: var(--color-success-text);
-}
-
-.stat-yellow {
-  background: linear-gradient(180deg, rgba(255, 176, 32, 0.18) 0%, var(--color-surface) 60%);
-}
-:root[data-theme='dark'] .stat-yellow {
-  background: linear-gradient(180deg, rgba(255, 197, 77, 0.18) 0%, var(--color-surface) 70%);
-}
-.stat-yellow .stat-glyph {
-  background: rgba(255, 176, 32, 0.28);
-  color: var(--color-warning-text);
-}
-:root[data-theme='dark'] .stat-yellow .stat-glyph {
-  color: var(--signal-warning);
-}
-
-.stat-blue {
-  background: linear-gradient(180deg, rgba(91, 141, 239, 0.15) 0%, var(--color-surface) 60%);
-}
-:root[data-theme='dark'] .stat-blue {
-  background: linear-gradient(180deg, rgba(122, 163, 245, 0.18) 0%, var(--color-surface) 70%);
-}
-.stat-blue .stat-glyph {
-  background: rgba(91, 141, 239, 0.2);
-  color: var(--signal-info);
-}
-
-.stat-label {
+.sec-title {
+  margin: 0;
   font-family: var(--font-sans);
-  font-size: var(--fs-label);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  font-weight: 600;
-  color: var(--color-text-muted);
-}
-
-.stat-value {
-  font-family: var(--font-display);
-  font-size: 2.25rem;
+  font-size: var(--fs-caption);
   font-weight: 700;
-  color: var(--color-heading);
-  line-height: 1.05;
-  letter-spacing: var(--tracking-tight);
+  line-height: var(--line-pitch);
+  color: var(--ink);
 }
 
-.stat-sub {
-  font-family: var(--font-sans);
-  font-size: 0.8125rem;
-  color: var(--color-text-muted);
-}
-
-/* Distribution */
-.dist {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.glance {
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
+/* "Needs attention" follows the "At a glance" mastery line inside the same
+   .sec; it gets its own top pitch like every other .sec on the page. */
+.sec-title--attn {
+  margin-top: var(--line-pitch);
 }
 
 .glance-line {
   margin: 0;
   font-family: var(--font-sans);
-  font-size: 0.9375rem;
-  color: var(--color-text-muted);
+  font-size: var(--fs-body);
+  line-height: var(--line-pitch);
+  color: var(--ink);
 }
 
-.glance-link {
-  color: inherit;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  text-decoration-color: var(--color-border-strong);
-  transition: color var(--motion-fast) ease;
-}
-
-.glance-link:hover {
-  color: var(--color-accent-text);
-  text-decoration-color: currentColor;
-}
-
-/* Section + columns */
-.section-title {
-  display: inline-flex;
-  align-items: center;
+/* Needs attention: a cue entry per concept, the whole line the link. The cue
+   stays in graphite and is marked in red -- never set in red. */
+.attn-link {
+  display: flex;
+  align-items: baseline;
   gap: 0.5rem;
-  font-family: var(--font-display);
-  font-size: 1.25rem;
-  font-weight: 700;
-  letter-spacing: var(--tracking-tight);
-  color: var(--color-heading);
-  margin: 0 0 0.875rem 0;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
 }
 
-.col-icon {
-  font-size: 1.05rem;
-}
-.col-icon-green {
-  color: var(--color-success-text);
-}
-.col-icon-yellow {
-  color: var(--color-warning-text);
+.attn-link:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 
-.two-col {
+.attn-word {
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--line-pitch);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+  text-decoration: underline;
+  text-decoration-color: var(--ink-marker);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+
+.attn-pct {
+  flex: 0 0 auto;
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
+}
+
+/* The level stroke at its weight, then the level word and count in pencil. */
+.lvl-mark {
+  flex: 0 0 auto;
+  align-self: center;
+  fill: none;
+  stroke: var(--ink);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.lvl-mark--unset {
+  stroke: var(--pencil);
+}
+
+.lvl-word {
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
+}
+
+.lvl-count {
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
+}
+
+.cue-cols {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
-  gap: 2rem;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: 0 2rem;
+  width: 100%;
 }
 
-/* Concept chips */
-.chip-list {
+.cue-list {
   list-style: none;
   padding: 0;
   margin: 0;
+  width: 100%;
+}
+
+.cue-entry {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+}
+
+.cue-line {
+  display: flex;
+  align-items: baseline;
   gap: 0.5rem;
 }
 
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.4rem 0.875rem;
-  border-radius: var(--radius-pill);
+.cue-mark {
+  flex: 0 0 auto;
+  align-self: center;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+
+.cue-mark--gap {
+  stroke: var(--pencil);
+}
+
+.cue-mark--tick {
+  stroke: var(--ink-learner);
+}
+
+/* The needs-attention dash: the marker's 2px red stroke. */
+.cue-mark--attn {
+  stroke: var(--ink-marker);
+  stroke-width: 2;
+}
+
+.cue-word {
   font-family: var(--font-sans);
-  font-size: 0.875rem;
-  font-weight: 500;
-  border: 1px solid transparent;
-  transition:
-    transform var(--motion-fast) var(--motion-bounce),
-    filter var(--motion-fast) ease;
+  font-size: var(--fs-body);
+  line-height: var(--line-pitch);
+  color: var(--ink-learner);
+  overflow-wrap: anywhere;
 }
 
-.chip:hover {
-  transform: translateY(-1px);
-}
-
-.chip-mastered {
-  background: rgba(34, 197, 94, 0.14);
-  color: var(--color-success-text);
-  border-color: rgba(34, 197, 94, 0.3);
-}
-:root:not([data-theme='dark']) .chip-mastered {
-  color: var(--color-success-text);
-}
-
-.chip-gap {
-  background: rgba(255, 176, 32, 0.16);
-  color: var(--color-warning-text);
-  border-color: rgba(255, 176, 32, 0.35);
-}
-:root[data-theme='dark'] .chip-gap {
-  color: var(--signal-warning);
-}
-
-.chip-name {
-  line-height: 1;
-}
-
-.chip-meta {
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  color: inherit;
-  opacity: 0.7;
+.cue-count {
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
   text-decoration: none;
-  padding: 0.1rem 0.4rem;
-  border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.4);
 }
 
-:root[data-theme='dark'] .chip-meta {
-  background: rgba(255, 255, 255, 0.1);
+.cue-count:hover {
+  color: var(--ink-learner);
 }
 
-.chip-meta:hover {
-  opacity: 1;
+/* The session the cue was first written in, in pencil under the cue. */
+.cue-sub {
+  padding-left: 1.25rem;
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
+  overflow-wrap: anywhere;
 }
 
-/* Recent list */
+.cue-none {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
+}
+
 .recent-list {
   list-style: none;
   padding: 0;
   margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  width: 100%;
 }
 
+/* Contents rows: a topic per ruled line, the rule painted so the row keeps the
+   pitch. */
 .recent-row {
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  transition:
-    border-color var(--motion-fast) ease,
-    transform var(--motion-fast) var(--motion-bounce);
-}
-
-.recent-row:hover {
-  border-color: var(--color-accent-soft);
-  transform: translateY(-1px);
+  box-shadow: inset 0 -1px 0 var(--rule);
 }
 
 .recent-link {
   display: flex;
-  align-items: center;
+  align-items: baseline;
+  justify-content: space-between;
   gap: 0.75rem;
-  padding: 0.875rem 1.125rem;
+  padding: 0 0.25rem 0 0;
   color: inherit;
   text-decoration: none;
 }
 
+.recent-link:hover .recent-topic {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.recent-link:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+}
+
 .recent-topic {
-  flex: 1;
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 1rem;
-  color: var(--color-heading);
-  letter-spacing: var(--tracking-tight);
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  line-height: var(--line-pitch);
+  color: var(--ink);
+  overflow-wrap: anywhere;
 }
 
 .recent-when {
+  flex: 0 0 auto;
   font-family: var(--font-sans);
-  font-size: 0.8125rem;
-  color: var(--color-text-muted);
+  font-size: var(--fs-label);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
 }
 
-.recent-arrow {
-  color: var(--color-text-faint);
-  font-size: 0.9rem;
-  transition:
-    transform var(--motion-fast) var(--motion-bounce),
-    color var(--motion-fast) ease;
+.actions {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  min-height: var(--line-pitch);
 }
 
-.recent-row:hover .recent-arrow {
-  color: var(--color-accent-text);
-  transform: translateX(3px);
+.text-btn {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-learner);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  line-height: var(--line-pitch);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
 }
 
+.text-btn:hover:not(:disabled) {
+  color: var(--color-accent-hover);
+}
+
+.text-btn:disabled {
+  color: var(--pencil);
+  text-decoration: none;
+  cursor: default;
+}
+
+.text-btn:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+}
+
+.link {
+  color: var(--ink-learner);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  line-height: var(--line-pitch);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.link:hover {
+  color: var(--color-accent-hover);
+}
+
+/* Skeleton: pencil-weight rules on the pitch, no shimmer. */
 .skel {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
 }
 
 .skel-block {
-  height: 1.25rem;
-  border-radius: var(--radius-md);
-  background: var(--color-surface-soft);
-  animation: skel-pulse 1.4s ease-in-out infinite;
-}
-
-.skel-row-tall {
-  height: 5.5rem;
+  display: block;
+  height: calc(var(--line-pitch) - 1px);
+  border-bottom: 1px solid var(--rule-strong);
 }
 
 .skel-short {
   width: 55%;
-}
-
-@keyframes skel-pulse {
-  0%,
-  100% {
-    opacity: 0.65;
-  }
-  50% {
-    opacity: 0.35;
-  }
 }
 
 .sr-only {
@@ -648,73 +648,5 @@ async function saveFeedback() {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
-}
-
-/* Feedback card */
-.card {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  padding: 1.5rem;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-paper);
-}
-
-.card-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-family: var(--font-display);
-  font-size: 1.125rem;
-  font-weight: 700;
-  letter-spacing: var(--tracking-tight);
-  color: var(--color-heading);
-  margin: 0;
-}
-
-.card-icon {
-  font-size: 1rem;
-  color: var(--color-accent-text);
-}
-
-.actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.875rem;
-  flex-wrap: wrap;
-}
-
-.save-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1.5rem;
-  border-radius: var(--radius-pill);
-  background: var(--color-accent-strong);
-  color: #ffffff;
-  border: 0;
-  font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 0.9375rem;
-  cursor: pointer;
-  transition:
-    filter var(--motion-fast) ease,
-    opacity var(--motion-fast) ease;
-}
-
-.save-btn:hover:not(:disabled) {
-  filter: brightness(1.08);
-}
-
-.save-btn:active:not(:disabled) {
-  filter: brightness(0.95);
-}
-
-.save-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  box-shadow: none;
 }
 </style>

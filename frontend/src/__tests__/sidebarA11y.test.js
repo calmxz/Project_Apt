@@ -16,16 +16,42 @@ vi.mock('primevue/toast', () => ({
 vi.mock('@/composables/useToast.js', () => ({
   useToast: () => ({ showError: vi.fn(), showWarn: vi.fn(), showSuccess: vi.fn() }),
 }))
+const apiReviewQueue = vi.fn()
+vi.mock('@/services/reviewApi.js', () => ({
+  getReviewQueue: (...args) => apiReviewQueue(...args),
+}))
 
 import App from '@/App.vue'
 import Sidebar from '@/components/sidebar/Sidebar.vue'
 import { useSessionStore } from '@/stores/session.js'
+import { useAuthStore } from '@/stores/auth.js'
 import { useSidebar } from '@/composables/useSidebar.js'
 import { __test__ as sidebarTest } from '@/composables/useSidebar.js'
 
 function setViewport(w) {
   Object.defineProperty(window, 'innerWidth', { configurable: true, writable: true, value: w })
   sidebarTest._setViewport(w)
+}
+
+// Mounts Sidebar expanded on desktop with the review-queue badge fetch
+// resolved to the given total (see sidebar.test.js "Review entry" describe
+// for the underlying fetch-gating pattern).
+async function mountSidebarWithReview(total) {
+  sidebarTest._setViewport(1400)
+  sidebarTest._setExpanded(true)
+  const auth = useAuthStore()
+  auth.session = { user: { id: 'u-1' }, access_token: 't' }
+  const store = useSessionStore()
+  vi.spyOn(store, 'listSessions').mockResolvedValue([])
+  apiReviewQueue.mockResolvedValue({ items: [], total, limit: 1, offset: 0 })
+  globalThis.requestIdleCallback = (cb) => {
+    cb()
+    return 1
+  }
+  globalThis.cancelIdleCallback = () => {}
+  const w = mount(Sidebar, { attachTo: document.body })
+  await flushPromises()
+  return w
 }
 
 describe('Shell a11y — skip link', () => {
@@ -176,6 +202,27 @@ describe('Sidebar a11y — inert when closed (D-03)', () => {
     wrapper = mount(Sidebar, { attachTo: document.body })
     await flushPromises()
     expect(wrapper.find('aside.sidebar').attributes('inert')).toBeUndefined()
+  })
+})
+
+describe('Sidebar a11y — review badge unit', () => {
+  let wrapper
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    localStorage.clear()
+    routeRef.meta = {}
+    routeRef.params = {}
+  })
+  afterEach(() => {
+    wrapper?.unmount()
+    delete globalThis.requestIdleCallback
+    delete globalThis.cancelIdleCallback
+  })
+
+  it('review link exposes the count with a unit', async () => {
+    wrapper = await mountSidebarWithReview(20)
+    const link = wrapper.get('[data-testid="sidebar-review"]')
+    expect(link.attributes('aria-label')).toBe('Review: 20 concepts due')
   })
 })
 

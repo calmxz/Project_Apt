@@ -53,13 +53,14 @@ describe('SessionEndedBanner', () => {
     },
   }
 
-  it('renders the ended-at date and read-only sub copy', () => {
+  it('renders the relative ended-at time and completion sub copy', () => {
     const wrapper = mount(SessionEndedBanner, {
       props: { endedAt: '2026-01-01T00:00:00Z' },
       global: { stubs },
     })
-    expect(wrapper.text()).toContain('This session ended')
-    expect(wrapper.text()).toContain('Read-only')
+    // Relative-time wording is covered under fake timers in sessionEndedBanner.test.js.
+    expect(wrapper.text()).toContain('Session ended')
+    expect(wrapper.text()).toContain('Continue the topic in a new session')
   })
 
   it('emits resume on button click', async () => {

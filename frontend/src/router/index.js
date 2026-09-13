@@ -104,6 +104,9 @@ const router = createRouter({
       name: 'session',
       component: () => import('../views/SessionView.vue'),
       props: true,
+      // The session is one full-width sheet: no centred column cap, no
+      // horizontal page padding.
+      meta: { sheet: true },
     },
     {
       path: '/session/:id/profile',

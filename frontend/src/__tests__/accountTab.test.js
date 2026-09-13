@@ -46,16 +46,28 @@ describe('AccountTab', () => {
     user.onboardingComplete = true
   })
 
-  it('renders name field and danger zone testids', () => {
+  it('renders name field and preferences testids', () => {
     const w = mount(AccountTab, { global: { stubs } })
     for (const id of [
       'settings-name',
       'settings-save',
-      'settings-danger',
+      'settings-preferences',
       'settings-retake-onboarding',
     ]) {
       expect(w.find(`[data-testid="${id}"]`).exists()).toBe(true)
     }
+  })
+
+  it('presents retake onboarding as a neutral preference, not a danger zone', async () => {
+    const w = mount(AccountTab, { global: { stubs } })
+    await flushPromises()
+    const section = w.get('[data-testid="settings-preferences"]')
+    expect(section.text()).not.toMatch(/danger/i)
+    expect(section.text()).not.toMatch(/removes your local profile/i)
+    expect(section.text()).toContain('Tutor preferences')
+    expect(section.get('[data-testid="settings-retake-onboarding"]').text()).toContain(
+      'Edit name and feedback style',
+    )
   })
 
   it('renders signout section when authenticated', async () => {

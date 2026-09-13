@@ -1394,7 +1394,52 @@ describe('SessionView', () => {
       expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(false)
     })
 
-    it('does not refetch on stream idle when the card is dismissed (F2)', async () => {
+    // Cue-lands, end to end: the cue column is fed by the same per-turn
+    // refetch, and a cue that arrives mid-session writes itself in.
+    it('feeds the cue column from the per-turn profile refetch', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      getSessionProfile.mockResolvedValueOnce({
+        profile: {
+          knowledge_level: 'beginner',
+          confirmed_gaps: [],
+          mastered_concepts: [],
+          focus_target_gap: null,
+        },
+        etag: 't1',
+      })
+      const wrapper = mountView()
+      await flushPromises()
+      expect(wrapper.findAll('[data-testid="cue-gap"]')).toHaveLength(0)
+
+      getSessionProfile.mockResolvedValueOnce({
+        profile: {
+          knowledge_level: 'beginner',
+          confirmed_gaps: [{ name: 'ATP yield', evidence_type: null, last_event_at: null }],
+          mastered_concepts: [],
+          focus_target_gap: null,
+        },
+        etag: 't2',
+      })
+      store.streamState = 'streaming'
+      await nextTick()
+      store.streamState = 'idle'
+      await flushPromises()
+
+      const gaps = wrapper.findAll('[data-testid="cue-gap"]')
+      expect(gaps).toHaveLength(1)
+      expect(gaps[0].text()).toContain('ATP yield')
+      expect(gaps[0].classes()).toContain('is-fresh')
+    })
+
+    // Redesign 2026-09-10 (Cornell Page, phase B1): the turn-end refetch used
+    // to be gated on the consent card still being live. The cue column now
+    // reads the same payload, and the store only writes topic_profile on
+    // loadSession, so the refetch has to run every turn or the cues go stale
+    // for the rest of the session. The card must still stay dismissed.
+    it('still refetches on stream idle when the card is dismissed, and stays dismissed (F2)', async () => {
       const store = useSessionStore()
       vi.spyOn(store, 'loadSession').mockImplementation(async () => {
         setupSession()
@@ -1406,12 +1451,14 @@ describe('SessionView', () => {
       await flushPromises()
       expect(getSessionProfile).toHaveBeenCalledTimes(1)
 
+      getSessionProfile.mockResolvedValueOnce({ profile: { knowledge_level: null }, etag: 't2' })
       store.streamState = 'streaming'
       await nextTick()
       store.streamState = 'idle'
       await flushPromises()
 
-      expect(getSessionProfile).toHaveBeenCalledTimes(1)
+      expect(getSessionProfile).toHaveBeenCalledTimes(2)
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(false)
     })
 
     // F3: a 412 can be a stale-etag false alarm rather than a real conflict.

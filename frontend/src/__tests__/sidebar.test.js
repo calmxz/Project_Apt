@@ -1311,11 +1311,15 @@ describe('Sidebar.vue — header states', () => {
     expect(toggle.attributes('aria-label')).toBe('Collapse sidebar')
   })
 
-  it('collapsed desktop header shows only the expand toggle, no logo', async () => {
+  // The collapsed rail carries the page mark (mark-only logo, no wordmark)
+  // above the expand toggle, so .sb-brand is present but "Crux" is not.
+  it('collapsed desktop header shows the page mark and the expand toggle', async () => {
     sidebarTest._setExpanded(false)
     wrapper = mount(Sidebar)
     await flushPromises()
-    expect(wrapper.find('.sb-brand').exists()).toBe(false)
+    const brand = wrapper.find('.sb-brand')
+    expect(brand.exists()).toBe(true)
+    expect(brand.text()).not.toContain('Crux')
     const toggle = wrapper.find('[data-testid="sidebar-collapse-toggle"]')
     expect(toggle.exists()).toBe(true)
     expect(toggle.attributes('aria-label')).toBe('Expand sidebar')

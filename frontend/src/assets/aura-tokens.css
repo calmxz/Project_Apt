@@ -1,31 +1,28 @@
-/* Chat surface design tokens (spec section 5).
- * Consumed as var() fallbacks by MarkdownContent.vue, ToolCallChip.vue,
- * CitationsList.vue and the Phase 3 component split.
+/* Chat surface tokens, kept as safe fallbacks for any consumer that still
+ * reads them (MarkdownContent.vue, ToolCallChip.vue, CitationsList.vue).
+ * Components reference the semantics in base.css directly.
  *
- * Repointed (2026-05-27 chat-surface-polish): these formerly held light-only
- * hex values, which rendered cream/tan blocks and invisible black borders on
- * the dark surface. They are now routed to the dark-aware --color-* semantics
- * in base.css so any remaining consumer resolves correctly in both themes.
- * Components themselves now reference the semantics directly (Tasks 5/6);
- * these declarations remain only as safe fallbacks. */
+ * In the Cornell Page world there are no bubbles: the tutor writes on the
+ * page and the learner writes in blue on the same page, so the bubble
+ * tokens resolve to nothing drawn. */
 :root {
-  --chat-bubble-bg: var(--color-surface-raised);
-  --chat-bubble-border: var(--color-border);
-  --chat-bubble-shadow: var(--shadow-paper);
-  --chat-bubble-radius: var(--radius-md);
+  --chat-bubble-bg: transparent;
+  --chat-bubble-border: transparent;
+  --chat-bubble-shadow: none;
+  --chat-bubble-radius: 0;
 
   --code-block-bg: var(--color-surface-soft);
   --code-block-border: var(--color-border);
   --code-block-text: var(--color-text);
 
-  --math-bg: var(--color-surface-soft);
-  --math-accent: var(--color-accent);
+  --math-bg: transparent;
+  --math-accent: var(--ink-marker);
 
-  --tool-pill-bg: var(--color-accent-soft);
-  --tool-pill-border: var(--color-accent);
-  --tool-pill-text: var(--color-accent-hover);
+  --tool-pill-bg: transparent;
+  --tool-pill-border: transparent;
+  --tool-pill-text: var(--pencil);
 
-  --user-bubble-bg: var(--color-accent);
-  --user-bubble-text: #ffffff;
-  --user-bubble-radius: 18px 18px 4px 18px;
+  --user-bubble-bg: transparent;
+  --user-bubble-text: var(--ink-learner);
+  --user-bubble-radius: 0;
 }

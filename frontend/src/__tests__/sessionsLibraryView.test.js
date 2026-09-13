@@ -35,6 +35,7 @@ vi.mock('@/services/sessionsApi.js', () => ({ getSessionLibrary: vi.fn() }))
 
 import SessionsLibraryView from '@/views/SessionsLibraryView.vue'
 import * as sessionsApi from '@/services/sessionsApi.js'
+import { getSessionLibrary } from '@/services/sessionsApi.js'
 
 const stubs = {
   EmptyState: { template: '<div data-testid="empty-stub"><slot name="cta" /></div>' },
@@ -100,6 +101,23 @@ describe('SessionsLibraryView', () => {
     const card = wrapper.get('[data-testid="library-card-a"]')
     expect(card.find('.library-chips').text()).toContain('Focus: gap-a')
     expect(card.find('.library-desc').text()).toBe('No activity yet')
+  })
+
+  it('renders a skeleton grid, not text, while the first page loads', async () => {
+    getSessionLibrary.mockReturnValue(new Promise(() => {}))
+    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="library-loading"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="library-skeleton"]').exists()).toBe(true)
+    expect(wrapper.text()).not.toContain('Loading...')
+  })
+
+  it('does not render a nested main landmark', async () => {
+    sessionsApi.getSessionLibrary.mockResolvedValue(page([item('a')]))
+    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+    await flushPromises()
+    expect(wrapper.findAll('main').length).toBe(0)
+    expect(wrapper.find('section.library').exists()).toBe(true)
   })
 
   it('shows the empty state when no results', async () => {
@@ -273,13 +291,42 @@ describe('SessionsLibraryView', () => {
     expect(back.attributes('to') || back.attributes('href')).toBe('/')
   })
 
-  it('renders a folio eyebrow above the display title', async () => {
-    sessionsApi.getSessionLibrary.mockResolvedValue(page([item('a')]))
+  // Redesign C1: the Cornell Page world bans eyebrow and kicker labels
+  // (DESIGN.md, "Don't add eyebrow or kicker labels"), so the folio line is
+  // gone and the display title stands on its own.
+  it('renders the display title with no folio eyebrow above it', async () => {
+    getSessionLibrary.mockResolvedValue(page([]))
     const wrapper = mount(SessionsLibraryView, { global: { stubs } })
     await flushPromises()
-    const folio = wrapper.get('.library-folio')
-    expect(folio.text()).toBe('library')
+    expect(wrapper.find('.library-folio').exists()).toBe(false)
     expect(wrapper.get('.library-title').text()).toBe('All sessions')
+  })
+
+  // Redesign finish fix 3: the status word is gone from line one -- the
+  // right-hand cell carries the mastered count so Library, Home and the
+  // sidebar share one three-cell label. Ended rows read "ended" off the
+  // pencil meta line, which is what the All filter needs.
+  it('line one carries the mastered count, not a status word', async () => {
+    sessionsApi.getSessionLibrary.mockResolvedValue(
+      page([
+        item('a', { progress: { focus_target_gap: 'gap-a', mastered_count: 4 } }),
+        item('z', { ended_at: '2026-06-02T00:00:00Z' }),
+      ]),
+    )
+    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+    await flushPromises()
+
+    const active = wrapper.get('[data-testid="library-card-a"]')
+    expect(active.find('.library-status').exists()).toBe(false)
+    expect(active.text()).not.toContain('Active')
+    expect(active.get('.library-mastered').text()).toBe('4')
+    // Written once per row: the chip row keeps focus only.
+    expect(active.get('.library-chips').text()).toContain('Focus: gap-a')
+    expect(active.find('.library-chips').text()).not.toContain('mastered')
+
+    const ended = wrapper.get('[data-testid="library-card-z"]')
+    expect(ended.text()).not.toContain('Ended')
+    expect(ended.get('.library-meta').text()).toContain('· ended')
   })
 
   it('ended card shows Continue button; active card does not', async () => {

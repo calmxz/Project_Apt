@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
@@ -29,6 +29,43 @@ describe('ResetPasswordView', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     routerPush.mockClear()
+    const auth = useAuthStore()
+    auth.ready = true
+    auth.session = { user: { id: 'u1' } }
+  })
+
+  afterEach(() => {
+    window.location.hash = ''
+  })
+
+  it('shows the expired-link state instead of the form when there is no recovery session', async () => {
+    const auth = useAuthStore()
+    auth.ready = true
+    auth.session = null
+    const w = mountView()
+    await flushPromises()
+    expect(w.find('[data-testid="reset-form"]').exists()).toBe(false)
+    expect(w.get('[data-testid="reset-no-session"]').text()).toMatch(/expired|invalid/i)
+    expect(w.find('[data-testid="reset-to-forgot"]').exists()).toBe(true)
+  })
+
+  it('shows the form when a recovery session is present', async () => {
+    const auth = useAuthStore()
+    auth.ready = true
+    auth.session = { user: { id: 'u1' } }
+    const w = mountView()
+    await flushPromises()
+    expect(w.find('[data-testid="reset-form"]').exists()).toBe(true)
+  })
+
+  it('shows the form while the recovery hash is present even before a session exists', async () => {
+    window.location.hash = '#access_token=x&type=recovery'
+    const auth = useAuthStore()
+    auth.ready = true
+    auth.session = null
+    const w = mountView()
+    await flushPromises()
+    expect(w.find('[data-testid="reset-form"]').exists()).toBe(true)
   })
 
   it('disables submit until an 8+ char password matches confirm', async () => {

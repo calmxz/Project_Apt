@@ -1,8 +1,21 @@
 <script setup>
-defineProps({
+import { computed } from 'vue'
+
+import { formatRelative } from '../../utils/formatDate.js'
+import { LEVEL_MARK_PATH, levelStroke } from './levelMark.js'
+
+const props = defineProps({
   topic: { type: String, default: '' },
   sessionId: { type: String, default: '' },
+  startedAt: { type: String, default: '' },
+  level: { type: String, default: '' },
 })
+
+const started = computed(() =>
+  props.startedAt ? `started ${formatRelative(props.startedAt)}` : '',
+)
+const levelText = computed(() => props.level || 'level not set')
+const stroke = computed(() => levelStroke(props.level))
 </script>
 
 <template>
@@ -19,20 +32,35 @@ defineProps({
       </RouterLink>
       <span v-else class="session-topic" :title="topic">{{ topic }}</span>
     </h1>
+    <p class="session-meta">
+      <span v-if="started" class="session-started">{{ started }}</span>
+      <span class="session-level">
+        <svg
+          class="session-level-mark"
+          viewBox="0 0 24 24"
+          width="22"
+          height="14"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path :d="LEVEL_MARK_PATH" :stroke-width="stroke" />
+        </svg>
+        {{ levelText }}
+      </span>
+    </p>
   </header>
 </template>
 
 <style scoped>
 .session-header {
-  position: sticky;
-  top: 0;
-  z-index: 10;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1.5rem;
+  min-height: 72px;
+  padding: 1.25rem clamp(1rem, 3vw, 1.5rem);
   background: var(--color-background);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  padding: 0.75rem clamp(1rem, 3vw, 1.5rem);
-  border-bottom: 1px solid transparent;
-  transition: border-color var(--motion-fast) ease;
+  border-bottom: 1px solid var(--rule-strong);
 }
 
 .session-topic-wrap {
@@ -42,11 +70,11 @@ defineProps({
 
 .session-topic {
   font-family: var(--font-display);
-  font-size: clamp(1.25rem, 2.5vw, 1.5rem);
+  font-size: var(--fs-h1);
   font-weight: 600;
-  letter-spacing: var(--tracking-tight);
-  line-height: 1.2;
-  color: var(--color-heading);
+  letter-spacing: var(--tracking-display);
+  line-height: var(--lh-display);
+  color: var(--ink);
   display: inline-block;
   max-width: 100%;
   white-space: nowrap;
@@ -57,25 +85,57 @@ defineProps({
 .session-topic-link {
   text-decoration: none;
   cursor: pointer;
-  border-radius: var(--radius-sm, 6px);
-  transition: color var(--motion-fast) ease;
 }
 
 .session-topic-link:hover {
-  color: var(--color-accent-strong);
   text-decoration: underline;
-  text-underline-offset: 3px;
+  text-decoration-color: var(--ink-marker);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
 }
 
 .session-topic-link:focus-visible {
-  outline: 2px solid var(--color-accent-strong);
+  outline: 2px solid var(--color-accent-ring);
   outline-offset: 3px;
 }
 
-/* Mobile: sit below sticky top strip added in S4 (token defaulted to 3rem). */
-@media (max-width: 1279px) {
+.session-meta {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 0;
+  flex: 0 0 auto;
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
+  white-space: nowrap;
+}
+
+.session-level {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* The header meta line is pencil throughout: date and level are notes to the
+   side of the page, not part of its ink. */
+.session-level-mark {
+  fill: none;
+  stroke: var(--pencil);
+  stroke-linecap: round;
+}
+
+@media (max-width: 899px) {
   .session-header {
-    top: var(--sidebar-mobile-strip-height, 3rem);
+    min-height: 0;
+    padding: 0.75rem clamp(1rem, 3vw, 1.5rem);
+    flex-wrap: wrap;
+    gap: 0.25rem 1rem;
+  }
+
+  .session-topic {
+    font-size: var(--fs-h2);
   }
 }
 </style>

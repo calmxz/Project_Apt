@@ -1,10 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
   <style>
-    path { fill: #b5413a; }
+    .page-outline { stroke: #1b1b1a; }
+    .page-rules { stroke: #b9c6da; }
+    .page-margin { stroke: #d8433a; }
     @media (prefers-color-scheme: dark) {
-      path { fill: #ff7766; }
+      .page-outline { stroke: #ecebe6; }
+      .page-rules { stroke: #363b47; }
+      .page-margin { stroke: #ff6a5e; }
     }
   </style>
-  <path d="M12 0.5 L13.6 10.4 L23.5 12 L13.6 13.6 L12 23.5 L10.4 13.6 L0.5 12 L10.4 10.4 Z" />
-  <path d="M19 2.5 L19.7 5.3 L22.5 6 L19.7 6.7 L19 9.5 L18.3 6.7 L15.5 6 L18.3 5.3 Z" opacity="0.55" />
+  <rect class="page-outline" x="2.5" y="1.5" width="19" height="21" rx="2" fill="none" stroke-width="1.5" />
+  <g class="page-rules" stroke-width="1.5">
+    <line x1="11" y1="7.5" x2="18.5" y2="7.5" />
+    <line x1="11" y1="12" x2="18.5" y2="12" />
+    <line x1="11" y1="16.5" x2="18.5" y2="16.5" />
+  </g>
+  <line class="page-margin" x1="8" y1="1.5" x2="8" y2="22.5" stroke-width="2.5" />
 </svg>

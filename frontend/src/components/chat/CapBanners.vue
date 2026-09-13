@@ -39,22 +39,39 @@ const store = useSessionStore()
 </script>
 
 <style scoped>
-/* Cap banner — pill style */
+/* A status caption, not a banner: one line, ink on paper, inside a full rule. */
 .cap-banner {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: baseline;
   gap: 0.5rem;
-  padding: 0.75rem 1.125rem;
-  background: rgba(239, 68, 68, 0.12);
-  border: 1px solid rgba(239, 68, 68, 0.35);
-  border-radius: var(--radius-lg);
-  color: var(--color-text);
-  font-size: 0.9375rem;
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--ink-marker);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  line-height: var(--line-pitch);
+  animation: cap-land var(--motion-ink) cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes cap-land {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0);
+  }
 }
 
 .cap-banner strong {
-  color: var(--color-error-text);
+  color: var(--ink-marker-text);
   font-weight: 700;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cap-banner {
+    animation: none;
+  }
 }
 </style>

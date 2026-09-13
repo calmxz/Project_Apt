@@ -19,8 +19,40 @@
         :title="uploading ? 'Uploading...' : 'Attach a reference file (PDF, PPTX, TXT, MD)'"
         @click="openFilePicker"
       >
-        <i v-if="!uploading" class="pi pi-paperclip" aria-hidden="true" />
-        <i v-else class="pi pi-spin pi-spinner" aria-hidden="true" />
+        <svg
+          v-if="!uploading"
+          class="composer-icon"
+          viewBox="0 0 20 20"
+          width="20"
+          height="20"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path
+            d="M17.87 9.21 l-7.66 7.66 a5 5 0 0 1 -7.08 -7.08 l7.66 -7.66 a3.33 3.33 0 0 1 4.72 4.72 l-7.67 7.66 a1.67 1.67 0 0 1 -2.36 -2.36 l7.08 -7.07"
+          />
+        </svg>
+        <svg
+          v-else
+          class="composer-icon composer-spinner pi-spin"
+          viewBox="0 0 20 20"
+          width="20"
+          height="20"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path d="M17 10 A7 7 0 1 1 10 3" />
+        </svg>
       </button>
 
       <textarea
@@ -46,7 +78,26 @@
         :aria-label="sending ? 'Sending message' : 'Send message'"
         @click="emit('send')"
       >
-        <i :class="sending ? 'pi pi-spin pi-spinner' : 'pi pi-arrow-up'" aria-hidden="true" />
+        <svg
+          class="composer-icon"
+          :class="sending ? 'composer-spinner pi-spin' : ''"
+          viewBox="0 0 20 20"
+          width="20"
+          height="20"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path v-if="sending" d="M17 10 A7 7 0 1 1 10 3" />
+          <template v-else>
+            <path d="M10 16.5 L10 3.5" />
+            <path d="M4.5 9 L10 3.5 L15.5 9" />
+          </template>
+        </svg>
       </button>
 
       <button
@@ -58,7 +109,21 @@
         aria-label="Stop generating"
         @click="emit('stop')"
       >
-        <i class="pi pi-stop" aria-hidden="true" />
+        <svg
+          class="composer-icon"
+          viewBox="0 0 20 20"
+          width="20"
+          height="20"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <rect x="5" y="5" width="10" height="10" />
+        </svg>
       </button>
 
       <button
@@ -74,13 +139,8 @@
     </div>
 
     <div class="composer-hints" :class="{ 'is-near-limit': nearCharLimit }">
-      <span class="composer-hint">
-        <kbd aria-label="Enter"><span aria-hidden="true">⏎</span></kbd> to send
-        <span class="composer-hint-sep" aria-hidden="true">·</span>
-        <kbd aria-label="Shift"><span aria-hidden="true">⇧</span></kbd
-        >+<kbd aria-label="Enter"><span aria-hidden="true">⏎</span></kbd> newline
-      </span>
-      <span v-if="modelValue.length" class="composer-count" aria-live="polite">
+      <span class="composer-hint">Enter to send, Shift + Enter for a new line</span>
+      <span v-if="modelValue.length" class="composer-count" aria-live="polite" data-tabular>
         {{ modelValue.length.toLocaleString() }} / {{ MAX_DRAFT_LEN.toLocaleString() }}
       </span>
     </div>
@@ -111,14 +171,12 @@ const fileInputEl = ref(null)
 
 // I-10: matches ChatRequest.message maxLength in the API contract.
 const MAX_DRAFT_LEN = 4000
-const COMPOSER_MAX_HEIGHT_PX = 220
+const COMPOSER_MAX_HEIGHT_PX = 224
 
 const nearCharLimit = computed(() => props.modelValue.length >= MAX_DRAFT_LEN * 0.9)
 
 const placeholder = computed(() =>
-  props.locked
-    ? 'Pick an answer above, or Skip...'
-    : 'Ask anything. Press Enter to send · Shift + Enter for a new line.',
+  props.locked ? 'Pick an answer above, or Skip...' : 'Ask anything.',
 )
 
 function autoResize() {
@@ -178,33 +236,24 @@ defineExpose({ focus })
 </script>
 
 <style scoped>
-/* Composer — native textarea + icon buttons in a CSS grid. Replaced the
-   previous PrimeVue Textarea + Button because Aura's tokens were bleeding
-   through the wrapper and breaking the layout (white box overflowing the
-   dark pill). Owning the markup gives us deterministic styling. */
+/* One ruled line at the foot of the notes column: the learner writes on the
+   rule in blue, the two drawn controls sit on either end. */
 .composer-wrap {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
 }
 
 .composer {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: end;
   gap: 0.5rem;
-  padding: 0.55rem 0.55rem 0.55rem 0.6rem;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lift);
-  transition:
-    border-color var(--motion-fast) ease,
-    box-shadow var(--motion-base) ease;
+  border-bottom: 1px solid var(--rule-strong);
+  transition: border-color var(--motion-fast) ease;
 }
 
 .composer:focus-within {
-  border-color: var(--color-accent);
+  border-bottom-color: var(--ink-learner);
 }
 
 .composer.is-disabled {
@@ -215,9 +264,9 @@ defineExpose({ focus })
   grid-column: 2;
   align-self: stretch;
   width: 100%;
-  min-height: 2.5rem;
-  max-height: 220px;
-  padding: 0.625rem 0.25rem;
+  min-height: var(--line-pitch);
+  max-height: 224px;
+  padding: 0;
   margin: 0;
   background: transparent;
   border: 0;
@@ -226,17 +275,17 @@ defineExpose({ focus })
   overflow-y: auto;
 
   font-family: var(--font-sans);
-  font-size: 1rem;
-  line-height: 1.5;
-  color: var(--color-text);
-  caret-color: var(--color-accent);
+  font-size: var(--fs-body);
+  line-height: var(--line-pitch);
+  color: var(--ink-learner);
+  caret-color: var(--ink-learner);
 
   scrollbar-width: thin;
-  scrollbar-color: var(--color-border-strong) transparent;
+  scrollbar-color: var(--rule-strong) transparent;
 }
 
 .composer-input::placeholder {
-  color: var(--color-text-faint);
+  color: var(--pencil);
   opacity: 1;
 }
 
@@ -256,200 +305,101 @@ defineExpose({ focus })
   background: transparent;
 }
 .composer-input::-webkit-scrollbar-thumb {
-  background: var(--color-border-strong);
-  border-radius: var(--radius-pill);
+  background: var(--rule-strong);
   border: 2px solid transparent;
   background-clip: padding-box;
 }
-.composer-input::-webkit-scrollbar-thumb:hover {
-  background: var(--color-text-faint);
-}
 
-/* Attach, send, and stop share the round-icon vocabulary. Sizes intentionally
-   identical so the composer reads as balanced book-ends around the input. */
+/* Attach, send and stop are drawn icons in the learner's ink, not filled
+   buttons: the line is the control, they are its ends. */
 .composer-attach,
 .composer-send,
 .composer-stop {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.5rem;
-  height: 2.5rem;
+  width: 2rem;
+  height: var(--line-pitch);
   flex-shrink: 0;
-  border-radius: var(--radius-pill);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
   font-size: 1rem;
+  color: var(--ink-learner);
   cursor: pointer;
-  transition:
-    background var(--motion-fast) ease,
-    color var(--motion-fast) ease,
-    border-color var(--motion-fast) ease,
-    filter var(--motion-fast) ease,
-    opacity var(--motion-fast) ease;
+  transition: color var(--motion-fast) ease;
+}
+
+/* Drawn strokes, not a glyph font: one weight, round ends, the button's ink. */
+.composer-icon {
+  flex: 0 0 auto;
 }
 
 .composer-attach {
   grid-column: 1;
   align-self: end;
-  margin-bottom: 0.1rem;
-  background: transparent;
-  color: var(--color-text-muted);
-  border: 1px solid var(--color-border);
 }
 
-.composer-attach:hover:not(:disabled),
-.composer-attach:focus-visible {
-  background: var(--color-accent-soft);
-  border-color: var(--color-accent-soft);
-  color: var(--color-accent);
-}
-
-.composer-attach:focus-visible {
-  outline: 2px solid var(--color-accent-ring);
-  outline-offset: 2px;
-}
-
-.composer-attach:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.composer-send {
-  grid-column: 3;
-  align-self: end;
-  margin-bottom: 0.1rem;
-  background: var(--color-accent-strong);
-  color: #ffffff;
-  border: 0;
-  font-weight: 600;
-}
-
-.composer-send:not(:disabled):hover,
-.composer-send:not(:disabled):focus-visible {
-  filter: brightness(1.08);
-}
-
-.composer-send:not(:disabled):focus-visible {
-  outline: 2px solid var(--color-accent-ring);
-  outline-offset: 2px;
-}
-
-.composer-send:not(:disabled):active {
-  filter: brightness(0.95);
-}
-
-.composer-send:disabled {
-  background: var(--color-surface-soft);
-  color: var(--color-text-faint);
-  box-shadow: none;
-  cursor: not-allowed;
-}
-
-/* Stop button — occupies the same slot as Send (grid-column 3).
-   Uses signal-error to communicate "danger/halt" clearly. */
+.composer-send,
 .composer-stop {
   grid-column: 3;
   align-self: end;
-  margin-bottom: 0.1rem;
-  background: var(--signal-error);
-  color: #ffffff;
-  border: 0;
-  font-weight: 600;
 }
 
-.composer-stop:not(:disabled):hover,
-.composer-stop:not(:disabled):focus-visible {
-  filter: brightness(1.08);
-}
-
-.composer-stop:not(:disabled):focus-visible {
+.composer-attach:focus-visible,
+.composer-send:focus-visible,
+.composer-stop:focus-visible {
   outline: 2px solid var(--color-accent-ring);
   outline-offset: 2px;
 }
 
-.composer-stop:not(:disabled):active {
-  filter: brightness(0.95);
+.composer-stop {
+  color: var(--ink-marker-text);
 }
 
+.composer-attach:disabled,
+.composer-send:disabled,
 .composer-stop:disabled {
-  background: var(--color-surface-soft);
-  color: var(--color-text-faint);
-  box-shadow: none;
+  color: var(--pencil);
   cursor: not-allowed;
 }
 
-/* Footer hint strip — keyboard cheatsheet left, character count right.
-   Mono caption styling keeps it editorial without competing with the input. */
+/* Hints in pencil under the line. */
 .composer-hints {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0 0.5rem;
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  letter-spacing: 0.04em;
-  color: var(--color-text-faint);
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
   user-select: none;
 }
 
-.composer-hint {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  flex-wrap: wrap;
-}
-
-.composer-hint kbd {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1.25rem;
-  height: 1.25rem;
-  padding: 0 0.3rem;
-  border: 1px solid var(--color-border);
-  border-bottom-width: 2px;
-  border-radius: 4px;
-  background: var(--color-surface-soft);
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  color: var(--color-text-muted);
-  line-height: 1;
-}
-
-.composer-hint-sep {
-  color: var(--color-border-strong);
-}
-
 .composer-count {
-  font-variant-numeric: tabular-nums;
   transition: color var(--motion-fast) ease;
 }
 
 .composer-hints.is-near-limit .composer-count {
-  color: var(--color-warning-text);
-  font-weight: 600;
+  color: var(--ink-marker-text);
+  font-weight: 700;
 }
 
 .composer-skip {
   grid-column: 3;
   align-self: end;
   background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  color: var(--color-text-muted);
-  padding: 0 0.75rem;
-  height: 2.5rem;
-  font-size: 0.8125rem;
+  border: 0;
+  padding: 0 0.5rem;
+  height: var(--line-pitch);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  color: var(--ink-learner);
   cursor: pointer;
-  transition:
-    border-color var(--motion-fast) ease,
-    color var(--motion-fast) ease;
-}
-
-.composer-skip:hover,
-.composer-skip:focus-visible {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .composer-skip:focus-visible {
@@ -457,15 +407,17 @@ defineExpose({ focus })
   outline-offset: 2px;
 }
 
-@media (max-width: 600px) {
-  .composer-hints {
-    display: none;
+/* .pi-spin (primeicons, imported globally in main.js) does the rotation; the
+   arc is a whole <svg> so it turns about its own centre. */
+@media (prefers-reduced-motion: reduce) {
+  .composer-spinner {
+    animation: none;
   }
-  .composer-attach,
-  .composer-send,
-  .composer-stop {
-    width: 2.25rem;
-    height: 2.25rem;
+}
+
+@media (max-width: 599px) {
+  .composer-hint {
+    display: none;
   }
 }
 </style>

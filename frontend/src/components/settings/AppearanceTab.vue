@@ -1,131 +1,200 @@
 <template>
-  <section class="card" data-testid="settings-appearance">
-    <h2 class="card-title">
-      <i class="pi pi-moon card-icon" aria-hidden="true" />
-      Appearance
-    </h2>
-    <div class="switch-row">
-      <span class="switch-body">
-        <span class="switch-label">Dark mode</span>
-        <span class="switch-sub">Use a dark theme across the app.</span>
-      </span>
-      <button
-        type="button"
-        class="switch"
-        :class="{ 'switch--on': isDark }"
-        role="switch"
-        :aria-checked="isDark"
-        aria-label="Dark mode"
-        data-testid="settings-theme-toggle"
-        @click="toggleTheme"
+  <section class="appearance" data-testid="settings-appearance">
+    <h2 class="heading">Appearance</h2>
+    <p class="note">The same desk, with the lamp on or off.</p>
+
+    <fieldset class="modes" data-testid="settings-theme-toggle">
+      <legend class="sr-only">Theme</legend>
+      <label
+        v-for="opt in MODES"
+        :key="opt.value"
+        class="mode"
+        :class="{ selected: override === opt.value }"
       >
-        <span class="switch-knob" aria-hidden="true" />
-      </button>
-    </div>
+        <input
+          type="radio"
+          class="mode-input"
+          name="crux-theme"
+          :value="opt.value"
+          :checked="override === opt.value"
+          :data-testid="`settings-theme-${opt.value}`"
+          @change="setTheme(opt.value)"
+        />
+        <span :class="['mode-swatch', `mode-swatch--${opt.value}`]" aria-hidden="true">
+          <svg viewBox="0 0 36 48" width="36" height="48" focusable="false">
+            <rect class="sw-page" x="0.5" y="0.5" width="35" height="47" />
+            <path class="sw-margin" d="M9 4 L9 44" />
+            <path class="sw-rule" d="M13 14 L31 14" />
+            <path class="sw-rule" d="M13 22 L31 22" />
+            <path class="sw-rule" d="M13 30 L31 30" />
+          </svg>
+        </span>
+        <span class="mode-line">
+          <span class="mode-label">{{ opt.label }}</span>
+          <svg
+            v-if="override === opt.value"
+            class="mode-tick"
+            viewBox="0 0 12 12"
+            width="12"
+            height="12"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <path d="M2 6.5 L4.8 9.2 L10 3.2" />
+          </svg>
+        </span>
+      </label>
+    </fieldset>
   </section>
 </template>
 
 <script setup>
 import { useTheme } from '../../composables/useTheme.js'
 
-const { isDark, toggle: toggleTheme } = useTheme()
+const { override, setTheme } = useTheme()
+
+const MODES = [
+  { value: 'light', label: 'Lamp on' },
+  { value: 'dark', label: 'Lamp off' },
+  { value: 'auto', label: 'Match system' },
+]
 </script>
 
 <style scoped>
-.card {
+.appearance {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  padding: 1.5rem;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-paper);
 }
 
-.card-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-family: var(--font-display);
-  font-size: 1.125rem;
+.heading {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
   font-weight: 700;
-  letter-spacing: var(--tracking-tight);
-  color: var(--color-heading);
+  line-height: var(--line-pitch);
+  color: var(--ink);
+}
+
+.note {
+  margin: 0 0 var(--line-pitch);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
+}
+
+.modes {
+  display: flex;
+  gap: 1.5rem;
+  border: 0;
+  padding: 0;
   margin: 0;
 }
 
-.card-icon {
-  font-size: 1rem;
-  color: var(--color-accent-text);
-}
-
-.switch-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.switch-body {
+.mode {
   display: flex;
   flex-direction: column;
-  gap: 0.125rem;
-  min-width: 0;
-}
-
-.switch-label {
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 1rem;
-  color: var(--color-heading);
-  letter-spacing: var(--tracking-tight);
-}
-
-.switch-sub {
-  font-family: var(--font-sans);
-  font-size: 0.8125rem;
-  color: var(--color-text-muted);
-}
-
-.switch {
-  position: relative;
-  flex-shrink: 0;
-  width: 2.75rem;
-  height: 1.5rem;
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--color-border-strong);
-  background: var(--color-border-strong);
+  gap: 0.5rem;
   cursor: pointer;
-  transition:
-    background var(--motion-fast) ease,
-    border-color var(--motion-fast) ease;
 }
 
-.switch--on {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
+.mode-input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
 }
 
-.switch:focus-visible {
+/* Each swatch is a page drawn in the inks of the theme it names, so the light
+   page stays light while the app is dark. Theme tokens cascade from
+   :root[data-theme], so they cannot express "the other theme" here: these six
+   values are lifted verbatim from DESIGN.md's palette and are the one place in
+   this surface where a literal ink is correct. The system swatch is the only
+   one drawn from the live tokens, because it is whatever the desk is. */
+.mode-swatch {
+  display: inline-flex;
+  --sw-page: var(--color-surface);
+  --sw-ink: var(--rule-strong);
+  --sw-rule: var(--rule);
+  --sw-margin: var(--margin-rule);
+}
+
+.mode-swatch--light {
+  --sw-page: #fcfcfa;
+  --sw-ink: #b9c6da;
+  --sw-rule: #d3dfee;
+  --sw-margin: #d8433a;
+}
+
+.mode-swatch--dark {
+  --sw-page: #141518;
+  --sw-ink: #363b47;
+  --sw-rule: #262a33;
+  --sw-margin: #ff6a5e;
+}
+
+.sw-page {
+  fill: var(--sw-page);
+  stroke: var(--sw-ink);
+  stroke-width: 1;
+}
+
+.sw-margin {
+  stroke: var(--sw-margin);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.sw-rule {
+  stroke: var(--sw-rule);
+  stroke-width: 1;
+}
+
+.mode-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.mode-label {
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  line-height: var(--line-pitch);
+  color: var(--ink);
+}
+
+.mode.selected .mode-label {
+  font-weight: 700;
+}
+
+.mode:hover .mode-label {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.mode-tick {
+  flex: 0 0 auto;
+  fill: none;
+  stroke: var(--ink-learner);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.mode:has(.mode-input:focus-visible) {
   outline: 2px solid var(--color-accent-ring);
   outline-offset: 2px;
 }
 
-.switch-knob {
+.sr-only {
   position: absolute;
-  top: 50%;
-  left: 0.1875rem;
-  width: 1.125rem;
-  height: 1.125rem;
-  transform: translateY(-50%);
-  border-radius: var(--radius-pill);
-  background: #ffffff;
-  box-shadow: var(--shadow-paper);
-  transition: left var(--motion-fast) var(--motion-bounce);
-}
-
-.switch--on .switch-knob {
-  left: calc(100% - 1.3125rem);
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 </style>

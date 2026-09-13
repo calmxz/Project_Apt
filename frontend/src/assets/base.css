@@ -1,62 +1,72 @@
 :root {
-  /* Cool-slate neutrals */
-  --ink-50: #f7f8fb;
-  --ink-100: #eef0f6;
-  --ink-200: #dde2ee;
-  --ink-300: #b7bfd2;
-  --ink-400: #7e8aa3;
-  --ink-450: #66718a;
-  --ink-500: #58637a;
-  --ink-700: #2a3142;
-  --ink-900: #141826;
+  /* --- The page ---------------------------------------------------------
+     Ground, rules and pitch. Structure comes from rules and whitespace, not
+     from cards or shadows. */
+  --line-pitch: 28px;
+  /* The rule paints at the foot of each 28px box, but the text baseline sits
+     above it. Atkinson Hyperlegible Next is upem 1000, ascent 984, descent 316
+     (USE_TYPO_METRICS set), so at 17px the content box is 22.1px, half-leading
+     is 2.95px and the baseline lands 19.68px below the box top -- 7.32px above
+     the rule. Shifting the pattern up by 7px puts the rule under the baseline.
+     Every consumer of --ruled-bg must also set
+     background-position-y: var(--ruled-offset). */
+  --ruled-offset: -7px;
+  --ruled-bg: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(var(--line-pitch) - 1px),
+    var(--rule) calc(var(--line-pitch) - 1px),
+    var(--rule) var(--line-pitch)
+  );
 
-  --paper-50: #ffffff;
-  --paper-100: #f5f7fc;
+  /* --- The three inks ---------------------------------------------------
+     Graphite is the tutor and all body text. Blue is the learner: their
+     messages, cue words, answers, every interactive control, links and focus
+     rings. Red is the margin rule and the marker's marks. Nothing else may
+     use blue or red. Pencil carries dates, counts and hints.
+     --ink-marker is a mark only: it never sets text. --ink-marker-text is the
+     text-safe red. */
+  --ink: #1b1b1a;
+  --ink-learner: #1d4fc4;
+  --ink-marker: #d8433a;
+  --ink-marker-text: #b8352c;
+  --pencil: #63635e;
+  --rule: #d3dfee;
+  --rule-strong: #b9c6da;
+  --margin-rule: #d8433a;
 
-  /* Coral accent ramp */
-  --accent-coral-50: #fff1ef;
-  --accent-coral-100: #ffd9d2;
-  --accent-coral-200: #ffb5a8;
-  --accent-coral-300: #ff8f7c;
-  --accent-coral-400: #ff7766;
-  --accent-coral-500: #ff6b5c;
-  --accent-coral-600: #e25a4a;
-  --accent-coral-700: #b5413a;
-  --accent-coral-800: #842922;
-  --accent-coral-900: #4d1611;
-  --accent-coral-950: #2b0a07;
-
-  /* Signal triad (independent from accent) */
-  --signal-success: #22c55e;
-  --signal-error: #ef4444;
-  --signal-warning: #ffb020;
-  --signal-info: #5b8def;
+  /* Signal triad, re-tuned to sit on paper (each clears AA as text). */
+  --signal-success: #1f7a3f;
+  --signal-error: #b8352c;
+  --signal-warning: #8a5a00;
+  --signal-info: #1d4fc4;
 
   /* Typography */
-  --font-display: 'Bricolage Grotesque', system-ui, -apple-system, sans-serif;
-  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace;
+  --font-display: 'Familjen Grotesk', system-ui, sans-serif;
+  --font-sans: 'Atkinson Hyperlegible Next', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
-  --fs-display: clamp(2.5rem, 5.5vw, 3.75rem);
-  --fs-h1: 1.875rem;
+  --fs-display: 2.25rem;
+  --fs-h1: 1.75rem;
   --fs-h2: 1.375rem;
   --fs-h3: 1.125rem;
-  --fs-body: 1rem;
-  --fs-caption: 0.8125rem;
-  --fs-label: 0.6875rem;
+  --fs-body: 1.0625rem;
+  --fs-caption: 0.875rem;
+  --fs-label: 0.8125rem;
 
-  --tracking-display: -0.015em;
-  --tracking-label: 0.14em;
-  --tracking-tight: -0.01em;
+  /* No tracked labels in this world; the heading carries its own weight. */
+  --tracking-display: -0.01em;
+  --tracking-label: 0;
+  --tracking-tight: 0;
 
-  --lh-display: 1.1;
-  --lh-body: 1.6;
+  --lh-display: 1.15;
+  --lh-body: 1.647;
 
-  /* Radii */
-  --radius-sm: 8px;
-  --radius-md: 14px;
-  --radius-lg: 22px;
-  --radius-card: 20px;
+  /* Radii — paper has none; controls get 4px. The chip is the one pill. */
+  --radius-sm: 4px;
+  --radius-md: 4px;
+  --radius-lg: 4px;
+  --radius-card: 0;
   --radius-pill: 999px;
 
   /* Spacing scale */
@@ -69,133 +79,141 @@
   --space-8: 3rem;
   --space-10: 4.5rem;
 
-  /* Shadows — chunky press-down */
-  --shadow-paper: 0 1px 0 rgba(20, 24, 38, 0.04), 0 2px 8px -2px rgba(20, 24, 38, 0.06);
-  --shadow-lift: 0 10px 20px -8px rgba(20, 24, 38, 0.18);
+  /* Paper does not float. --shadow-lift exists for teleported overlays only. */
+  --shadow-paper: none;
+  --shadow-lift: 0 12px 24px -12px rgba(0, 0, 0, 0.25);
 
-  /* Decorative gradients */
-  --gradient-spark: linear-gradient(135deg, #ff6b5c 0%, #ff8f7c 100%);
-  --gradient-surface: linear-gradient(180deg, var(--paper-50) 0%, var(--paper-100) 100%);
-
-  /* Motion */
-  --motion-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* Motion — ink appears, it never slides or bounces. The bounce token name
+     is kept for its many consumers; the curve is now an exponential ease-out. */
+  --motion-bounce: cubic-bezier(0.16, 1, 0.3, 1);
   --motion-fast: 140ms;
-  --motion-base: 220ms;
+  --motion-base: 240ms;
+  --motion-ink: 320ms;
 
   /* Sidebar shell */
   --sidebar-width-expanded: 16rem;
   --sidebar-width-collapsed: 3rem;
   --sidebar-mobile-strip-height: 3rem;
 
-  /* Semantic colors — light */
-  --color-background: var(--paper-100);
-  --color-surface: var(--paper-50);
-  --color-surface-soft: var(--ink-50);
-  --color-surface-raised: var(--paper-50);
-  --color-text: var(--ink-900);
-  --color-text-muted: var(--ink-500);
-  --color-text-faint: var(--ink-450);
-  --color-heading: var(--ink-900);
-  --color-border: var(--ink-200);
-  --color-border-strong: var(--ink-300);
-  --color-accent: var(--accent-coral-500);
-  --color-accent-soft: var(--accent-coral-100);
-  --color-accent-hover: var(--accent-coral-600);
-  --color-accent-ring: rgba(255, 143, 124, 0.35);
-  /* AA-contrast variants. --color-accent (bright coral) stays for borders,
-     rings, hover, soft fills, and accent text on DARK surfaces. White text on
-     bright coral is only ~2.6:1, so filled buttons use --color-accent-strong,
-     and accent text on the light page background uses --color-accent-text
-     (both coral-700 -> >=4.5:1 white / >=5.2:1 as text). --color-accent-strong
-     is coral-700 in every theme (inherits); --color-accent-text stays bright on
-     dark, where coral-400 already clears 4.5:1, via the per-theme overrides. */
-  --color-accent-strong: var(--accent-coral-700);
-  --color-accent-text: var(--accent-coral-700);
-  --color-wordmark: var(--ink-900);
-  --color-stub-heading: var(--ink-700);
-  /* Foreground tokens that stay AA on LIGHT surfaces. Filled white-text CTAs use
-     --color-accent-strong (coral-700); --color-text-on-accent is that white.
-     Signal-as-text must use these darkened variants, NOT the raw --signal-* ramp
-     (tuned for fills/borders/dark surfaces; fails as light-bg text). */
+  /* --- Semantic colors, light (lamp on) --------------------------------
+     Literal hex, not indirection: the token contrast test reads this file and
+     resolves nothing. */
+  --color-background: #fcfcfa;
+  --color-surface: #fcfcfa;
+  --color-surface-soft: #f3f3ef;
+  --color-surface-raised: #ffffff;
+  --color-text: #1b1b1a;
+  --color-heading: #1b1b1a;
+  --color-text-muted: #63635e;
+  --color-text-faint: #63635e;
+  --color-border: #d3dfee;
+  --color-border-strong: #b9c6da;
+  --color-accent: #1d4fc4;
+  --color-accent-hover: #173fa0;
+  --color-accent-text: #1d4fc4;
+  --color-accent-strong: #1d4fc4;
+  --color-accent-soft: #e6ecfa;
+  --color-accent-ring: rgba(29, 79, 196, 0.35);
   --color-text-on-accent: #ffffff;
-  --color-success-text: #0e7a36;
-  --color-error-text: #b91c1c;
+  --color-wordmark: #1b1b1a;
+  --color-stub-heading: #1b1b1a;
+  --color-success-text: #1f7a3f;
+  --color-error-text: #b8352c;
   --color-warning-text: #8a5a00;
-  --color-info-text: #2e5dc4;
-  /* Darkened info fill for white-text CTAs (same recipe as
-     --color-accent-strong): raw --signal-info is ~3.0:1 with white. */
-  --color-info-strong: #2e5dc4;
+  --color-info-text: #1d4fc4;
+  --color-info-strong: #1d4fc4;
 }
 
 :root[data-theme='dark'] {
-  /* On dark surfaces bright coral-400 already clears 4.5:1 as text, so keep it
-     (no change from before this token existed). --color-accent-strong inherits
-     coral-700 from :root for filled buttons. */
-  --color-accent-text: var(--accent-coral-400);
-  --color-background: #0f1220;
-  --color-surface: #161a2a;
-  --color-surface-soft: #1e2236;
-  --color-surface-raised: #262b43;
-  --color-text: var(--ink-100);
-  --color-text-muted: #8b95ae;
-  --color-text-faint: #5b6480;
-  --color-heading: #ffffff;
-  --color-border: #2a3050;
-  --color-border-strong: #3a4166;
-  --color-accent: var(--accent-coral-400);
-  --color-accent-soft: rgba(255, 119, 102, 0.18);
-  --color-accent-hover: var(--accent-coral-300);
-  --color-accent-ring: rgba(255, 143, 124, 0.45);
-  --color-wordmark: #ffffff;
-  --color-stub-heading: var(--ink-100);
+  /* The same desk with the lamp off. */
+  --ink: #ecebe6;
+  --ink-learner: #8fb0ff;
+  --ink-marker: #ff6a5e;
+  --ink-marker-text: #ff6a5e;
+  --pencil: #a3a39c;
+  --rule: #262a33;
+  --rule-strong: #363b47;
+  --margin-rule: #ff6a5e;
 
-  --shadow-paper: 0 1px 0 rgba(0, 0, 0, 0.3), 0 2px 8px -2px rgba(0, 0, 0, 0.5);
-  --shadow-lift: 0 16px 36px -16px rgba(0, 0, 0, 0.6);
+  --signal-success: #5fcf8a;
+  --signal-error: #ff6a5e;
+  --signal-warning: #e6b450;
+  --signal-info: #8fb0ff;
 
-  --signal-success: #34d77b;
-  --signal-error: #ff6b6b;
-  --signal-warning: #ffc54d;
-  --signal-info: #7aa3f5;
+  --color-background: #141518;
+  --color-surface: #141518;
+  --color-surface-soft: #1b1c20;
+  --color-surface-raised: #1f2126;
+  --color-text: #ecebe6;
+  --color-heading: #ecebe6;
+  --color-text-muted: #a3a39c;
+  --color-text-faint: #a3a39c;
+  --color-border: #262a33;
+  --color-border-strong: #363b47;
+  --color-accent: #8fb0ff;
+  --color-accent-hover: #a9c2ff;
+  --color-accent-text: #8fb0ff;
+  /* Filled control on the dark page: white text needs a darker blue than the
+     dark-theme accent, while staying legible against the page itself. */
+  --color-accent-strong: #3b63d6;
+  --color-accent-soft: rgba(143, 176, 255, 0.14);
+  --color-accent-ring: rgba(143, 176, 255, 0.45);
+  --color-text-on-accent: #ffffff;
+  --color-wordmark: #ecebe6;
+  --color-stub-heading: #ecebe6;
+  --color-success-text: #5fcf8a;
+  --color-error-text: #ff6a5e;
+  --color-warning-text: #e6b450;
+  --color-info-text: #8fb0ff;
+  --color-info-strong: #3b63d6;
 
-  /* Dark surfaces: the bright signal ramp already clears AA as text. */
-  --color-success-text: #34d77b;
-  --color-error-text: #ff6b6b;
-  --color-warning-text: #ffc54d;
-  --color-info-text: #7aa3f5;
+  --shadow-paper: none;
+  --shadow-lift: 0 12px 24px -12px rgba(0, 0, 0, 0.7);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --color-accent-text: var(--accent-coral-400);
-    --color-background: #0f1220;
-    --color-surface: #161a2a;
-    --color-surface-soft: #1e2236;
-    --color-surface-raised: #262b43;
-    --color-text: var(--ink-100);
-    --color-text-muted: #8b95ae;
-    --color-text-faint: #5b6480;
-    --color-heading: #ffffff;
-    --color-border: #2a3050;
-    --color-border-strong: #3a4166;
-    --color-accent: var(--accent-coral-400);
-    --color-accent-soft: rgba(255, 119, 102, 0.18);
-    --color-accent-hover: var(--accent-coral-300);
-    --color-accent-ring: rgba(255, 143, 124, 0.45);
-    --color-wordmark: #ffffff;
-    --color-stub-heading: var(--ink-100);
+    --ink: #ecebe6;
+    --ink-learner: #8fb0ff;
+    --ink-marker: #ff6a5e;
+    --ink-marker-text: #ff6a5e;
+    --pencil: #a3a39c;
+    --rule: #262a33;
+    --rule-strong: #363b47;
+    --margin-rule: #ff6a5e;
 
-    --shadow-paper: 0 1px 0 rgba(0, 0, 0, 0.3), 0 2px 8px -2px rgba(0, 0, 0, 0.5);
-    --shadow-lift: 0 16px 36px -16px rgba(0, 0, 0, 0.6);
+    --signal-success: #5fcf8a;
+    --signal-error: #ff6a5e;
+    --signal-warning: #e6b450;
+    --signal-info: #8fb0ff;
 
-    --signal-success: #34d77b;
-    --signal-error: #ff6b6b;
-    --signal-warning: #ffc54d;
-    --signal-info: #7aa3f5;
+    --color-background: #141518;
+    --color-surface: #141518;
+    --color-surface-soft: #1b1c20;
+    --color-surface-raised: #1f2126;
+    --color-text: #ecebe6;
+    --color-heading: #ecebe6;
+    --color-text-muted: #a3a39c;
+    --color-text-faint: #a3a39c;
+    --color-border: #262a33;
+    --color-border-strong: #363b47;
+    --color-accent: #8fb0ff;
+    --color-accent-hover: #a9c2ff;
+    --color-accent-text: #8fb0ff;
+    --color-accent-strong: #3b63d6;
+    --color-accent-soft: rgba(143, 176, 255, 0.14);
+    --color-accent-ring: rgba(143, 176, 255, 0.45);
+    --color-text-on-accent: #ffffff;
+    --color-wordmark: #ecebe6;
+    --color-stub-heading: #ecebe6;
+    --color-success-text: #5fcf8a;
+    --color-error-text: #ff6a5e;
+    --color-warning-text: #e6b450;
+    --color-info-text: #8fb0ff;
+    --color-info-strong: #3b63d6;
 
-    --color-success-text: #34d77b;
-    --color-error-text: #ff6b6b;
-    --color-warning-text: #ffc54d;
-    --color-info-text: #7aa3f5;
+    --shadow-paper: none;
+    --shadow-lift: 0 12px 24px -12px rgba(0, 0, 0, 0.7);
   }
 }
 
@@ -220,6 +238,7 @@ body {
   font-size: var(--fs-body);
   line-height: var(--lh-body);
   font-weight: 400;
+  caret-color: var(--ink-learner);
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -239,9 +258,18 @@ h4 {
   line-height: var(--lh-display);
 }
 
+code,
+kbd,
+pre,
+samp {
+  font-family: var(--font-mono);
+}
+
 a {
-  color: var(--color-accent-text);
-  text-decoration: none;
+  color: var(--ink-learner);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
   transition: color var(--motion-fast) ease;
 }
 
@@ -253,8 +281,14 @@ button {
   font-family: inherit;
 }
 
+input,
+textarea,
+select {
+  caret-color: var(--ink-learner);
+}
+
 :focus-visible {
-  outline: 2px solid var(--color-accent-ring);
+  outline: 2px solid var(--ink-learner);
   outline-offset: 2px;
   border-radius: var(--radius-sm);
 }
@@ -264,13 +298,38 @@ button {
   color: var(--color-text);
 }
 
+/* Browser surfaces belong to the page too. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule-strong) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--rule-strong);
+  border-radius: var(--radius-sm);
+}
+
+/* Figures line up column-wise wherever numbers are read as data. */
+table,
+[data-tabular] {
+  font-variant-numeric: tabular-nums;
+}
+
 .label {
   font-family: var(--font-sans);
-  font-size: var(--fs-label);
-  font-weight: 600;
+  font-size: var(--fs-caption);
+  font-weight: 700;
   letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-  color: var(--color-text-muted);
+  color: var(--pencil);
 }
 
 .hairline {
@@ -286,12 +345,12 @@ button {
   top: -2.5rem;
   z-index: 100;
   padding: 0.5rem 0.875rem;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   background: var(--color-accent-strong);
-  color: #fff;
+  color: var(--color-text-on-accent);
   font-family: var(--font-sans);
   font-weight: 600;
-  font-size: 0.875rem;
+  font-size: var(--fs-caption);
   text-decoration: none;
   transition: top var(--motion-fast) ease;
 }
@@ -299,8 +358,8 @@ button {
 .skip-link:focus,
 .skip-link:focus-visible {
   top: 0.75rem;
-  color: #fff;
-  outline: 2px solid var(--color-accent-ring);
+  color: var(--color-text-on-accent);
+  outline: 2px solid var(--ink-learner);
   outline-offset: 2px;
 }
 
@@ -320,17 +379,20 @@ body.sb-scroll-lock {
   }
 }
 
-/* Destructive confirm accept (delete-file dialog). A touch darker than the
-   default danger red so it reads as the heavier action. ConfirmDialog teleports
-   to <body>, so this must be global, not scoped to the banner. base.css sits
-   outside PrimeVue's cascade layer, so it wins without !important. */
+/* Destructive confirm accept (delete-file dialog). Red pen, the text-safe
+   value in both themes so the white label stays readable. ConfirmDialog
+   teleports to <body>, so this must be global, not scoped to the banner.
+   base.css sits outside PrimeVue's cascade layer, so it wins without
+   !important. */
 .p-button.confirm-delete-strong {
-  background: #dc2626;
-  border-color: #dc2626;
+  background: #b8352c;
+  border-color: #b8352c;
+  color: #ffffff;
 }
 .p-button.confirm-delete-strong:hover {
-  background: #b91c1c;
-  border-color: #b91c1c;
+  background: #94271f;
+  border-color: #94271f;
+  color: #ffffff;
 }
 
 /* Visually hidden but screen-reader-accessible. F-18: discrete stream

@@ -22,25 +22,42 @@ defineProps({
 </script>
 
 <style scoped>
+/* One status caption: ink on paper inside a full 1px rule, landing in one
+   snap and leaving clean. */
 .upload-status {
+  display: block;
   margin: 0;
-  padding: 0.5rem 0.875rem;
+  padding: 0.25rem 0.75rem;
   font-family: var(--font-sans);
-  font-size: 0.8125rem;
-  border-radius: var(--radius-pill);
-  background: var(--color-accent-soft);
-  color: var(--color-accent-text);
-  align-self: flex-start;
-  display: inline-block;
+  font-size: var(--fs-caption);
+  line-height: var(--line-pitch);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  animation: upload-land var(--motion-ink) cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes upload-land {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0);
+  }
 }
 
 .upload-status-ready {
-  background: rgba(34, 197, 94, 0.12);
-  color: var(--color-success-text);
+  border-color: var(--signal-success);
 }
 
 .upload-status-failed {
-  background: rgba(239, 68, 68, 0.12);
-  color: var(--color-error-text);
+  border-color: var(--ink-marker);
+  color: var(--ink-marker-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .upload-status {
+    animation: none;
+  }
 }
 </style>

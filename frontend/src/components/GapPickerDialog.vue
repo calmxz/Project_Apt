@@ -16,8 +16,17 @@
           :data-testid="`gap-picker-option-${i}`"
           @click="choose(g)"
         >
-          <i class="pi pi-bullseye" aria-hidden="true" />
-          <span>{{ g }}</span>
+          <svg
+            class="gap-mark"
+            viewBox="0 0 12 12"
+            width="12"
+            height="12"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <circle cx="6" cy="6" r="4" />
+          </svg>
+          <span class="gap-word">{{ g }}</span>
         </button>
       </li>
     </ul>
@@ -41,36 +50,45 @@ function choose(gap) {
 </script>
 
 <style scoped>
+/* Entries as cue words on ruled lines, not boxed options. */
 .gap-list {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
 }
 
 .gap-option {
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  align-items: baseline;
+  gap: 0.625rem;
   width: 100%;
-  padding: 0.625rem 0.75rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  color: var(--color-text);
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
+  background: transparent;
   font-family: var(--font-sans);
-  font-size: 0.9375rem;
+  font-size: var(--fs-body);
+  line-height: var(--line-pitch);
   cursor: pointer;
   text-align: left;
-  transition:
-    background var(--motion-fast) ease,
-    border-color var(--motion-fast) ease;
 }
 
-.gap-option:hover {
-  background: var(--color-surface-soft);
+.gap-mark {
+  flex: 0 0 auto;
+  align-self: center;
+  fill: none;
+  stroke: var(--pencil);
+  stroke-width: 1.5;
+}
+
+.gap-word {
+  color: var(--ink-learner);
+}
+
+.gap-option:hover .gap-word {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .gap-option:focus-visible {
