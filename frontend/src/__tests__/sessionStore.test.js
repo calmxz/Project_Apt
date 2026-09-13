@@ -455,11 +455,11 @@ describe('listSessions via library endpoint', () => {
       .mockResolvedValueOnce({ items: [{ id: 'e1' }], total: 25, limit: 20, offset: 0 })
     await store.listSessions()
     expect(getSessionLibrary).toHaveBeenCalledWith(
-      { status: 'active', sort: 'pinned_activity', limit: 20, offset: 0 },
+      { status: 'active', sort: 'pinned_activity', limit: 40, offset: 0 },
       { silent: true },
     )
     expect(getSessionLibrary).toHaveBeenCalledWith(
-      { status: 'ended', sort: 'last_activity', limit: 20, offset: 0 },
+      { status: 'ended', sort: 'last_activity', limit: 40, offset: 0 },
       { silent: true },
     )
     expect(store.sessions.map((s) => s.id)).toEqual(['a1', 'a2', 'e1'])

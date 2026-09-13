@@ -240,7 +240,7 @@ A white page, three inks and a pencil; the palette is a stationery drawer, not a
 - **Graphite** (`ink`, light #1b1b1a / dark #ecebe6): the tutor and all body text, headings, cue section headings, the border of a ruled box and of a review cover, the summary strip's closing rule, the level stroke.
 - **Pencil** (`pencil`, light #63635e / dark #a3a39c): dates, counts, hints, role tags ("tutor", "check"), placeholders, footnotes, disabled text, the unset level stroke, the gap circle mark, ledes and field labels on the other pages, the lifted aside on a review row.
 - **Page** (`page`, light #fcfcfa / dark #141518): the ground of everything, including the sidebar, header, ruled boxes and covers.
-- **Soft Surface** (`surface-soft`): code fences, inline code, sidebar and library row hover, overlay item hover. The only tonal fill on the page.
+- **Soft Surface** (`surface-soft`): code fences, inline code, sidebar and library row hover, overlay item hover, the learner's turn panel. The only tonal fill on the page.
 - **Raised Surface** (`surface-raised`): overlays only (dialogs, toasts, row menu).
 - **Feint Rule** (`rule`, light #d3dfee / dark #262a33): the ruled ground, painted option separators, painted separators under lettered lines and recent-topic rows, the hairline under an answer line.
 - **Strong Rule** (`rule-strong`, light #b9c6da / dark #363b47): borders that structure the page: header underline, notes-foot rule, sidebar edge and section rules, the rule under a cover's head and under a legal page's back line, code fence border, table cells, footnote rule, the composer line and every field line at rest, scrollbar thumbs, skeleton bars.
@@ -401,7 +401,7 @@ An outlined page (1px current-colour stroke, 2px corner) with a 2px red margin l
 - **Do** keep test hooks (data-testid, aria attributes, asserted class names, copy strings) unchanged when extending a surface.
 
 ### Don't:
-- **Don't** put a card, bubble, avatar, icon tile or shadow on the page; shadows belong to teleported overlays only.
+- **Don't** put a card, bubble, avatar, icon tile or shadow on the page; shadows belong to teleported overlays only. The learner turn's soft panel (surface-soft fill, no border) is the one exception, so the two voices are told apart.
 - **Don't** set text in `ink-marker`; use `ink-marker-text`, and use red only for the margin rule, marks, underlines and verdicts.
 - **Don't** add eyebrow or kicker labels, uppercase tracked labels, or a second accent colour.
 - **Don't** slide, scale or bounce anything; motion is opacity, clip-path or a stroke draw, and reduced motion shows the final state.

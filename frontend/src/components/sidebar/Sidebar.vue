@@ -5,6 +5,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useSidebar } from '@/composables/useSidebar.js'
+import { useToast } from '@/composables/useToast.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useSessionStore } from '@/stores/session.js'
 import { useSessionGroups } from '@/composables/useSessionGroups.js'
@@ -90,6 +91,8 @@ onBeforeUnmount(() => {
   }
   clearTimeout(searchTimer)
   cancelIdleBadge?.()
+  listResizeObserver?.disconnect()
+  listResizeObserver = null
 })
 
 const searchQuery = ref('')
@@ -101,7 +104,30 @@ const { searching, pinnedActive, activeGroups, endedRows } = useSessionGroups(
 
 const activeFlat = computed(() => activeGroups.value.flatMap((g) => g.rows))
 
+// SIDEBAR_CAP is the floor (and the fallback wherever the list's height cannot
+// be measured -- jsdom, or a browser without ResizeObserver). SIDEBAR_CAP_MAX
+// is the ceiling, and matches the store's SIDEBAR_PAGE_LIMIT window: rendering
+// past it would only ever draw rows the store does not hold.
 const SIDEBAR_CAP = 15
+const SIDEBAR_CAP_MAX = 40
+const DEFAULT_PITCH_PX = 28
+
+// How many rows the list column actually has room for. Recomputed from the
+// measured height of `listEl` so a tall screen fills instead of stopping at
+// the floor and leaving dead space below the last row.
+const renderCap = ref(SIDEBAR_CAP)
+let listResizeObserver = null
+
+function measureRenderCap() {
+  const el = listEl.value
+  if (!el) return
+  const raw = getComputedStyle(el).getPropertyValue('--line-pitch')
+  const parsed = parseFloat(raw)
+  const pitchPx = Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_PITCH_PX
+  // One pitch is reserved for the closing "View all" line.
+  const fit = Math.floor((el.clientHeight - pitchPx) / pitchPx)
+  renderCap.value = Math.min(SIDEBAR_CAP_MAX, Math.max(SIDEBAR_CAP, fit))
+}
 
 // Search queries the library endpoint server-side (the store only holds a
 // SIDEBAR_CAP-windowed slice, so client-side filtering of `sessions` could
@@ -161,13 +187,13 @@ const showViewAllSearch = computed(
 
 // Pinned rows render first and count toward the cap; server's pinned_activity
 // sort already guarantees pinned rows are inside the fetched page. Pinned
-// itself is also sliced to the cap so >15 pinned rows can never push the
-// component's total render past SIDEBAR_CAP on their own.
-const cappedPinnedActive = computed(() => pinnedActive.value.slice(0, SIDEBAR_CAP))
+// itself is also sliced to the cap so a long pinned list can never push the
+// component's total render past renderCap on its own.
+const cappedPinnedActive = computed(() => pinnedActive.value.slice(0, renderCap.value))
 const cappedActiveFlat = computed(() =>
-  activeFlat.value.slice(0, Math.max(0, SIDEBAR_CAP - cappedPinnedActive.value.length)),
+  activeFlat.value.slice(0, Math.max(0, renderCap.value - cappedPinnedActive.value.length)),
 )
-const cappedEndedRows = computed(() => endedRows.value.slice(0, SIDEBAR_CAP))
+const cappedEndedRows = computed(() => endedRows.value.slice(0, renderCap.value))
 
 const activeRendered = computed(
   () => cappedPinnedActive.value.length + cappedActiveFlat.value.length,
@@ -199,6 +225,13 @@ const showEmptyActiveHint = computed(
 // shared Pinia store means second call refetches (and that's fine — it'll be
 // fresh data), but skipping when populated avoids the deep-link redundant fetch.
 onMounted(async () => {
+  // Fit-to-height: measure once the list column exists (desktop or drawer) and
+  // again whenever it resizes. Guarded so jsdom -- which has no
+  // ResizeObserver -- keeps the SIDEBAR_CAP floor.
+  if (listEl.value && typeof ResizeObserver !== 'undefined') {
+    listResizeObserver = new ResizeObserver(() => measureRenderCap())
+    listResizeObserver.observe(listEl.value)
+  }
   if (isAuthenticated.value && !sessions.value.length) {
     await sessionStore.listSessions().catch(() => {})
   }
@@ -239,6 +272,20 @@ watch(isExpanded, (expanded) => {
 function onNewSession() {
   closeDrawer()
   router.push({ name: 'new-session' })
+}
+
+// Sign out lives on the footer rail rather than inside Settings > Account:
+// it is a navigation act, not a setting, and it belongs with the other
+// written lines at the foot of the contents page.
+async function onSignOut() {
+  closeDrawer()
+  try {
+    await authStore.signOut()
+  } catch (err) {
+    useToast().showError(err?.message || 'Sign out failed')
+    return
+  }
+  router.push('/login')
 }
 </script>
 
@@ -624,6 +671,34 @@ function onNewSession() {
         </svg>
         <span v-if="isExpanded" class="sb-icon-label">Settings</span>
       </RouterLink>
+      <button
+        v-if="isAuthenticated"
+        type="button"
+        class="sb-icon sb-icon-btn"
+        :class="{ 'sb-icon--row': isExpanded }"
+        aria-label="Sign out"
+        title="Sign out"
+        data-testid="sidebar-sign-out"
+        @click="onSignOut"
+      >
+        <svg
+          class="sb-inline-icon"
+          viewBox="0 0 20 20"
+          width="16"
+          height="16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path d="M12 4 H5 V16 H12" />
+          <path d="M9 10 H17 M14 7 L17 10 L14 13" />
+        </svg>
+        <span v-if="isExpanded" class="sb-icon-label">Sign out</span>
+      </button>
     </footer>
   </aside>
 </template>
@@ -644,7 +719,7 @@ function onNewSession() {
 }
 
 .sidebar--expanded {
-  width: var(--sidebar-width-expanded, 16rem);
+  width: var(--sidebar-width-expanded, 18rem);
 }
 
 .sidebar--collapsed {
@@ -658,7 +733,7 @@ function onNewSession() {
   position: fixed;
   top: 0;
   left: 0;
-  width: var(--sidebar-width-expanded, 16rem);
+  width: var(--sidebar-width-expanded, 18rem);
   max-width: 85vw;
   box-shadow: var(--shadow-lift);
   opacity: 0;
@@ -924,6 +999,15 @@ function onNewSession() {
   gap: 0.625rem;
   padding: 0;
   border-radius: 0;
+}
+
+/* Sign out is a button, not a link; strip the UA chrome so it reads as the
+   same written line as Settings. */
+.sb-icon-btn {
+  background: transparent;
+  border: 0;
+  font: inherit;
+  text-align: left;
 }
 
 .sb-icon-label {

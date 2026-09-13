@@ -117,8 +117,9 @@ function tickAt(i) {
 .role-tag {
   font-family: var(--font-sans);
   font-size: var(--fs-label);
+  font-weight: 700;
   line-height: var(--line-pitch);
-  color: var(--pencil);
+  color: var(--ink);
 }
 
 /* Block-level, not inline-flex: inline would sit on the body's baseline and

@@ -93,9 +93,9 @@ const visibleToolCalls = computed(() => {
 .role-tag {
   font-family: var(--font-sans);
   font-size: var(--fs-label);
-  font-weight: 400;
+  font-weight: 700;
   line-height: var(--line-pitch);
-  color: var(--pencil);
+  color: var(--ink);
 }
 
 /* The tick hangs under the role tag without adding height: in flow it made the

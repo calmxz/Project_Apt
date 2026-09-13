@@ -19,6 +19,12 @@ describe('UserBubble', () => {
     expect(w.classes()).toContain('user')
   })
 
+  it('root has class user and body element has class msg-body', () => {
+    const w = mount(UserBubble, { props: { content: 'test' } })
+    expect(w.classes()).toContain('user')
+    expect(w.find('.msg-body').exists()).toBe(true)
+  })
+
   it('root element has data-testid="msg-user"', () => {
     const w = mount(UserBubble, { props: { content: 'test' } })
     expect(w.attributes('data-testid')).toBe('msg-user')

@@ -46,7 +46,7 @@ defineProps({
 .role-tag {
   font-family: var(--font-sans);
   font-size: var(--fs-label);
-  font-weight: 400;
+  font-weight: 700;
   line-height: var(--line-pitch);
   color: var(--ink-learner);
 }
@@ -57,6 +57,9 @@ defineProps({
   max-width: 80%;
   justify-self: end;
   text-align: left;
+  background: var(--color-surface-soft);
+  border-radius: var(--radius-sm);
+  padding: 0 0.875rem;
 }
 
 .content {
@@ -76,6 +79,10 @@ defineProps({
 
   .msg-body {
     max-width: 100%;
+  }
+
+  .msg-gutter {
+    align-items: flex-end;
   }
 }
 </style>

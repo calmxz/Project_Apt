@@ -50,8 +50,8 @@
         <span class="mode-line">
           <span class="mode-label">{{ opt.label }}</span>
           <svg
-            v-if="override === opt.value"
             class="mode-tick"
+            :class="{ 'mode-tick--on': override === opt.value }"
             viewBox="0 0 12 12"
             width="12"
             height="12"
@@ -215,11 +215,16 @@ const MODES = [
 
 .mode-tick {
   flex: 0 0 auto;
+  visibility: hidden;
   fill: none;
   stroke: var(--ink-learner);
   stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+.mode-tick--on {
+  visibility: visible;
 }
 
 .mode:has(.mode-input:focus-visible) {
