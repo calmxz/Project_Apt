@@ -93,8 +93,11 @@ function tickAt(i) {
   opacity: 0;
 }
 
-/* Typing indicator row (bespoke markup, same gutter grammar as a turn). */
-.msg {
+/* Typing indicator row (bespoke markup, same gutter grammar as a turn).
+   Scoped to .typing: a bare .msg rule here also lands on the root of every
+   child bubble (a parent's scoped rule reaches a child's root element) and
+   would override the learner turn's mirrored grid. */
+.msg.typing {
   display: grid;
   grid-template-columns: 4rem minmax(0, 1fr);
   gap: 0 0.75rem;
@@ -104,7 +107,7 @@ function tickAt(i) {
 
 /* Same reason as the turn gutters: an inline role tag in a block would share
    the 17px strut and make the row 28.5px. */
-.msg .msg-gutter {
+.msg.typing .msg-gutter {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -162,7 +165,7 @@ function tickAt(i) {
 }
 
 @media (max-width: 599px) {
-  .msg {
+  .msg.typing {
     grid-template-columns: minmax(0, 1fr);
     gap: 0;
   }

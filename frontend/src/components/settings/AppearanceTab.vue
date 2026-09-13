@@ -21,7 +21,25 @@
           @change="setTheme(opt.value)"
         />
         <span :class="['mode-swatch', `mode-swatch--${opt.value}`]" aria-hidden="true">
-          <svg viewBox="0 0 36 48" width="36" height="48" focusable="false">
+          <svg
+            v-if="opt.value === 'auto'"
+            viewBox="0 0 36 48"
+            width="36"
+            height="48"
+            focusable="false"
+          >
+            <rect class="sw-page sw-page--lt" x="0.5" y="0.5" width="17.5" height="47" />
+            <rect class="sw-page sw-page--dk" x="18" y="0.5" width="17.5" height="47" />
+            <rect class="sw-frame" x="0.5" y="0.5" width="35" height="47" fill="none" />
+            <path class="sw-margin sw-margin--lt" d="M9 4 L9 44" />
+            <path class="sw-rule sw-rule--lt" d="M13 14 L18 14" />
+            <path class="sw-rule sw-rule--dk" d="M18 14 L31 14" />
+            <path class="sw-rule sw-rule--lt" d="M13 22 L18 22" />
+            <path class="sw-rule sw-rule--dk" d="M18 22 L31 22" />
+            <path class="sw-rule sw-rule--lt" d="M13 30 L18 30" />
+            <path class="sw-rule sw-rule--dk" d="M18 30 L31 30" />
+          </svg>
+          <svg v-else viewBox="0 0 36 48" width="36" height="48" focusable="false">
             <rect class="sw-page" x="0.5" y="0.5" width="35" height="47" />
             <path class="sw-margin" d="M9 4 L9 44" />
             <path class="sw-rule" d="M13 14 L31 14" />
@@ -107,16 +125,14 @@ const MODES = [
 
 /* Each swatch is a page drawn in the inks of the theme it names, so the light
    page stays light while the app is dark. Theme tokens cascade from
-   :root[data-theme], so they cannot express "the other theme" here: these six
-   values are lifted verbatim from DESIGN.md's palette and are the one place in
-   this surface where a literal ink is correct. The system swatch is the only
-   one drawn from the live tokens, because it is whatever the desk is. */
+   :root[data-theme], so they cannot express "the other theme" here: these
+   values are lifted verbatim from DESIGN.md's palette and are the one place
+   in this surface where a literal ink is correct. The system swatch cannot
+   be drawn from the live tokens either -- that would just mirror whichever
+   theme happens to be active -- so it is drawn as half light page, half dark
+   page, literally split down the middle. */
 .mode-swatch {
   display: inline-flex;
-  --sw-page: var(--color-surface);
-  --sw-ink: var(--rule-strong);
-  --sw-rule: var(--rule);
-  --sw-margin: var(--margin-rule);
 }
 
 .mode-swatch--light {
@@ -148,6 +164,31 @@ const MODES = [
 .sw-rule {
   stroke: var(--sw-rule);
   stroke-width: 1;
+}
+
+.sw-page--lt {
+  fill: #fcfcfa;
+}
+
+.sw-page--dk {
+  fill: #141518;
+}
+
+.sw-frame {
+  stroke: #b9c6da;
+  stroke-width: 1;
+}
+
+.sw-margin--lt {
+  stroke: #d8433a;
+}
+
+.sw-rule--lt {
+  stroke: #d3dfee;
+}
+
+.sw-rule--dk {
+  stroke: #262a33;
 }
 
 .mode-line {

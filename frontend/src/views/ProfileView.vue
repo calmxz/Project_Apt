@@ -533,7 +533,8 @@ onMounted(load)
 
 .cue-mark {
   flex: 0 0 auto;
-  align-self: center;
+  align-self: flex-start;
+  margin-top: calc((var(--line-pitch) - 12px) / 2);
   fill: none;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -597,7 +598,7 @@ onMounted(load)
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  align-self: center;
+  align-self: flex-start;
   width: 1.5rem;
   height: var(--line-pitch);
   padding: 0;

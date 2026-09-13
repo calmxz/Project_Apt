@@ -78,6 +78,45 @@ describe('cleanPreview', () => {
     expect(cleanPreview('hello there')).toBe('hello there')
     expect(cleanPreview(null)).toBe('')
   })
+
+  it('strips bold markers but keeps the words', () => {
+    expect(cleanPreview('Routers forward **IP addresses** onward')).toBe(
+      'Routers forward IP addresses onward',
+    )
+    expect(cleanPreview('Routers forward __IP addresses__ onward')).toBe(
+      'Routers forward IP addresses onward',
+    )
+  })
+
+  it('strips italic markers but keeps the words', () => {
+    expect(cleanPreview('A *subtle* hint')).toBe('A subtle hint')
+    expect(cleanPreview('A _subtle_ hint')).toBe('A subtle hint')
+  })
+
+  it('strips inline code backticks and strikethrough', () => {
+    expect(cleanPreview('Call `render()` first')).toBe('Call render() first')
+    expect(cleanPreview('Not ~~wrong~~ right')).toBe('Not wrong right')
+  })
+
+  it('keeps link and image text, drops the target', () => {
+    expect(cleanPreview('See [the RFC](https://example.com/rfc) for detail')).toBe(
+      'See the RFC for detail',
+    )
+    expect(cleanPreview('Here ![a diagram](/img/d.png) sits')).toBe('Here a diagram sits')
+  })
+
+  it('strips heading, list and blockquote markers at line start', () => {
+    expect(cleanPreview('# Subnetting\n- masks\n* hosts\n1. gateways\n> a note')).toBe(
+      'Subnetting masks hosts gateways a note',
+    )
+  })
+
+  it('leaves word-internal underscores alone', () => {
+    expect(cleanPreview('Rename snake_case to camelCase')).toBe('Rename snake_case to camelCase')
+    expect(cleanPreview('Both snake_case and _emphasis_ here')).toBe(
+      'Both snake_case and emphasis here',
+    )
+  })
 })
 
 describe('cardStory (active)', () => {

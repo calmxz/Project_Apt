@@ -47,7 +47,7 @@ beforeEach(() => {
   apiReviewQueue.mockReset()
   apiReviewQueue.mockResolvedValue({ items: [], total: 0, limit: 1, offset: 0 })
   apiGetSessionLibrary.mockReset()
-  apiGetSessionLibrary.mockResolvedValue({ items: [], total: 0, limit: 20, offset: 0 })
+  apiGetSessionLibrary.mockResolvedValue({ items: [], total: 0, limit: 15, offset: 0 })
 })
 
 describe('Sidebar.vue — session list rendering', () => {
@@ -354,7 +354,7 @@ describe('sidebar server-side search', () => {
     expect(apiGetSessionLibrary).not.toHaveBeenCalled()
     await vi.advanceTimersByTimeAsync(1)
     expect(apiGetSessionLibrary).toHaveBeenCalledWith(
-      { status: 'active', q: 'gly', sort: 'last_activity', limit: 20, offset: 0 },
+      { status: 'active', q: 'gly', sort: 'last_activity', limit: 15, offset: 0 },
       { silent: true },
     )
   })
@@ -542,7 +542,7 @@ describe('sidebar server-side search', () => {
   })
 
   // Search results describe sessions that are routinely OUTSIDE the store's
-  // 20+20 window. A row action must still be visible on the rendered row --
+  // 15+15 window. A row action must still be visible on the rendered row --
   // otherwise nothing appears to happen, the user retries, and the server's
   // idempotent end/reopen replays 200 while the totals mirror skews again.
   it('reflects an End taken on a search row for a session outside the loaded window', async () => {
@@ -614,7 +614,7 @@ describe('sidebar server-side search', () => {
     expect(apiGetSessionLibrary).not.toHaveBeenCalled()
     await vi.advanceTimersByTimeAsync(1)
     expect(apiGetSessionLibrary).toHaveBeenCalledWith(
-      { status: 'ended', q: 'gly', sort: 'last_activity', limit: 20, offset: 0 },
+      { status: 'ended', q: 'gly', sort: 'last_activity', limit: 15, offset: 0 },
       { silent: true },
     )
   })
@@ -1363,7 +1363,7 @@ function makeEndedSessions(count) {
   }))
 }
 
-describe('sidebar 20-row cap and View all links', () => {
+describe('sidebar 15-row cap and View all links', () => {
   let wrapper
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -1376,7 +1376,7 @@ describe('sidebar 20-row cap and View all links', () => {
   })
   afterEach(() => wrapper?.unmount())
 
-  it('renders at most 20 active rows (pinned count toward the cap)', async () => {
+  it('renders at most 15 active rows (pinned count toward the cap)', async () => {
     const store = useSessionStore()
     const pinnedRows = makeActiveSessions(3, { pinned: true, prefix: 'p' })
     const unpinnedRows = makeActiveSessions(25, { pinned: false, prefix: 'u' })
@@ -1388,7 +1388,7 @@ describe('sidebar 20-row cap and View all links', () => {
       wrapper.findAll('[data-testid="sidebar-section-pinned"] [data-session-id]'),
     ).toHaveLength(3)
     expect(wrapper.findAll('[data-testid="sidebar-quick-group"] [data-session-id]')).toHaveLength(
-      17,
+      12,
     )
     const viewAll = wrapper.find('[data-testid="sidebar-view-all-active"]')
     expect(viewAll.exists()).toBe(true)
@@ -1402,7 +1402,7 @@ describe('sidebar 20-row cap and View all links', () => {
     })
   })
 
-  it('caps pinned rows themselves at 20, leaving no room for unpinned rows', async () => {
+  it('caps pinned rows themselves at 15, leaving no room for unpinned rows', async () => {
     const store = useSessionStore()
     const pinnedRows = makeActiveSessions(25, { pinned: true, prefix: 'p' })
     const unpinnedRows = makeActiveSessions(5, { pinned: false, prefix: 'u' })
@@ -1412,21 +1412,21 @@ describe('sidebar 20-row cap and View all links', () => {
     await flushPromises()
     expect(
       wrapper.findAll('[data-testid="sidebar-section-pinned"] [data-session-id]'),
-    ).toHaveLength(20)
+    ).toHaveLength(15)
     expect(wrapper.findAll('[data-testid="sidebar-quick-group"] [data-session-id]')).toHaveLength(0)
   })
 
-  it('caps the collapsed icon rail at 20 pinned rows too', async () => {
+  it('caps the collapsed icon rail at 15 pinned rows too', async () => {
     sidebarTest._setExpanded(false)
     const store = useSessionStore()
     store.sessions = makeActiveSessions(25, { pinned: true, prefix: 'p' })
     store.activeTotal = 25
     wrapper = mount(Sidebar)
     await flushPromises()
-    expect(wrapper.findAll('.sb-session-list--collapsed [data-session-id]')).toHaveLength(20)
+    expect(wrapper.findAll('.sb-session-list--collapsed [data-session-id]')).toHaveLength(15)
   })
 
-  it('caps the ended tab at 20 and links with status=ended', async () => {
+  it('caps the ended tab at 15 and links with status=ended', async () => {
     const store = useSessionStore()
     store.sessions = makeEndedSessions(22)
     store.endedTotal = 40
@@ -1434,7 +1434,7 @@ describe('sidebar 20-row cap and View all links', () => {
     await flushPromises()
     await wrapper.find('[data-testid="sidebar-status-ended"]').trigger('click')
     expect(wrapper.findAll('[data-testid="sidebar-section-ended"] [data-session-id]')).toHaveLength(
-      20,
+      15,
     )
     const viewAll = wrapper.find('[data-testid="sidebar-view-all-ended"]')
     expect(viewAll.exists()).toBe(true)
@@ -1448,13 +1448,15 @@ describe('sidebar 20-row cap and View all links', () => {
     })
   })
 
-  it('hides View all when the tab total fits the rendered rows', async () => {
+  it('shows View all as the last line even when every session is rendered', async () => {
     const store = useSessionStore()
     store.sessions = makeActiveSessions(5)
     store.activeTotal = 5
     wrapper = mount(Sidebar)
     await flushPromises()
-    expect(wrapper.find('[data-testid="sidebar-view-all-active"]').exists()).toBe(false)
+    const viewAll = wrapper.find('[data-testid="sidebar-view-all-active"]')
+    expect(viewAll.exists()).toBe(true)
+    expect(viewAll.text()).toContain('View all 5 sessions')
   })
 
   it('ended tab badge shows the server total, not the loaded count', async () => {
@@ -1508,10 +1510,10 @@ describe('sidebar 20-row cap and View all links', () => {
     await flushPromises()
     expect(
       wrapper.findAll('[data-testid="sidebar-section-pinned"] [data-session-id]'),
-    ).toHaveLength(20)
+    ).toHaveLength(15)
     expect(
       wrapper.find('[data-testid="sidebar-section-pinned"] .sb-section-count').text(),
-    ).toContain('20')
+    ).toContain('15')
   })
 
   // The totals are a local mirror: createSession bumps activeTotal without

@@ -34,29 +34,6 @@
           {{ plural(data.total_learning_events, 'check-question') }}
         </p>
 
-        <section class="sec" data-testid="agg-dist">
-          <h2 class="sec-title">Knowledge level distribution</h2>
-          <ul v-if="distEntries.length" class="cue-list">
-            <li v-for="e in distEntries" :key="e.key" class="cue-entry" data-testid="dist-entry">
-              <span class="cue-line">
-                <svg
-                  class="lvl-mark"
-                  :class="{ 'lvl-mark--unset': e.key === 'unknown' }"
-                  viewBox="0 0 24 24"
-                  width="18"
-                  height="12"
-                  aria-hidden="true"
-                  focusable="false"
-                >
-                  <path d="M2 17 L22 7" :stroke-width="levelStroke(e.key)" />
-                </svg>
-                <span class="lvl-word">{{ e.key }}</span>
-                <span class="lvl-count" data-tabular>{{ e.count }}</span>
-              </span>
-            </li>
-          </ul>
-        </section>
-
         <section class="sec" data-testid="agg-insights">
           <h2 class="sec-title">At a glance</h2>
           <p class="glance-line" data-testid="glance-mastery">{{ masteryLine }}</p>
@@ -162,21 +139,6 @@
             </ul>
           </section>
         </div>
-
-        <section class="sec" data-testid="agg-recent">
-          <h2 class="sec-title">Recent topics</h2>
-          <ul class="recent-list">
-            <li v-for="t in data.recent_topics" :key="t.id" class="recent-row">
-              <router-link
-                :to="{ name: 'session-profile', params: { id: t.id } }"
-                class="recent-link"
-              >
-                <span class="recent-topic">{{ t.topic || 'untitled' }}</span>
-                <span class="recent-when">{{ formatRelative(t.created_at) }}</span>
-              </router-link>
-            </li>
-          </ul>
-        </section>
       </template>
     </template>
 
@@ -203,7 +165,6 @@ import { computed, onMounted, ref } from 'vue'
 
 import EmptyState from '../EmptyState.vue'
 import FeedbackStylePicker from '../FeedbackStylePicker.vue'
-import { levelStroke } from '../chat/levelMark.js'
 import { friendlyError } from '../../lib/errors.js'
 import { getAggregateProfile } from '../../services/profileApi.js'
 import { formatRelative } from '../../utils/formatDate.js'
@@ -216,16 +177,6 @@ const { showSuccess, showError } = useToast()
 const data = ref(null)
 const loading = ref(false)
 const error = ref('')
-
-const levelKeys = ['beginner', 'intermediate', 'advanced', 'unknown']
-
-// The distribution is written as cue entries: the level stroke at its own
-// weight, the level word in pencil, the count in pencil label. Levels nobody
-// sits at stay off the page rather than reading "0 advanced".
-const distEntries = computed(() => {
-  const d = data.value?.knowledge_level_distribution || {}
-  return levelKeys.filter((k) => (d[k] || 0) > 0).map((k) => ({ key: k, count: d[k] }))
-})
 
 const masteryLine = computed(() => {
   const total = data.value?.combined_mastered_concepts.length || 0
@@ -302,12 +253,14 @@ async function saveFeedback() {
 </script>
 
 <style scoped>
-/* The aggregate profile is the cue column at full width: what the tutor knows
-   about you across every session, written as cue words on the pitch. No stat
-   cards, no chips, no fills. */
+/* The aggregate profile is the cue column at full width, condensed to what
+   changes the next session: counts, what needs attention, gaps, mastered,
+   feedback style. No stat cards, no chips, no fills. */
 .profile-tab {
-  max-width: 72rem;
-  margin: 0 auto;
+  /* Full panel width: an auto cross-axis margin inside the panel's flex
+     column would shrink-wrap the tab to its longest line and collapse the
+     two cue columns into one. */
+  width: 100%;
   display: flex;
   flex-direction: column;
 }
@@ -408,34 +361,6 @@ async function saveFeedback() {
   color: var(--pencil);
 }
 
-/* The level stroke at its weight, then the level word and count in pencil. */
-.lvl-mark {
-  flex: 0 0 auto;
-  align-self: center;
-  fill: none;
-  stroke: var(--ink);
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.lvl-mark--unset {
-  stroke: var(--pencil);
-}
-
-.lvl-word {
-  font-family: var(--font-sans);
-  font-size: var(--fs-body);
-  line-height: var(--line-pitch);
-  color: var(--pencil);
-}
-
-.lvl-count {
-  font-family: var(--font-sans);
-  font-size: var(--fs-label);
-  line-height: var(--line-pitch);
-  color: var(--pencil);
-}
-
 .cue-cols {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
@@ -463,7 +388,8 @@ async function saveFeedback() {
 
 .cue-mark {
   flex: 0 0 auto;
-  align-self: center;
+  align-self: flex-start;
+  margin-top: calc((var(--line-pitch) - 12px) / 2);
   fill: none;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -518,55 +444,6 @@ async function saveFeedback() {
   margin: 0;
   font-family: var(--font-sans);
   font-size: var(--fs-body);
-  line-height: var(--line-pitch);
-  color: var(--pencil);
-}
-
-.recent-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  width: 100%;
-}
-
-/* Contents rows: a topic per ruled line, the rule painted so the row keeps the
-   pitch. */
-.recent-row {
-  box-shadow: inset 0 -1px 0 var(--rule);
-}
-
-.recent-link {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0 0.25rem 0 0;
-  color: inherit;
-  text-decoration: none;
-}
-
-.recent-link:hover .recent-topic {
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.recent-link:focus-visible {
-  outline: 2px solid var(--color-accent-ring);
-  outline-offset: 2px;
-}
-
-.recent-topic {
-  font-family: var(--font-sans);
-  font-size: 0.9375rem;
-  line-height: var(--line-pitch);
-  color: var(--ink);
-  overflow-wrap: anywhere;
-}
-
-.recent-when {
-  flex: 0 0 auto;
-  font-family: var(--font-sans);
-  font-size: var(--fs-label);
   line-height: var(--line-pitch);
   color: var(--pencil);
 }
