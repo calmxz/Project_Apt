@@ -18,14 +18,17 @@ defineProps({
 </template>
 
 <style scoped>
-/* No bubble: the learner writes in blue on the same rules, with a small blue
-   "you" in the gutter. */
+/* No bubble: the learner writes on the right-hand side of the same rules,
+   with a small blue "you" in a right gutter. The tutor's gutter is on the
+   left. */
 .msg {
   display: grid;
-  grid-template-columns: 4rem minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 4rem;
+  grid-template-areas: 'body gutter';
   gap: 0 0.75rem;
   max-width: 100%;
   padding: var(--line-pitch) 0 0;
+  justify-items: end;
 }
 
 /* Flex column, not a block: an inline 13px role tag inside a 17px block shares
@@ -33,9 +36,10 @@ defineProps({
    every turn drifted half a pixel off the rules. A flex item is blockified and
    carries only its own strut, so the gutter is exactly one pitch. */
 .msg-gutter {
+  grid-area: gutter;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: flex-end;
   min-width: 0;
 }
 
@@ -48,7 +52,11 @@ defineProps({
 }
 
 .msg-body {
+  grid-area: body;
   min-width: 0;
+  max-width: 80%;
+  justify-self: end;
+  text-align: left;
 }
 
 .content {
@@ -62,7 +70,12 @@ defineProps({
 @media (max-width: 599px) {
   .msg {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'gutter' 'body';
     gap: 0;
+  }
+
+  .msg-body {
+    max-width: 100%;
   }
 }
 </style>

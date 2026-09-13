@@ -125,17 +125,6 @@
       Sign out
     </button>
   </section>
-
-  <section class="sec sec--ruled" data-testid="settings-preferences">
-    <h2 class="sec-title">Tutor preferences</h2>
-    <p class="hint">
-      Re-run the two-step setup to change your display name or how the tutor gives feedback.
-      Sessions are not affected.
-    </p>
-    <router-link to="/onboarding?retake=1" class="link" data-testid="settings-retake-onboarding">
-      Edit name and feedback style
-    </router-link>
-  </section>
 </template>
 
 <script setup>
@@ -342,25 +331,6 @@ async function signOut() {
 }
 
 .text-btn:focus-visible {
-  outline: 2px solid var(--color-accent-ring);
-  outline-offset: 2px;
-}
-
-.link {
-  color: var(--ink-learner);
-  font-family: var(--font-sans);
-  font-size: var(--fs-caption);
-  font-weight: 700;
-  line-height: var(--line-pitch);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.link:hover {
-  color: var(--color-accent-hover);
-}
-
-.link:focus-visible {
   outline: 2px solid var(--color-accent-ring);
   outline-offset: 2px;
 }

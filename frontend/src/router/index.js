@@ -114,6 +114,16 @@ const router = createRouter({
       component: () => import('../views/ProfileView.vue'),
       props: true,
     },
+    {
+      // Catch-all, last by definition. Public so a logged-out visitor lands on
+      // the page rather than a login redirect. Like every other public route it
+      // drops the shell: App.vue does not auth-gate the sidebar, so leaving it
+      // on would draw the session rail for an anonymous visitor.
+      path: '/:pathMatch(.*)*',
+      name: 'not-found',
+      component: () => import('../views/NotFoundView.vue'),
+      meta: { public: true, sidebar: false },
+    },
   ],
 })
 

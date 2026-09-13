@@ -101,7 +101,7 @@ const { searching, pinnedActive, activeGroups, endedRows } = useSessionGroups(
 
 const activeFlat = computed(() => activeGroups.value.flatMap((g) => g.rows))
 
-const SIDEBAR_CAP = 20
+const SIDEBAR_CAP = 15
 
 // Search queries the library endpoint server-side (the store only holds a
 // SIDEBAR_CAP-windowed slice, so client-side filtering of `sessions` could
@@ -161,7 +161,7 @@ const showViewAllSearch = computed(
 
 // Pinned rows render first and count toward the cap; server's pinned_activity
 // sort already guarantees pinned rows are inside the fetched page. Pinned
-// itself is also sliced to the cap so >20 pinned rows can never push the
+// itself is also sliced to the cap so >15 pinned rows can never push the
 // component's total render past SIDEBAR_CAP on their own.
 const cappedPinnedActive = computed(() => pinnedActive.value.slice(0, SIDEBAR_CAP))
 const cappedActiveFlat = computed(() =>
@@ -172,16 +172,13 @@ const cappedEndedRows = computed(() => endedRows.value.slice(0, SIDEBAR_CAP))
 const activeRendered = computed(
   () => cappedPinnedActive.value.length + cappedActiveFlat.value.length,
 )
-// Gated on rendered rows > 0: createSession bumps activeTotal without
-// pushing into the (windowed) `sessions` array, so a fresh account can sit
-// at activeTotal=1 with zero rendered rows. Without this guard the sidebar
+// View all is the list's closing line whenever rows are rendered. The
+// zero-rows guard stays: createSession bumps activeTotal without pushing
+// into the (windowed) `sessions` array, so a fresh account can sit at
+// activeTotal=1 with zero rendered rows. Without this guard the sidebar
 // would show "No sessions yet" and "View all 1 sessions" at once.
-const showViewAllActive = computed(
-  () => activeRendered.value > 0 && activeTotal.value > activeRendered.value,
-)
-const showViewAllEnded = computed(
-  () => cappedEndedRows.value.length > 0 && endedTotal.value > cappedEndedRows.value.length,
-)
+const showViewAllActive = computed(() => activeRendered.value > 0)
+const showViewAllEnded = computed(() => cappedEndedRows.value.length > 0)
 
 const showSkeleton = computed(() => loading.value && !sessions.value.length)
 
@@ -811,9 +808,6 @@ function onNewSession() {
   overflow-x: hidden;
   padding: 0;
   border-top: 1px solid var(--rule-strong);
-  background: var(--ruled-bg);
-  background-position-y: var(--ruled-offset);
-  background-attachment: local;
 }
 
 .sb-section {

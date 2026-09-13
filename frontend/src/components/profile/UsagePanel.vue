@@ -33,6 +33,21 @@
           Today ${{ usage.today_spend_usd.toFixed(2) }} / ${{ usage.hard_cap_usd.toFixed(2) }} cap
         </span>
       </div>
+
+      <div v-if="ledger.length" class="ledger" data-testid="usage-ledger">
+        <h3 class="sub-title">Last 7 days</h3>
+        <ul class="ledger-list">
+          <li
+            v-for="d in ledger"
+            :key="d.date_utc"
+            class="ledger-row"
+            data-testid="usage-ledger-row"
+          >
+            <span class="ledger-date">{{ d.label }}</span>
+            <span class="ledger-cost" data-tabular>${{ d.cost_usd.toFixed(2) }}</span>
+          </li>
+        </ul>
+      </div>
     </template>
 
     <div v-if="usage.top_sessions.length" class="top-sessions">
@@ -74,11 +89,29 @@ const pctOfHard = (v) => `${Math.min(100, Math.round((v / props.usage.hard_cap_u
 
 const fillPct = computed(() => pctOfHard(props.usage.today_spend_usd))
 const markerPct = (v) => pctOfHard(v)
+
+function formatDay(iso) {
+  try {
+    const d = new Date(`${iso}T00:00:00Z`)
+    if (Number.isNaN(d.getTime())) return iso
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+  } catch {
+    return iso
+  }
+}
+
+const ledger = computed(() =>
+  props.usage.daily
+    .slice(-7)
+    .slice()
+    .reverse()
+    .map((d) => ({ ...d, label: formatDay(d.date_utc) })),
+)
 </script>
 
 <style scoped>
-/* The ledger page: every line on the pitch, every figure in tabular numerals,
-   the day's spend drawn as one ruled line rather than a bar. */
+/* The ledger page: today against the cap as one ruled line, the last seven
+   days as dated rows, the costliest sessions under them. */
 .usage {
   display: flex;
   flex-direction: column;
@@ -149,6 +182,46 @@ const markerPct = (v) => pctOfHard(v)
   font-weight: 700;
   line-height: var(--line-pitch);
   color: var(--ink);
+}
+
+.ledger {
+  display: flex;
+  flex-direction: column;
+  padding-top: var(--line-pitch);
+}
+
+.ledger-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ledger-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0 0.25rem 0 0;
+  box-shadow: inset 0 -1px 0 var(--rule);
+}
+
+.ledger-date {
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  line-height: var(--line-pitch);
+  color: var(--ink);
+}
+
+.ledger-cost {
+  flex: 0 0 auto;
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
+}
+
+.top-sessions {
+  padding-top: var(--line-pitch);
 }
 
 .top-list {

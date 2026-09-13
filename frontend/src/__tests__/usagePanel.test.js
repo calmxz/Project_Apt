@@ -48,6 +48,29 @@ describe('UsagePanel', () => {
     expect(w.find('[data-testid="usage-glance"]').text()).toBe('Today $0.10 · Last 7 days $0.70')
   })
 
+  it('lists the last 7 days as ledger rows, most recent first', () => {
+    const w = factory(
+      usage({
+        daily: [
+          { date_utc: '2026-07-03', cost_usd: 5.0 },
+          { date_utc: '2026-07-04', cost_usd: 0.1 },
+          { date_utc: '2026-07-05', cost_usd: 0.1 },
+          { date_utc: '2026-07-06', cost_usd: 0.1 },
+          { date_utc: '2026-07-07', cost_usd: 0.1 },
+          { date_utc: '2026-07-08', cost_usd: 0.1 },
+          { date_utc: '2026-07-09', cost_usd: 0.1 },
+          { date_utc: '2026-07-10', cost_usd: 0.1 },
+        ],
+        today_spend_usd: 0.1,
+      }),
+    )
+    const rows = w.findAll('[data-testid="usage-ledger-row"]')
+    expect(rows).toHaveLength(7)
+    expect(rows[0].text()).toContain('Jul 10')
+    expect(rows[0].text()).toContain('$0.10')
+    expect(rows.some((r) => r.text().includes('Jul 3'))).toBe(false)
+  })
+
   it('positions tier markers from response values, not literals', () => {
     const w = factory(usage({ hard_cap_usd: 4.0, soft_cap_usd: 1.0, urgent_cap_usd: 3.6 }))
     const markers = w.findAll('.tier-marker')
@@ -88,6 +111,7 @@ describe('UsagePanel', () => {
     )
     expect(w.find('[data-testid="usage-empty"]').exists()).toBe(true)
     expect(w.find('[data-testid="usage-glance"]').exists()).toBe(false)
+    expect(w.find('[data-testid="usage-ledger"]').exists()).toBe(false)
   })
 
   it('does not show the empty-state copy when top_sessions has rows', () => {

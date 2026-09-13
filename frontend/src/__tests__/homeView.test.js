@@ -194,37 +194,15 @@ describe('HomeView', () => {
     expect(store.createSession).toHaveBeenCalledTimes(1)
   })
 
-  // Redesign C1: recent sessions are back on Home as contents rows on the
-  // ruled ground (three-cell label, minus the level cell the library API does
-  // not serve). This supersedes the earlier "recent feed relocated" guard.
-  // The dupe banner stays gone.
-  it('does not render the dupe banner, and renders recent sessions as contents rows', async () => {
+  // Redesign: recent sessions now live in the sidebar only. Home keeps only
+  // the prompt, so this guard narrows to the dupe banner staying gone.
+  it('does not render the dupe banner', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'listSessions').mockResolvedValue([])
     store.sessions = [makeSession('a1', 'Calc', false, -1), makeSession('a2', 'Calc', false, 0)]
     const wrapper = mountView()
     await flushPromises()
     expect(wrapper.find('[data-testid="home-dupe-banner"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="home-recent"]').exists()).toBe(true)
-    expect(wrapper.findAll('[data-testid^="home-recent-"]')).toHaveLength(2)
-    expect(wrapper.get('[data-testid="home-recent-a1"]').text()).toContain('Calc')
-  })
-
-  it('hides the recent block entirely when there are no sessions', async () => {
-    const store = useSessionStore()
-    vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    const wrapper = mountView()
-    await flushPromises()
-    expect(wrapper.find('[data-testid="home-recent"]').exists()).toBe(false)
-  })
-
-  it('quick pick chip fills the topic input', async () => {
-    const store = useSessionStore()
-    vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    const wrapper = mountView()
-    await flushPromises()
-    await wrapper.findAll('.quick-pick')[0].trigger('click')
-    expect(wrapper.get('[data-testid="home-quick-topic"]').element.value).toBe('Recursion')
   })
 
   it('does not render a file-attach control', async () => {
