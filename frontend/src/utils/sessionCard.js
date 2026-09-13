@@ -19,12 +19,46 @@ const DISPLAY_MATH_RE = /\$\$[\s\S]*?\$\$/g
 const INLINE_MATH_RE = /\$[^$\n]+?\$/g
 const SHORT_PREVIEW = 12
 
-// Strips LaTeX source (display and inline math) down to a placeholder so card
-// previews never show raw formula syntax.
+// Line-start block markers. Run before the inline passes so a bullet's "* "
+// is never mistaken for an emphasis opener.
+const MD_HEADING_RE = /^[ \t]*#{1,6}[ \t]+/gm
+const MD_QUOTE_RE = /^[ \t]*>[ \t]?/gm
+const MD_BULLET_RE = /^[ \t]*[-*+][ \t]+/gm
+const MD_ORDERED_RE = /^[ \t]*\d+\.[ \t]+/gm
+// Images before links, or "![alt](url)" would leave a stray "!".
+const MD_IMAGE_RE = /!\[([^\]]*)\]\([^)]*\)/g
+const MD_LINK_RE = /\[([^\]]*)\]\([^)]*\)/g
+const MD_CODE_RE = /`([^`\n]+)`/g
+const MD_STRIKE_RE = /~~([^~\n]+?)~~/g
+// Double markers before single ones, or "**x**" would only lose one pair.
+// The underscore forms require a word boundary on both sides so "snake_case"
+// survives untouched.
+const MD_BOLD_STAR_RE = /\*\*([^*\n]+?)\*\*/g
+const MD_BOLD_UNDER_RE = /(^|[^\w])__([^_\n]+?)__(?=[^\w]|$)/g
+// The single-marker forms also require the marker to hug its text, so prose
+// arithmetic ("5 * 3 and 2 * 4") keeps its asterisks.
+const MD_ITALIC_STAR_RE = /\*(\S(?:[^*\n]*?\S)?)\*/g
+const MD_ITALIC_UNDER_RE = /(^|[^\w])_(\S(?:[^_\n]*?\S)?)_(?=[^\w]|$)/g
+
+// Strips LaTeX source (display and inline math) down to a placeholder and then
+// strips inline markdown syntax down to its text, so card previews never show
+// raw formula or markup characters.
 export function cleanPreview(text) {
   return (text || '')
     .replace(DISPLAY_MATH_RE, '[formula]')
     .replace(INLINE_MATH_RE, '[formula]')
+    .replace(MD_HEADING_RE, '')
+    .replace(MD_QUOTE_RE, '')
+    .replace(MD_BULLET_RE, '')
+    .replace(MD_ORDERED_RE, '')
+    .replace(MD_IMAGE_RE, '$1')
+    .replace(MD_LINK_RE, '$1')
+    .replace(MD_CODE_RE, '$1')
+    .replace(MD_STRIKE_RE, '$1')
+    .replace(MD_BOLD_STAR_RE, '$1')
+    .replace(MD_BOLD_UNDER_RE, '$1$2')
+    .replace(MD_ITALIC_STAR_RE, '$1')
+    .replace(MD_ITALIC_UNDER_RE, '$1$2')
     .replace(/\s+/g, ' ')
     .trim()
 }

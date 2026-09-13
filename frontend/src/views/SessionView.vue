@@ -1087,7 +1087,9 @@ function goHome() {
      painted on the scrolling content so text keeps sitting on them. */
   min-height: 0;
   overflow-y: auto;
-  scrollbar-gutter: stable;
+  /* Both edges: .notes-foot has no scrollbar, so a single right-side gutter
+     here would push the centered measure ~8px left of the foot's. */
+  scrollbar-gutter: stable both-edges;
   background-image: var(--ruled-bg);
   background-position-y: var(--ruled-offset);
   background-attachment: local;
@@ -1113,9 +1115,13 @@ function goHome() {
   background-clip: padding-box;
 }
 
-/* The measure: the notes gutter plus a 72ch text column. */
+/* The measure: the notes gutter plus a 72ch text column, centered in the
+   notes column. The foot uses the same rule so the composer stays under
+   the notes. */
 .notes-measure {
+  width: 100%;
   max-width: calc(4rem + 72ch);
+  margin: 0 auto;
 }
 
 .notes-foot {

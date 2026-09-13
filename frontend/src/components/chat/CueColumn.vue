@@ -331,9 +331,12 @@ const expanded = ref(false)
   color: var(--pencil);
 }
 
+/* Marks sit on the first line of the pitch, so a cue that wraps keeps its
+   mark beside its first word rather than floating mid-block. */
 .cue-mark {
   flex: 0 0 auto;
-  align-self: center;
+  align-self: flex-start;
+  margin-top: calc((var(--line-pitch) - 12px) / 2);
   fill: none;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -355,10 +358,15 @@ const expanded = ref(false)
 
 .cue-level-mark {
   flex: 0 0 auto;
-  align-self: center;
+  align-self: flex-start;
+  margin-top: calc((var(--line-pitch) - 16px) / 2);
   fill: none;
   stroke: var(--ink);
   stroke-linecap: round;
+}
+
+.cue-subtopic .cue-level-mark {
+  margin-top: calc((var(--line-pitch) - 12px) / 2);
 }
 
 .cue-level.is-unset .cue-level-mark {

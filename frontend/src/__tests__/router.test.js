@@ -94,6 +94,18 @@ describe('router', () => {
     expect(router.currentRoute.value.name).toBe('onboarding')
   })
 
+  it('resolves an unknown path to the not-found route', () => {
+    expect(router.resolve('/definitely/not/a/route').name).toBe('not-found')
+  })
+
+  it('shows not-found (not login) to an unauthenticated visitor on an unknown path', async () => {
+    setAuth(false)
+    const user = useUserStore()
+    user.onboardingComplete = true
+    await router.push('/nope')
+    expect(router.currentRoute.value.name).toBe('not-found')
+  })
+
   it('passes :id as a prop to the session route', () => {
     const route = router.getRoutes().find((r) => r.name === 'session')
     expect(route.props.default).toBe(true)

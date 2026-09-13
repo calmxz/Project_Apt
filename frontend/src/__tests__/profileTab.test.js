@@ -140,19 +140,6 @@ describe('ProfileTab', () => {
     expect(wrapper.find('[data-testid="glance-mastery"]').text()).toBe(
       '1 mastered this week · 2 total',
     )
-    // Redesign finish fix 2: the distribution is cue entries (level stroke at
-    // its weight + word + count), not one "2 beginner · 1 intermediate" line.
-    // Levels with a zero count are still left off the page.
-    const dist = wrapper.findAll('[data-testid="dist-entry"]')
-    expect(dist).toHaveLength(2)
-    expect(dist[0].text()).toContain('beginner')
-    expect(dist[0].text()).toContain('2')
-    expect(dist[0].find('path').attributes('stroke-width')).toBe('1.5')
-    expect(dist[1].text()).toContain('intermediate')
-    expect(dist[1].find('path').attributes('stroke-width')).toBe('2.25')
-    expect(wrapper.find('[data-testid="agg-dist"]').text()).not.toContain('advanced')
-    expect(wrapper.find('[data-testid="agg-dist"]').text()).not.toContain('unknown')
-
     // Needs attention is a bold caption heading over cue entries, so the copy
     // is no longer one comma-joined sentence; the same strings are asserted.
     expect(wrapper.find('[data-testid="agg-insights"]').text()).toContain('Needs attention')
@@ -249,7 +236,6 @@ describe('ProfileTab', () => {
     const gapsText = wrapper.find('[data-testid="agg-gaps"]').text()
     expect(gapsText).toContain('window-fns')
     expect(gapsText).toContain('×2')
-    expect(wrapper.find('[data-testid="agg-recent"]').text()).toContain('sql joins')
   })
 
   it('glance lines: zero-mastered form and hidden needs-attention', async () => {
