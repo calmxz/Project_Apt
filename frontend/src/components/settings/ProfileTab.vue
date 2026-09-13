@@ -1,9 +1,20 @@
 <template>
   <div class="profile-tab" data-testid="agg-profile">
-    <p v-if="data?.last_active_at" class="lede">
-      Last active {{ formatRelative(data.last_active_at) }}.
-    </p>
-    <p v-else class="lede">Snapshot of everything the tutor has learned about you.</p>
+    <section class="sec" data-testid="profile-feedback">
+      <h2 class="sec-title">Feedback style</h2>
+      <FeedbackStylePicker v-model="feedback" :options="feedbackOptions" />
+      <div class="actions">
+        <button
+          type="button"
+          class="text-btn"
+          data-testid="profile-feedback-save"
+          :disabled="!feedbackDirty || savingFeedback"
+          @click="saveFeedback"
+        >
+          Save feedback style
+        </button>
+      </div>
+    </section>
 
     <div v-if="loading" class="skel" data-testid="agg-loading" aria-hidden="true">
       <span class="skel-block" />
@@ -16,6 +27,7 @@
     <template v-else-if="data">
       <EmptyState
         v-if="data.total_sessions === 0"
+        class="sec--ruled"
         data-testid="agg-empty"
         tone="celebrate"
         headline="No sessions yet"
@@ -27,41 +39,35 @@
       </EmptyState>
 
       <template v-else>
-        <p class="counts" data-testid="agg-stats" data-tabular>
-          {{ plural(data.total_sessions, 'session') }} ({{ data.active_sessions }} active,
-          {{ data.ended_sessions }} ended) · {{ data.combined_mastered_concepts.length }} mastered ·
-          {{ plural(data.combined_confirmed_gaps.length, 'gap') }} ·
-          {{ plural(data.total_learning_events, 'check-question') }}
+        <p class="counts sec--ruled" data-testid="agg-stats" data-tabular>
+          {{ plural(data.total_sessions, 'session') }} ·
+          {{ data.combined_mastered_concepts.length }} mastered ·
+          {{ plural(data.combined_confirmed_gaps.length, 'gap') }}
         </p>
 
-        <section class="sec" data-testid="agg-insights">
-          <h2 class="sec-title">At a glance</h2>
-          <p class="glance-line" data-testid="glance-mastery">{{ masteryLine }}</p>
-
-          <template v-if="attentionItems.length">
-            <h3 class="sec-title sec-title--attn">Needs attention</h3>
-            <ul class="cue-list" data-testid="glance-attention">
-              <li v-for="c in attentionItems" :key="c.concept" class="cue-entry">
-                <router-link
-                  :to="{ name: 'session-profile', params: { id: c.first_seen_session_id } }"
-                  class="attn-link"
+        <section v-if="attentionItems.length" class="sec" data-testid="agg-insights">
+          <h2 class="sec-title">Needs attention</h2>
+          <ul class="cue-list" data-testid="glance-attention">
+            <li v-for="c in attentionItems" :key="c.concept" class="cue-entry">
+              <router-link
+                :to="{ name: 'session-profile', params: { id: c.first_seen_session_id } }"
+                class="attn-link"
+              >
+                <svg
+                  class="cue-mark cue-mark--attn"
+                  viewBox="0 0 12 12"
+                  width="12"
+                  height="12"
+                  aria-hidden="true"
+                  focusable="false"
                 >
-                  <svg
-                    class="cue-mark cue-mark--attn"
-                    viewBox="0 0 12 12"
-                    width="12"
-                    height="12"
-                    aria-hidden="true"
-                    focusable="false"
-                  >
-                    <path d="M1 6 L11 6" />
-                  </svg>
-                  <span class="attn-word">{{ c.concept }}</span>
-                  <span class="attn-pct" data-tabular>({{ c.pct }}%)</span>
-                </router-link>
-              </li>
-            </ul>
-          </template>
+                  <path d="M1 6 L11 6" />
+                </svg>
+                <span class="attn-word">{{ c.concept }}</span>
+                <span class="attn-pct" data-tabular>({{ c.pct }}%)</span>
+              </router-link>
+            </li>
+          </ul>
         </section>
 
         <div class="cue-cols">
@@ -94,9 +100,6 @@
                   >
                     ×{{ item.count }}
                   </router-link>
-                </span>
-                <span v-if="topicFor(item.first_seen_session_id)" class="cue-sub">
-                  {{ topicFor(item.first_seen_session_id) }}
                 </span>
               </li>
             </ul>
@@ -132,31 +135,12 @@
                     ×{{ item.count }}
                   </router-link>
                 </span>
-                <span v-if="topicFor(item.first_seen_session_id)" class="cue-sub">
-                  {{ topicFor(item.first_seen_session_id) }}
-                </span>
               </li>
             </ul>
           </section>
         </div>
       </template>
     </template>
-
-    <section class="sec sec--ruled" data-testid="profile-feedback">
-      <h2 class="sec-title">Feedback style</h2>
-      <FeedbackStylePicker v-model="feedback" :options="feedbackOptions" />
-      <div class="actions">
-        <button
-          type="button"
-          class="text-btn"
-          data-testid="profile-feedback-save"
-          :disabled="!feedbackDirty || savingFeedback"
-          @click="saveFeedback"
-        >
-          Save feedback style
-        </button>
-      </div>
-    </section>
   </div>
 </template>
 
@@ -167,7 +151,6 @@ import EmptyState from '../EmptyState.vue'
 import FeedbackStylePicker from '../FeedbackStylePicker.vue'
 import { friendlyError } from '../../lib/errors.js'
 import { getAggregateProfile } from '../../services/profileApi.js'
-import { formatRelative } from '../../utils/formatDate.js'
 import { useUserStore } from '../../stores/user.js'
 import { useToast } from '../../composables/useToast.js'
 
@@ -178,28 +161,10 @@ const data = ref(null)
 const loading = ref(false)
 const error = ref('')
 
-const masteryLine = computed(() => {
-  const total = data.value?.combined_mastered_concepts.length || 0
-  if (total === 0) return 'Nothing mastered yet'
-  const weeks = data.value?.weekly_mastery || []
-  // weekly_mastery counts first-correct events, which survive later demotions
-  // out of mastered_concepts — clamp so "this week" never exceeds the total
-  const thisWeek = Math.min(weeks.length ? weeks[weeks.length - 1].count : 0, total)
-  return `${thisWeek} mastered this week · ${total} total`
-})
-
 // Counts are written the way the cue column writes them: "1 gap", not
 // "1 gaps". "mastered" is a participle and never takes a plural.
 function plural(n, word) {
   return `${n} ${word}${n === 1 ? '' : 's'}`
-}
-
-// The session a cue was first written in, when it is one of the recent topics
-// the payload carries; the aggregate API sends ids, not names.
-function topicFor(sessionId) {
-  if (!sessionId) return ''
-  const hit = (data.value?.recent_topics || []).find((t) => t.id === sessionId)
-  return hit?.topic || ''
 }
 
 const attentionItems = computed(() =>
@@ -253,9 +218,10 @@ async function saveFeedback() {
 </script>
 
 <style scoped>
-/* The aggregate profile is the cue column at full width, condensed to what
-   changes the next session: counts, what needs attention, gaps, mastered,
-   feedback style. No stat cards, no chips, no fills. */
+/* Feedback style comes first (the setting the learner is most likely to
+   change), then the aggregate profile, lightened to what changes the next
+   session: a one-line pencil count, what needs attention, gaps, mastered.
+   No stat cards, no chips, no fills. */
 .profile-tab {
   /* Full panel width: an auto cross-axis margin inside the panel's flex
      column would shrink-wrap the tab to its longest line and collapse the
@@ -263,14 +229,6 @@ async function saveFeedback() {
   width: 100%;
   display: flex;
   flex-direction: column;
-}
-
-.lede {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-size: var(--fs-caption);
-  line-height: var(--line-pitch);
-  color: var(--pencil);
 }
 
 .counts {
@@ -307,20 +265,6 @@ async function saveFeedback() {
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
   font-weight: 700;
-  line-height: var(--line-pitch);
-  color: var(--ink);
-}
-
-/* "Needs attention" follows the "At a glance" mastery line inside the same
-   .sec; it gets its own top pitch like every other .sec on the page. */
-.sec-title--attn {
-  margin-top: var(--line-pitch);
-}
-
-.glance-line {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-size: var(--fs-body);
   line-height: var(--line-pitch);
   color: var(--ink);
 }
@@ -428,16 +372,6 @@ async function saveFeedback() {
 
 .cue-count:hover {
   color: var(--ink-learner);
-}
-
-/* The session the cue was first written in, in pencil under the cue. */
-.cue-sub {
-  padding-left: 1.25rem;
-  font-family: var(--font-sans);
-  font-size: var(--fs-label);
-  line-height: var(--line-pitch);
-  color: var(--pencil);
-  overflow-wrap: anywhere;
 }
 
 .cue-none {

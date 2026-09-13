@@ -38,7 +38,7 @@ export const useSessionStore = defineStore('session', () => {
   const currentSessionId = ref(null)
   const currentSession = ref(null)
   // NOT the full corpus: a SIDEBAR_PAGE_LIMIT-sized window per status
-  // (20 active + 20 ended), refilled only by listSessions().
+  // (40 active + 40 ended), refilled only by listSessions().
   const sessions = ref([])
   // The sidebar's server-side search results. Owned by the store rather than
   // by Sidebar.vue because the sidebar RENDERS these row objects directly and
@@ -47,7 +47,10 @@ export const useSessionStore = defineStore('session', () => {
   // search row would update nothing the user can see.
   const searchRows = ref([])
   // Server-capped sidebar page size; totals let the UI say "View all N".
-  const SIDEBAR_PAGE_LIMIT = 20
+  // 40 rather than 20 because the sidebar now renders as many rows as its own
+  // height allows (fit-to-height, up to 40) instead of a fixed 15 -- a 20-row
+  // window would starve a tall viewport of rows it has room to draw.
+  const SIDEBAR_PAGE_LIMIT = 40
   // activeTotal / endedTotal are a LOCAL MIRROR of the server's per-status
   // counts. They are NOT derived from `sessions` (which is only a window) and
   // they are reconciled with the server in exactly two places: listSessions()

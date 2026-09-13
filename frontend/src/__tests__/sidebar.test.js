@@ -1060,13 +1060,12 @@ describe('Sidebar.vue — footer rail labels', () => {
     expect(wrapper.find('[data-testid="sidebar-settings"]').text()).not.toContain('Settings')
   })
 
-  it('footer rail no longer renders theme or sign-out controls', async () => {
+  it('footer rail no longer renders a theme control', async () => {
     const auth = useAuthStore()
     auth.session = { user: { id: 'u-1' }, access_token: 't' }
     wrapper = mount(Sidebar)
     await flushPromises()
     expect(wrapper.find('[data-testid="sidebar-theme-toggle"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="sidebar-sign-out"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="sidebar-settings"]').exists()).toBe(true)
   })
 
@@ -1075,6 +1074,64 @@ describe('Sidebar.vue — footer rail labels', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="sidebar-profile"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="sidebar-settings"]').exists()).toBe(true)
+  })
+})
+
+// Sign out moved out of Settings > Account and onto the footer rail: it is a
+// navigation act, not a setting.
+describe('Sidebar.vue — footer sign out', () => {
+  let wrapper
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    routerPush.mockClear()
+    showError.mockClear()
+    localStorage.clear()
+    setViewport(1400)
+    sidebarTest._setExpanded(true)
+    routeRef.params = {}
+    routeRef.fullPath = '/'
+  })
+  afterEach(() => wrapper?.unmount())
+
+  it('is hidden when unauthenticated', async () => {
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sidebar-sign-out"]').exists()).toBe(false)
+  })
+
+  it('renders a written Sign out line when authenticated and expanded', async () => {
+    const auth = useAuthStore()
+    auth.session = { user: { id: 'u-1' }, access_token: 't' }
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    const btn = wrapper.get('[data-testid="sidebar-sign-out"]')
+    expect(btn.text()).toContain('Sign out')
+    expect(btn.attributes('aria-label')).toBe('Sign out')
+  })
+
+  it('signs out and redirects to /login', async () => {
+    const auth = useAuthStore()
+    auth.session = { user: { id: 'u-1' }, access_token: 't' }
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    await wrapper.get('[data-testid="sidebar-sign-out"]').trigger('click')
+    await flushPromises()
+    expect(globalThis.__supabaseAuthStub.signOut).toHaveBeenCalled()
+    expect(routerPush).toHaveBeenCalledWith('/login')
+  })
+
+  it('surfaces an error toast and does not redirect on failure', async () => {
+    globalThis.__supabaseAuthStub.signOut.mockResolvedValueOnce({
+      error: new Error('network down'),
+    })
+    const auth = useAuthStore()
+    auth.session = { user: { id: 'u-1' }, access_token: 't' }
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    await wrapper.get('[data-testid="sidebar-sign-out"]').trigger('click')
+    await flushPromises()
+    expect(showError).toHaveBeenCalledWith('network down')
+    expect(routerPush).not.toHaveBeenCalled()
   })
 })
 
@@ -1363,7 +1420,25 @@ function makeEndedSessions(count) {
   }))
 }
 
-describe('sidebar 15-row cap and View all links', () => {
+// jsdom ships no ResizeObserver and reports clientHeight 0, so the component's
+// fit-to-height measurement is unreachable by default. This installs a stub
+// that reports `height` for the observed element and fires the callback once,
+// synchronously, on observe() -- i.e. the first measurement the browser makes.
+function installResizeObserverStub(height) {
+  globalThis.ResizeObserver = class {
+    constructor(cb) {
+      this._cb = cb
+    }
+    observe(el) {
+      Object.defineProperty(el, 'clientHeight', { configurable: true, value: height })
+      this._cb([{ target: el }], this)
+    }
+    unobserve() {}
+    disconnect() {}
+  }
+}
+
+describe('sidebar row cap and View all links', () => {
   let wrapper
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -1530,6 +1605,42 @@ describe('sidebar 15-row cap and View all links', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="sidebar-empty-hint"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="sidebar-view-all-active"]').exists()).toBe(false)
+  })
+
+  // Fit-to-height: with a real ResizeObserver the cap grows to whatever the
+  // list column has room for (one pitch reserved for the View all line),
+  // clamped to [15, 40]. jsdom has no ResizeObserver, which is exactly why
+  // every case above still sees the 15-row floor.
+  it('renders as many rows as the measured list height allows, up to 40', async () => {
+    installResizeObserverStub(28 * 31)
+    try {
+      const store = useSessionStore()
+      store.sessions = makeActiveSessions(40)
+      store.activeTotal = 40
+      wrapper = mount(Sidebar)
+      await flushPromises()
+      expect(wrapper.findAll('[data-testid="sidebar-quick-group"] [data-session-id]')).toHaveLength(
+        30,
+      )
+    } finally {
+      delete globalThis.ResizeObserver
+    }
+  })
+
+  it('keeps the 15-row floor when the measured height fits fewer rows', async () => {
+    installResizeObserverStub(100)
+    try {
+      const store = useSessionStore()
+      store.sessions = makeActiveSessions(40)
+      store.activeTotal = 40
+      wrapper = mount(Sidebar)
+      await flushPromises()
+      expect(wrapper.findAll('[data-testid="sidebar-quick-group"] [data-session-id]')).toHaveLength(
+        15,
+      )
+    } finally {
+      delete globalThis.ResizeObserver
+    }
   })
 
   it('never offers the ended View all link while no ended rows are rendered', async () => {

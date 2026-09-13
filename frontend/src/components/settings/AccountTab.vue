@@ -115,21 +115,10 @@
       </div>
     </form>
   </section>
-
-  <section
-    v-if="authStore.isAuthenticated"
-    class="sec sec--ruled"
-    data-testid="settings-signout-section"
-  >
-    <button type="button" class="text-btn" data-testid="settings-sign-out" @click="signOut">
-      Sign out
-    </button>
-  </section>
 </template>
 
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
 
 import { friendlyError } from '@/lib/errors.js'
 import { useUserStore } from '../../stores/user.js'
@@ -138,8 +127,7 @@ import { useToast } from '../../composables/useToast.js'
 
 const user = useUserStore()
 const authStore = useAuthStore()
-const router = useRouter()
-const { showSuccess, showError } = useToast()
+const { showSuccess } = useToast()
 
 const displayName = ref(user.name || '')
 const savedFlash = ref(false)
@@ -208,16 +196,6 @@ async function changePassword() {
   } finally {
     pwSubmitting.value = false
   }
-}
-
-async function signOut() {
-  try {
-    await authStore.signOut()
-  } catch (err) {
-    showError(err?.message || 'Sign out failed')
-    return
-  }
-  router.push('/login')
 }
 </script>
 

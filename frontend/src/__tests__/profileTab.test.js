@@ -137,9 +137,7 @@ describe('ProfileTab', () => {
 
     expect(wrapper.find('[data-testid="agg-stats"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="agg-profile"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="glance-mastery"]').text()).toBe(
-      '1 mastered this week · 2 total',
-    )
+    expect(wrapper.find('[data-testid="agg-stats"]').text()).toBe('3 sessions · 2 mastered · 1 gap')
     // Needs attention is a bold caption heading over cue entries, so the copy
     // is no longer one comma-joined sentence; the same strings are asserted.
     expect(wrapper.find('[data-testid="agg-insights"]').text()).toContain('Needs attention')
@@ -156,7 +154,7 @@ describe('ProfileTab', () => {
 
   // The section heading is drawn on the page now, not hidden for screen
   // readers only (DESIGN.md: no sr-only stand-ins for a visible heading).
-  it('gives the at-a-glance section a visible heading', async () => {
+  it('gives the needs-attention section a visible heading, only when there are items', async () => {
     seedUser()
     vi.spyOn(profileApi, 'getAggregateProfile').mockResolvedValue(nonEmptyAggregatePayload())
 
@@ -166,21 +164,34 @@ describe('ProfileTab', () => {
     const section = wrapper.get('[data-testid="agg-insights"]')
     expect(section.find('.sr-only').exists()).toBe(false)
     expect(section.get('h2').classes()).toContain('sec-title')
-    expect(section.get('h2').text()).toBe('At a glance')
+    expect(section.get('h2').text()).toBe('Needs attention')
   })
 
-  it('clamps the mastered-this-week count to the mastered total', async () => {
+  it('does not render the needs-attention section when there are no attention items', async () => {
     seedUser()
     const payload = nonEmptyAggregatePayload()
-    payload.weekly_mastery = [{ week_start: '2026-07-27', count: 5 }]
+    payload.concept_accuracy = []
     vi.spyOn(profileApi, 'getAggregateProfile').mockResolvedValue(payload)
 
     const wrapper = mount(ProfileTab, { global: { stubs } })
     await flushPromises()
 
-    expect(wrapper.find('[data-testid="glance-mastery"]').text()).toBe(
-      '2 mastered this week · 2 total',
-    )
+    expect(wrapper.find('[data-testid="agg-insights"]').exists()).toBe(false)
+  })
+
+  it('renders the feedback style section before the aggregate stats in DOM order', async () => {
+    seedUser()
+    vi.spyOn(profileApi, 'getAggregateProfile').mockResolvedValue(nonEmptyAggregatePayload())
+
+    const wrapper = mount(ProfileTab, { global: { stubs } })
+    await flushPromises()
+
+    const html = wrapper.html()
+    const feedbackIdx = html.indexOf('profile-feedback')
+    const statsIdx = html.indexOf('agg-stats')
+    expect(feedbackIdx).toBeGreaterThan(-1)
+    expect(statsIdx).toBeGreaterThan(-1)
+    expect(feedbackIdx).toBeLessThan(statsIdx)
   })
 
   it('links each needs-attention concept to its first-seen session', async () => {
@@ -238,7 +249,7 @@ describe('ProfileTab', () => {
     expect(gapsText).toContain('×2')
   })
 
-  it('glance lines: zero-mastered form and hidden needs-attention', async () => {
+  it('stats line: zero-mastered form and hidden needs-attention', async () => {
     seedUser()
     const payload = nonEmptyAggregatePayload()
     payload.combined_mastered_concepts = []
@@ -249,7 +260,7 @@ describe('ProfileTab', () => {
     const wrapper = mount(ProfileTab, { global: { stubs } })
     await flushPromises()
 
-    expect(wrapper.find('[data-testid="glance-mastery"]').text()).toBe('Nothing mastered yet')
+    expect(wrapper.find('[data-testid="agg-stats"]').text()).toBe('3 sessions · 0 mastered · 1 gap')
     expect(wrapper.find('[data-testid="glance-attention"]').exists()).toBe(false)
   })
 

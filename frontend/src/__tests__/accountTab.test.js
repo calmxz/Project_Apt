@@ -53,12 +53,15 @@ describe('AccountTab', () => {
     }
   })
 
-  it('renders signout section when authenticated', async () => {
+  // Sign out is a navigation act, not a setting: it lives on the sidebar
+  // footer rail (see sidebar.test.js), never inside the Account tab.
+  it('does not render any sign-out control', async () => {
     const auth = useAuthStore()
     auth.session = { user: { id: 'u-1' }, access_token: 't' }
     const w = mount(AccountTab, { global: { stubs } })
     await flushPromises()
-    expect(w.find('[data-testid="settings-signout-section"]').exists()).toBe(true)
+    expect(w.find('[data-testid="settings-signout-section"]').exists()).toBe(false)
+    expect(w.find('[data-testid="settings-sign-out"]').exists()).toBe(false)
   })
 
   it('does not render the security card when unauthenticated', () => {
@@ -160,35 +163,5 @@ describe('AccountTab', () => {
     expect(w.find('[data-testid="settings-pw-success"]').exists()).toBe(true)
     expect(w.find('[data-testid="settings-pw-success"]').attributes('role')).toBe('status')
     expect(showSuccess).toHaveBeenCalled()
-  })
-
-  it('sign-out button is hidden when unauthenticated', () => {
-    const w = mount(AccountTab, { global: { stubs } })
-    expect(w.find('[data-testid="settings-sign-out"]').exists()).toBe(false)
-  })
-
-  it('sign-out signs out and redirects to /login', async () => {
-    const auth = useAuthStore()
-    auth.session = { user: { id: 'u-1' }, access_token: 't' }
-    const w = mount(AccountTab, { global: { stubs } })
-    await flushPromises()
-    await w.get('[data-testid="settings-sign-out"]').trigger('click')
-    await flushPromises()
-    expect(globalThis.__supabaseAuthStub.signOut).toHaveBeenCalled()
-    expect(routerPush).toHaveBeenCalledWith('/login')
-  })
-
-  it('sign-out surfaces an error toast and does not redirect on failure', async () => {
-    globalThis.__supabaseAuthStub.signOut.mockResolvedValueOnce({
-      error: new Error('network down'),
-    })
-    const auth = useAuthStore()
-    auth.session = { user: { id: 'u-1' }, access_token: 't' }
-    const w = mount(AccountTab, { global: { stubs } })
-    await flushPromises()
-    await w.get('[data-testid="settings-sign-out"]').trigger('click')
-    await flushPromises()
-    expect(showError).toHaveBeenCalledWith('network down')
-    expect(routerPush).not.toHaveBeenCalled()
   })
 })
