@@ -10,6 +10,7 @@ describe('sessionsApi check operations', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     apiClient.apiPost.mockResolvedValue({ correct: true })
+    apiClient.apiGet.mockResolvedValue({ items: [] })
   })
   afterEach(() => vi.restoreAllMocks())
 
@@ -25,6 +26,32 @@ describe('sessionsApi check operations', () => {
       { before: 5, limit: 30 },
       { silent: true },
     )
+  })
+
+  it('getSessionLibrary defaults items to [] when apiGet resolves {}', async () => {
+    apiGet.mockResolvedValueOnce({})
+    const result = await sessionsApi.getSessionLibrary({ status: 'active' }, { silent: true })
+    expect(result.items).toEqual([])
+  })
+
+  it('getSessionLibrary defaults items to [] when apiGet resolves a partial object', async () => {
+    apiGet.mockResolvedValueOnce({ total: 5, limit: 20, offset: 0 })
+    const result = await sessionsApi.getSessionLibrary({ status: 'active' }, { silent: true })
+    expect(result.items).toEqual([])
+    expect(result.total).toBe(5)
+  })
+
+  it('getSessionLibrary defaults items to [] when apiGet resolves null', async () => {
+    apiGet.mockResolvedValueOnce(null)
+    const result = await sessionsApi.getSessionLibrary({ status: 'active' }, { silent: true })
+    expect(result.items).toEqual([])
+  })
+
+  it('getSessionLibrary passes a full valid payload through unchanged', async () => {
+    const page = { items: [{ id: 's1' }], total: 1, limit: 20, offset: 0 }
+    apiGet.mockResolvedValueOnce(page)
+    const result = await sessionsApi.getSessionLibrary({ status: 'active' }, { silent: true })
+    expect(result).toEqual(page)
   })
 
   it('answerCheck and skipCheck opt out of the errorBus toast', async () => {

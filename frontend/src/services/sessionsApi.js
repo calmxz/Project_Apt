@@ -21,9 +21,18 @@ export const lookupTopic = (topic) => apiGet('/sessions/lookup', { topic }, { si
 // the flag if a different caller's non-silent call wins the race.
 export const listSessions = () => apiGet('/sessions', undefined, { silent: true })
 
+// H1: default the contract array key so a malformed/partial {} or null
+// response from the backend can't throw in render (e.g. `items.length`)
+// inside SessionsLibraryView.
+const normalizeSessionLibraryPage = (res) => ({
+  ...res,
+  items: res?.items ?? [],
+})
+
 // params: { status?: 'all'|'active'|'ended', q?: string,
 //           sort?: 'last_activity'|'created'|'topic'|'pinned_activity', limit?: number, offset?: number }
-export const getSessionLibrary = (params, opts) => apiGet('/sessions/library', params, opts)
+export const getSessionLibrary = (params, opts) =>
+  apiGet('/sessions/library', params, opts).then(normalizeSessionLibraryPage)
 
 export const getSession = (sessionId) => apiGet(`/sessions/${sessionId}`)
 

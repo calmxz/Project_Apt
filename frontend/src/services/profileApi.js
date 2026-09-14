@@ -4,7 +4,20 @@ import { apiDelete, apiGet, apiPatch } from './apiClient.js'
 // prefix. user_id is resolved from the Authorization header server-side.
 export const getSessionProfile = (sessionId) => apiGet(`/profile/${sessionId}`)
 
-export const getAggregateProfile = () => apiGet('/profile/aggregate')
+// H1: default every contract array key so a malformed/partial {} or null
+// response from the backend can't throw in render (e.g.
+// `data.combined_mastered_concepts.length`) inside ProfileTab/ProfileView.
+const normalizeAggregateProfile = (res) => ({
+  ...res,
+  combined_mastered_concepts: res?.combined_mastered_concepts ?? [],
+  combined_confirmed_gaps: res?.combined_confirmed_gaps ?? [],
+  recent_topics: res?.recent_topics ?? [],
+  concept_accuracy: res?.concept_accuracy ?? [],
+  weekly_mastery: res?.weekly_mastery ?? [],
+})
+
+export const getAggregateProfile = () =>
+  apiGet('/profile/aggregate').then(normalizeAggregateProfile)
 
 export const getUsageSummary = () => apiGet('/usage/summary')
 
