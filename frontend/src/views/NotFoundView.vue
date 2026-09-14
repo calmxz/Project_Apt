@@ -1,5 +1,5 @@
 <template>
-  <section class="not-found">
+  <main class="not-found">
     <h1 class="title" data-testid="not-found-title">Page not found</h1>
     <p class="lede">Nothing is written at this address.</p>
     <p class="back">
@@ -17,7 +17,7 @@
         </svg>
       </RouterLink>
     </p>
-  </section>
+  </main>
 </template>
 
 <script setup>

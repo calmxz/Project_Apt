@@ -1,10 +1,10 @@
 <template>
-  <section class="legal-page">
+  <main class="legal-page">
     <div class="legal-head">
       <BackButton label="Back" fallback="/" />
     </div>
     <article class="legal" v-html="html" />
-  </section>
+  </main>
 </template>
 
 <script setup>
