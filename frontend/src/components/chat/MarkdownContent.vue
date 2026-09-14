@@ -1,6 +1,6 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { renderMarkdown } from '@/lib/markdownRenderer.js'
+import { markdownAssetsVersion, renderMarkdown } from '@/lib/markdownRenderer.js'
 import { splitSafePrefixIncremental, createSplitState } from '@/lib/markdownStreamBuffer.js'
 
 const props = defineProps({
@@ -13,6 +13,10 @@ const props = defineProps({
 const splitState = createSplitState()
 
 const parts = computed(() => {
+  // P1: KaTeX and highlight.js arrive after the first render that needs them.
+  // Reading the version here (before either branch) subscribes this computed,
+  // so the same text is re-rendered with the plugin once it lands.
+  void markdownAssetsVersion.value
   if (!props.streaming) {
     return { safeHtml: renderMarkdown(props.text), deferred: '' }
   }

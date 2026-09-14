@@ -6,6 +6,15 @@
     <link rel="icon" href="/favicon.ico?v=2" sizes="48x48">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="color-scheme" content="light dark">
+    <!-- P2: the two regular faces every route paints with (body/UI and page
+         titles). Vite rewrites these hrefs to the same hashed asset URLs the
+         emitted CSS uses, so the preload and the @font-face rule share one
+         fetch. crossorigin is mandatory on font preloads: fonts are fetched in
+         CORS mode, so without it the browser would fetch each file twice. The
+         italic and mono faces stay unpreloaded; they are not on the critical
+         paint path. -->
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/src/assets/fonts/atkinson-hyperlegible-next-latin.woff2">
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/src/assets/fonts/familjen-grotesk-latin.woff2">
     <title>Crux</title>
   </head>
   <body>

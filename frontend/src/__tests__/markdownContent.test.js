@@ -1,6 +1,14 @@
 import { describe, it, expect } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { mount, flushPromises } from '@vue/test-utils'
+import { whenRendererReady } from '../lib/markdownRenderer.js'
 import MarkdownContent from '../components/chat/MarkdownContent.vue'
+
+// P1: KaTeX is dynamic-imported on first sight of math, so a math assertion
+// waits for the plugin to land and the component to re-render.
+async function settle() {
+  await whenRendererReady()
+  await flushPromises()
+}
 
 describe('MarkdownContent', () => {
   it('renders bold and italics', () => {
@@ -16,13 +24,15 @@ describe('MarkdownContent', () => {
     expect(w.html()).toMatch(/<code class="language-python[^"]*"/)
   })
 
-  it('renders inline math through KaTeX', () => {
+  it('renders inline math through KaTeX', async () => {
     const w = mount(MarkdownContent, { props: { text: 'cost $O(n)$ done' } })
+    await settle()
     expect(w.html()).toContain('class="katex"')
   })
 
-  it('renders display math through KaTeX', () => {
+  it('renders display math through KaTeX', async () => {
     const w = mount(MarkdownContent, { props: { text: '$$\\int_0^1 x dx$$' } })
+    await settle()
     expect(w.html()).toContain('class="katex-display"')
   })
 
@@ -47,10 +57,11 @@ describe('MarkdownContent', () => {
     expect(w.html()).toContain('$O(log')
   })
 
-  it('streaming mode: full render once math closes', () => {
+  it('streaming mode: full render once math closes', async () => {
     const w = mount(MarkdownContent, {
       props: { text: 'cost is $O(n)$', streaming: true },
     })
+    await settle()
     expect(w.html()).toContain('class="katex"')
     expect(w.html()).not.toContain('class="deferred"')
   })
