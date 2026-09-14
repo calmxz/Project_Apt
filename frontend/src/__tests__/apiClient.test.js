@@ -1,28 +1,28 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { ApiError, apiGet, apiPost } from '../services/apiClient.js'
+import { ApiError, apiGet, apiPost, setUnauthorizedHandler } from '../services/apiClient.js'
 import { errorBus } from '../services/errorBus.js'
 import { useAuthStore } from '../stores/auth.js'
-
-vi.mock('../router/index.js', () => ({
-  default: {
-    push: vi.fn(),
-    currentRoute: { value: { fullPath: '/session/abc' } },
-  },
-}))
 
 describe('apiClient', () => {
   let listener
   let fetchMock
+  let unauthorizedHandler
   beforeEach(() => {
     setActivePinia(createPinia())
     listener = vi.fn()
     errorBus.addEventListener('api-error', listener)
     fetchMock = vi.fn()
     globalThis.fetch = fetchMock
+    // F-16: apiClient no longer imports the router (see the comment on
+    // setUnauthorizedHandler in apiClient.js) -- main.js wires the redirect
+    // at boot, so tests supply their own handler stub.
+    unauthorizedHandler = vi.fn()
+    setUnauthorizedHandler(unauthorizedHandler)
   })
   afterEach(() => {
     errorBus.removeEventListener('api-error', listener)
+    setUnauthorizedHandler(null)
     vi.restoreAllMocks()
   })
 
@@ -190,8 +190,7 @@ describe('apiClient', () => {
     expect(init.headers['authorization']).toBe('Bearer store-tok')
   })
 
-  it('signs out and redirects to login after a second 401', async () => {
-    const router = (await import('../router/index.js')).default
+  it('signs out and calls the unauthorized handler after a second 401', async () => {
     globalThis.__supabaseAuthStub.getSession.mockResolvedValue({
       data: { session: { access_token: 'still-dead', user: { id: 'u1' } } },
     })
@@ -202,20 +201,19 @@ describe('apiClient', () => {
 
     await expect(apiGet('/whatever')).rejects.toMatchObject({ status: 401 })
     expect(globalThis.__supabaseAuthStub.signOut).toHaveBeenCalled()
-    expect(router.push).toHaveBeenCalledWith({
-      name: 'login',
-      query: { redirect: '/session/abc' },
-    })
+    expect(unauthorizedHandler).toHaveBeenCalledTimes(1)
     expect(fetch).toHaveBeenCalledTimes(2) // hard cap: one retry
   })
 
-  it('_onAuthExpired pushes login with redirect query', async () => {
+  it('_onAuthExpired invokes the registered unauthorized handler', async () => {
     const { _onAuthExpired } = await import('../services/apiClient.js')
-    const router = (await import('../router/index.js')).default
     await _onAuthExpired()
-    expect(router.push).toHaveBeenCalledWith({
-      name: 'login',
-      query: { redirect: '/session/abc' },
-    })
+    expect(unauthorizedHandler).toHaveBeenCalledTimes(1)
+  })
+
+  it('_onAuthExpired is a no-op when no handler is registered', async () => {
+    setUnauthorizedHandler(null)
+    const { _onAuthExpired } = await import('../services/apiClient.js')
+    await expect(_onAuthExpired()).resolves.toBeUndefined()
   })
 })

@@ -10,14 +10,7 @@ import {
   MAX_UPLOAD_BYTES,
   deleteDocument,
 } from '@/services/uploadApi.js'
-import { ApiError } from '@/services/apiClient.js'
-
-vi.mock('../router/index.js', () => ({
-  default: {
-    push: vi.fn(),
-    currentRoute: { value: { fullPath: '/session/abc' } },
-  },
-}))
+import { ApiError, setUnauthorizedHandler } from '@/services/apiClient.js'
 
 function fakeFile(name, size) {
   return { name, size }
@@ -50,12 +43,20 @@ describe('validateFile', () => {
 
 describe('uploadApi', () => {
   let fetchMock
+  let unauthorizedHandler
   beforeEach(() => {
     setActivePinia(createPinia())
     fetchMock = vi.fn()
     globalThis.fetch = fetchMock
+    // F-16: apiClient no longer imports the router directly -- main.js wires
+    // the redirect at boot, so tests supply their own handler stub.
+    unauthorizedHandler = vi.fn()
+    setUnauthorizedHandler(unauthorizedHandler)
   })
-  afterEach(() => vi.restoreAllMocks())
+  afterEach(() => {
+    setUnauthorizedHandler(null)
+    vi.restoreAllMocks()
+  })
 
   function ok(body) {
     return Promise.resolve({
@@ -153,16 +154,12 @@ describe('uploadApi', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
-  it('signs out and redirects to login when the retry also gets a 401 (F-12)', async () => {
-    const router = (await import('../router/index.js')).default
+  it('signs out and calls the unauthorized handler when the retry also gets a 401 (F-12)', async () => {
     fetchMock.mockReturnValueOnce(fail(401, {})).mockReturnValueOnce(fail(401, {}))
     await expect(
       uploadDocument({ sessionId: 's1', file: new File(['x'], 'a.pdf') }),
     ).rejects.toMatchObject({ status: 401 })
     expect(globalThis.__supabaseAuthStub.signOut).toHaveBeenCalled()
-    expect(router.push).toHaveBeenCalledWith({
-      name: 'login',
-      query: { redirect: '/session/abc' },
-    })
+    expect(unauthorizedHandler).toHaveBeenCalledTimes(1)
   })
 })
