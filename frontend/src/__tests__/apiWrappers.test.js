@@ -83,4 +83,59 @@ describe('api wrappers', () => {
     expect(fetchMock.mock.calls[0][0]).toContain('/profile/aggregate')
     expect(fetchMock.mock.calls[0][0]).not.toContain('user_id=')
   })
+
+  const AGGREGATE_ARRAY_KEYS = [
+    'combined_mastered_concepts',
+    'combined_confirmed_gaps',
+    'recent_topics',
+    'concept_accuracy',
+    'weekly_mastery',
+  ]
+
+  it('getAggregateProfile defaults all contract array keys to [] when the API resolves {}', async () => {
+    fetchMock.mockReturnValueOnce(ok({}))
+    const result = await getAggregateProfile()
+    for (const key of AGGREGATE_ARRAY_KEYS) {
+      expect(result[key]).toEqual([])
+    }
+  })
+
+  it('getAggregateProfile defaults missing array keys when the API resolves a partial object', async () => {
+    fetchMock.mockReturnValueOnce(
+      ok({ total_sessions: 3, combined_mastered_concepts: [{ concept: 'x', count: 1 }] }),
+    )
+    const result = await getAggregateProfile()
+    expect(result.total_sessions).toBe(3)
+    expect(result.combined_mastered_concepts).toEqual([{ concept: 'x', count: 1 }])
+    expect(result.combined_confirmed_gaps).toEqual([])
+    expect(result.recent_topics).toEqual([])
+    expect(result.concept_accuracy).toEqual([])
+    expect(result.weekly_mastery).toEqual([])
+  })
+
+  it('getAggregateProfile defaults all contract array keys to [] when the API resolves null', async () => {
+    fetchMock.mockReturnValueOnce(ok(null))
+    const result = await getAggregateProfile()
+    for (const key of AGGREGATE_ARRAY_KEYS) {
+      expect(result[key]).toEqual([])
+    }
+  })
+
+  it('getAggregateProfile passes a full valid payload through unchanged', async () => {
+    const payload = {
+      total_sessions: 2,
+      active_sessions: 1,
+      ended_sessions: 1,
+      total_learning_events: 5,
+      combined_mastered_concepts: [{ concept: 'a', count: 1 }],
+      combined_confirmed_gaps: [{ concept: 'b', count: 1 }],
+      knowledge_level_distribution: { beginner: 1, intermediate: 0, advanced: 0, unknown: 0 },
+      recent_topics: [{ id: 's1', topic: 't', created_at: '2026-01-01T00:00:00Z' }],
+      concept_accuracy: [],
+      weekly_mastery: [],
+    }
+    fetchMock.mockReturnValueOnce(ok(payload))
+    const result = await getAggregateProfile()
+    expect(result).toEqual(payload)
+  })
 })
