@@ -16,6 +16,14 @@ describe('code-block chrome', () => {
     expect(html).toMatch(/class="code-block-lang"[^>]*>plain/)
   })
 
+  // R2: the copy button measured 49x28 on coarse pointer; it sits directly
+  // above the code with no room to grow in layout, so it gets the invisible
+  // hit-area extension rather than coarse-2x.
+  it('R2: copy button carries hit-44 for a coarse-pointer hit area', () => {
+    const html = renderMarkdown('```python\nprint("hi")\n```')
+    expect(html).toMatch(/class="code-block-copy hit-44"/)
+  })
+
   // P1: highlight.js is loaded on demand by the first fence, so the highlighted
   // markup lands on the render after the plugin arrives.
   it('preserves highlight.js spans inside the code block', async () => {

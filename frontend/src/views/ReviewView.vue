@@ -291,7 +291,7 @@ async function expand() {
 /* Lifted, the aside is written onto the rules left to right. v-show keeps the
    copy in the DOM, so the animation restarts each time display returns. */
 .review-answer.lifted .review-detail {
-  animation: review-land var(--motion-ink) var(--motion-bounce) both;
+  animation: review-land var(--motion-ink) var(--motion-out-expo) both;
 }
 
 @keyframes review-land {

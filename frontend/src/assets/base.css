@@ -84,9 +84,8 @@
   --shadow-paper: none;
   --shadow-lift: 0 12px 24px -12px rgba(0, 0, 0, 0.25);
 
-  /* Motion — ink appears, it never slides or bounces. The bounce token name
-     is kept for its many consumers; the curve is now an exponential ease-out. */
-  --motion-bounce: cubic-bezier(0.16, 1, 0.3, 1);
+  /* Motion — ink appears, it never slides or bounces. Exponential ease-out. */
+  --motion-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --motion-fast: 140ms;
   --motion-base: 240ms;
   --motion-ink: 320ms;

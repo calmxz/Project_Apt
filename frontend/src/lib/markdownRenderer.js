@@ -185,7 +185,7 @@ function build() {
       `<pre class="code-block">` +
       `<div class="code-block-header">` +
       `<span class="code-block-lang">${escapeAttr(lang)}</span>` +
-      `<button type="button" class="code-block-copy" data-copy-button>copy</button>` +
+      `<button type="button" class="code-block-copy hit-44" data-copy-button>copy</button>` +
       `</div>` +
       `<code class="${langClass}">${body}</code>` +
       `</pre>`
