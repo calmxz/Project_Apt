@@ -44,6 +44,11 @@ describe('CheckQuestion batch', () => {
     expect(w.emitted('answer')[0]).toEqual([1])
   })
 
+  it('R2: skip carries coarse-2x for a coarse-pointer two-pitch target', () => {
+    const w = mount(CheckQuestion, { props: { check: batch() } })
+    expect(w.find('[data-testid="check-skip"]').classes()).toContain('coarse-2x')
+  })
+
   it('shows Next when an answered item is not the last', () => {
     const b = batch({ currentIndex: 1 })
     b.items[0] = {

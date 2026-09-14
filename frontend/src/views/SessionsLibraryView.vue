@@ -198,7 +198,7 @@ defineExpose({ load }) // used by control/pagination tasks
 <template>
   <section class="library" aria-labelledby="library-title">
     <header class="library-head">
-      <RouterLink to="/" class="library-back" data-testid="library-back">
+      <RouterLink to="/" class="library-back hit-44" data-testid="library-back">
         <svg
           class="library-back-mark"
           viewBox="0 0 20 20"
@@ -233,7 +233,7 @@ defineExpose({ load }) // used by control/pagination tasks
       <input
         v-model="q"
         type="search"
-        class="library-search"
+        class="library-search coarse-2x"
         data-testid="library-search"
         placeholder="Search topics..."
         aria-label="Search sessions by topic"
@@ -243,7 +243,7 @@ defineExpose({ load }) // used by control/pagination tasks
       <span class="library-sort-field">
         <select
           v-model="sort"
-          class="library-sort"
+          class="library-sort coarse-2x"
           data-testid="library-sort"
           aria-label="Sort sessions"
           @change="onSortChange"
@@ -427,6 +427,10 @@ defineExpose({ load }) // used by control/pagination tasks
 }
 
 .library-filter-btn {
+  /* A2: "All" is three letters, one column wide at 28px -- "Active" and
+     "Ended" clear this by their own text length. Match .sb-status-btn's
+     floor so every filter button has a comparable target width. */
+  min-width: 2.5rem;
   padding: 0;
   border: 0;
   background: transparent;

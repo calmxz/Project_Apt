@@ -77,6 +77,11 @@ describe('SettingsView shell', () => {
     expect(w.find('[data-testid="settings-tab-rail"]').attributes('role')).toBe('tablist')
   })
 
+  it('R2: rail tabs carry coarse-2x for a coarse-pointer two-pitch target', async () => {
+    const { w } = await mountAt('profile')
+    expect(w.find('[data-testid="settings-tab-profile"]').classes()).toContain('coarse-2x')
+  })
+
   it('active tab follows the tab prop', async () => {
     const { w } = await mountAt('usage')
     expect(w.find('[data-testid="stub-usage"]').exists()).toBe(true)

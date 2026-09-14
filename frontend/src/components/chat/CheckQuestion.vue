@@ -116,7 +116,7 @@ watch(answered, async (is) => {
       <button
         v-if="!answered"
         type="button"
-        class="check-skip"
+        class="check-skip coarse-2x"
         data-testid="check-skip"
         :disabled="busy"
         @click="emit('skip')"
@@ -346,6 +346,17 @@ watch(answered, async (is) => {
   .check-card {
     grid-template-columns: minmax(0, 1fr);
     gap: 0;
+  }
+}
+
+/* R1: rows are 28px with only a painted separator between them -- fine for
+   a mouse, too tight to tap reliably. On coarse pointers only, take each row
+   to two pitches (56px) and centre the letter and text within it; the
+   inset box-shadow separator keeps the ruled look unchanged. */
+@media (pointer: coarse) {
+  .check-option {
+    min-height: calc(var(--line-pitch) * 2);
+    align-items: center;
   }
 }
 </style>

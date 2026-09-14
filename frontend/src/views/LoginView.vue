@@ -86,7 +86,7 @@
         <div class="actions">
           <button
             type="submit"
-            class="cta"
+            class="cta hit-44"
             data-testid="login-submit"
             :disabled="!canSubmit || submitting"
           >
