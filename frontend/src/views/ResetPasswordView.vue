@@ -1,5 +1,5 @@
 <template>
-  <section class="cover">
+  <main class="cover">
     <div class="sheet">
       <header class="cover-head">
         <Logo size="md" variant="full" />
@@ -96,7 +96,7 @@
         </p>
       </div>
     </div>
-  </section>
+  </main>
 </template>
 
 <script setup>
