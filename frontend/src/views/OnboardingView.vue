@@ -1,5 +1,5 @@
 <template>
-  <section class="cover">
+  <main class="cover">
     <div class="sheet">
       <header class="cover-head">
         <Logo size="md" variant="full" />
@@ -74,7 +74,7 @@
         </p>
       </form>
     </div>
-  </section>
+  </main>
 </template>
 
 <script setup>
@@ -319,7 +319,7 @@ async function submit() {
 /* Ink appears: the sheet fills in line by line, nothing moves. */
 .stagger {
   opacity: 0;
-  animation: ink-in var(--motion-ink) var(--motion-bounce) forwards;
+  animation: ink-in var(--motion-ink) var(--motion-out-expo) forwards;
   animation-delay: var(--delay, 0ms);
 }
 

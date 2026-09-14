@@ -46,6 +46,13 @@ describe('OnboardingView', () => {
     expect(wrapper.text()).toContain('Crux')
   })
 
+  // A3 leftover: OnboardingView is a no-shell route (meta.sidebar: false), so
+  // it needs its own main landmark like the other cover/legal views.
+  it('A3: root renders as a main landmark', () => {
+    const wrapper = mount(OnboardingView, { global: { stubs } })
+    expect(wrapper.element.tagName).toBe('MAIN')
+  })
+
   it('submit completes onboarding and routes home', async () => {
     const wrapper = mount(OnboardingView, { global: { stubs } })
     await wrapper.get('[data-testid="onboarding-name"]').setValue('Eddy')

@@ -138,7 +138,7 @@
   clip-path: inset(0 100% 0 0);
 }
 .p-toast-message-enter-active {
-  transition: clip-path var(--motion-ink) var(--motion-bounce);
+  transition: clip-path var(--motion-ink) var(--motion-out-expo);
   transform: none;
 }
 .p-toast-message-enter-to {
