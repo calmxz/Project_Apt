@@ -367,4 +367,13 @@ describe('SessionProfileView (per-session)', () => {
     const wrapper = await mountProfile({ profile: { subtopic_levels: {} } })
     expect(wrapper.find('[data-testid="sprof-subtopics"]').exists()).toBe(false)
   })
+
+  // A2: add-item inputs must have accessible names for screen readers.
+  it('has accessible names on the add-mastered and add-gap inputs', async () => {
+    const wrapper = await mountProfile()
+    expect(wrapper.get('[data-testid="add-mastered"]').attributes('aria-label')).toBe(
+      'Add a mastered concept',
+    )
+    expect(wrapper.get('[data-testid="add-gap"]').attributes('aria-label')).toBe('Add a gap')
+  })
 })

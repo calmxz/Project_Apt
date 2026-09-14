@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { nextTick } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
@@ -1610,6 +1610,70 @@ describe('SessionView', () => {
       const wrapper = mountView()
       await flushPromises()
       expect(wrapper.get('[data-testid="load-earlier"]').text()).toMatch(/retry/i)
+    })
+  })
+
+  // R2 (UI audit 2026-09-13): at 390x844 the check card pinned in the foot took
+  // ~420px and left the transcript ~190px (0px with the cue strip expanded). The
+  // card now scrolls with the transcript below 900px. The two placements are
+  // v-if/v-else on one matchMedia flag, so exactly one card exists at any width.
+  describe('check card placement', () => {
+    const realMatchMedia = window.matchMedia
+
+    function stubMatchMedia(matches) {
+      window.matchMedia = vi.fn().mockReturnValue({
+        matches,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })
+    }
+
+    function openBatch(store) {
+      store.pendingCheck = {
+        gap: 'ATP yield',
+        total: 1,
+        currentIndex: 0,
+        viewIndex: 0,
+        items: [{ question: 'How many ATP?', options: ['30', '38'], status: 'pending' }],
+      }
+    }
+
+    afterEach(() => {
+      window.matchMedia = realMatchMedia
+    })
+
+    it('renders the card inside the messages scroller below 900px', async () => {
+      stubMatchMedia(true)
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession({ messages: [{ role: 'user', content: 'hi', message_id: 9 }] })
+        openBatch(store)
+      })
+      const wrapper = mountView()
+      await flushPromises()
+
+      expect(wrapper.findAllComponents(CheckQuestion)).toHaveLength(1)
+      expect(
+        wrapper.find('[data-testid="session-messages"] [data-testid="check-card"]').exists(),
+      ).toBe(true)
+      expect(wrapper.find('.notes-foot [data-testid="check-card"]').exists()).toBe(false)
+    })
+
+    it('keeps the card in the foot at 900px and above', async () => {
+      stubMatchMedia(false)
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession({ messages: [{ role: 'user', content: 'hi', message_id: 9 }] })
+        openBatch(store)
+      })
+      const wrapper = mountView()
+      await flushPromises()
+
+      expect(wrapper.findAllComponents(CheckQuestion)).toHaveLength(1)
+      expect(wrapper.find('.notes-foot [data-testid="check-card"]').exists()).toBe(true)
+      expect(
+        wrapper.find('[data-testid="session-messages"] [data-testid="check-card"]').exists(),
+      ).toBe(false)
     })
   })
 })

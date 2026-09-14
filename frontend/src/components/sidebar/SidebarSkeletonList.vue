@@ -54,9 +54,12 @@ defineProps({
   }
 }
 
+/* The bars hold at the middle of the pulse rather than at one of its ends, so
+   a still list still reads as pencil waiting to be written on. */
 @media (prefers-reduced-motion: reduce) {
   .sb-skel-line {
     animation: none;
+    opacity: 0.19;
   }
 }
 </style>

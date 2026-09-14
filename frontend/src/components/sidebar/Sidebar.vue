@@ -318,7 +318,7 @@ async function onSignOut() {
       <button
         v-if="showCollapseToggle"
         type="button"
-        class="sb-toggle"
+        class="sb-toggle hit-44"
         :aria-label="isExpanded ? 'Collapse sidebar' : 'Expand sidebar'"
         :title="isExpanded ? 'Collapse sidebar' : 'Expand sidebar'"
         data-testid="sidebar-collapse-toggle"
@@ -350,7 +350,7 @@ async function onSignOut() {
       <button
         v-if="showDrawerClose"
         type="button"
-        class="sb-toggle sb-toggle--end"
+        class="sb-toggle sb-toggle--end hit-44"
         aria-label="Close sessions sidebar"
         title="Close"
         data-testid="sidebar-drawer-close"
@@ -532,7 +532,7 @@ async function onSignOut() {
               class="sb-section sb-section--pinned"
               data-testid="sidebar-section-pinned"
             >
-              <h3 class="sb-section-label label">
+              <h2 class="sb-section-label label">
                 <svg
                   class="sb-inline-icon"
                   viewBox="0 0 20 20"
@@ -550,7 +550,7 @@ async function onSignOut() {
                 </svg>
                 Pinned
                 <span class="sb-section-count">({{ cappedPinnedActive.length }})</span>
-              </h3>
+              </h2>
               <ul class="sb-session-list">
                 <SidebarSessionRow
                   v-for="s in cappedPinnedActive"
@@ -725,6 +725,28 @@ async function onSignOut() {
   width: 100%;
 }
 
+/* P2: the shell column snaps rather than animating grid-template-columns (a
+   whole-shell relayout every frame). The collapse instead reads the way
+   everything else in this world does: the paper and its right-hand rule hold
+   still while the ink on it fades back in at the new measure. The class flip
+   between --expanded and --collapsed is what re-runs the animation, so this
+   needs no per-branch wrapper -- the expanded body and the collapsed rail are
+   the same interleaved v-if branches, and neither is ever mid-fade while
+   focusable, since only opacity moves. */
+@keyframes sb-mode-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.sidebar--expanded > *,
+.sidebar--collapsed > * {
+  animation: sb-mode-fade var(--motion-fast) ease;
+}
+
 /* Mobile drawer: the same paper, laid over the page. It appears and leaves in
    opacity -- in this world ink is never slid into place. The shell grid column
    collapses to zero so the main column gets full width when it is closed. */
@@ -770,9 +792,19 @@ async function onSignOut() {
   }
 }
 
+/* The contents, the backdrop and the drawer all arrive at their final state at
+   once: full opacity, no fade. Visibility still flips, so the closed drawer
+   stays out of the tab order. */
 @media (prefers-reduced-motion: reduce) {
-  .sb-backdrop {
+  .sb-backdrop,
+  .sidebar--expanded > *,
+  .sidebar--collapsed > * {
     animation: none;
+  }
+
+  .sidebar--drawer,
+  .sidebar--drawer-open {
+    transition: visibility 0s;
   }
 }
 

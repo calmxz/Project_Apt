@@ -21,7 +21,9 @@ const showShell = computed(() => route.meta?.sidebar !== false)
 const isSheet = computed(() => route.meta?.sheet === true)
 const { drawerOpen } = useSidebar()
 
-// Drives the shell's grid-template-columns transition (see .shell CSS below).
+// Drives the shell's sidebar column width (see .shell CSS below). The column
+// snaps -- animating grid-template-columns relaid out the whole shell every
+// frame; the collapse now reads as the sidebar's ink fading in (Sidebar.vue).
 // On mobile the drawer is position: fixed and out of flow, so no class is
 // applied and the column keeps its default "auto" (collapses to zero).
 const shellSidebarClass = computed(() => {
@@ -96,7 +98,6 @@ onBeforeUnmount(() => errorBus.removeEventListener('api-error', onApiError))
   grid-template-columns: var(--shell-sidebar-col, auto) 1fr;
   min-height: 100vh;
   align-items: stretch;
-  transition: grid-template-columns var(--motion-base) ease;
 }
 
 .shell--sb-expanded {
@@ -105,12 +106,6 @@ onBeforeUnmount(() => errorBus.removeEventListener('api-error', onApiError))
 
 .shell--sb-collapsed {
   --shell-sidebar-col: var(--sidebar-width-collapsed, 3rem);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .shell {
-    transition: none;
-  }
 }
 
 .shell-main {
@@ -149,5 +144,11 @@ onBeforeUnmount(() => errorBus.removeEventListener('api-error', onApiError))
 }
 .fade-enter-from {
   opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-enter-active {
+    transition: none;
+  }
 }
 </style>

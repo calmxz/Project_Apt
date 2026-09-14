@@ -83,6 +83,24 @@
                 :awaiting="awaitingResponse"
                 :landed="cuesLanded"
               />
+
+              <!-- R2: under 900px the check card scrolls with the transcript.
+                   Pinned in the foot it took a fixed ~420px out of a 844px
+                   viewport and starved .messages down to ~190px (0px with the
+                   cue expanded). The foot copy below is the >=900px form; the
+                   two are v-if/v-else on isNarrow, so exactly one instance of
+                   CheckQuestion exists at any width and an open batch can
+                   never double-render. -->
+              <CheckQuestion
+                v-if="isNarrow && store.pendingCheck"
+                class="check-inline"
+                :check="store.pendingCheck"
+                :busy="store.streamState !== 'idle'"
+                @answer="onAnswerCheck"
+                @skip="onSkipCheck"
+                @next="store.nextCheck"
+                @done="onDoneCheck"
+              />
             </template>
           </div>
         </div>
@@ -90,7 +108,7 @@
         <div class="notes-foot">
           <div class="notes-measure">
             <CheckQuestion
-              v-if="store.pendingCheck && !store.detailLoading"
+              v-if="!isNarrow && store.pendingCheck && !store.detailLoading"
               :check="store.pendingCheck"
               :busy="store.streamState !== 'idle'"
               @answer="onAnswerCheck"
@@ -504,6 +522,27 @@ function onCostWarning(event) {
 onMounted(() => costBus.addEventListener('cost-warning', onCostWarning))
 onUnmounted(() => costBus.removeEventListener('cost-warning', onCostWarning))
 
+// R2: the check card's placement is width-dependent (see the template comment).
+// Driven by matchMedia rather than a CSS-only swap because the card has to move
+// between two different containers — the .messages scroller and the foot — which
+// CSS cannot do. Kept in sync with the 899px breakpoint in <style> below.
+const NARROW_QUERY = '(max-width: 899px)'
+const isNarrow = ref(false)
+let narrowMql = null
+function onNarrowChange(e) {
+  isNarrow.value = e.matches
+}
+onMounted(() => {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
+  narrowMql = window.matchMedia(NARROW_QUERY)
+  isNarrow.value = narrowMql.matches
+  narrowMql.addEventListener?.('change', onNarrowChange)
+})
+onUnmounted(() => {
+  narrowMql?.removeEventListener?.('change', onNarrowChange)
+  narrowMql = null
+})
+
 // App-shell lock: while in a session, the document itself must not scroll —
 // only the .messages box does. A body class drives the route-scoped overflow
 // lock and flex-height cascade (see <style>). Removed unconditionally on leave
@@ -559,6 +598,17 @@ watch([() => store.messages.length, awaitingResponse], () => {
   if (prepending.value) return
   scrollToBottom()
 })
+
+// R2: at narrow widths the card lives at the end of the scroller, so a newly
+// opened batch would otherwise land below the fold. Shallow watch — the store
+// assigns a fresh object per batch, so this fires once per batch, not per
+// answered item.
+watch(
+  () => store.pendingCheck,
+  (now) => {
+    if (now && isNarrow.value) scrollToBottom()
+  },
+)
 
 async function loadCurrent(id) {
   // Reset per-load so navigating away from a 404 session clears the state.
@@ -1314,13 +1364,15 @@ function goHome() {
     grid-template-rows: auto auto minmax(0, 1fr);
   }
 
+  /* R2: no scroller and no 50vh cap here — the expanded profile is bounded by
+     .cue-body's own 40vh cap in CueColumn, so the strip can never grow far
+     enough to push the notes column (and the composer with it) off-screen. */
   .sheet-cue {
     grid-column: 1;
     grid-row: 2;
     display: block;
     padding-left: 0;
-    max-height: 50vh;
-    overflow-y: auto;
+    min-height: 0;
   }
 
   .sheet-margin-rule {
@@ -1330,6 +1382,20 @@ function goHome() {
   .sheet-notes {
     grid-column: 1;
     grid-row: 3;
+  }
+
+  /* R2: the foot now carries only the status slot and the composer, so it is
+     short enough to stay in view. Sticky pins it to the bottom of the notes
+     column as a backstop if a status caption ever makes the column overflow. */
+  .notes-foot {
+    position: sticky;
+    bottom: 0;
+    background: var(--color-surface);
+  }
+
+  /* The inline card sits on the transcript's baseline grid like a turn does. */
+  .check-inline {
+    margin-bottom: var(--line-pitch);
   }
 }
 

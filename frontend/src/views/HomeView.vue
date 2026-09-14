@@ -22,7 +22,7 @@
         <p class="quick-go">
           <button
             type="button"
-            class="cta-primary"
+            class="cta-primary hit-44"
             data-testid="home-quick-go"
             :disabled="busy"
             @click="startQuick"

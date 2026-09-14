@@ -12,7 +12,7 @@
     <div class="composer" :class="{ 'is-disabled': disabled }">
       <button
         type="button"
-        class="composer-attach"
+        class="composer-attach hit-44"
         data-testid="session-upload-btn"
         :disabled="disabled || uploading || locked"
         :aria-label="uploading ? 'Uploading file' : 'Attach a reference file'"
@@ -39,7 +39,7 @@
         </svg>
         <svg
           v-else
-          class="composer-icon composer-spinner pi-spin"
+          class="composer-icon composer-spinner spin"
           viewBox="0 0 20 20"
           width="20"
           height="20"
@@ -64,6 +64,7 @@
         :placeholder="placeholder"
         :disabled="disabled"
         :maxlength="MAX_DRAFT_LEN"
+        aria-label="Message the tutor"
         :aria-describedby="describedby || undefined"
         @input="onInput"
         @keydown="onKeydown"
@@ -72,7 +73,7 @@
       <button
         v-if="streamState === 'idle'"
         type="button"
-        class="composer-send"
+        class="composer-send hit-44"
         data-testid="session-send"
         :disabled="disabled || !modelValue.trim() || sending"
         :aria-label="sending ? 'Sending message' : 'Send message'"
@@ -80,7 +81,7 @@
       >
         <svg
           class="composer-icon"
-          :class="sending ? 'composer-spinner pi-spin' : ''"
+          :class="sending ? 'composer-spinner spin' : ''"
           viewBox="0 0 20 20"
           width="20"
           height="20"
@@ -103,7 +104,7 @@
       <button
         v-else
         type="button"
-        class="composer-stop"
+        class="composer-stop hit-44"
         data-testid="session-stop"
         :disabled="streamState === 'stopping'"
         aria-label="Stop generating"
@@ -140,6 +141,18 @@
 
     <div class="composer-hints" :class="{ 'is-near-limit': nearCharLimit }">
       <span class="composer-hint">Enter to send, Shift + Enter for a new line</span>
+      <!-- The spinner's caption in words. Hidden visually while the arc turns;
+           under reduced motion the arc goes and this line takes its place. The
+           buttons carry the same wording as their accessible name, so this is
+           never announced twice. -->
+      <span
+        v-if="uploading || sending"
+        class="composer-busy"
+        aria-hidden="true"
+        data-testid="composer-busy"
+      >
+        {{ uploading ? 'Uploading file' : 'Sending message' }}
+      </span>
       <span v-if="modelValue.length" class="composer-count" aria-live="polite" data-tabular>
         {{ modelValue.length.toLocaleString() }} / {{ MAX_DRAFT_LEN.toLocaleString() }}
       </span>
@@ -407,11 +420,37 @@ defineExpose({ focus })
   outline-offset: 2px;
 }
 
-/* .pi-spin (primeicons, imported globally in main.js) does the rotation; the
-   arc is a whole <svg> so it turns about its own centre. */
+/* .spin (base.css) does the rotation; the arc is a whole <svg> so it turns
+   about its own centre. The caption beside it is out of sight while it turns. */
+.composer-busy {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* A still arc says nothing, so under reduced motion it leaves and its caption
+   is written on the hint line instead, in pencil on the pitch. */
 @media (prefers-reduced-motion: reduce) {
   .composer-spinner {
-    animation: none;
+    display: none;
+  }
+
+  .composer-busy {
+    position: static;
+    width: auto;
+    height: auto;
+    margin: 0;
+    overflow: visible;
+    clip: auto;
+    font-size: var(--fs-label);
+    line-height: var(--line-pitch);
+    color: var(--pencil);
   }
 }
 

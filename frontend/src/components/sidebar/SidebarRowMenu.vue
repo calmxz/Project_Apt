@@ -68,7 +68,7 @@ onBeforeUnmount(() => {
     <button
       ref="triggerEl"
       type="button"
-      class="sb-row-menu-trigger"
+      class="sb-row-menu-trigger hit-44"
       :class="{ 'is-open': open }"
       :aria-expanded="open"
       :aria-label="state === 'active' ? 'Session actions' : 'Ended session actions'"
@@ -259,6 +259,13 @@ onBeforeUnmount(() => {
 .sb-row-menu-trigger:hover {
   opacity: 1;
   color: var(--ink-learner);
+}
+
+/* The trigger appears at once instead of fading in. */
+@media (prefers-reduced-motion: reduce) {
+  .sb-row-menu-trigger {
+    transition: none;
+  }
 }
 
 /* On touch / coarse-pointer devices there is no hover to reveal the trigger, so

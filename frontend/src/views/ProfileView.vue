@@ -110,7 +110,7 @@
             </div>
             <button
               type="button"
-              class="icon-btn"
+              class="icon-btn hit-44"
               data-testid="subtopic-remove"
               :aria-label="`Remove ${name}`"
               @click="removeSubtopic(name)"
@@ -154,7 +154,7 @@
               </span>
               <button
                 type="button"
-                class="icon-btn"
+                class="icon-btn hit-44"
                 data-testid="chip-remove"
                 :aria-label="`Remove ${c.name}`"
                 @click="removeItem('mastered_concepts', c.name)"
@@ -178,6 +178,7 @@
               data-testid="add-mastered"
               class="add-input"
               placeholder="Add a concept"
+              aria-label="Add a mastered concept"
               maxlength="200"
               @keydown.enter="addMastered"
             />
@@ -214,7 +215,7 @@
               </span>
               <button
                 type="button"
-                class="icon-btn"
+                class="icon-btn hit-44"
                 data-testid="chip-remove"
                 :aria-label="`Remove ${g.name}`"
                 @click="removeItem('confirmed_gaps', g.name)"
@@ -238,6 +239,7 @@
               data-testid="add-gap"
               class="add-input"
               placeholder="Add a gap"
+              aria-label="Add a gap"
               maxlength="200"
               @keydown.enter="addGap"
             />

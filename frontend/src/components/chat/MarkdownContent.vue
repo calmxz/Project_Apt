@@ -40,9 +40,9 @@ function snapBlocks() {
   const pitch = _pitch(root)
   for (const el of root.querySelectorAll(SNAP_SELECTOR)) {
     // The applied top-up is read back from the property we wrote, never from a
-    // measurement: clearing the style and re-measuring returns a transitioning
-    // value under prefers-reduced-motion (* { transition-duration: 0.01ms }
-    // makes every margin write animate), which compounds the pad on each pass.
+    // measurement: clearing the style and re-measuring can return a mid-flight
+    // value whenever anything transitions a margin here, which compounds the
+    // pad on each pass.
     const applied = parseFloat(el.style.getPropertyValue('--snap-pad')) || 0
     const cs = getComputedStyle(el)
     const total =

@@ -126,27 +126,27 @@ const MODES = [
 /* Each swatch is a page drawn in the inks of the theme it names, so the light
    page stays light while the app is dark. Theme tokens cascade from
    :root[data-theme], so they cannot express "the other theme" here: these
-   values are lifted verbatim from DESIGN.md's palette and are the one place
-   in this surface where a literal ink is correct. The system swatch cannot
-   be drawn from the live tokens either -- that would just mirror whichever
-   theme happens to be active -- so it is drawn as half light page, half dark
-   page, literally split down the middle. */
+   values come from the theme-independent --sw-* tokens declared once in
+   base.css's plain :root block (lifted verbatim from DESIGN.md's palette).
+   The system swatch cannot be drawn from the live tokens either -- that
+   would just mirror whichever theme happens to be active -- so it is drawn
+   as half light page, half dark page, literally split down the middle. */
 .mode-swatch {
   display: inline-flex;
 }
 
 .mode-swatch--light {
-  --sw-page: #fcfcfa;
-  --sw-ink: #b9c6da;
-  --sw-rule: #d3dfee;
-  --sw-margin: #d8433a;
+  --sw-page: var(--sw-light-paper);
+  --sw-ink: var(--sw-light-ink);
+  --sw-rule: var(--sw-light-rule);
+  --sw-margin: var(--sw-light-margin);
 }
 
 .mode-swatch--dark {
-  --sw-page: #141518;
-  --sw-ink: #363b47;
-  --sw-rule: #262a33;
-  --sw-margin: #ff6a5e;
+  --sw-page: var(--sw-dark-paper);
+  --sw-ink: var(--sw-dark-ink);
+  --sw-rule: var(--sw-dark-rule);
+  --sw-margin: var(--sw-dark-margin);
 }
 
 .sw-page {
@@ -167,28 +167,28 @@ const MODES = [
 }
 
 .sw-page--lt {
-  fill: #fcfcfa;
+  fill: var(--sw-light-paper);
 }
 
 .sw-page--dk {
-  fill: #141518;
+  fill: var(--sw-dark-paper);
 }
 
 .sw-frame {
-  stroke: #b9c6da;
+  stroke: var(--sw-light-ink);
   stroke-width: 1;
 }
 
 .sw-margin--lt {
-  stroke: #d8433a;
+  stroke: var(--sw-light-margin);
 }
 
 .sw-rule--lt {
-  stroke: #d3dfee;
+  stroke: var(--sw-light-rule);
 }
 
 .sw-rule--dk {
-  stroke: #262a33;
+  stroke: var(--sw-dark-rule);
 }
 
 .mode-line {

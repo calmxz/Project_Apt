@@ -154,3 +154,15 @@
 .p-toast-message-leave-to {
   opacity: 0;
 }
+
+/* Under reduced motion the caption is simply there, whole, and simply gone:
+   the reveal starts at its final clip and neither phase is timed. */
+@media (prefers-reduced-motion: reduce) {
+  .p-toast-message-enter-from {
+    clip-path: inset(0);
+  }
+  .p-toast-message-enter-active,
+  .p-toast-message-leave-active {
+    transition: none;
+  }
+}
