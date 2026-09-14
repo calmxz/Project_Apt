@@ -291,6 +291,15 @@ describe('SessionsLibraryView', () => {
     expect(back.attributes('to') || back.attributes('href')).toBe('/')
   })
 
+  it('A2/R2: filter, search, sort and back carry their coarse-pointer target fixes', async () => {
+    sessionsApi.getSessionLibrary.mockResolvedValue(page([item('a')]))
+    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="library-back"]').classes()).toContain('hit-44')
+    expect(wrapper.get('[data-testid="library-search"]').classes()).toContain('coarse-2x')
+    expect(wrapper.get('[data-testid="library-sort"]').classes()).toContain('coarse-2x')
+  })
+
   // Redesign C1: the Cornell Page world bans eyebrow and kicker labels
   // (DESIGN.md, "Don't add eyebrow or kicker labels"), so the folio line is
   // gone and the display title stands on its own.

@@ -454,6 +454,18 @@ body.sb-scroll-lock {
   }
 }
 
+/* R2: written controls (no drawn box to extend a hit area around) sit on
+   one 28px pitch by design. On coarse pointers only, this takes the whole
+   control to two pitches so the text itself is a full-height target,
+   without touching the fine-pointer rhythm. */
+@media (pointer: coarse) {
+  .coarse-2x {
+    display: inline-flex;
+    align-items: center;
+    min-height: calc(var(--line-pitch) * 2);
+  }
+}
+
 /* Visually hidden but screen-reader-accessible. F-18: discrete stream
    status announcement in SessionView. */
 .sr-only {

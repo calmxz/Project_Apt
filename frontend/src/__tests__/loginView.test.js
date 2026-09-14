@@ -44,6 +44,11 @@ describe('LoginView', () => {
     expect(btn.attributes('disabled')).toBeUndefined()
   })
 
+  it('R2: submit carries hit-44 for a coarse-pointer hit area', () => {
+    const wrapper = mountView()
+    expect(wrapper.get('[data-testid="login-submit"]').classes()).toContain('hit-44')
+  })
+
   it('submit calls signIn with email and password', async () => {
     const auth = useAuthStore()
     const spy = vi.spyOn(auth, 'signIn').mockResolvedValue()

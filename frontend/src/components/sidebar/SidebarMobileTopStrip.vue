@@ -32,7 +32,7 @@ const { openDrawer } = useSidebar()
         <path d="M3.5 6 H16.5 M3.5 10 H16.5 M3.5 14 H16.5" />
       </svg>
     </button>
-    <RouterLink to="/" class="sb-strip-brand" aria-label="Crux home">
+    <RouterLink to="/" class="sb-strip-brand hit-44" aria-label="Crux home">
       <Logo size="sm" variant="full" />
     </RouterLink>
     <div class="sb-strip-actions">

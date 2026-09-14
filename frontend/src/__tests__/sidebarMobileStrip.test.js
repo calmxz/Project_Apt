@@ -23,6 +23,11 @@ describe('SidebarMobileTopStrip', () => {
     expect(wrapper.find('[data-testid="strip-settings"]').exists()).toBe(true)
   })
 
+  it('A1: brand link carries hit-44 for a coarse-pointer hit area', () => {
+    wrapper = mount(SidebarMobileTopStrip)
+    expect(wrapper.find('.sb-strip-brand').classes()).toContain('hit-44')
+  })
+
   it('no longer renders theme or sign-out controls', () => {
     wrapper = mount(SidebarMobileTopStrip)
     expect(wrapper.find('[data-testid="strip-theme-toggle"]').exists()).toBe(false)

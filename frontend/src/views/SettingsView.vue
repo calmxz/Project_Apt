@@ -20,7 +20,7 @@
           :aria-controls="`panel-${t.slug}`"
           :aria-selected="t.slug === tab ? 'true' : 'false'"
           :tabindex="t.slug === tab ? 0 : -1"
-          :class="['rail-tab', { 'rail-tab--active': t.slug === tab }]"
+          :class="['rail-tab', 'coarse-2x', { 'rail-tab--active': t.slug === tab }]"
           :data-testid="`settings-tab-${t.slug}`"
           type="button"
           @click="activate(i)"
