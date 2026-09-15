@@ -23,7 +23,7 @@ defineProps({
    left. */
 .msg {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 4rem;
+  grid-template-columns: minmax(0, 1fr) 5rem;
   grid-template-areas: 'body gutter';
   gap: 0 0.75rem;
   max-width: 100%;
@@ -58,8 +58,12 @@ defineProps({
   justify-self: end;
   text-align: left;
   background: var(--color-surface-soft);
-  border-radius: var(--radius-sm);
-  padding: 0 0.875rem;
+  /* A hairline panel, not a bubble: square, and 13px + the 1px rule is half a
+     pitch of frame at each end, so the learner's block stays a whole multiple
+     of the pitch. */
+  border: 1px solid var(--rule-strong);
+  border-radius: 0;
+  padding: calc(var(--line-pitch) / 2 - 1px) 1rem;
 }
 
 .content {

@@ -156,10 +156,10 @@ watch(answered, async (is) => {
 
 <style scoped>
 /* Same gutter grammar as the tutor and learner turns: the role sits in the
-   4rem gutter in pencil, the box holds the question. */
+   5rem gutter in pencil, the box holds the question. */
 .check-card {
   display: grid;
-  grid-template-columns: 4rem minmax(0, 1fr);
+  grid-template-columns: 5rem minmax(0, 1fr);
   gap: 0 0.75rem;
   max-width: 100%;
 }

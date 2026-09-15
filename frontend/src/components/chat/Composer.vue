@@ -74,6 +74,7 @@
         v-if="streamState === 'idle'"
         type="button"
         class="composer-send hit-44"
+        :class="{ 'is-armed': sendArmed }"
         data-testid="session-send"
         :disabled="disabled || !modelValue.trim() || sending"
         :aria-label="sending ? 'Sending message' : 'Send message'"
@@ -184,9 +185,14 @@ const fileInputEl = ref(null)
 
 // I-10: matches ChatRequest.message maxLength in the API contract.
 const MAX_DRAFT_LEN = 4000
-const COMPOSER_MAX_HEIGHT_PX = 224
+// Six pitches: the textarea grows from one ruled line to six, then scrolls.
+const COMPOSER_MAX_HEIGHT_PX = 168
 
 const nearCharLimit = computed(() => props.modelValue.length >= MAX_DRAFT_LEN * 0.9)
+
+// A draft worth sending arms the send control: the drawn arrow sits on a
+// filled blue square instead of on the page.
+const sendArmed = computed(() => !props.disabled && Boolean(props.modelValue.trim()))
 
 const placeholder = computed(() =>
   props.locked ? 'Pick an answer above, or Skip...' : 'Ask anything.',
@@ -249,8 +255,10 @@ defineExpose({ focus })
 </script>
 
 <style scoped>
-/* One ruled line at the foot of the notes column: the learner writes on the
-   rule in blue, the two drawn controls sit on either end. */
+/* The same ruled box as a check: 1px ink border, page ground over the rules,
+   no radius, 13px + the 1px border for half a pitch of frame at each end and
+   1rem of side. The learner writes inside it in blue, the two drawn controls
+   sit on either end of the line. */
 .composer-wrap {
   display: flex;
   flex-direction: column;
@@ -261,16 +269,24 @@ defineExpose({ focus })
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: end;
   gap: 0.5rem;
-  border-bottom: 1px solid var(--rule-strong);
+  padding: calc(var(--line-pitch) / 2 - 1px) 1rem;
+  background: var(--color-background);
+  border: 1px solid var(--ink);
+  border-radius: 0;
   transition: border-color var(--motion-fast) ease;
 }
 
 .composer:focus-within {
-  border-bottom-color: var(--ink-learner);
+  border-color: var(--ink-learner);
 }
 
 .composer.is-disabled {
-  opacity: 0.7;
+  border-color: var(--rule-strong);
+}
+
+.composer.is-disabled .composer-input,
+.composer.is-disabled .composer-input::placeholder {
+  color: var(--pencil);
 }
 
 .composer-input {
@@ -278,7 +294,7 @@ defineExpose({ focus })
   align-self: stretch;
   width: 100%;
   min-height: var(--line-pitch);
-  max-height: 224px;
+  max-height: calc(var(--line-pitch) * 6);
   padding: 0;
   margin: 0;
   background: transparent;
@@ -331,7 +347,9 @@ defineExpose({ focus })
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2rem;
+  /* 28px square in every state, so arming the send control changes its ink
+     and never its size. */
+  width: var(--line-pitch);
   height: var(--line-pitch);
   flex-shrink: 0;
   background: transparent;
@@ -346,6 +364,28 @@ defineExpose({ focus })
 /* Drawn strokes, not a glyph font: one weight, round ends, the button's ink. */
 .composer-icon {
   flex: 0 0 auto;
+  position: relative;
+}
+
+/* The fill is a pseudo-element under the arrow, faded in and out; the square
+   itself never changes size, so nothing on the line moves. .hit-44 already
+   makes the button a positioning context and owns ::after for its hit area. */
+.composer-send::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--color-accent-strong);
+  border-radius: var(--radius-sm);
+  opacity: 0;
+  transition: opacity var(--motion-fast) ease;
+}
+
+.composer-send.is-armed::before {
+  opacity: 1;
+}
+
+.composer-send.is-armed {
+  color: var(--color-text-on-accent);
 }
 
 .composer-attach {
@@ -370,10 +410,16 @@ defineExpose({ focus })
   color: var(--ink-marker-text);
 }
 
+/* An armed send stays filled while it is sending, so the square does not
+   blink off and on again between the click and the first token. */
 .composer-attach:disabled,
-.composer-send:disabled,
-.composer-stop:disabled {
+.composer-stop:disabled,
+.composer-send:disabled:not(.is-armed) {
   color: var(--pencil);
+  cursor: not-allowed;
+}
+
+.composer-send:disabled {
   cursor: not-allowed;
 }
 

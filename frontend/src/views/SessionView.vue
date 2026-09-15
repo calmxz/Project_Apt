@@ -1135,12 +1135,24 @@ function goHome() {
   /* Sole scroller in the app-shell. min-height: 0 lets it shrink within the
      grid row instead of forcing the page to overflow. The feint rules are
      painted on the scrolling content so text keeps sitting on them. */
+
+  /* --ruled-bg at 65% of the feint rule's alpha. Same pitch, same offset, same
+     pattern as base.css; only the ink of the rule is lighter, so the notes
+     column reads as paper with the turns on it rather than as a grid. Local to
+     this scroller -- every other ruled surface keeps the full-weight rule. */
+  --ruled-bg-soft: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(var(--line-pitch) - 1px),
+    color-mix(in srgb, var(--rule) 65%, transparent) calc(var(--line-pitch) - 1px),
+    color-mix(in srgb, var(--rule) 65%, transparent) var(--line-pitch)
+  );
   min-height: 0;
   overflow-y: auto;
   /* Both edges: .notes-foot has no scrollbar, so a single right-side gutter
      here would push the centered measure ~8px left of the foot's. */
   scrollbar-gutter: stable both-edges;
-  background-image: var(--ruled-bg);
+  background-image: var(--ruled-bg-soft);
   background-position-y: var(--ruled-offset);
   background-attachment: local;
   padding: 0 clamp(1rem, 3vw, 2rem);
@@ -1170,7 +1182,7 @@ function goHome() {
    the notes. */
 .notes-measure {
   width: 100%;
-  max-width: calc(4rem + 72ch);
+  max-width: calc(5rem + 72ch);
   margin: 0 auto;
 }
 

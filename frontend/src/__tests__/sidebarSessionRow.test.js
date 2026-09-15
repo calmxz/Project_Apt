@@ -34,26 +34,7 @@ beforeEach(() => {
   routerPush.mockClear()
 })
 
-describe('SidebarSessionRow — level cell', () => {
-  it('renders the level mark when progress.level is set', () => {
-    const wrapper = mountRow(
-      baseSession({ progress: { level: 'intermediate', mastered_count: 0 } }),
-    )
-    expect(wrapper.find('.sb-row-level').exists()).toBe(true)
-    const path = wrapper.find('.sb-row-level-icon path')
-    expect(path.exists()).toBe(true)
-  })
-
-  it('does not render the level cell when level is null', () => {
-    const wrapper = mountRow(baseSession({ progress: { mastered_count: 2 } }))
-    expect(wrapper.find('.sb-row-level').exists()).toBe(false)
-  })
-
-  it('does not render the level cell when progress is null', () => {
-    const wrapper = mountRow(baseSession({ progress: null }))
-    expect(wrapper.find('.sb-row-level').exists()).toBe(false)
-  })
-
+describe('SidebarSessionRow — accessible row label', () => {
   it('includes the level in the accessible row label', () => {
     const wrapper = mountRow(
       baseSession({

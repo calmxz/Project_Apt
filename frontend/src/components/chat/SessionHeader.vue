@@ -34,12 +34,13 @@ const stroke = computed(() => levelStroke(props.level))
     </h1>
     <p class="session-meta">
       <span v-if="started" class="session-started">{{ started }}</span>
+      <span v-if="started" class="session-meta-sep" aria-hidden="true">&middot;</span>
       <span class="session-level">
         <svg
           class="session-level-mark"
           viewBox="0 0 24 24"
-          width="22"
-          height="14"
+          width="28"
+          height="18"
           aria-hidden="true"
           focusable="false"
         >
@@ -110,6 +111,13 @@ const stroke = computed(() => levelStroke(props.level))
   line-height: var(--line-pitch);
   color: var(--pencil);
   white-space: nowrap;
+}
+
+/* One caption line: the date, a pencil middot, then the level and its stroke.
+   The middot only exists when there is a date to separate from. */
+.session-meta-sep {
+  flex: 0 0 auto;
+  color: var(--pencil);
 }
 
 .session-level {

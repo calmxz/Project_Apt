@@ -247,9 +247,6 @@ describe('HomeView — Start control touch target', () => {
     vi.doMock('@/services/sessionsApi.js', () => ({
       endSession: vi.fn(),
     }))
-    vi.doMock('@/services/profileApi.js', () => ({
-      getAggregateProfile: vi.fn().mockResolvedValue({ recent_topics: [] }),
-    }))
     setActivePinia(createPinia())
     HomeView = (await import('@/views/HomeView.vue')).default
   })
@@ -257,7 +254,6 @@ describe('HomeView — Start control touch target', () => {
   afterEach(() => {
     vi.doUnmock('vue-router')
     vi.doUnmock('@/services/sessionsApi.js')
-    vi.doUnmock('@/services/profileApi.js')
   })
 
   it('the Start control carries hit-44', () => {

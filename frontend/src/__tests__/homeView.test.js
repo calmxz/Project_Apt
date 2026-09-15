@@ -16,11 +16,6 @@ vi.mock('@/services/sessionsApi.js', () => ({
   endSession: (...args) => apiEndSession(...args),
 }))
 
-const apiAggregate = vi.fn()
-vi.mock('@/services/profileApi.js', () => ({
-  getAggregateProfile: (...args) => apiAggregate(...args),
-}))
-
 const stubs = {
   EmptyState: {
     props: ['tone', 'eyebrow', 'headline', 'subtext'],
@@ -48,8 +43,6 @@ describe('HomeView', () => {
     setActivePinia(createPinia())
     push.mockClear()
     apiEndSession.mockReset()
-    apiAggregate.mockReset()
-    apiAggregate.mockResolvedValue({ recent_topics: [] })
   })
 
   it('calls listSessions on mount', async () => {

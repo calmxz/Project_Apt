@@ -957,7 +957,7 @@ async function onSignOut() {
 .sb-session-list {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 0.25rem 0;
   display: flex;
   flex-direction: column;
 }

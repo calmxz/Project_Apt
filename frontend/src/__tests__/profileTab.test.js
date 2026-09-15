@@ -1,10 +1,10 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount, flushPromises, RouterLinkStub } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 import ProfileTab from '@/components/settings/ProfileTab.vue'
 import { useUserStore } from '@/stores/user.js'
-import * as profileApi from '@/services/profileApi.js'
+import * as sessionsApi from '@/services/sessionsApi.js'
 
 const showSuccess = vi.fn()
 const showError = vi.fn()
@@ -24,80 +24,39 @@ function seedUser() {
   user.onboardingComplete = true
 }
 
-function nonEmptyAggregatePayload() {
-  return {
-    total_sessions: 3,
-    active_sessions: 2,
-    ended_sessions: 1,
-    total_learning_events: 7,
-    last_active_at: new Date().toISOString(),
-    combined_mastered_concepts: [
-      { concept: 'joins', count: 3, first_seen_session_id: 's1' },
-      { concept: 'select', count: 1, first_seen_session_id: 's2' },
-    ],
-    combined_confirmed_gaps: [{ concept: 'window-fns', count: 2, first_seen_session_id: 's1' }],
-    knowledge_level_distribution: { beginner: 2, intermediate: 1, advanced: 0, unknown: 0 },
-    recent_topics: [
-      { id: 's3', topic: 'sql joins', created_at: new Date().toISOString(), ended_at: null },
-    ],
-    concept_accuracy: [
-      {
-        concept: 'formal analysis',
-        accuracy: 0.31,
-        total_count: 13,
-        last_results: [false, false, true],
-        first_seen_session_id: 's1',
-      },
-      {
-        concept: 'data transmission',
-        accuracy: 0.33,
-        total_count: 3,
-        last_results: [false, true],
-        first_seen_session_id: 's1',
-      },
-      {
-        concept: 'CSS selectors',
-        accuracy: 0.67,
-        total_count: 3,
-        last_results: [true, true, false],
-        first_seen_session_id: 's2',
-      },
-      {
-        concept: 'fourth concept',
-        accuracy: 0.9,
-        total_count: 4,
-        last_results: [true, true],
-        first_seen_session_id: 's2',
-      },
-      {
-        concept: 'single try',
-        accuracy: 0,
-        total_count: 1,
-        last_results: [false],
-        first_seen_session_id: 's3',
-      },
-    ],
-    weekly_mastery: [
-      { week_start: '2026-07-20', count: 1 },
-      { week_start: '2026-07-27', count: 1 },
-    ],
-  }
-}
-
-function emptyAggregatePayload() {
-  return {
-    total_sessions: 0,
-    active_sessions: 0,
-    ended_sessions: 0,
-    total_learning_events: 0,
-    last_active_at: null,
-    combined_mastered_concepts: [],
-    combined_confirmed_gaps: [],
-    knowledge_level_distribution: { beginner: 0, intermediate: 0, advanced: 0, unknown: 0 },
-    recent_topics: [],
-    concept_accuracy: [],
-    weekly_mastery: [],
-  }
+// Deliberately out of order: the oldest row is listed first, the middle row
+// has no last_activity_at (so the created_at fallback decides), and the last
+// row is ended with no progress block at all.
+function sessionList() {
+  return [
+    {
+      id: 's-old',
+      topic: 'photosynthesis',
+      created_at: '2026-09-01T10:00:00Z',
+      ended_at: null,
+      pinned: false,
+      last_activity_at: '2026-09-02T10:00:00Z',
+      progress: { focus_target_gap: null, level: 'beginner', mastered_count: 1 },
+    },
+    {
+      id: 's-new',
+      topic: 'sql joins',
+      created_at: '2026-09-10T10:00:00Z',
+      ended_at: null,
+      pinned: false,
+      last_activity_at: null,
+      progress: { focus_target_gap: 'window functions', level: 'intermediate', mastered_count: 4 },
+    },
+    {
+      id: 's-ended',
+      topic: 'css selectors',
+      created_at: '2026-08-01T10:00:00Z',
+      ended_at: '2026-08-02T10:00:00Z',
+      pinned: false,
+      last_activity_at: '2026-08-02T10:00:00Z',
+      progress: null,
+    },
+  ]
 }
 
 describe('ProfileTab', () => {
@@ -108,111 +67,95 @@ describe('ProfileTab', () => {
     showError.mockClear()
   })
 
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('displays skeleton loading state during initial fetch', async () => {
     seedUser()
-    let resolveProfile
-    const profilePromise = new Promise((resolve) => {
-      resolveProfile = resolve
+    let resolveSessions
+    const pending = new Promise((resolve) => {
+      resolveSessions = resolve
     })
-    vi.spyOn(profileApi, 'getAggregateProfile').mockReturnValue(profilePromise)
-    const getUsageSpy = vi.spyOn(profileApi, 'getUsageSummary')
+    vi.spyOn(sessionsApi, 'listSessions').mockReturnValue(pending)
 
     const wrapper = mount(ProfileTab, { global: { stubs } })
     await wrapper.vm.$nextTick()
 
     expect(wrapper.find('[data-testid="agg-loading"]').exists()).toBe(true)
     expect(wrapper.find('[role="status"]').exists()).toBe(true)
-    expect(getUsageSpy).not.toHaveBeenCalled()
 
-    resolveProfile(nonEmptyAggregatePayload())
+    resolveSessions(sessionList())
     await flushPromises()
+    expect(wrapper.find('[data-testid="agg-loading"]').exists()).toBe(false)
   })
 
-  it('renders stats from getAggregateProfile fixture', async () => {
+  it('writes the account-level summary line: topic count, total mastered, most-recent focus', async () => {
     seedUser()
-    vi.spyOn(profileApi, 'getAggregateProfile').mockResolvedValue(nonEmptyAggregatePayload())
+    vi.spyOn(sessionsApi, 'listSessions').mockResolvedValue(sessionList())
 
     const wrapper = mount(ProfileTab, { global: { stubs } })
     await flushPromises()
 
-    expect(wrapper.find('[data-testid="agg-stats"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="agg-profile"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="agg-stats"]').text()).toBe('3 sessions · 2 mastered · 1 gap')
-    // Needs attention is a bold caption heading over cue entries, so the copy
-    // is no longer one comma-joined sentence; the same strings are asserted.
-    expect(wrapper.find('[data-testid="agg-insights"]').text()).toContain('Needs attention')
-    const attention = wrapper.find('[data-testid="glance-attention"]').text()
-    expect(attention).toContain('formal analysis')
-    expect(attention).toContain('(31%)')
-    expect(attention).toContain('data transmission')
-    expect(attention).toContain('(33%)')
-    expect(attention).toContain('CSS selectors')
-    expect(attention).toContain('(67%)')
-    expect(attention).not.toContain('fourth concept')
-    expect(attention).not.toContain('single try')
+    // Mastered totals 1 (s-old) + 4 (s-new) + 0 (s-ended, no progress) = 5.
+    // s-new has no last_activity_at, so its created_at (2026-09-10) sorts it
+    // first and its focus_target_gap ("window functions") is the one used.
+    expect(wrapper.get('[data-testid="profile-summary-line"]').text()).toBe(
+      '3 topics · 5 mastered · focus: window functions',
+    )
   })
 
-  // The section heading is drawn on the page now, not hidden for screen
-  // readers only (DESIGN.md: no sr-only stand-ins for a visible heading).
-  it('gives the needs-attention section a visible heading, only when there are items', async () => {
+  it('writes just the topic count for a single session with no progress', async () => {
     seedUser()
-    vi.spyOn(profileApi, 'getAggregateProfile').mockResolvedValue(nonEmptyAggregatePayload())
+    vi.spyOn(sessionsApi, 'listSessions').mockResolvedValue([
+      {
+        id: 's-solo',
+        topic: 'algebra',
+        created_at: '2026-09-01T10:00:00Z',
+        ended_at: null,
+        pinned: false,
+        last_activity_at: '2026-09-01T10:00:00Z',
+        progress: null,
+      },
+    ])
 
     const wrapper = mount(ProfileTab, { global: { stubs } })
     await flushPromises()
 
-    const section = wrapper.get('[data-testid="agg-insights"]')
-    expect(section.find('.sr-only').exists()).toBe(false)
-    expect(section.get('h2').classes()).toContain('sec-title')
-    expect(section.get('h2').text()).toBe('Needs attention')
+    expect(wrapper.get('[data-testid="profile-summary-line"]').text()).toBe('1 topic')
   })
 
-  it('does not render the needs-attention section when there are no attention items', async () => {
+  it('links "See all topics" to the sessions library', async () => {
     seedUser()
-    const payload = nonEmptyAggregatePayload()
-    payload.concept_accuracy = []
-    vi.spyOn(profileApi, 'getAggregateProfile').mockResolvedValue(payload)
+    vi.spyOn(sessionsApi, 'listSessions').mockResolvedValue(sessionList())
 
     const wrapper = mount(ProfileTab, { global: { stubs } })
     await flushPromises()
 
-    expect(wrapper.find('[data-testid="agg-insights"]').exists()).toBe(false)
+    const link = wrapper.getComponent('[data-testid="profile-see-all"]')
+    expect(link.text()).toBe('See all topics')
+    expect(link.props('to')).toBe('/sessions')
   })
 
-  it('renders the feedback style section before the aggregate stats in DOM order', async () => {
+  it('renders the feedback style section before the summary in DOM order', async () => {
     seedUser()
-    vi.spyOn(profileApi, 'getAggregateProfile').mockResolvedValue(nonEmptyAggregatePayload())
+    vi.spyOn(sessionsApi, 'listSessions').mockResolvedValue(sessionList())
 
     const wrapper = mount(ProfileTab, { global: { stubs } })
     await flushPromises()
 
     const html = wrapper.html()
     const feedbackIdx = html.indexOf('profile-feedback')
-    const statsIdx = html.indexOf('agg-stats')
+    const summaryIdx = html.indexOf('profile-summary')
     expect(feedbackIdx).toBeGreaterThan(-1)
-    expect(statsIdx).toBeGreaterThan(-1)
-    expect(feedbackIdx).toBeLessThan(statsIdx)
-  })
-
-  it('links each needs-attention concept to its first-seen session', async () => {
-    seedUser()
-    vi.spyOn(profileApi, 'getAggregateProfile').mockResolvedValue(nonEmptyAggregatePayload())
-
-    const wrapper = mount(ProfileTab, { global: { stubs } })
-    await flushPromises()
-
-    const links = wrapper.find('[data-testid="glance-attention"]').findAllComponents(RouterLinkStub)
-    expect(links).toHaveLength(3)
-    // The whole cue row is the link now, so its text carries the percentage too.
-    expect(links[0].text()).toContain('formal analysis')
-    expect(links[0].text()).toContain('(31%)')
-    expect(links[0].props('to')).toEqual({ name: 'session-profile', params: { id: 's1' } })
-    expect(links[2].props('to')).toEqual({ name: 'session-profile', params: { id: 's2' } })
+    expect(summaryIdx).toBeGreaterThan(-1)
+    expect(feedbackIdx).toBeLessThan(summaryIdx)
   })
 
   it('shows error banner when the API throws', async () => {
     seedUser()
-    vi.spyOn(profileApi, 'getAggregateProfile').mockRejectedValue(new Error('boom'))
+    vi.spyOn(sessionsApi, 'listSessions').mockRejectedValue(new Error('boom'))
 
     const wrapper = mount(ProfileTab, { global: { stubs } })
     await flushPromises()
@@ -220,58 +163,29 @@ describe('ProfileTab', () => {
     const err = wrapper.find('[data-testid="agg-error"]')
     expect(err.exists()).toBe(true)
     expect(err.text()).toContain('boom')
+    expect(wrapper.find('[data-testid="profile-summary-line"]').exists()).toBe(false)
   })
 
   it('renders empty state when zero sessions', async () => {
     seedUser()
-    vi.spyOn(profileApi, 'getAggregateProfile').mockResolvedValue(emptyAggregatePayload())
+    vi.spyOn(sessionsApi, 'listSessions').mockResolvedValue([])
 
     const wrapper = mount(ProfileTab, { global: { stubs } })
     await flushPromises()
 
     expect(wrapper.find('[data-testid="agg-empty"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="agg-stats"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="profile-summary-line"]').exists()).toBe(false)
   })
 
-  it('renders mastered + gap chips with counts', async () => {
+  it('save feedback is the filled control, disabled until the choice changes', async () => {
     seedUser()
-    vi.spyOn(profileApi, 'getAggregateProfile').mockResolvedValue(nonEmptyAggregatePayload())
-
-    const wrapper = mount(ProfileTab, { global: { stubs } })
-    await flushPromises()
-
-    const masteredText = wrapper.find('[data-testid="agg-mastered"]').text()
-    expect(masteredText).toContain('joins')
-    expect(masteredText).toContain('×3')
-    expect(masteredText).toContain('select')
-    const gapsText = wrapper.find('[data-testid="agg-gaps"]').text()
-    expect(gapsText).toContain('window-fns')
-    expect(gapsText).toContain('×2')
-  })
-
-  it('stats line: zero-mastered form and hidden needs-attention', async () => {
-    seedUser()
-    const payload = nonEmptyAggregatePayload()
-    payload.combined_mastered_concepts = []
-    payload.weekly_mastery = []
-    payload.concept_accuracy = []
-    vi.spyOn(profileApi, 'getAggregateProfile').mockResolvedValue(payload)
-
-    const wrapper = mount(ProfileTab, { global: { stubs } })
-    await flushPromises()
-
-    expect(wrapper.find('[data-testid="agg-stats"]').text()).toBe('3 sessions · 0 mastered · 1 gap')
-    expect(wrapper.find('[data-testid="glance-attention"]').exists()).toBe(false)
-  })
-
-  it('feedback style card renders picker and save button; changing feedback enables save', async () => {
-    seedUser()
-    vi.spyOn(profileApi, 'getAggregateProfile').mockResolvedValue(nonEmptyAggregatePayload())
+    vi.spyOn(sessionsApi, 'listSessions').mockResolvedValue(sessionList())
 
     const wrapper = mount(ProfileTab, { global: { stubs } })
     await flushPromises()
 
     const saveBtn = wrapper.get('[data-testid="profile-feedback-save"]')
+    expect(saveBtn.classes()).toContain('btn-fill')
     expect(saveBtn.attributes('disabled')).toBeDefined()
 
     await wrapper.get('[data-testid="feedback-style-direct_answers"]').setValue(true)
@@ -280,7 +194,7 @@ describe('ProfileTab', () => {
 
   it('submitting feedback calls user.updateProfile with current name and new feedback', async () => {
     seedUser()
-    vi.spyOn(profileApi, 'getAggregateProfile').mockResolvedValue(nonEmptyAggregatePayload())
+    vi.spyOn(sessionsApi, 'listSessions').mockResolvedValue(sessionList())
     const user = useUserStore()
     const updateSpy = vi.spyOn(user, 'updateProfile').mockResolvedValue()
 
@@ -295,15 +209,62 @@ describe('ProfileTab', () => {
     expect(showSuccess).toHaveBeenCalledOnce()
   })
 
-  it('does not call getUsageSummary (usage moved to its own tab)', async () => {
+  it('marks the save button busy while the write is in flight', async () => {
     seedUser()
-    vi.spyOn(profileApi, 'getAggregateProfile').mockResolvedValue(nonEmptyAggregatePayload())
-    const getUsageSpy = vi.spyOn(profileApi, 'getUsageSummary')
+    vi.spyOn(sessionsApi, 'listSessions').mockResolvedValue(sessionList())
+    const user = useUserStore()
+    let resolveSave
+    vi.spyOn(user, 'updateProfile').mockReturnValue(
+      new Promise((resolve) => {
+        resolveSave = resolve
+      }),
+    )
 
     const wrapper = mount(ProfileTab, { global: { stubs } })
     await flushPromises()
 
-    expect(getUsageSpy).not.toHaveBeenCalled()
+    await wrapper.get('[data-testid="feedback-style-direct_answers"]').setValue(true)
+    await wrapper.get('[data-testid="profile-feedback-save"]').trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.get('[data-testid="profile-feedback-save"]').classes()).toContain(
+      'btn-fill--busy',
+    )
+
+    resolveSave()
+    await flushPromises()
+    expect(wrapper.get('[data-testid="profile-feedback-save"]').classes()).not.toContain(
+      'btn-fill--busy',
+    )
+  })
+
+  it('flashes Saved. beside the button until the value changes again', async () => {
+    seedUser()
+    vi.spyOn(sessionsApi, 'listSessions').mockResolvedValue(sessionList())
+    const user = useUserStore()
+    vi.spyOn(user, 'updateProfile').mockResolvedValue()
+
+    const wrapper = mount(ProfileTab, { global: { stubs } })
+    await flushPromises()
+    await wrapper.get('[data-testid="feedback-style-direct_answers"]').setValue(true)
+
+    await wrapper.get('[data-testid="profile-feedback-save"]').trigger('click')
+    await flushPromises()
+    const flash = wrapper.get('[data-testid="profile-feedback-saved"]')
+    expect(flash.text()).toBe('Saved.')
+    expect(flash.find('svg.tick').exists()).toBe(true)
+
+    // Same grammar as the Account tab: the flash clears on the next change.
+    await wrapper.get('[data-testid="feedback-style-hints"]').setValue(true)
+    expect(wrapper.find('[data-testid="profile-feedback-saved"]').exists()).toBe(false)
+  })
+
+  it('does not render the usage panel (usage moved to its own tab)', async () => {
+    seedUser()
+    vi.spyOn(sessionsApi, 'listSessions').mockResolvedValue(sessionList())
+
+    const wrapper = mount(ProfileTab, { global: { stubs } })
+    await flushPromises()
+
     expect(wrapper.find('[data-testid="usage-panel"]').exists()).toBe(false)
   })
 })
