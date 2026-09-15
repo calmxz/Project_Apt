@@ -10,27 +10,30 @@ vi.mock('../composables/useToast.js', () => ({
   useToast: () => ({ showSuccess, showError, showWarn: vi.fn() }),
 }))
 
-const getAggregateProfile = vi.fn()
 const getUsageSummary = vi.fn()
 vi.mock('../services/profileApi.js', () => ({
-  getAggregateProfile: (...a) => getAggregateProfile(...a),
   getUsageSummary: (...a) => getUsageSummary(...a),
 }))
 
-function minimalAggregateFixture() {
-  return {
-    total_sessions: 1,
-    active_sessions: 1,
-    ended_sessions: 0,
-    total_learning_events: 0,
-    last_active_at: null,
-    combined_mastered_concepts: [],
-    combined_confirmed_gaps: [],
-    knowledge_level_distribution: { beginner: 1, intermediate: 0, advanced: 0, unknown: 0 },
-    recent_topics: [],
-    concept_accuracy: [],
-    weekly_mastery: [],
-  }
+// ProfileTab lists topics from GET /sessions now, not the aggregate profile.
+const listSessions = vi.fn()
+vi.mock('../services/sessionsApi.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  listSessions: (...a) => listSessions(...a),
+}))
+
+function minimalSessionsFixture() {
+  return [
+    {
+      id: 's1',
+      topic: 'sql joins',
+      created_at: '2026-09-10T10:00:00Z',
+      ended_at: null,
+      pinned: false,
+      last_activity_at: '2026-09-10T11:00:00Z',
+      progress: { focus_target_gap: null, level: 'beginner', mastered_count: 0 },
+    },
+  ]
 }
 
 function minimalUsageFixture() {
@@ -54,7 +57,17 @@ const stubs = {
 function makeRouter() {
   return createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: '/settings/:tab', name: 'settings', component: SettingsView, props: true }],
+    routes: [
+      { path: '/settings/:tab', name: 'settings', component: SettingsView, props: true },
+      // ProfileTab's topic rows link here; without the route vue-router
+      // throws an unhandled "No match" while resolving the link.
+      {
+        path: '/sessions/:id/profile',
+        name: 'session-profile',
+        component: { template: '<div />' },
+      },
+      { path: '/new', name: 'new-session', component: { template: '<div />' } },
+    ],
   })
 }
 
@@ -134,7 +147,7 @@ describe('SettingsView shell', () => {
 
   it('KeepAlive prevents ProfileTab refetch when navigating profile -> usage -> profile', async () => {
     setActivePinia(createPinia())
-    getAggregateProfile.mockReset().mockResolvedValue(minimalAggregateFixture())
+    listSessions.mockReset().mockResolvedValue(minimalSessionsFixture())
     getUsageSummary.mockReset().mockResolvedValue(minimalUsageFixture())
 
     const router = makeRouter()
@@ -148,7 +161,7 @@ describe('SettingsView shell', () => {
       },
     })
     await flushPromises()
-    expect(getAggregateProfile).toHaveBeenCalledTimes(1)
+    expect(listSessions).toHaveBeenCalledTimes(1)
 
     await w.find('[data-testid="settings-tab-usage"]').trigger('click')
     await flushPromises()
@@ -156,7 +169,7 @@ describe('SettingsView shell', () => {
 
     await w.find('[data-testid="settings-tab-profile"]').trigger('click')
     await flushPromises()
-    expect(getAggregateProfile).toHaveBeenCalledTimes(1)
+    expect(listSessions).toHaveBeenCalledTimes(1)
 
     w.unmount()
   })

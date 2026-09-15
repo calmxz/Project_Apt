@@ -24,8 +24,8 @@
           <svg
             v-if="opt.value === 'auto'"
             viewBox="0 0 36 48"
-            width="36"
-            height="48"
+            width="72"
+            height="96"
             focusable="false"
           >
             <rect class="sw-page sw-page--lt" x="0.5" y="0.5" width="17.5" height="47" />
@@ -39,7 +39,7 @@
             <path class="sw-rule sw-rule--lt" d="M13 30 L18 30" />
             <path class="sw-rule sw-rule--dk" d="M18 30 L31 30" />
           </svg>
-          <svg v-else viewBox="0 0 36 48" width="36" height="48" focusable="false">
+          <svg v-else viewBox="0 0 36 48" width="72" height="96" focusable="false">
             <rect class="sw-page" x="0.5" y="0.5" width="35" height="47" />
             <path class="sw-margin" d="M9 4 L9 44" />
             <path class="sw-rule" d="M13 14 L31 14" />
@@ -48,7 +48,7 @@
           </svg>
         </span>
         <span class="mode-line">
-          <span class="mode-label">{{ opt.label }}</span>
+          <span class="mode-label" :data-label="opt.label">{{ opt.label }}</span>
           <svg
             class="mode-tick"
             :class="{ 'mode-tick--on': override === opt.value }"
@@ -103,7 +103,7 @@ const MODES = [
 
 .modes {
   display: flex;
-  gap: 1.5rem;
+  gap: 3rem;
   border: 0;
   padding: 0;
   margin: 0;
@@ -198,10 +198,23 @@ const MODES = [
 }
 
 .mode-label {
+  position: relative;
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
   line-height: var(--line-pitch);
   color: var(--ink);
+}
+
+/* Reserves the width the label would need at 700 weight, invisibly, so
+   selecting a mode never widens its label and pushes its siblings. */
+.mode-label::after {
+  content: attr(data-label);
+  display: block;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+  font-weight: 700;
 }
 
 .mode.selected .mode-label {

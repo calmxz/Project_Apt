@@ -1,19 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
   <style>
-    .page-outline { stroke: #1b1b1a; }
-    .page-rules { stroke: #b9c6da; }
-    .page-margin { stroke: #d8433a; }
+    .mark-c { stroke: #1b1b1a; }
+    .mark-rule { stroke: #d8433a; }
     @media (prefers-color-scheme: dark) {
-      .page-outline { stroke: #ecebe6; }
-      .page-rules { stroke: #363b47; }
-      .page-margin { stroke: #ff6a5e; }
+      .mark-c { stroke: #ecebe6; }
+      .mark-rule { stroke: #ff6a5e; }
     }
   </style>
-  <rect class="page-outline" x="2.5" y="1.5" width="19" height="21" rx="2" fill="none" stroke-width="1.5" />
-  <g class="page-rules" stroke-width="1.5">
-    <line x1="11" y1="7.5" x2="18.5" y2="7.5" />
-    <line x1="11" y1="12" x2="18.5" y2="12" />
-    <line x1="11" y1="16.5" x2="18.5" y2="16.5" />
-  </g>
-  <line class="page-margin" x1="8" y1="1.5" x2="8" y2="22.5" stroke-width="2.5" />
+  <path class="mark-c" d="M26.6 10.9 A8 8 0 1 0 26.6 21.1" fill="none" stroke-width="6.5" stroke-linecap="butt" />
+  <line class="mark-rule" x1="5.5" y1="2" x2="5.5" y2="30" stroke-width="3" />
 </svg>

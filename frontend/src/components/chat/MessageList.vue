@@ -93,13 +93,29 @@ function tickAt(i) {
   opacity: 0;
 }
 
+/* Turns apart: a change of voice is worth two pitches, consecutive turns in
+   the same voice keep one. A parent's scoped rule reaches the root element of
+   a child component, which is exactly the turn block being spaced here. */
+.msg.user + .msg.assistant,
+.msg.assistant + .msg.user {
+  padding-top: calc(var(--line-pitch) * 2);
+}
+
+/* The typing row and the streaming turn are siblings of the list, not children
+   of it, so their adjacent neighbour is the list itself: they take the wider
+   gap only when the last thing written was the learner. */
+.msg-list:has(> .msg.user:last-child) + .msg.typing,
+.msg-list:has(> .msg.user:last-child) + .msg.assistant {
+  padding-top: calc(var(--line-pitch) * 2);
+}
+
 /* Typing indicator row (bespoke markup, same gutter grammar as a turn).
    Scoped to .typing: a bare .msg rule here also lands on the root of every
    child bubble (a parent's scoped rule reaches a child's root element) and
    would override the learner turn's mirrored grid. */
 .msg.typing {
   display: grid;
-  grid-template-columns: 4rem minmax(0, 1fr);
+  grid-template-columns: 5rem minmax(0, 1fr);
   gap: 0 0.75rem;
   max-width: 100%;
   padding: var(--line-pitch) 0 0;

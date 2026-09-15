@@ -76,7 +76,7 @@ const visibleToolCalls = computed(() => {
    the gutter in pencil. */
 .msg {
   display: grid;
-  grid-template-columns: 4rem minmax(0, 1fr);
+  grid-template-columns: 5rem minmax(0, 1fr);
   gap: 0 0.75rem;
   max-width: 100%;
   padding: var(--line-pitch) 0 0;

@@ -172,7 +172,9 @@ const expanded = ref(false)
       </section>
 
       <section class="cue-section">
-        <h2 class="cue-heading">Gaps</h2>
+        <h2 class="cue-heading">
+          Gaps <span class="cue-count" data-tabular>{{ openGaps.length }}</span>
+        </h2>
         <ul v-if="openGaps.length" class="cue-list">
           <li
             v-for="g in openGaps"
@@ -200,7 +202,9 @@ const expanded = ref(false)
       </section>
 
       <section class="cue-section">
-        <h2 class="cue-heading">Mastered</h2>
+        <h2 class="cue-heading">
+          Mastered <span class="cue-count" data-tabular>{{ mastered.length }}</span>
+        </h2>
         <ul v-if="mastered.length" class="cue-list">
           <li
             v-for="m in mastered"
@@ -283,6 +287,9 @@ const expanded = ref(false)
   flex-direction: column;
 }
 
+/* The heading is a written section head with a painted feint rule under it:
+   painted, not laid out, so the line stays 28px and the list below it starts
+   on the next pitch. The count is a pencil aside beside the word. */
 .cue-heading {
   margin: 0;
   font-family: var(--font-sans);
@@ -290,6 +297,13 @@ const expanded = ref(false)
   font-weight: 700;
   line-height: var(--line-pitch);
   color: var(--ink);
+  box-shadow: inset 0 -1px 0 var(--rule);
+}
+
+.cue-count {
+  font-size: var(--fs-label);
+  font-weight: 400;
+  color: var(--pencil);
 }
 
 .cue-list {
@@ -325,6 +339,12 @@ const expanded = ref(false)
   text-decoration-color: var(--ink-marker);
   text-decoration-thickness: 2px;
   text-underline-offset: 4px;
+}
+
+/* Only the focus cue carries the extra weight; a gap under an open check is
+   still a gap, marked but not promoted. */
+.cue-entry--focus .cue-word {
+  font-weight: 700;
 }
 
 .cue-none {
@@ -373,8 +393,17 @@ const expanded = ref(false)
   stroke: var(--pencil);
 }
 
-.cue-level-label,
+/* A recorded level is a fact about the page, so it is written in graphite at
+   caption weight; "level not set" is still a pencil note. */
+.cue-level-label {
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.cue-level.is-unset .cue-level-label,
 .cue-subtopic-name {
+  font-weight: 400;
   color: var(--pencil);
 }
 

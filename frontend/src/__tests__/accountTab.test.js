@@ -77,6 +77,17 @@ describe('AccountTab', () => {
     expect(w.find('[data-testid="settings-security"]').exists()).toBe(true)
   })
 
+  // D2: every submit in Settings is the filled control now, not a text line.
+  it('both submits are filled buttons', async () => {
+    const auth = useAuthStore()
+    auth.session = { user: { id: 'u-1', email: 'a@b.c' }, access_token: 't' }
+    const w = mount(AccountTab, { global: { stubs } })
+    await flushPromises()
+    expect(w.get('[data-testid="settings-save"]').classes()).toContain('btn-fill')
+    expect(w.get('[data-testid="settings-pw-submit"]').classes()).toContain('btn-fill')
+    expect(w.find('.text-btn').exists()).toBe(false)
+  })
+
   it('save button disabled until name changes (feedback no longer affects dirty)', async () => {
     const w = mount(AccountTab, { global: { stubs } })
     expect(w.find('[data-testid="settings-save"]').attributes('disabled')).toBeDefined()

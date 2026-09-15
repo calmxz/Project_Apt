@@ -47,6 +47,19 @@ describe('AppearanceTab', () => {
     await w.get('[data-testid="settings-theme-dark"]').setValue(true)
     expect(setTheme).toHaveBeenCalledWith('dark')
   })
+
+  // Bug: selecting a mode bolds its label, which (without a width
+  // reservation) widens it and shifts the other labels in the flex row.
+  // jsdom can't measure widths, so this asserts the reservation hook
+  // (data-label, read by the ::after bold-weight ghost in CSS) is present.
+  it('gives each mode-label a data-label matching its text, for the no-reflow bold reservation', () => {
+    const w = mount(AppearanceTab)
+    const labels = w.findAll('.mode-label')
+    expect(labels.length).toBe(3)
+    for (const label of labels) {
+      expect(label.attributes('data-label')).toBe(label.text())
+    }
+  })
 })
 
 // T3: the swatch preview colors live in base.css's --sw-* tokens, not as hex

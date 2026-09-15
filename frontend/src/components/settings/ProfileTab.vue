@@ -3,187 +3,115 @@
     <section class="sec" data-testid="profile-feedback">
       <h2 class="sec-title">Feedback style</h2>
       <FeedbackStylePicker v-model="feedback" :options="feedbackOptions" />
-      <div class="actions">
+      <div class="btn-fill-row">
         <button
           type="button"
-          class="text-btn"
+          class="btn-fill"
+          :class="{ 'btn-fill--busy': savingFeedback }"
           data-testid="profile-feedback-save"
           :disabled="!feedbackDirty || savingFeedback"
           @click="saveFeedback"
         >
           Save feedback style
         </button>
+        <span
+          v-if="feedbackSaved"
+          class="saved-flash"
+          role="status"
+          data-testid="profile-feedback-saved"
+        >
+          <svg
+            class="tick"
+            viewBox="0 0 12 12"
+            width="12"
+            height="12"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <path d="M2 6.5 L4.8 9.2 L10 3.2" />
+          </svg>
+          Saved.
+        </span>
       </div>
     </section>
 
     <div v-if="loading" class="skel" data-testid="agg-loading" aria-hidden="true">
       <span class="skel-block" />
-      <span class="skel-block" />
-      <span class="skel-block skel-short" />
     </div>
     <span v-if="loading" class="sr-only" role="status">Loading</span>
     <p v-else-if="error" class="error" data-testid="agg-error">{{ error }}</p>
 
-    <template v-else-if="data">
-      <EmptyState
-        v-if="data.total_sessions === 0"
-        class="sec--ruled"
-        data-testid="agg-empty"
-        tone="celebrate"
-        headline="No sessions yet"
-        subtext="Start one — your profile builds itself as you go."
-      >
-        <template #cta>
-          <router-link to="/new" class="link">Start your first session</router-link>
+    <template v-else>
+      <section class="sec sec--ruled" data-testid="profile-summary">
+        <h2 class="sec-title">Topics</h2>
+        <EmptyState
+          v-if="topics.length === 0"
+          data-testid="agg-empty"
+          tone="celebrate"
+          headline="No sessions yet"
+          subtext="Start one — your profile builds itself as you go."
+        >
+          <template #cta>
+            <router-link to="/new" class="link">Start your first session</router-link>
+          </template>
+        </EmptyState>
+        <template v-else>
+          <p class="lede" data-testid="profile-summary-line">{{ summaryLine }}</p>
+          <router-link to="/sessions" class="link link--block" data-testid="profile-see-all">
+            See all topics
+          </router-link>
         </template>
-      </EmptyState>
-
-      <template v-else>
-        <p class="counts sec--ruled" data-testid="agg-stats" data-tabular>
-          {{ plural(data.total_sessions, 'session') }} ·
-          {{ data.combined_mastered_concepts.length }} mastered ·
-          {{ plural(data.combined_confirmed_gaps.length, 'gap') }}
-        </p>
-
-        <section v-if="attentionItems.length" class="sec" data-testid="agg-insights">
-          <h2 class="sec-title">Needs attention</h2>
-          <ul class="cue-list" data-testid="glance-attention">
-            <li v-for="c in attentionItems" :key="c.concept" class="cue-entry">
-              <router-link
-                :to="{ name: 'session-profile', params: { id: c.first_seen_session_id } }"
-                class="attn-link"
-              >
-                <svg
-                  class="cue-mark cue-mark--attn"
-                  viewBox="0 0 12 12"
-                  width="12"
-                  height="12"
-                  aria-hidden="true"
-                  focusable="false"
-                >
-                  <path d="M1 6 L11 6" />
-                </svg>
-                <span class="attn-word">{{ c.concept }}</span>
-                <span class="attn-pct" data-tabular>({{ c.pct }}%)</span>
-              </router-link>
-            </li>
-          </ul>
-        </section>
-
-        <div class="cue-cols">
-          <section class="sec" data-testid="agg-gaps">
-            <h2 class="sec-title">Gaps</h2>
-            <p v-if="!data.combined_confirmed_gaps.length" class="cue-none">None yet.</p>
-            <ul v-else class="cue-list">
-              <li
-                v-for="item in data.combined_confirmed_gaps"
-                :key="`g-${item.concept}`"
-                class="cue-entry"
-              >
-                <span class="cue-line">
-                  <svg
-                    class="cue-mark cue-mark--gap"
-                    viewBox="0 0 12 12"
-                    width="12"
-                    height="12"
-                    aria-hidden="true"
-                    focusable="false"
-                  >
-                    <circle cx="6" cy="6" r="4" />
-                  </svg>
-                  <span class="cue-word">{{ item.concept }}</span>
-                  <router-link
-                    :to="{ name: 'session-profile', params: { id: item.first_seen_session_id } }"
-                    class="cue-count"
-                    data-tabular
-                    :title="`seen in ${item.count} ${item.count === 1 ? 'session' : 'sessions'}`"
-                  >
-                    ×{{ item.count }}
-                  </router-link>
-                </span>
-              </li>
-            </ul>
-          </section>
-
-          <section class="sec" data-testid="agg-mastered">
-            <h2 class="sec-title">Mastered</h2>
-            <p v-if="!data.combined_mastered_concepts.length" class="cue-none">None yet.</p>
-            <ul v-else class="cue-list">
-              <li
-                v-for="item in data.combined_mastered_concepts"
-                :key="`m-${item.concept}`"
-                class="cue-entry"
-              >
-                <span class="cue-line">
-                  <svg
-                    class="cue-mark cue-mark--tick"
-                    viewBox="0 0 12 12"
-                    width="12"
-                    height="12"
-                    aria-hidden="true"
-                    focusable="false"
-                  >
-                    <path d="M2 6.5 L4.8 9.2 L10 3.2" />
-                  </svg>
-                  <span class="cue-word">{{ item.concept }}</span>
-                  <router-link
-                    :to="{ name: 'session-profile', params: { id: item.first_seen_session_id } }"
-                    class="cue-count"
-                    data-tabular
-                    :title="`seen in ${item.count} ${item.count === 1 ? 'session' : 'sessions'}`"
-                  >
-                    ×{{ item.count }}
-                  </router-link>
-                </span>
-              </li>
-            </ul>
-          </section>
-        </div>
-      </template>
+      </section>
     </template>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 
 import EmptyState from '../EmptyState.vue'
 import FeedbackStylePicker from '../FeedbackStylePicker.vue'
 import { friendlyError } from '../../lib/errors.js'
-import { getAggregateProfile } from '../../services/profileApi.js'
+import { listSessions } from '../../services/sessionsApi.js'
 import { useUserStore } from '../../stores/user.js'
 import { useToast } from '../../composables/useToast.js'
 
 const user = useUserStore()
 const { showSuccess, showError } = useToast()
 
-const data = ref(null)
+const sessions = ref([])
 const loading = ref(false)
 const error = ref('')
 
-// Counts are written the way the cue column writes them: "1 gap", not
-// "1 gaps". "mastered" is a participle and never takes a plural.
-function plural(n, word) {
-  return `${n} ${word}${n === 1 ? '' : 's'}`
+function activityTime(s) {
+  const raw = s?.last_activity_at || s?.created_at
+  const t = raw ? new Date(raw).getTime() : NaN
+  return Number.isNaN(t) ? 0 : t
 }
 
-const attentionItems = computed(() =>
-  (data.value?.concept_accuracy || [])
-    .filter((c) => c.total_count >= 2)
-    .sort((a, b) => a.accuracy - b.accuracy || a.concept.localeCompare(b.concept))
-    .slice(0, 3)
-    .map((c) => ({
-      concept: c.concept,
-      pct: Math.round(c.accuracy * 100),
-      first_seen_session_id: c.first_seen_session_id,
-    })),
-)
+const topics = computed(() => [...sessions.value].sort((a, b) => activityTime(b) - activityTime(a)))
+
+// One account-level line: topic count always, mastered total only when it is
+// non-zero, and the most recently active session's open focus cue -- the
+// per-topic gaps/mastered/focus themselves live on that session's own
+// profile page, not here.
+const summaryLine = computed(() => {
+  const list = topics.value
+  const n = list.length
+  const parts = [`${n} topic${n === 1 ? '' : 's'}`]
+  const mastered = list.reduce((sum, s) => sum + (s?.progress?.mastered_count || 0), 0)
+  if (mastered > 0) parts.push(`${mastered} mastered`)
+  const focusSession = list.find((s) => s?.progress?.focus_target_gap)
+  if (focusSession) parts.push(`focus: ${focusSession.progress.focus_target_gap}`)
+  return parts.join(' · ')
+})
 
 async function load() {
   loading.value = true
   error.value = ''
   try {
-    data.value = await getAggregateProfile()
+    const res = await listSessions()
+    sessions.value = Array.isArray(res) ? res : []
   } catch (e) {
     error.value = friendlyError(e)
   }
@@ -199,9 +127,16 @@ const feedbackOptions = [
 
 const feedback = ref(user.interactionPreferences?.feedback || 'hints')
 const savingFeedback = ref(false)
+const feedbackSaved = ref(false)
 const feedbackDirty = computed(
   () => feedback.value !== (user.interactionPreferences?.feedback || 'hints'),
 )
+
+// The "Saved." flash reads the same way on every Settings save: it stays
+// beside the (now idle) button until the learner changes the value again.
+watch(feedback, () => {
+  feedbackSaved.value = false
+})
 
 async function saveFeedback() {
   if (!feedbackDirty.value || savingFeedback.value) return
@@ -209,6 +144,7 @@ async function saveFeedback() {
   try {
     await user.updateProfile({ name: user.name || '', feedback: feedback.value })
     showSuccess('Preferences saved.')
+    feedbackSaved.value = true
   } catch (e) {
     showError(friendlyError(e))
   } finally {
@@ -218,25 +154,21 @@ async function saveFeedback() {
 </script>
 
 <style scoped>
-/* Feedback style comes first (the setting the learner is most likely to
-   change), then the aggregate profile, lightened to what changes the next
-   session: a one-line pencil count, what needs attention, gaps, mastered.
-   No stat cards, no chips, no fills. */
+/* The account tab holds only what is true at account level: Feedback style,
+   then one pencil summary line (topic count, total mastered when non-zero,
+   and the most recently active session's open focus cue) with a link to the
+   library. Per-topic gaps, mastered concepts and focus live on that
+   session's own profile page; the full per-session list lives in the
+   library at /sessions, not duplicated here. */
 .profile-tab {
   /* Full panel width: an auto cross-axis margin inside the panel's flex
-     column would shrink-wrap the tab to its longest line and collapse the
-     two cue columns into one. */
+     column would shrink-wrap the tab to its longest line. Two independent
+     sections -- Feedback style, then Topics -- sit side by side from 60rem
+     up, divided by a vertical rule instead of the stacked horizontal one. */
   width: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.counts {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-size: var(--fs-caption);
-  line-height: var(--line-pitch);
-  color: var(--pencil);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  column-gap: 3rem;
 }
 
 .error {
@@ -250,8 +182,13 @@ async function saveFeedback() {
 .sec {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: stretch;
   padding-top: var(--line-pitch);
+  width: 100%;
+}
+
+.btn-fill-row {
+  align-self: flex-start;
 }
 
 .sec--ruled {
@@ -269,154 +206,31 @@ async function saveFeedback() {
   color: var(--ink);
 }
 
-/* Needs attention: a cue entry per concept, the whole line the link. The cue
-   stays in graphite and is marked in red -- never set in red. */
-.attn-link {
-  display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
-  min-width: 0;
-  color: inherit;
-  text-decoration: none;
-}
-
-.attn-link:focus-visible {
-  outline: 2px solid var(--color-accent-ring);
-  outline-offset: 2px;
-}
-
-.attn-word {
-  font-family: var(--font-sans);
-  font-size: var(--fs-body);
-  line-height: var(--line-pitch);
-  color: var(--ink);
-  overflow-wrap: anywhere;
-  text-decoration: underline;
-  text-decoration-color: var(--ink-marker);
-  text-decoration-thickness: 2px;
-  text-underline-offset: 4px;
-}
-
-.attn-pct {
-  flex: 0 0 auto;
-  font-family: var(--font-sans);
-  font-size: var(--fs-label);
-  line-height: var(--line-pitch);
-  color: var(--pencil);
-}
-
-.cue-cols {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
-  gap: 0 2rem;
-  width: 100%;
-}
-
-.cue-list {
-  list-style: none;
-  padding: 0;
+.lede {
   margin: 0;
-  width: 100%;
-}
-
-.cue-entry {
-  display: flex;
-  flex-direction: column;
-}
-
-.cue-line {
-  display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
-}
-
-.cue-mark {
-  flex: 0 0 auto;
-  align-self: flex-start;
-  margin-top: calc((var(--line-pitch) - 12px) / 2);
-  fill: none;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.5;
-}
-
-.cue-mark--gap {
-  stroke: var(--pencil);
-}
-
-.cue-mark--tick {
-  stroke: var(--ink-learner);
-}
-
-/* The needs-attention dash: the marker's 2px red stroke. */
-.cue-mark--attn {
-  stroke: var(--ink-marker);
-  stroke-width: 2;
-}
-
-.cue-word {
-  font-family: var(--font-sans);
-  font-size: var(--fs-body);
-  line-height: var(--line-pitch);
-  color: var(--ink-learner);
-  overflow-wrap: anywhere;
-}
-
-.cue-count {
-  font-family: var(--font-sans);
-  font-size: var(--fs-label);
-  line-height: var(--line-pitch);
-  color: var(--pencil);
-  text-decoration: none;
-}
-
-.cue-count:hover {
-  color: var(--ink-learner);
-}
-
-.cue-none {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-size: var(--fs-body);
-  line-height: var(--line-pitch);
-  color: var(--pencil);
-}
-
-.actions {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 1.25rem;
-  flex-wrap: wrap;
-  min-height: var(--line-pitch);
-}
-
-.text-btn {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--ink-learner);
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
-  font-weight: 700;
   line-height: var(--line-pitch);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  cursor: pointer;
-}
-
-.text-btn:hover:not(:disabled) {
-  color: var(--color-accent-hover);
-}
-
-.text-btn:disabled {
   color: var(--pencil);
-  text-decoration: none;
-  cursor: default;
 }
 
-.text-btn:focus-visible {
-  outline: 2px solid var(--color-accent-ring);
-  outline-offset: 2px;
+.saved-flash {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  line-height: var(--line-pitch);
+  color: var(--ink);
+}
+
+.tick {
+  flex: 0 0 auto;
+  fill: none;
+  stroke: var(--ink-learner);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .link {
@@ -433,6 +247,10 @@ async function saveFeedback() {
   color: var(--color-accent-hover);
 }
 
+.link--block {
+  display: block;
+}
+
 /* Skeleton: pencil-weight rules on the pitch, no shimmer. */
 .skel {
   display: flex;
@@ -445,10 +263,6 @@ async function saveFeedback() {
   border-bottom: 1px solid var(--rule-strong);
 }
 
-.skel-short {
-  width: 55%;
-}
-
 .sr-only {
   position: absolute;
   width: 1px;
@@ -459,5 +273,31 @@ async function saveFeedback() {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* From 60rem the two sections sit side by side; the vertical rule replaces
+   the horizontal one. Kept last so it wins over the base .sec--ruled rule. */
+@media (min-width: 60rem) {
+  .profile-tab {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .sec {
+    grid-column: 1;
+  }
+
+  .skel,
+  .error,
+  [data-testid='profile-summary'] {
+    grid-column: 2;
+  }
+
+  .sec--ruled {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+    border-left: 1px solid var(--rule-strong);
+    padding-left: 3rem;
+  }
 }
 </style>

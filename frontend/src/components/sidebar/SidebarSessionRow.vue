@@ -4,7 +4,6 @@ import { useRoute, useRouter } from 'vue-router'
 import { useSidebar } from '@/composables/useSidebar.js'
 import { useSessionStore } from '@/stores/session.js'
 import { useToast } from '@/composables/useToast.js'
-import { levelStroke } from '@/components/chat/levelMark.js'
 import SidebarRowMenu from './SidebarRowMenu.vue'
 
 const props = defineProps({
@@ -31,8 +30,8 @@ const isCollapsed = computed(() => mode.value === 'collapsed')
 const tooltip = computed(() => props.session.topic || 'Untitled')
 
 // Row label cells. SessionListItem.progress carries focus_target_gap, level,
-// and mastered_count, so a row reads: topic, level mark, mastered count, focus
-// cue underneath.
+// and mastered_count. Only the topic is shown on the row; the rest still feed
+// the aria-label for screen readers.
 const masteredCount = computed(() => props.session.progress?.mastered_count || 0)
 const focusCue = computed(() => props.session.progress?.focus_target_gap || '')
 const level = computed(() => props.session.progress?.level || null)
@@ -207,40 +206,7 @@ function commitRenameFromKey() {
               </svg>
               {{ session.topic || 'Untitled' }}
             </span>
-            <span v-if="level" class="sb-row-level" aria-hidden="true">
-              <svg
-                class="sb-row-level-icon"
-                viewBox="0 0 24 24"
-                width="14"
-                height="10"
-                fill="none"
-                stroke="currentColor"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                focusable="false"
-              >
-                <path d="M2 17 L22 7" :stroke-width="levelStroke(level)" />
-              </svg>
-            </span>
-            <span v-if="masteredCount" class="sb-row-mastered" data-tabular aria-hidden="true">
-              <svg
-                class="sb-row-mastered-icon"
-                viewBox="0 0 12 12"
-                width="10"
-                height="10"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.5"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                focusable="false"
-              >
-                <path d="M2 6.5 L4.8 9.2 L10 3.2" />
-              </svg>
-              {{ masteredCount }}
-            </span>
           </span>
-          <span v-if="focusCue" class="sb-row-focus" aria-hidden="true">{{ focusCue }}</span>
         </template>
       </span>
     </button>
@@ -288,7 +254,7 @@ function commitRenameFromKey() {
   flex-direction: column;
   justify-content: center;
   min-height: var(--line-pitch);
-  padding: 0 0.25rem 0 0.75rem;
+  padding: 0.25rem 0.25rem 0.25rem 0.75rem;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -311,7 +277,6 @@ function commitRenameFromKey() {
   flex-direction: column;
 }
 
-/* Line one: topic, then the mastered count in pencil. */
 .sb-row-label {
   display: flex;
   align-items: center;
@@ -330,47 +295,6 @@ function commitRenameFromKey() {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.sb-row-level {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-}
-
-.sb-row-level-icon {
-  flex-shrink: 0;
-  color: var(--pencil);
-}
-
-.sb-row-mastered {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.1875rem;
-  font-size: var(--fs-label);
-  color: var(--pencil);
-}
-
-.sb-row-mastered-icon {
-  flex-shrink: 0;
-  color: var(--ink-learner);
-}
-
-/* Line two: the focus cue, in ink and marked in red, never set in red. */
-.sb-row-focus {
-  min-width: 0;
-  font-family: var(--font-sans);
-  font-size: var(--fs-label);
-  line-height: var(--line-pitch);
-  color: var(--color-text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-decoration: underline;
-  text-decoration-color: var(--ink-marker);
-  text-decoration-thickness: 2px;
-  text-underline-offset: 3px;
 }
 
 .sb-row--ended .sb-row-topic {

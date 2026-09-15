@@ -35,7 +35,7 @@ defineProps({
 
 .msg-skel-row {
   display: grid;
-  grid-template-columns: 4rem minmax(0, 1fr);
+  grid-template-columns: 5rem minmax(0, 1fr);
   gap: 0 0.75rem;
   padding: var(--line-pitch) 0 0;
 }

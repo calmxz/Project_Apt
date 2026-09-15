@@ -1,120 +1,133 @@
 <template>
-  <form class="form" @submit.prevent="save">
-    <section class="sec">
-      <h2 class="sec-title">Account</h2>
-      <div class="field">
-        <label class="lbl" for="set-name">Display name</label>
-        <input
-          id="set-name"
-          v-model="displayName"
-          data-testid="settings-name"
-          maxlength="40"
-          class="input"
-          type="text"
-          placeholder="Learner"
-        />
-        <p class="hint">How the tutor refers to you.</p>
-      </div>
-    </section>
+  <div class="account" data-testid="settings-account">
+    <form class="form" @submit.prevent="save">
+      <section class="sec">
+        <h2 class="sec-title">Account</h2>
+        <div class="field">
+          <label class="lbl" for="set-name">Display name</label>
+          <input
+            id="set-name"
+            v-model="displayName"
+            data-testid="settings-name"
+            maxlength="40"
+            class="input"
+            type="text"
+            placeholder="Learner"
+          />
+          <p class="hint">How the tutor refers to you.</p>
+        </div>
+      </section>
 
-    <div class="actions">
-      <button
-        type="submit"
-        class="text-btn"
-        data-testid="settings-save"
-        :disabled="!dirty || saving"
-      >
-        Save name
-      </button>
-      <span v-if="savedFlash" class="saved-flash" data-testid="settings-saved">
-        <svg
-          class="tick"
-          viewBox="0 0 12 12"
-          width="12"
-          height="12"
-          aria-hidden="true"
-          focusable="false"
-        >
-          <path d="M2 6.5 L4.8 9.2 L10 3.2" />
-        </svg>
-        Saved.
-      </span>
-    </div>
-
-    <p v-if="saveError" class="error" role="alert" data-testid="settings-error">
-      {{ saveError }}
-    </p>
-  </form>
-
-  <section v-if="authStore.isAuthenticated" class="sec sec--ruled" data-testid="settings-security">
-    <h2 class="sec-title">Security</h2>
-    <form class="pw-form" @submit.prevent="changePassword">
-      <div class="field">
-        <label class="lbl" for="pw-current">Current password</label>
-        <input
-          id="pw-current"
-          v-model="pwCurrent"
-          data-testid="settings-pw-current"
-          class="input"
-          type="password"
-          autocomplete="current-password"
-        />
-      </div>
-      <div class="field">
-        <label class="lbl" for="pw-new">New password</label>
-        <input
-          id="pw-new"
-          v-model="pwNew"
-          data-testid="settings-pw-new"
-          class="input"
-          type="password"
-          autocomplete="new-password"
-          placeholder="At least 8 characters"
-        />
-      </div>
-      <div class="field">
-        <label class="lbl" for="pw-confirm">Confirm new password</label>
-        <input
-          id="pw-confirm"
-          v-model="pwConfirm"
-          data-testid="settings-pw-confirm"
-          class="input"
-          type="password"
-          autocomplete="new-password"
-        />
-      </div>
-      <p v-if="pwMismatch" class="hint" data-testid="settings-pw-mismatch">
-        New passwords do not match.
-      </p>
-      <p v-if="pwError" class="error" role="alert" data-testid="settings-pw-error">
-        {{ pwError }}
-      </p>
-      <p v-if="pwSuccess" class="saved-flash" role="status" data-testid="settings-pw-success">
-        <svg
-          class="tick"
-          viewBox="0 0 12 12"
-          width="12"
-          height="12"
-          aria-hidden="true"
-          focusable="false"
-        >
-          <path d="M2 6.5 L4.8 9.2 L10 3.2" />
-        </svg>
-        Password updated.
-      </p>
-      <div class="actions">
+      <div class="btn-fill-row">
         <button
-          type="button"
-          class="text-btn"
-          data-testid="settings-pw-submit"
-          :disabled="!pwCanSubmit || pwSubmitting"
-          @click="changePassword"
+          type="submit"
+          class="btn-fill"
+          :class="{ 'btn-fill--busy': saving }"
+          data-testid="settings-save"
+          :disabled="!dirty || saving"
         >
-          {{ pwSubmitting ? 'Updating…' : 'Update password' }}
+          Save name
         </button>
+        <span v-if="savedFlash" class="saved-flash" data-testid="settings-saved">
+          <svg
+            class="tick"
+            viewBox="0 0 12 12"
+            width="12"
+            height="12"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <path d="M2 6.5 L4.8 9.2 L10 3.2" />
+          </svg>
+          Saved.
+        </span>
       </div>
+
+      <p v-if="saveError" class="error" role="alert" data-testid="settings-error">
+        {{ saveError }}
+      </p>
     </form>
-  </section>
+
+    <section
+      v-if="authStore.isAuthenticated"
+      class="sec sec--ruled"
+      data-testid="settings-security"
+    >
+      <h2 class="sec-title">Security</h2>
+      <form class="pw-form" @submit.prevent="changePassword">
+        <div class="field">
+          <label class="lbl" for="pw-current">Current password</label>
+          <input
+            id="pw-current"
+            v-model="pwCurrent"
+            data-testid="settings-pw-current"
+            class="input"
+            type="password"
+            autocomplete="current-password"
+          />
+        </div>
+        <div class="field">
+          <label class="lbl" for="pw-new">New password</label>
+          <input
+            id="pw-new"
+            v-model="pwNew"
+            data-testid="settings-pw-new"
+            class="input"
+            type="password"
+            autocomplete="new-password"
+            placeholder="At least 8 characters"
+          />
+        </div>
+        <div class="field">
+          <label class="lbl" for="pw-confirm">Confirm new password</label>
+          <input
+            id="pw-confirm"
+            v-model="pwConfirm"
+            data-testid="settings-pw-confirm"
+            class="input"
+            type="password"
+            autocomplete="new-password"
+          />
+        </div>
+        <p v-if="pwMismatch" class="hint" data-testid="settings-pw-mismatch">
+          New passwords do not match.
+        </p>
+        <p v-if="pwError" class="error" role="alert" data-testid="settings-pw-error">
+          {{ pwError }}
+        </p>
+        <div class="btn-fill-row">
+          <button
+            type="button"
+            class="btn-fill"
+            :class="{ 'btn-fill--busy': pwSubmitting }"
+            data-testid="settings-pw-submit"
+            :disabled="!pwCanSubmit || pwSubmitting"
+            @click="changePassword"
+          >
+            {{ pwSubmitting ? 'Updating…' : 'Update password' }}
+          </button>
+          <span
+            v-if="pwSuccess"
+            class="saved-flash"
+            role="status"
+            data-testid="settings-pw-success"
+          >
+            <svg
+              class="tick"
+              viewBox="0 0 12 12"
+              width="12"
+              height="12"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="M2 6.5 L4.8 9.2 L10 3.2" />
+            </svg>
+            Password updated.
+          </span>
+        </div>
+      </form>
+    </section>
+  </div>
 </template>
 
 <script setup>
@@ -200,9 +213,17 @@ async function changePassword() {
 </script>
 
 <style scoped>
-/* Account is a ruled page: sections divided by one hairline, fields written on
-   a rule, and every action a line of blue text. No card, no fill, no glyph
+/* Account is a ruled page: sections divided by one hairline and fields written
+   on a rule. The two submits are the one filled control on the page (.btn-fill,
+   base.css), each on its own row beside its saved caption. No card, no glyph
    font. */
+.account {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  column-gap: 3rem;
+  width: 100%;
+}
+
 .form {
   display: flex;
   flex-direction: column;
@@ -275,44 +296,6 @@ async function changePassword() {
   color: var(--pencil);
 }
 
-.actions {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 1.25rem;
-  flex-wrap: wrap;
-  min-height: var(--line-pitch);
-}
-
-/* The default action in this world is a line of blue text. */
-.text-btn {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--ink-learner);
-  font-family: var(--font-sans);
-  font-size: var(--fs-caption);
-  font-weight: 700;
-  line-height: var(--line-pitch);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  cursor: pointer;
-}
-
-.text-btn:hover:not(:disabled) {
-  color: var(--color-accent-hover);
-}
-
-.text-btn:disabled {
-  color: var(--pencil);
-  text-decoration: none;
-  cursor: default;
-}
-
-.text-btn:focus-visible {
-  outline: 2px solid var(--color-accent-ring);
-  outline-offset: 2px;
-}
-
 .error {
   margin: 0;
   font-family: var(--font-sans);
@@ -346,5 +329,21 @@ async function changePassword() {
   flex-direction: column;
   align-items: flex-start;
   width: 100%;
+}
+
+/* From 60rem the two sections sit side by side; the vertical rule replaces
+   the horizontal one. Kept last so it wins over the base .sec--ruled rule. */
+@media (min-width: 60rem) {
+  .account {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .sec--ruled {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+    border-left: 1px solid var(--rule-strong);
+    padding-left: 3rem;
+  }
 }
 </style>
