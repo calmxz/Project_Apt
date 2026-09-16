@@ -235,11 +235,26 @@ function commitRenameFromKey() {
   padding: 0;
   margin: 0;
   list-style: none;
+  border-radius: var(--radius-card);
 }
 
 .sb-row:hover,
 .sb-row:focus-within {
-  background: var(--color-surface-soft);
+  background: color-mix(in srgb, var(--card) 60%, transparent);
+}
+
+/* The current session sits on its own white card, the one row on the
+   contents page that is allowed to lift off the ground. Collapsed rail rows
+   stay dots only (below), so the card treatment is expanded-only. */
+.sb-row--current:not(.sb-row--collapsed) {
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  box-shadow: 0 1px 0 var(--card-drop);
+}
+
+.sb-row--current:not(.sb-row--collapsed):hover,
+.sb-row--current:not(.sb-row--collapsed):focus-within {
+  background: var(--card);
 }
 
 .sb-row:hover :deep(.sb-row-menu-trigger),
@@ -316,18 +331,23 @@ function commitRenameFromKey() {
   padding: 0;
 }
 
+/* Collapsed spine: one dot per session, current turns blue. */
 .sb-row-mark {
-  width: 1rem;
-  height: 2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
   background: var(--pencil);
+  opacity: 0.6;
 }
 
 .sb-row--ended .sb-row-mark {
   background: var(--rule-strong);
+  opacity: 1;
 }
 
 .sb-row--current .sb-row-mark {
-  background: var(--ink-learner);
+  background: var(--color-accent);
+  opacity: 1;
 }
 
 /* Renaming writes on the same rule the row sits on. */

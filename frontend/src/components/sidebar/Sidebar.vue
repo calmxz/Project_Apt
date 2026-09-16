@@ -318,7 +318,7 @@ async function onSignOut() {
       <button
         v-if="showCollapseToggle"
         type="button"
-        class="sb-toggle hit-44"
+        class="sb-toggle sb-toggle--edge hit-44"
         :aria-label="isExpanded ? 'Collapse sidebar' : 'Expand sidebar'"
         :title="isExpanded ? 'Collapse sidebar' : 'Expand sidebar'"
         data-testid="sidebar-collapse-toggle"
@@ -711,8 +711,8 @@ async function onSignOut() {
   height: 100vh;
   position: sticky;
   top: 0;
-  background: var(--color-background);
-  border-right: 1px solid var(--rule-strong);
+  background: var(--desk-deep);
+  border-right: 1px solid var(--card-edge);
   z-index: 30;
   overflow: hidden;
 }
@@ -854,6 +854,26 @@ async function onSignOut() {
 .sb-toggle:focus-visible {
   outline: 2px solid var(--ink-learner);
   outline-offset: 2px;
+}
+
+/* The collapse control is a half-tab standing off the sidebar's right edge,
+   the one control on the contents page allowed to look like a fixture rather
+   than a written line. */
+.sb-toggle--edge {
+  position: absolute;
+  top: 0.875rem;
+  right: -1px;
+  width: 22px;
+  height: 28px;
+  border: 1px solid var(--card-edge);
+  border-right: 0;
+  border-radius: 6px 0 0 6px;
+  background: var(--card);
+  color: var(--pencil);
+}
+
+.sb-toggle--edge:hover {
+  color: var(--ink-learner);
 }
 
 .sb-cta {
