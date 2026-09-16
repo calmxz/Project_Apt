@@ -595,7 +595,8 @@ defineExpose({ load }) // used by control/pagination tasks
 
 .library-mastered-mark {
   flex: 0 0 auto;
-  color: var(--ink-learner);
+  /* Mastered tick is green everywhere (tab law). */
+  color: var(--tab-mastered);
 }
 
 .library-chips {

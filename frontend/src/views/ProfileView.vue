@@ -615,7 +615,8 @@ onMounted(load)
 }
 
 .cue-mark--tick {
-  stroke: var(--ink-learner);
+  /* Mastered tick is green everywhere (tab law); the word stays blue. */
+  stroke: var(--tab-mastered);
 }
 
 .cue-none {
