@@ -17,62 +17,62 @@ const html = renderMarkdown(source)
 </script>
 
 <style scoped>
-/* A ruled reading column: the back line on its own rule, then the document
-   set on the feint rules at the 28px pitch. No card, no chrome. */
+/* A white reading card, centred on the desk ground. */
 .legal-page {
   box-sizing: border-box;
   width: 100%;
-  max-width: calc(72ch + 2rem);
-  margin: 0 auto;
-  padding: var(--line-pitch) 1rem calc(var(--line-pitch) * 2);
+  max-width: 48rem;
+  margin: 1.75rem auto 3.5rem;
+  padding: clamp(1.5rem, 4vw, 2.5rem);
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-card);
+  box-shadow: 0 1px 0 var(--card-drop);
   font-family: var(--font-sans);
   font-size: var(--fs-body);
 }
 
 .legal-head {
-  padding-bottom: calc(var(--line-pitch) - 1px);
-  border-bottom: 1px solid var(--rule-strong);
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--card-edge);
 }
 
 .legal {
   max-width: 72ch;
-  padding-top: var(--line-pitch);
+  padding-top: 1.5rem;
   font-family: var(--font-sans);
   font-size: var(--fs-body);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--ink);
-  background-image: var(--ruled-bg);
-  background-position-y: var(--ruled-offset);
-  background-attachment: local;
 }
 
 .legal :deep(h1) {
-  margin: 0 0 var(--line-pitch);
+  margin: 0 0 1.5rem;
   font-family: var(--font-display);
   font-size: var(--fs-h1);
   font-weight: 600;
   letter-spacing: var(--tracking-display);
-  line-height: calc(var(--line-pitch) * 2);
+  line-height: var(--lh-display);
   color: var(--ink);
 }
 
 /* One Display Line Rule: the display face stays on the h1; section headings
    are the Subhead in the body face. */
 .legal :deep(h2) {
-  margin: var(--line-pitch) 0 0;
+  margin: 1.75rem 0 0;
   font-family: var(--font-sans);
   font-size: 1.125rem;
   font-weight: 600;
   letter-spacing: var(--tracking-display);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--ink);
 }
 
 .legal :deep(p),
 .legal :deep(ul),
 .legal :deep(ol) {
-  margin: 0 0 var(--line-pitch);
-  line-height: var(--line-pitch);
+  margin: 0 0 1.5rem;
+  line-height: var(--lh-body);
   color: var(--ink);
 }
 
@@ -82,7 +82,7 @@ const html = renderMarkdown(source)
 }
 
 .legal :deep(li) {
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
 }
 
 .legal :deep(li + li) {

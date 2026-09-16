@@ -22,17 +22,19 @@ defineProps({
 </script>
 
 <style scoped>
-/* One status caption: ink on paper inside a full 1px rule, landing in one
-   snap and leaving clean. */
+/* A status caption card: card stock with a 3px tab-colour rule at the head,
+   never a side border. Lands in one snap and leaves clean. */
 .upload-status {
   display: block;
   margin: 0;
-  padding: 0.25rem 0.75rem;
+  padding: 0.4rem 0.75rem;
+  background: var(--card);
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
-  line-height: var(--line-pitch);
-  border: 1px solid var(--rule-strong);
-  border-radius: var(--radius-sm);
+  line-height: var(--lh-body);
+  border: 1px solid var(--card-edge);
+  border-top: 3px solid var(--color-accent);
+  border-radius: var(--radius-card);
   color: var(--ink);
   animation: upload-land var(--motion-ink) cubic-bezier(0.16, 1, 0.3, 1) both;
 }
@@ -47,11 +49,11 @@ defineProps({
 }
 
 .upload-status-ready {
-  border-color: var(--signal-success);
+  border-top-color: var(--tab-mastered);
 }
 
 .upload-status-failed {
-  border-color: var(--ink-marker);
+  border-top-color: var(--tab-focus);
   color: var(--ink-marker-text);
 }
 

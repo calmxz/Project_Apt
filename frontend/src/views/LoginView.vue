@@ -191,39 +191,42 @@ async function resend() {
 </script>
 
 <style scoped>
-/* The notebook cover: one centred sheet on the page ground. No card, no
-   shadow -- the fields' rules are the only lines, and the head sits above a
-   strong rule the way the sheet header does. */
+/* One white card centred on the desk ground. */
 .cover {
   min-height: 100dvh;
   box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--line-pitch) 1rem calc(var(--line-pitch) * 2);
-  background: var(--color-background);
+  padding: 1.75rem 1rem 3.5rem;
+  background: var(--desk);
 }
 
 .sheet {
   width: 100%;
   max-width: 26rem;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-card);
+  box-shadow:
+    0 1px 0 var(--card-drop),
+    var(--shadow-lift);
+  padding: clamp(1.5rem, 4vw, 2.5rem);
 }
 
 .cover-head {
   display: flex;
   flex-direction: column;
-  gap: 0;
-  padding-bottom: calc(var(--line-pitch) - 1px);
-  border-bottom: 1px solid var(--rule-strong);
+  gap: 0.35rem;
 }
 
 .cover-title {
-  margin: var(--line-pitch) 0 0;
+  margin: 0.875rem 0 0;
   font-family: var(--font-display);
   font-size: var(--fs-h1);
   font-weight: 600;
   letter-spacing: var(--tracking-display);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-display);
   color: var(--ink);
 }
 
@@ -231,18 +234,18 @@ async function resend() {
   margin: 0;
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--pencil);
 }
 
 .form {
   display: flex;
   flex-direction: column;
-  gap: var(--line-pitch);
-  padding-top: var(--line-pitch);
+  gap: 1.25rem;
+  padding-top: 1.5rem;
 }
 
-/* A field is a label written in pencil above a line the learner writes on. */
+/* A field is a label above a line the learner writes on. */
 .field {
   display: flex;
   flex-direction: column;
@@ -251,7 +254,7 @@ async function resend() {
 .field-label {
   font-family: var(--font-sans);
   font-size: var(--fs-label);
-  line-height: var(--line-pitch);
+  line-height: 1.75rem;
   color: var(--pencil);
 }
 
@@ -260,7 +263,7 @@ async function resend() {
   grid-template-columns: minmax(0, 1fr);
   align-items: end;
   gap: 0.5rem;
-  border-bottom: 1px solid var(--rule-strong);
+  border-bottom: 1px solid var(--card-edge);
   transition: border-color var(--motion-fast) ease;
 }
 
@@ -275,7 +278,7 @@ async function resend() {
 .field-input :deep(input),
 .field-input.p-inputtext {
   width: 100%;
-  height: var(--line-pitch);
+  height: 1.75rem;
   padding: 0;
   margin: 0;
   background: transparent;
@@ -285,7 +288,7 @@ async function resend() {
   outline: 0;
   font-family: var(--font-sans);
   font-size: var(--fs-body);
-  line-height: var(--line-pitch);
+  line-height: 1.75rem;
   color: var(--ink-learner);
   caret-color: var(--ink-learner);
 }
@@ -309,7 +312,7 @@ async function resend() {
   align-items: center;
   justify-content: center;
   width: 2rem;
-  height: var(--line-pitch);
+  height: 1.75rem;
   flex-shrink: 0;
   background: transparent;
   border: 0;
@@ -346,7 +349,7 @@ async function resend() {
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
   font-weight: 700;
-  line-height: var(--line-pitch);
+  line-height: 1.75rem;
   cursor: pointer;
   transition: color var(--motion-fast) ease;
 }
@@ -378,32 +381,33 @@ async function resend() {
   flex: 0 0 auto;
 }
 
-/* One line of ink on paper inside a full rule. */
+/* A small status card: card stock with a token-colored border. */
 .status {
   margin: 0;
-  border: 1px solid var(--rule-strong);
+  background: var(--card);
+  border: 1px solid var(--card-edge);
   border-radius: var(--radius-sm);
-  padding: 0.25rem 0.75rem;
+  padding: 0.4rem 0.75rem;
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--ink);
 }
 
 .status.is-alert {
-  border-color: var(--ink-marker);
+  border-color: var(--tab-focus);
   color: var(--ink-marker-text);
 }
 
 .status.is-done {
-  border-color: var(--signal-success);
+  border-color: var(--tab-mastered);
 }
 
 .line {
   margin: 0;
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
-  line-height: var(--line-pitch);
+  line-height: 1.75rem;
   color: var(--pencil);
 }
 
