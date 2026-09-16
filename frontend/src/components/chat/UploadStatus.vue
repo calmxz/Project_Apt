@@ -34,7 +34,8 @@ defineProps({
   line-height: var(--lh-body);
   border: 1px solid var(--card-edge);
   border-top: 3px solid var(--color-accent);
-  border-radius: var(--radius-card);
+  /* Head rule reads as a tab edge: top corners square, bottom corners card radius. */
+  border-radius: 0 0 var(--radius-card) var(--radius-card);
   color: var(--ink);
   animation: upload-land var(--motion-ink) cubic-bezier(0.16, 1, 0.3, 1) both;
 }

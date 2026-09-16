@@ -50,7 +50,8 @@ const store = useSessionStore()
   background: var(--card);
   border: 1px solid var(--card-edge);
   border-top: 3px solid var(--tab-focus);
-  border-radius: var(--radius-card);
+  /* Head rule reads as a tab edge: top corners square, bottom corners card radius. */
+  border-radius: 0 0 var(--radius-card) var(--radius-card);
   color: var(--ink);
   font-family: var(--font-sans);
   font-size: var(--fs-caption);

@@ -219,7 +219,8 @@ defineExpose({ refresh })
   align-items: stretch;
   padding: 0.4rem 0.75rem;
   background: var(--card);
-  border-radius: var(--radius-card);
+  /* Head rule reads as a tab edge: top corners square, bottom corners card radius. */
+  border-radius: 0 0 var(--radius-card) var(--radius-card);
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
   line-height: var(--lh-body);
