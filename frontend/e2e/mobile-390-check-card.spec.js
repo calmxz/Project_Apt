@@ -182,5 +182,11 @@ test.describe('mobile 390 check card', () => {
 
     const scrollerHeight = await messages.evaluate((el) => el.clientHeight)
     expect(scrollerHeight).toBeGreaterThanOrEqual(160)
+
+    // The document itself must not grow past the fold: an absolutely
+    // positioned box escaping the .messages scroller once pushed
+    // scrollHeight to 1132 on an 844 viewport (2026-09-16).
+    const docHeight = await page.evaluate(() => document.documentElement.scrollHeight)
+    expect(docHeight).toBeLessThanOrEqual(VIEWPORT.height)
   })
 })

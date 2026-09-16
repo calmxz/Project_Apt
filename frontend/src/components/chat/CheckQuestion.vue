@@ -187,6 +187,10 @@ watch(answered, async (is) => {
 }
 
 .check-box {
+  /* Containing block for the sr-only live region below; without it the
+     absolutely positioned box resolves against the page and can grow the
+     document past the fold on mobile. */
+  position: relative;
   display: flex;
   flex-direction: column;
   min-width: 0;
