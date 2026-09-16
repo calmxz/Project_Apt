@@ -1138,6 +1138,13 @@ function goHome() {
   /* Sole scroller in the app-shell. min-height: 0 lets it shrink within the
      grid row instead of forcing the page to overflow. The cards are laid on the
      desk: no ruled ground, the ground is what the turns sit on. */
+  /* position: relative makes the scroller the containing block for everything
+     inside it. Without it an absolutely positioned descendant with no offsets
+     (the check card's sr-only live region) resolves against the page, escapes
+     this box's overflow entirely, and is laid out at its static position deep
+     in the unscrolled transcript -- which grew document.scrollHeight to 1132px
+     on a 844px viewport and broke the "composer at the foot" promise. */
+  position: relative;
   min-height: 0;
   overflow-y: auto;
   background: var(--desk);
@@ -1363,6 +1370,11 @@ function goHome() {
   .session.is-sheet {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto auto minmax(0, 1fr);
+    /* clip, never hidden: hidden would make the grid a scroll container and
+       change what the sticky strip and foot stick to. clip swallows the
+       sheet's dim overlay (which runs a viewport's worth past the strip) and
+       backstops anything else that tries to grow the page past the fold. */
+    overflow: clip;
   }
 
   /* R2: no scroller and no 50vh cap here — the expanded profile is bounded by

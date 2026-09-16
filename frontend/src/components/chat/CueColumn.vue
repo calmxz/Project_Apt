@@ -748,12 +748,37 @@ const isCollapsed = computed(() => panelCollapsed.value && !isNarrow.value)
     max-height: 40vh;
     overflow-y: auto;
     background: var(--card);
+    /* The sheet is a card pulled out over the thread, so it closes: a bottom
+       edge and two carded bottom corners. Without them the last divider ran
+       into the first turn below and the two read as one broken card. The 40vh
+       cap plus this box's own scroll keeps the last divider reachable. */
     border-top: 1px solid var(--card-edge);
+    border-bottom: 1px solid var(--card-edge);
+    border-radius: 0 0 var(--radius-card) var(--radius-card);
     box-shadow: var(--shadow-lift);
   }
 
   .cue.is-expanded .cue-body {
     display: flex;
+  }
+
+  /* The thread is put away while the sheet is out: a desk-coloured wash from
+     the foot of the strip down. It sits under the sheet (z-index 1 against the
+     sheet's 2) so the dividers stay at full strength, and takes no pointer
+     events so the composer and an open check batch stay usable underneath.
+     A viewport's worth of height is deliberate -- SessionView clips the grid
+     at this width, so the overhang costs the page nothing. */
+  .cue.is-expanded::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    height: 100dvh;
+    z-index: 1;
+    pointer-events: none;
+    background: var(--desk);
+    opacity: 0.55;
   }
 }
 
