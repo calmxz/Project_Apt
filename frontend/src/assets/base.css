@@ -67,7 +67,7 @@
   --radius-sm: 4px;
   --radius-md: 4px;
   --radius-lg: 4px;
-  --radius-card: 0;
+  --radius-card: 6px;
   --radius-pill: 999px;
 
   /* Spacing scale */
@@ -98,9 +98,9 @@
   /* --- Semantic colors, light (lamp on) --------------------------------
      Literal hex, not indirection: the token contrast test reads this file and
      resolves nothing. */
-  --color-background: #f6f5f0;
-  --color-surface: #f6f5f0;
-  --color-surface-soft: #ebeae3;
+  --color-background: #e6e8ec;
+  --color-surface: #ffffff;
+  --color-surface-soft: #dfe2e7;
   --color-surface-raised: #fbfaf7;
   --color-text: #1b1b1a;
   --color-heading: #1b1b1a;
@@ -118,11 +118,31 @@
   --color-text-on-accent: #ffffff;
   --color-wordmark: #1b1b1a;
   --color-stub-heading: #1b1b1a;
-  --color-success-text: #1f7a3f;
+  /* #1f7a3f is 4.374:1 on the new --color-background (#e6e8ec), just under
+     4.5:1; darkened minimally to #1d733b (4.798:1) rather than moving the
+     ground. */
+  --color-success-text: #1d733b;
   --color-error-text: #b8352c;
   --color-warning-text: #8a5a00;
   --color-info-text: #1d4fc4;
   --color-info-strong: #1d4fc4;
+
+  /* --- The card box ------------------------------------------------------
+     Desk is the page ground; cards float on it. Tab colours are law: red
+     only Focus, amber only Gaps, green only Mastered. Blue remains every
+     control, link and focus ring. */
+  --desk: #e6e8ec;
+  --desk-deep: #dfe2e7;
+  --card: #ffffff;
+  --card-edge: #cfd3da;
+  --card-drop: #c4c8d0;
+  --card-learner: #dbe6fb;
+  --card-learner-edge: #b9cdf5;
+  --tab-focus: #b8352c;
+  --tab-gaps: #8a5a00;
+  --tab-mastered: #1f7a3f;
+  --tab-level: #63635e;
+  --tab-ink: #ffffff;
 
   /* T3: theme-swatch preview inks (AppearanceTab). These draw the OTHER
      theme's page regardless of which theme is active, so they cannot come
@@ -158,9 +178,9 @@
   --signal-warning: #e6b450;
   --signal-info: #8fb0ff;
 
-  --color-background: #141518;
-  --color-surface: #141518;
-  --color-surface-soft: #1b1c20;
+  --color-background: #15171b;
+  --color-surface: #22252b;
+  --color-surface-soft: #1b1d22;
   --color-surface-raised: #1f2126;
   --color-text: #ecebe6;
   --color-heading: #ecebe6;
@@ -188,6 +208,19 @@
 
   --shadow-paper: none;
   --shadow-lift: 0 12px 24px -12px rgba(0, 0, 0, 0.7);
+
+  --desk: #15171b;
+  --desk-deep: #1b1d22;
+  --card: #22252b;
+  --card-edge: #2e323a;
+  --card-drop: #0b0c0e;
+  --card-learner: #1e2a44;
+  --card-learner-edge: #2f4470;
+  --tab-focus: #ff6a5e;
+  --tab-gaps: #e6b450;
+  --tab-mastered: #5fcf8a;
+  --tab-level: #a3a39c;
+  --tab-ink: #141518;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -207,9 +240,9 @@
     --signal-warning: #e6b450;
     --signal-info: #8fb0ff;
 
-    --color-background: #141518;
-    --color-surface: #141518;
-    --color-surface-soft: #1b1c20;
+    --color-background: #15171b;
+    --color-surface: #22252b;
+    --color-surface-soft: #1b1d22;
     --color-surface-raised: #1f2126;
     --color-text: #ecebe6;
     --color-heading: #ecebe6;
@@ -235,6 +268,19 @@
 
     --shadow-paper: none;
     --shadow-lift: 0 12px 24px -12px rgba(0, 0, 0, 0.7);
+
+    --desk: #15171b;
+    --desk-deep: #1b1d22;
+    --card: #22252b;
+    --card-edge: #2e323a;
+    --card-drop: #0b0c0e;
+    --card-learner: #1e2a44;
+    --card-learner-edge: #2f4470;
+    --tab-focus: #ff6a5e;
+    --tab-gaps: #e6b450;
+    --tab-mastered: #5fcf8a;
+    --tab-level: #a3a39c;
+    --tab-ink: #141518;
   }
 }
 

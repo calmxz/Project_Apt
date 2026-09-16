@@ -83,6 +83,20 @@ describe('base.css tokens', () => {
         ).toBeGreaterThanOrEqual(4.5)
       })
     })
+
+    it(`${themeName}: --tab-ink is >= 4.5:1 on every --tab-* fill`, () => {
+      const inks = hex('--tab-ink', block)
+      for (const tabToken of ['--tab-focus', '--tab-gaps', '--tab-mastered', '--tab-level']) {
+        const fills = hex(tabToken, block)
+        expect(fills.length).toBe(inks.length)
+        fills.forEach((fill, i) => {
+          expect(
+            ratio(inks[i], fill),
+            `${tabToken} tab label (${themeName})`,
+          ).toBeGreaterThanOrEqual(4.5)
+        })
+      }
+    })
   }
 })
 
