@@ -1,5 +1,5 @@
 <template>
-  <section class="session" :class="{ 'is-sheet': !notFound }">
+  <section class="session" :class="{ 'is-sheet': !notFound, 'panel-collapsed': panelCollapsed }">
     <div v-if="notFound" class="not-found" data-testid="session-not-found">
       <BackButton />
       <span class="folio" data-tabular>404</span>
@@ -36,17 +36,8 @@
         />
       </div>
 
-      <div class="sheet-cue">
-        <CueColumn
-          :profile="liveProfile"
-          :session-id="props.id"
-          :testing-gap="testingGap"
-          @landed="onCuesLanded"
-        />
-      </div>
-
-      <div class="sheet-margin-rule" aria-hidden="true"></div>
-
+      <!-- Notes before cue in the DOM so the reading order is thread first;
+           the panel is placed in column 2 by the grid. -->
       <div class="sheet-notes">
         <div
           ref="messagesEl"
@@ -203,6 +194,15 @@
         </div>
       </div>
 
+      <div class="sheet-cue">
+        <CueColumn
+          :profile="liveProfile"
+          :session-id="props.id"
+          :testing-gap="testingGap"
+          @landed="onCuesLanded"
+        />
+      </div>
+
       <div class="sr-only" role="status" aria-live="polite" data-testid="stream-status">
         {{ streamAnnouncement }}
       </div>
@@ -255,6 +255,7 @@ import ReferenceStatusBanner from '../components/chat/ReferenceStatusBanner.vue'
 import UploadStatus from '../components/chat/UploadStatus.vue'
 import { friendlyError, StreamAbortedError } from '../lib/errors.js'
 import { useSessionStore } from '../stores/session.js'
+import { usePanel } from '../composables/usePanel.js'
 import { useToast } from '../composables/useToast.js'
 import { costBus } from '../services/costBus.js'
 import { getSessionProfile, patchProfile } from '../services/profileApi.js'
@@ -268,6 +269,9 @@ const props = defineProps({ id: { type: String, required: true } })
 const route = useRoute()
 const router = useRouter()
 const store = useSessionStore()
+// Drives the panel column width only (see --panel-col in <style>); CueColumn
+// owns its own collapsed rendering and the toggle button.
+const { collapsed: panelCollapsed } = usePanel()
 
 const draft = ref('')
 const lastSentText = ref('')
@@ -1090,14 +1094,21 @@ function goHome() {
   padding: 0;
 }
 
-/* The sheet: cue column, red margin rule, notes column, one header across. */
+/* The desk: thread on the left, profile panel on the right, one header across.
+   --panel-col is the panel's width; the collapsed value is the vertical tab
+   strip (CueColumn renders it, usePanel owns the state). */
 .session.is-sheet {
+  --panel-col: 17rem;
   display: grid;
-  grid-template-columns: 232px 2px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) var(--panel-col);
   grid-template-rows: auto minmax(0, 1fr);
   flex: 1;
   min-height: 0;
   width: 100%;
+}
+
+.session.is-sheet.panel-collapsed {
+  --panel-col: 2.75rem;
 }
 
 .sheet-header {
@@ -1107,23 +1118,15 @@ function goHome() {
 }
 
 .sheet-cue {
-  grid-column: 1;
+  grid-column: 2;
   grid-row: 2;
   display: flex;
   min-height: 0;
   min-width: 0;
-  padding-left: clamp(1rem, 3vw, 1.5rem);
-}
-
-/* Page structure, not a card border: the red rule divides cue from notes. */
-.sheet-margin-rule {
-  grid-column: 2;
-  grid-row: 2;
-  background: var(--margin-rule);
 }
 
 .sheet-notes {
-  grid-column: 3;
+  grid-column: 1;
   grid-row: 2;
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
@@ -1133,29 +1136,12 @@ function goHome() {
 
 .messages {
   /* Sole scroller in the app-shell. min-height: 0 lets it shrink within the
-     grid row instead of forcing the page to overflow. The feint rules are
-     painted on the scrolling content so text keeps sitting on them. */
-
-  /* --ruled-bg at 65% of the feint rule's alpha. Same pitch, same offset, same
-     pattern as base.css; only the ink of the rule is lighter, so the notes
-     column reads as paper with the turns on it rather than as a grid. Local to
-     this scroller -- every other ruled surface keeps the full-weight rule. */
-  --ruled-bg-soft: repeating-linear-gradient(
-    to bottom,
-    transparent 0,
-    transparent calc(var(--line-pitch) - 1px),
-    color-mix(in srgb, var(--rule) 65%, transparent) calc(var(--line-pitch) - 1px),
-    color-mix(in srgb, var(--rule) 65%, transparent) var(--line-pitch)
-  );
+     grid row instead of forcing the page to overflow. The cards are laid on the
+     desk: no ruled ground, the ground is what the turns sit on. */
   min-height: 0;
   overflow-y: auto;
-  /* Both edges: .notes-foot has no scrollbar, so a single right-side gutter
-     here would push the centered measure ~8px left of the foot's. */
-  scrollbar-gutter: stable both-edges;
-  background-image: var(--ruled-bg-soft);
-  background-position-y: var(--ruled-offset);
-  background-attachment: local;
-  padding: 0 clamp(1rem, 3vw, 2rem);
+  background: var(--desk);
+  padding: 1rem clamp(1rem, 3vw, 2rem);
   scrollbar-width: thin;
   scrollbar-color: var(--rule-strong) transparent;
 }
@@ -1177,18 +1163,18 @@ function goHome() {
   background-clip: padding-box;
 }
 
-/* The measure: the notes gutter plus a 72ch text column, centered in the
-   notes column. The foot uses the same rule so the composer stays under
-   the notes. */
+/* The measure: a 72ch text column plus the card's own padding, centered in the
+   notes column. The foot uses the same rule so the composer card stays under
+   the thread. */
 .notes-measure {
   width: 100%;
-  max-width: calc(5rem + 72ch);
+  max-width: calc(72ch + 2rem);
   margin: 0 auto;
 }
 
+/* No top rule: the composer is a card on the desk, not a footer band. */
 .notes-foot {
-  border-top: 1px solid var(--rule-strong);
-  padding: 0 clamp(1rem, 3vw, 2rem) var(--line-pitch);
+  padding: 0 clamp(1rem, 3vw, 2rem) 1rem;
   min-width: 0;
 }
 
@@ -1369,7 +1355,10 @@ function goHome() {
   outline-offset: 2px;
 }
 
-/* Under 900px the cue column becomes a strip under the header. */
+/* Under 900px the profile panel becomes a strip under the header: one column,
+   so --panel-col is unused at this width. Kept in sync with the NARROW_QUERY
+   matchMedia switch in <script> -- the check card has to move between two
+   different containers, which CSS alone cannot do. */
 @media (max-width: 899px) {
   .session.is-sheet {
     grid-template-columns: minmax(0, 1fr);
@@ -1383,12 +1372,7 @@ function goHome() {
     grid-column: 1;
     grid-row: 2;
     display: block;
-    padding-left: 0;
     min-height: 0;
-  }
-
-  .sheet-margin-rule {
-    display: none;
   }
 
   .sheet-notes {
@@ -1402,12 +1386,12 @@ function goHome() {
   .notes-foot {
     position: sticky;
     bottom: 0;
-    background: var(--color-surface);
+    background: var(--desk);
   }
 
-  /* The inline card sits on the transcript's baseline grid like a turn does. */
+  /* The inline card keeps the same spacing as the cards above it. */
   .check-inline {
-    margin-bottom: var(--line-pitch);
+    margin-bottom: 0.75rem;
   }
 }
 

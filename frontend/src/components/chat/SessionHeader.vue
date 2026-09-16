@@ -33,8 +33,6 @@ const stroke = computed(() => levelStroke(props.level))
       <span v-else class="session-topic" :title="topic">{{ topic }}</span>
     </h1>
     <p class="session-meta">
-      <span v-if="started" class="session-started">{{ started }}</span>
-      <span v-if="started" class="session-meta-sep" aria-hidden="true">&middot;</span>
       <span class="session-level">
         <svg
           class="session-level-mark"
@@ -48,6 +46,8 @@ const stroke = computed(() => levelStroke(props.level))
         </svg>
         {{ levelText }}
       </span>
+      <span v-if="started" class="session-meta-sep" aria-hidden="true">&middot;</span>
+      <span v-if="started" class="session-started">{{ started }}</span>
     </p>
   </header>
 </template>
@@ -60,8 +60,7 @@ const stroke = computed(() => levelStroke(props.level))
   gap: 1.5rem;
   min-height: 72px;
   padding: 1.25rem clamp(1rem, 3vw, 1.5rem);
-  background: var(--color-background);
-  border-bottom: 1px solid var(--rule-strong);
+  background: var(--desk);
 }
 
 .session-topic-wrap {
@@ -71,7 +70,7 @@ const stroke = computed(() => levelStroke(props.level))
 
 .session-topic {
   font-family: var(--font-display);
-  font-size: var(--fs-h1);
+  font-size: 1.25rem;
   font-weight: 600;
   letter-spacing: var(--tracking-display);
   line-height: var(--lh-display);
@@ -113,8 +112,8 @@ const stroke = computed(() => levelStroke(props.level))
   white-space: nowrap;
 }
 
-/* One caption line: the date, a pencil middot, then the level and its stroke.
-   The middot only exists when there is a date to separate from. */
+/* One caption line: the level stroke and its word, a pencil middot, then the
+   start date. The middot only exists when there is a date to separate from. */
 .session-meta-sep {
   flex: 0 0 auto;
   color: var(--pencil);
@@ -140,10 +139,6 @@ const stroke = computed(() => levelStroke(props.level))
     padding: 0.75rem clamp(1rem, 3vw, 1.5rem);
     flex-wrap: wrap;
     gap: 0.25rem 1rem;
-  }
-
-  .session-topic {
-    font-size: var(--fs-h2);
   }
 }
 </style>
