@@ -1229,7 +1229,7 @@ function goHome() {
   color: var(--pencil);
 }
 
-/* Status captions: one line each, ink on paper inside a full 1px rule. */
+/* Status captions: small cards with a head rule, tab colour on top only. */
 .status-line {
   display: flex;
   flex-wrap: wrap;
@@ -1237,17 +1237,19 @@ function goHome() {
   gap: 0.75rem;
   margin: 0;
   padding: 0.25rem 0.75rem;
-  border: 1px solid var(--rule-strong);
-  border-radius: var(--radius-sm);
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-top: 3px solid var(--color-accent);
+  border-radius: 0 0 var(--radius-card) var(--radius-card);
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--ink);
   animation: status-land var(--motion-ink) cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .status-line.is-alert {
-  border-color: var(--ink-marker);
+  border-top-color: var(--tab-focus);
 }
 
 @keyframes status-land {

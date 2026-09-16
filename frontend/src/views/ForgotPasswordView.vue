@@ -275,7 +275,8 @@ async function submit() {
   margin: 0;
   background: var(--card);
   border: 1px solid var(--card-edge);
-  border-radius: var(--radius-sm);
+  border-top: 3px solid var(--color-accent);
+  border-radius: 0 0 var(--radius-card) var(--radius-card);
   padding: 0.4rem 0.75rem;
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
@@ -284,12 +285,12 @@ async function submit() {
 }
 
 .status.is-alert {
-  border-color: var(--tab-focus);
+  border-top-color: var(--tab-focus);
   color: var(--ink-marker-text);
 }
 
 .status.is-done {
-  border-color: var(--tab-mastered);
+  border-top-color: var(--tab-mastered);
 }
 
 .line {

@@ -874,14 +874,15 @@ onMounted(load)
   color: var(--ink-marker-text);
 }
 
-/* A status caption: one line of ink on paper inside a full rule; the alert
-   edge is red pen. */
+/* A status caption: a small card with a head rule; the alert tab is red pen. */
 .conflict {
   align-self: flex-start;
   margin: 1.75rem 0 0;
   padding: 0.25rem 0.75rem;
-  border: 1px solid var(--ink-marker);
-  border-radius: var(--radius-sm);
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-top: 3px solid var(--tab-focus);
+  border-radius: 0 0 var(--radius-card) var(--radius-card);
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
   line-height: var(--lh-body);
