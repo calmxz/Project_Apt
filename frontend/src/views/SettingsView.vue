@@ -46,7 +46,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import ProfileTab from '../components/settings/ProfileTab.vue'
@@ -74,6 +74,12 @@ const activeComponent = computed(
 
 const tabRefs = ref([])
 
+// The deep-desk ground must fill the whole routed pane, not just the
+// settings element, so it is painted on .page via a body class (same
+// mechanism SessionView uses for chat-locked).
+onMounted(() => document.body.classList.add('settings-page'))
+onUnmounted(() => document.body.classList.remove('settings-page'))
+
 async function activate(i) {
   const slug = tabs[i].slug
   if (slug !== props.tab) {
@@ -94,15 +100,16 @@ function onKeydown(e, i) {
 </script>
 
 <style scoped>
-/* The whole settings page sits on the deep desk, bleeding out to the
-   surrounding .page-inner's own padding (App.vue) so the ground reads as
-   one surface rather than a card floating on a lighter page. */
+/* The whole settings page sits on the deep desk. The ground is painted on
+   the routed pane (.page fills .shell-main, which is min-height 100vh), so
+   it runs edge to edge and to the fold however short the content is. */
+:global(body.settings-page .page) {
+  background: var(--desk-deep);
+}
+
 .settings {
   display: flex;
   flex-direction: column;
-  background: var(--desk-deep);
-  margin: calc(-1 * clamp(2rem, 6vw, 4.5rem)) calc(-1 * clamp(1rem, 4vw, 2.5rem)) -4rem;
-  padding: clamp(2rem, 6vw, 4.5rem) clamp(1rem, 4vw, 2.5rem) 4rem;
 }
 
 .head {
