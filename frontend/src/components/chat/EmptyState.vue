@@ -54,12 +54,18 @@ const quickPrompts = [
 </script>
 
 <style scoped>
-/* An empty sheet: three feint rules and a pencil prompt line. */
+/* A single centred card: no ruled ground behind it any more. */
 .empty {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  padding: var(--line-pitch) 0 0 4.75rem;
+  max-width: 32rem;
+  margin: 2rem auto;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-card);
+  box-shadow: 0 1px 0 var(--card-drop);
+  padding: 1rem 1.25rem 1.2rem;
 }
 
 .empty-head {
@@ -80,7 +86,6 @@ const quickPrompts = [
   margin: 0;
   font-family: var(--font-sans);
   font-size: var(--fs-label);
-  line-height: var(--line-pitch);
   color: var(--pencil);
 }
 
@@ -88,7 +93,7 @@ const quickPrompts = [
   margin: 0;
   font-family: var(--font-sans);
   font-size: var(--fs-body);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--ink);
 }
 
@@ -100,6 +105,8 @@ const quickPrompts = [
   display: flex;
   flex-direction: column;
   align-items: flex-start;
+  gap: 0.35rem;
+  margin-top: 0.75rem;
   max-width: 42ch;
 }
 
@@ -109,7 +116,7 @@ const quickPrompts = [
   padding: 0;
   font-family: var(--font-sans);
   font-size: var(--fs-body);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--ink-learner);
   cursor: pointer;
   text-align: left;
@@ -127,7 +134,8 @@ const quickPrompts = [
 
 @media (max-width: 599px) {
   .empty {
-    padding-left: 0;
+    margin: 1.25rem auto;
+    max-width: 100%;
   }
 }
 </style>

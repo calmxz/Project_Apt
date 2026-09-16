@@ -1,15 +1,24 @@
 <script setup>
+import { computed } from 'vue'
 import MarkdownContent from './MarkdownContent.vue'
 
-defineProps({
+const props = defineProps({
   content: { type: String, default: '' },
+  createdAt: { type: String, default: null },
 })
+
+const TIME_FMT = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' })
+// The head line carries the time only when the server sent one; never invent it.
+const timeLabel = computed(() =>
+  props.createdAt ? TIME_FMT.format(new Date(props.createdAt)) : '',
+)
 </script>
 
 <template>
   <article class="msg user" data-testid="msg-user">
     <div class="msg-gutter">
       <span class="role-tag">you</span>
+      <span v-if="timeLabel" class="msg-time">{{ timeLabel }}</span>
     </div>
     <div class="msg-body">
       <MarkdownContent class="content" :text="content || ''" />
@@ -18,28 +27,25 @@ defineProps({
 </template>
 
 <style scoped>
-/* No bubble: the learner writes on the right-hand side of the same rules,
-   with a small blue "you" in a right gutter. The tutor's gutter is on the
-   left. */
+/* The learner's card: blue stock, right-aligned. Same card grammar as the
+   tutor, different material -- that is how the two voices are told apart. */
 .msg {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 5rem;
-  grid-template-areas: 'body gutter';
-  gap: 0 0.75rem;
-  max-width: 100%;
-  padding: var(--line-pitch) 0 0;
-  justify-items: end;
-}
-
-/* Flex column, not a block: an inline 13px role tag inside a 17px block shares
-   the block's strut, and the two half-leadings make the line box 28.5px, so
-   every turn drifted half a pixel off the rules. A flex item is blockified and
-   carries only its own strut, so the gutter is exactly one pitch. */
-.msg-gutter {
-  grid-area: gutter;
+  align-self: flex-end;
+  max-width: 78%;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  gap: 0.35rem;
+  background: var(--card-learner);
+  border: 1px solid var(--card-learner-edge);
+  border-radius: var(--radius-card);
+  box-shadow: 0 1px 0 var(--card-drop);
+  padding: 0.55rem 0.9rem 0.7rem;
+}
+
+.msg-gutter {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
   min-width: 0;
 }
 
@@ -47,46 +53,33 @@ defineProps({
   font-family: var(--font-sans);
   font-size: var(--fs-label);
   font-weight: 700;
-  line-height: var(--line-pitch);
   color: var(--ink-learner);
+  opacity: 0.75;
+}
+
+.msg-time {
+  margin-left: auto;
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  color: var(--ink-learner);
+  opacity: 0.75;
 }
 
 .msg-body {
-  grid-area: body;
   min-width: 0;
-  max-width: 80%;
-  justify-self: end;
-  text-align: left;
-  background: var(--color-surface-soft);
-  /* A hairline panel, not a bubble: square, and 13px + the 1px rule is half a
-     pitch of frame at each end, so the learner's block stays a whole multiple
-     of the pitch. */
-  border: 1px solid var(--rule-strong);
-  border-radius: 0;
-  padding: calc(var(--line-pitch) / 2 - 1px) 1rem;
 }
 
 .content {
   margin: 0;
   font-family: var(--font-sans);
   font-size: var(--fs-body);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--ink-learner);
 }
 
 @media (max-width: 599px) {
   .msg {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: 'gutter' 'body';
-    gap: 0;
-  }
-
-  .msg-body {
-    max-width: 100%;
-  }
-
-  .msg-gutter {
-    align-items: flex-end;
+    max-width: 92%;
   }
 }
 </style>

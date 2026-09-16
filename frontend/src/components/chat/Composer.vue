@@ -255,10 +255,9 @@ defineExpose({ focus })
 </script>
 
 <style scoped>
-/* The same ruled box as a check: 1px ink border, page ground over the rules,
-   no radius, 13px + the 1px border for half a pitch of frame at each end and
-   1rem of side. The learner writes inside it in blue, the two drawn controls
-   sit on either end of the line. */
+/* The composer is a white card, same grammar as a turn: the learner writes
+   inside it, attach sits left, send is a 28px blue square that arms on a
+   non-empty draft. */
 .composer-wrap {
   display: flex;
   flex-direction: column;
@@ -269,10 +268,11 @@ defineExpose({ focus })
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: end;
   gap: 0.5rem;
-  padding: calc(var(--line-pitch) / 2 - 1px) 1rem;
-  background: var(--color-background);
-  border: 1px solid var(--ink);
-  border-radius: 0;
+  padding: 0.55rem 0.9rem;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-card);
+  box-shadow: 0 1px 0 var(--card-drop);
   transition: border-color var(--motion-fast) ease;
 }
 
@@ -281,7 +281,7 @@ defineExpose({ focus })
 }
 
 .composer.is-disabled {
-  border-color: var(--rule-strong);
+  border-color: var(--card-edge);
 }
 
 .composer.is-disabled .composer-input,
@@ -293,8 +293,8 @@ defineExpose({ focus })
   grid-column: 2;
   align-self: stretch;
   width: 100%;
-  min-height: var(--line-pitch);
-  max-height: calc(var(--line-pitch) * 6);
+  min-height: 1.75rem;
+  max-height: 10.5rem;
   padding: 0;
   margin: 0;
   background: transparent;
@@ -305,7 +305,7 @@ defineExpose({ focus })
 
   font-family: var(--font-sans);
   font-size: var(--fs-body);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--ink-learner);
   caret-color: var(--ink-learner);
 
@@ -339,18 +339,16 @@ defineExpose({ focus })
   background-clip: padding-box;
 }
 
-/* Attach, send and stop are drawn icons in the learner's ink, not filled
-   buttons: the line is the control, they are its ends. */
+/* Attach and stop are drawn icons in the learner's ink; send is the 28px
+   blue square that arms once there is a draft to send. */
 .composer-attach,
 .composer-send,
 .composer-stop {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  /* 28px square in every state, so arming the send control changes its ink
-     and never its size. */
-  width: var(--line-pitch);
-  height: var(--line-pitch);
+  width: 28px;
+  height: 28px;
   flex-shrink: 0;
   background: transparent;
   border: 0;
@@ -423,15 +421,15 @@ defineExpose({ focus })
   cursor: not-allowed;
 }
 
-/* Hints in pencil under the line. */
+/* Hints in pencil under the card. */
 .composer-hints {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 1rem;
+  padding: 0.3rem 0.2rem 0;
   font-family: var(--font-sans);
   font-size: var(--fs-label);
-  line-height: var(--line-pitch);
   color: var(--pencil);
   user-select: none;
 }
@@ -451,7 +449,7 @@ defineExpose({ focus })
   background: transparent;
   border: 0;
   padding: 0 0.5rem;
-  height: var(--line-pitch);
+  height: 28px;
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
   font-weight: 700;
@@ -495,7 +493,7 @@ defineExpose({ focus })
     overflow: visible;
     clip: auto;
     font-size: var(--fs-label);
-    line-height: var(--line-pitch);
+    line-height: var(--lh-body);
     color: var(--pencil);
   }
 }

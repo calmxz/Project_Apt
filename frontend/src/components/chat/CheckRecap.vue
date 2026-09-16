@@ -67,49 +67,52 @@ function isYourAnswer(item, i) {
 </template>
 
 <style scoped>
-/* The marked-up sheet: the score set in red pen beside the gap name. */
+/* Same card grammar as the check: the score is set in title-size, text-safe
+   red beside the gap name. */
 .recap-card {
+  max-width: 84%;
   display: flex;
   flex-direction: column;
-  padding: 0 0 var(--line-pitch);
+  gap: 0.6rem;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-card);
+  box-shadow: 0 1px 0 var(--card-drop);
+  padding: 0.55rem 0.9rem 0.7rem;
   font-family: var(--font-sans);
 }
 
-/* One pitch tall, and the hairline is painted rather than laid out: a
-   border-bottom plus baseline-aligned 22px and 14px text made the header 33px
-   and pushed every line below it off the rules. */
 .recap-header {
   display: flex;
   align-items: baseline;
   gap: 0.625rem;
-  height: var(--line-pitch);
-  box-shadow: inset 0 -1px 0 var(--rule-strong);
+  padding-bottom: 0.4rem;
+  border-bottom: 3px solid var(--ink);
 }
 
 .recap-score {
   font-family: var(--font-display);
   font-size: var(--fs-h2);
   font-weight: 600;
-  line-height: var(--line-pitch);
   color: var(--ink-marker-text);
 }
 
 .recap-gap {
   font-size: var(--fs-caption);
-  line-height: var(--line-pitch);
   color: var(--pencil);
 }
 
 .recap-item {
   display: flex;
   flex-direction: column;
+  gap: 0.35rem;
 }
 
 .recap-question {
   margin: 0;
   font-size: var(--fs-body);
   font-weight: 700;
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--ink);
 }
 
@@ -124,13 +127,14 @@ function isYourAnswer(item, i) {
   align-items: baseline;
   gap: 0.625rem;
   font-size: var(--fs-body);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--ink);
 }
 
 .recap-letter {
   flex: 0 0 auto;
-  color: var(--pencil);
+  color: var(--ink-learner);
+  font-weight: 700;
 }
 
 .recap-option-text {
@@ -179,14 +183,14 @@ function isYourAnswer(item, i) {
   margin: 0;
   font-size: var(--fs-caption);
   font-style: italic;
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--pencil);
 }
 
 .recap-explanation {
   margin: 0;
   font-size: var(--fs-body);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--pencil);
 }
 

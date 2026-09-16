@@ -45,12 +45,18 @@ defineEmits(['resume', 'resume-gaps'])
 </script>
 
 <style scoped>
-/* The summary strip: the sheet closes under a 1px ink rule. */
+/* The summary card: same white stock as a turn, last in the stack. */
 .ended-banner {
+  align-self: flex-start;
+  max-width: 84%;
   display: flex;
   flex-direction: column;
-  border-top: 1px solid var(--ink);
-  padding-top: calc(var(--line-pitch) / 2);
+  gap: 0.35rem;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-card);
+  box-shadow: 0 1px 0 var(--card-drop);
+  padding: 0.55rem 0.9rem 0.7rem;
   font-family: var(--font-sans);
 }
 
@@ -59,21 +65,20 @@ defineEmits(['resume', 'resume-gaps'])
   font-family: var(--font-display);
   font-size: var(--fs-h2);
   font-weight: 600;
-  line-height: var(--line-pitch);
   color: var(--ink);
 }
 
 .summary {
   margin: 0;
   font-size: var(--fs-body);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--ink);
 }
 
 .sub {
   margin: 0;
   font-size: var(--fs-caption);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--pencil);
 }
 
@@ -91,7 +96,7 @@ defineEmits(['resume', 'resume-gaps'])
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
   font-weight: 700;
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--ink-learner);
   cursor: pointer;
   text-decoration: underline;

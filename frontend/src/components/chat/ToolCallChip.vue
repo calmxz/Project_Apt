@@ -31,14 +31,14 @@ const display = computed(() => {
 </template>
 
 <style scoped>
-/* No pill: what the tutor did while writing is a pencil aside on the rule. */
+/* No pill: what the tutor did while writing is a pencil aside inside the card. */
 .tool-pill {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--pencil);
 }
 

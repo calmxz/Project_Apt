@@ -34,10 +34,11 @@ const grouped = computed(() => {
 </template>
 
 <style scoped>
-/* Footnotes at the foot of the turn: pencil, on the rule, above a hairline. */
+/* A footnote block inside the card: pencil, small, above a hairline top rule. */
 .citations-list {
-  border-top: 1px solid var(--rule-strong);
-  margin-top: calc(var(--line-pitch) - 1px);
+  border-top: 1px solid var(--card-edge);
+  margin-top: 0.35rem;
+  padding-top: 0.35rem;
   font-family: var(--font-sans);
   font-size: var(--fs-label);
   color: var(--pencil);
@@ -48,7 +49,7 @@ const grouped = computed(() => {
   gap: 0.5rem;
   align-items: baseline;
   margin: 0;
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
 }
 
 .citation-ref {
