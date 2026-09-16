@@ -47,6 +47,9 @@ watch(answered, async (is) => {
   >
     <div class="check-gutter">
       <span class="role-tag">check</span>
+      <p v-if="showProgress" class="check-progress" data-tabular>
+        {{ check.viewIndex + 1 }}/{{ check.total }}
+      </p>
     </div>
     <div class="check-box">
       <p class="check-question">{{ item.question }}</p>
@@ -146,10 +149,6 @@ watch(answered, async (is) => {
       >
         Done
       </button>
-
-      <p v-if="showProgress" class="check-progress" data-tabular>
-        {{ check.viewIndex + 1 }}/{{ check.total }}
-      </p>
     </div>
   </section>
 </template>
@@ -173,6 +172,8 @@ watch(answered, async (is) => {
 .check-gutter {
   display: flex;
   align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
   min-width: 0;
   padding-bottom: 0.4rem;
   border-bottom: 3px solid var(--ink);
@@ -193,10 +194,11 @@ watch(answered, async (is) => {
   font-family: var(--font-sans);
 }
 
-/* The count is a page number at the foot of the card. */
+/* The count sits in the head line's right slot, matching tutor/learner
+   cards' timestamp -- same size as the "check" role label, pencil ink. */
 .check-progress {
   margin: 0;
-  align-self: flex-end;
+  flex: 0 0 auto;
   font-size: var(--fs-label);
   color: var(--pencil);
 }

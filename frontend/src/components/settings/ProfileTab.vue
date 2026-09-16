@@ -48,6 +48,7 @@
           v-if="topics.length === 0"
           data-testid="agg-empty"
           tone="celebrate"
+          flat
           headline="No sessions yet"
           subtext="Start one — your profile builds itself as you go."
         >

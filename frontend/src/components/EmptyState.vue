@@ -13,11 +13,15 @@ defineProps({
     default: 'default',
     validator: (v) => ['default', 'celebrate', 'pause'].includes(v),
   },
+  // Content-only: strips the card background, border, radius and drop
+  // shadow. For call sites that already sit on their own card (e.g. inside
+  // a `.sec` panel) so the empty state doesn't nest a third edge.
+  flat: { type: Boolean, default: false },
 })
 </script>
 
 <template>
-  <div class="empty-state" :data-tone="tone">
+  <div class="empty-state" :class="{ 'empty-state--flat': flat }" :data-tone="tone">
     <h2 v-if="$slots.headline || headline" class="empty-headline">
       <slot name="headline">{{ headline }}</slot>
     </h2>
@@ -46,6 +50,17 @@ defineProps({
   border-radius: var(--radius-card);
   box-shadow: 0 1px 0 var(--card-drop);
   text-align: center;
+}
+
+/* Content-only variant: no card, no border, no radius, no drop shadow --
+   just the headline, line and link, for call sites that already sit on
+   their own card. */
+.empty-state--flat {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
 }
 
 .empty-headline {

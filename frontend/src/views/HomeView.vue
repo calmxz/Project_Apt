@@ -159,7 +159,9 @@ function startQuick() {
   border: 0;
 }
 
-/* Field on a rule: no box, no radius, one bottom rule that inks on focus. */
+/* Field on a rule: no box, no radius, one bottom rule that inks on focus.
+   overflow/text-overflow/white-space clip a long placeholder to an ellipsis
+   on narrow viewports instead of letting it wrap or overflow mid-word. */
 .quick-input {
   display: block;
   width: 100%;
@@ -174,6 +176,9 @@ function startQuick() {
   font-size: var(--fs-body);
   line-height: var(--lh-body);
   text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .quick-input::placeholder {

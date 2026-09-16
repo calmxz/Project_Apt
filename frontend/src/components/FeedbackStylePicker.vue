@@ -147,14 +147,14 @@ function select(value) {
   color: var(--pencil);
 }
 
-/* Green tick: the picker's own selected-state mark, distinct from the
-   Mastered divider tab but drawn from the same signal-success ink so a
-   "chosen" line reads the same grammar wherever it appears. */
+/* Blue tick: a control state, not a Mastered signal. Tab-colour law
+   reserves green for Mastered only, so the picker's own selected-state
+   mark uses the same learner-blue ink as other interactive affordances. */
 .radio-tick {
   align-self: center;
   flex: 0 0 auto;
   fill: none;
-  stroke: var(--tab-mastered);
+  stroke: var(--ink-learner);
   stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
