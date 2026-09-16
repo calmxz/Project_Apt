@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
 
 import CueColumn from '@/components/chat/CueColumn.vue'
+import { __test__ as panelTest } from '@/composables/usePanel.js'
 
 // ConceptEntry per docs/api/openapi.yaml: the concept key is `name`.
 const entry = (name) => ({ name, evidence_type: null, last_event_at: null })
@@ -138,6 +139,34 @@ describe('CueColumn', () => {
     expect(btn.attributes('aria-expanded')).toBe('false')
     await btn.trigger('click')
     expect(btn.attributes('aria-expanded')).toBe('true')
+  })
+
+  // The panel collapse state is a module singleton in usePanel.js, so every
+  // case that touches it has to hand the module back the way it found it.
+  afterEach(() => {
+    panelTest._setExpanded(true)
+    try {
+      window.localStorage.removeItem(panelTest.LS_KEY)
+    } catch {
+      /* private mode, ignore */
+    }
+  })
+
+  it('flips the collapse toggle label when the panel collapses', async () => {
+    const w = mountCue()
+    const btn = w.get('[data-testid="cue-collapse-toggle"]')
+    expect(btn.attributes('aria-label')).toBe('Collapse profile')
+    await btn.trigger('click')
+    expect(btn.attributes('aria-label')).toBe('Expand profile')
+  })
+
+  it('renders the vertical tab rail and drops the sections when collapsed', () => {
+    panelTest._setExpanded(false)
+    const w = mountCue()
+    expect(w.get('[data-testid="cue-column"]').classes()).toContain('is-collapsed')
+    // Focus / Gaps / Mastered, the three coloured tabs; Level is not on the rail.
+    expect(w.findAll('.cue-rail-tab')).toHaveLength(3)
+    expect(w.findAll('[data-testid="cue-gap"]')).toHaveLength(0)
   })
 
   it('renders empty-section copy when the profile has nothing yet', () => {
