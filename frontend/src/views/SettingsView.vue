@@ -94,17 +94,21 @@ function onKeydown(e, i) {
 </script>
 
 <style scoped>
+/* The whole settings page sits on the deep desk, bleeding out to the
+   surrounding .page-inner's own padding (App.vue) so the ground reads as
+   one surface rather than a card floating on a lighter page. */
 .settings {
   display: flex;
   flex-direction: column;
+  background: var(--desk-deep);
+  margin: calc(-1 * clamp(2rem, 6vw, 4.5rem)) calc(-1 * clamp(1rem, 4vw, 2.5rem)) -4rem;
+  padding: clamp(2rem, 6vw, 4.5rem) clamp(1rem, 4vw, 2.5rem) 4rem;
 }
 
-/* The sheet header: one display line under a strong rule. */
 .head {
   display: flex;
   flex-direction: column;
   padding-bottom: var(--line-pitch);
-  border-bottom: 1px solid var(--rule-strong);
 }
 
 .title {
@@ -125,29 +129,31 @@ function onKeydown(e, i) {
   flex-direction: column;
 }
 
+/* Divider tabs: each is its own tab shape on the deep desk; the one in
+   force lifts to the sheet's own white and sits flush against it (negative
+   margin overlaps the panel's top border) so rail and sheet read as one
+   joined object. */
 .rail {
   display: flex;
   flex-direction: row;
-  gap: 1.5rem;
+  align-items: flex-end;
+  gap: 0.375rem;
   overflow-x: auto;
   position: static;
   padding: 0;
-  border-bottom: 1px solid var(--rule-strong);
   margin-top: var(--line-pitch);
 }
 
-/* Blue caption-700 toggles; the one in force turns graphite with a 2px
-   graphite underline, the tab line held on the pitch (28px + the 1px
-   border below it). */
 .rail-tab {
   display: flex;
   align-items: center;
   flex-shrink: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--ink-learner);
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--card-edge);
+  border-bottom: 0;
+  border-radius: var(--radius-card) var(--radius-card) 0 0;
+  background: var(--desk);
+  color: var(--pencil);
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
   font-weight: 700;
@@ -157,14 +163,16 @@ function onKeydown(e, i) {
 }
 
 .rail-tab:hover {
-  background: transparent;
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  background: var(--card);
+  color: var(--ink);
 }
 
 .rail-tab--active {
+  position: relative;
+  z-index: 1;
+  margin-bottom: -1px;
+  background: var(--card);
   color: var(--ink);
-  box-shadow: inset 0 -2px 0 var(--ink);
 }
 
 .rail-tab:focus-visible {
@@ -172,15 +180,19 @@ function onKeydown(e, i) {
   outline-offset: 2px;
 }
 
-/* The page runs full width beneath the tab line; each tab lays its own
-   sections out (see ProfileTab, AccountTab). */
+/* The sheet: a white card joined to the active tab, square only at the
+   top-left where the rail starts. Each tab lays its own sections out (see
+   ProfileTab, AccountTab) as desk-deep cards on this sheet. */
 .panel {
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: var(--line-pitch);
-  padding: var(--line-pitch) 0 0;
-  border-left: 0;
+  padding: 1.5rem 2rem 2rem;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: 0 var(--radius-card) var(--radius-card) var(--radius-card);
+  box-shadow: 0 1px 0 var(--card-drop);
 }
 
 .panel:focus-visible {

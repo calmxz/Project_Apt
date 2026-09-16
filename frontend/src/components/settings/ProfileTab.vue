@@ -42,7 +42,7 @@
     <p v-else-if="error" class="error" data-testid="agg-error">{{ error }}</p>
 
     <template v-else>
-      <section class="sec sec--ruled" data-testid="profile-summary">
+      <section class="sec" data-testid="profile-summary">
         <h2 class="sec-title">Topics</h2>
         <EmptyState
           v-if="topics.length === 0"
@@ -161,14 +161,13 @@ async function saveFeedback() {
    session's own profile page; the full per-session list lives in the
    library at /sessions, not duplicated here. */
 .profile-tab {
-  /* Full panel width: an auto cross-axis margin inside the panel's flex
-     column would shrink-wrap the tab to its longest line. Two independent
-     sections -- Feedback style, then Topics -- sit side by side from 60rem
-     up, divided by a vertical rule instead of the stacked horizontal one. */
+  /* Full panel width. Two independent sections -- Feedback style, then
+     Topics -- are their own desk-deep cards, stacked here and sitting side
+     by side from 60rem up. */
   width: 100%;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  column-gap: 3rem;
+  gap: var(--line-pitch);
 }
 
 .error {
@@ -177,24 +176,26 @@ async function saveFeedback() {
   font-size: var(--fs-body);
   line-height: var(--line-pitch);
   color: var(--ink-marker-text);
+  background: var(--desk-deep);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-card);
+  padding: 1rem 1.25rem;
 }
 
 .sec {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  padding-top: var(--line-pitch);
+  gap: 0.5rem;
   width: 100%;
+  background: var(--desk-deep);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-card);
+  padding: 1rem 1.25rem 1.25rem;
 }
 
 .btn-fill-row {
   align-self: flex-start;
-}
-
-.sec--ruled {
-  margin-top: var(--line-pitch);
-  padding-top: calc(var(--line-pitch) - 1px);
-  border-top: 1px solid var(--rule-strong);
 }
 
 .sec-title {
@@ -251,10 +252,14 @@ async function saveFeedback() {
   display: block;
 }
 
-/* Skeleton: pencil-weight rules on the pitch, no shimmer. */
+/* Skeleton: a desk-deep card, no shimmer. */
 .skel {
   display: flex;
   flex-direction: column;
+  background: var(--desk-deep);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-card);
+  padding: 1rem 1.25rem;
 }
 
 .skel-block {
@@ -275,8 +280,7 @@ async function saveFeedback() {
   border: 0;
 }
 
-/* From 60rem the two sections sit side by side; the vertical rule replaces
-   the horizontal one. Kept last so it wins over the base .sec--ruled rule. */
+/* From 60rem the two cards sit side by side. */
 @media (min-width: 60rem) {
   .profile-tab {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -290,14 +294,6 @@ async function saveFeedback() {
   .error,
   [data-testid='profile-summary'] {
     grid-column: 2;
-  }
-
-  .sec--ruled {
-    margin-top: 0;
-    padding-top: 0;
-    border-top: 0;
-    border-left: 1px solid var(--rule-strong);
-    padding-left: 3rem;
   }
 }
 </style>

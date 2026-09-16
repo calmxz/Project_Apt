@@ -114,7 +114,7 @@ function select(value) {
   font-size: var(--fs-body);
   font-weight: 700;
   line-height: var(--line-pitch);
-  color: var(--ink-learner);
+  color: var(--color-accent);
 }
 
 .radio-body {
@@ -147,11 +147,14 @@ function select(value) {
   color: var(--pencil);
 }
 
+/* Green tick: the picker's own selected-state mark, distinct from the
+   Mastered divider tab but drawn from the same signal-success ink so a
+   "chosen" line reads the same grammar wherever it appears. */
 .radio-tick {
   align-self: center;
   flex: 0 0 auto;
   fill: none;
-  stroke: var(--ink-learner);
+  stroke: var(--tab-mastered);
   stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
