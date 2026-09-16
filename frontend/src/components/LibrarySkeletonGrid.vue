@@ -12,34 +12,40 @@ defineProps({ count: { type: Number, default: 6 } })
 </template>
 
 <style scoped>
-/* Pencil-weight bars on the rules, in the row geometry they stand in for.
-   No shimmer, no card, no radius: a page waiting to be written on. */
+/* Card-shaped grey blocks standing in for the session cards they precede.
+   No shimmer: a still placeholder, not an animated one. */
 .library-skel {
   list-style: none;
   margin: 0;
   padding: 0;
-  background-image: var(--ruled-bg);
-  background-position-y: var(--ruled-offset);
-  background-attachment: local;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
 }
 
 .skel-row {
-  padding: 0 0.25rem 0 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-card);
+  box-shadow: 0 1px 0 var(--card-drop);
 }
 
 .skel-line {
   display: block;
-  height: 1px;
-  background: var(--rule-strong);
+  height: 0.75rem;
+  border-radius: var(--radius-sm);
+  background: var(--desk-deep);
 }
 
 .skel-topic {
   width: 42%;
-  margin: calc(var(--line-pitch) / 2 - 1px) 0 calc(var(--line-pitch) / 2);
 }
 
 .skel-focus {
   width: 26%;
-  margin: calc(var(--line-pitch) / 2 - 1px) 0 calc(var(--line-pitch) / 2);
 }
 </style>

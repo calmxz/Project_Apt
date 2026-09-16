@@ -62,16 +62,20 @@ function choose(gap) {
   align-items: baseline;
   gap: 0.625rem;
   width: 100%;
-  padding: 0;
+  padding: 0.5rem 0;
   border: 0;
-  border-bottom: 1px solid var(--rule);
+  box-shadow: inset 0 -1px 0 var(--card-edge);
   border-radius: 0;
   background: transparent;
   font-family: var(--font-sans);
   font-size: var(--fs-body);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   cursor: pointer;
   text-align: left;
+}
+
+.gap-option:last-child {
+  box-shadow: none;
 }
 
 .gap-mark {

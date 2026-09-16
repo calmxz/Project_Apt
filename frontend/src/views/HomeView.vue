@@ -1,57 +1,59 @@
 <template>
   <section class="home">
-    <h1 class="home-head">What do you want to learn?</h1>
+    <div class="home-card">
+      <h1 class="home-head">What do you want to learn?</h1>
 
-    <p v-if="store.error && !store.sessions.length" class="error" data-testid="home-error">
-      {{ friendlyError(store.error) }}
-    </p>
+      <p v-if="store.error && !store.sessions.length" class="error" data-testid="home-error">
+        {{ friendlyError(store.error) }}
+      </p>
 
-    <template v-else>
-      <div class="quick" data-testid="home-mode-quick">
-        <label for="home-topic" class="sr-only">Topic</label>
-        <input
-          id="home-topic"
-          v-model="quickTopic"
-          class="quick-input"
-          data-testid="home-quick-topic"
-          placeholder="a topic, a chapter, a thing that will not stick..."
-          autocomplete="off"
-          @keydown.enter="startQuick"
-        />
+      <template v-else>
+        <div class="quick" data-testid="home-mode-quick">
+          <label for="home-topic" class="sr-only">Topic</label>
+          <input
+            id="home-topic"
+            v-model="quickTopic"
+            class="quick-input"
+            data-testid="home-quick-topic"
+            placeholder="a topic, a chapter, a thing that will not stick..."
+            autocomplete="off"
+            @keydown.enter="startQuick"
+          />
 
-        <p class="quick-go">
-          <button
-            type="button"
-            class="cta-primary hit-44"
-            data-testid="home-quick-go"
-            :disabled="busy"
-            @click="startQuick"
-          >
-            <span>{{ startLabel }}</span>
-            <svg
-              class="cta-mark"
-              viewBox="0 0 20 20"
-              width="18"
-              height="18"
-              aria-hidden="true"
-              focusable="false"
+          <p class="quick-go">
+            <button
+              type="button"
+              class="cta-primary hit-44"
+              data-testid="home-quick-go"
+              :disabled="busy"
+              @click="startQuick"
             >
-              <path d="M4 10 L15 10 M10.5 5.5 L15 10 L10.5 14.5" />
-            </svg>
-          </button>
-        </p>
-      </div>
-      <StartTopicIntercept
-        v-if="stage === 'intercept'"
-        :match="interceptMatch"
-        :kind="interceptKind"
-        :busy="busy"
-        @open-existing="openExisting"
-        @continue-topic="continuePrior"
-        @start-fresh="startFresh"
-        @cancel="cancel"
-      />
-    </template>
+              <span>{{ startLabel }}</span>
+              <svg
+                class="cta-mark"
+                viewBox="0 0 20 20"
+                width="18"
+                height="18"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <path d="M4 10 L15 10 M10.5 5.5 L15 10 L10.5 14.5" />
+              </svg>
+            </button>
+          </p>
+        </div>
+        <StartTopicIntercept
+          v-if="stage === 'intercept'"
+          :match="interceptMatch"
+          :kind="interceptKind"
+          :busy="busy"
+          @open-existing="openExisting"
+          @continue-topic="continuePrior"
+          @start-fresh="startFresh"
+          @cancel="cancel"
+        />
+      </template>
+    </div>
   </section>
 </template>
 
@@ -98,8 +100,8 @@ function startQuick() {
 </script>
 
 <style scoped>
-/* A fresh sheet with one question and one rule to write on, centered on the
-   page -- vertically and horizontally, nothing else on the sheet. */
+/* One centred white card on the desk: the question, the topic field and
+   Start live on the sheet, the desk ground shows around it. */
 .home {
   max-width: 44rem;
   margin: 0 auto;
@@ -107,7 +109,17 @@ function startQuick() {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: var(--line-pitch);
+}
+
+.home-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+  padding: 2.5rem 2.5rem 2.75rem;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-card);
+  box-shadow: 0 1px 0 var(--card-drop);
 }
 
 .home-head {
@@ -125,7 +137,7 @@ function startQuick() {
   margin: 0;
   font-family: var(--font-sans);
   font-size: var(--fs-body);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--ink-marker-text);
   text-align: center;
 }
@@ -160,7 +172,7 @@ function startQuick() {
   caret-color: var(--ink-learner);
   font-family: var(--font-sans);
   font-size: var(--fs-body);
-  line-height: calc(var(--line-pitch) - 1px);
+  line-height: var(--lh-body);
   text-align: center;
 }
 
@@ -175,8 +187,8 @@ function startQuick() {
 
 .quick-go {
   margin: 0;
-  padding-top: var(--line-pitch);
-  line-height: var(--line-pitch);
+  padding-top: 1.75rem;
+  line-height: var(--lh-body);
   text-align: center;
 }
 
@@ -194,7 +206,7 @@ function startQuick() {
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
   font-weight: 700;
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   cursor: pointer;
 }
 

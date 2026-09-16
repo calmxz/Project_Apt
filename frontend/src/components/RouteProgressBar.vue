@@ -34,7 +34,7 @@ import { routeProgress } from '@/services/routeProgress.js'
 .route-progress-bar {
   width: 100%;
   height: 100%;
-  background: var(--ink-learner);
+  background: var(--color-accent);
   transform-origin: left;
   /* Slow ease-out = the rule extends toward 85% while the chunk loads. */
   transition: transform 8s cubic-bezier(0.1, 0.6, 0.2, 1);

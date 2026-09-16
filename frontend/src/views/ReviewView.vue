@@ -36,6 +36,7 @@
           <button
             type="button"
             class="review-cover"
+            :class="{ 'review-cover--lifted': isLifted(item) }"
             :data-testid="`review-cover-${i}`"
             :aria-expanded="isLifted(item) ? 'true' : 'false'"
             :aria-controls="detailId(i)"
@@ -153,15 +154,15 @@ async function expand() {
 </script>
 
 <style scoped>
-/* A recitation page: cues down the left, the answer beside each one under a
-   cover the learner lifts. Rules and columns, no cards. */
+/* A recitation page: cues down the left, each answer beside its cue under a
+   card the learner lifts. */
 .review {
   max-width: 44rem;
   margin: 0 auto;
-  padding-top: var(--line-pitch);
+  padding-top: 1.75rem;
   display: flex;
   flex-direction: column;
-  gap: var(--line-pitch);
+  gap: 1.75rem;
 }
 
 .head {
@@ -183,7 +184,7 @@ async function expand() {
   margin: 0;
   font-family: var(--font-sans);
   font-size: var(--fs-body);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--pencil);
 }
 
@@ -191,35 +192,31 @@ async function expand() {
   margin: 0;
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--pencil);
 }
 
-/* Rows sit one pitch apart so stacked covers are separated by ruled ground
-   and never butt frames: 56px row + 28px gap = three pitches per entry. */
+/* Rows sit apart on the desk so stacked cards read as separate objects. */
 .review-list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  row-gap: var(--line-pitch);
-  background-image: var(--ruled-bg);
-  background-position-y: var(--ruled-offset);
-  background-attachment: local;
+  row-gap: 0.75rem;
 }
 
-/* Every row is exactly two pitches in both states, so lifting a cover never
+/* Every row is a fixed height in both states, so lifting a cover never
    reflows the list. */
 .review-row {
   display: grid;
   grid-template-columns: minmax(0, 20rem) minmax(0, 1fr);
   align-items: start;
   column-gap: 1rem;
-  min-height: calc(2 * var(--line-pitch));
+  min-height: 3.5rem;
 }
 
-/* The cue itself: a blue cue word on the rule, and the control that starts
-   the check. Written, not stamped. */
+/* The cue itself: a blue cue word, and the control that starts the check.
+   Written, not stamped. */
 .review-item {
   display: block;
   width: 100%;
@@ -229,7 +226,7 @@ async function expand() {
   color: var(--ink-learner);
   font-family: var(--font-sans);
   font-size: var(--fs-body);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   text-align: left;
   cursor: pointer;
 }
@@ -250,38 +247,42 @@ async function expand() {
   outline-offset: 2px;
 }
 
-/* The cue takes its own width and wraps on the pitch; a cue word is never
-   truncated -- it is the thing the learner has to recall. */
+/* The cue takes its own width and wraps; a cue word is never truncated --
+   it is the thing the learner has to recall. */
 .review-concept {
   display: block;
   overflow-wrap: anywhere;
 }
 
-/* The answer area. Covered, it is a blank sheet over the rules with the way
-   in written on it; lifted, it reads as a pencil aside. */
+/* The answer area holds one card at a time: covered (blue stock) or lifted
+   (white stock, with the pencil aside above it). */
 .review-answer {
   display: flex;
   align-items: baseline;
   gap: 0.75rem;
-  min-height: calc(2 * var(--line-pitch));
+  min-height: 3.5rem;
 }
 
-/* Lifted, the cell keeps its two pitches: the aside on line one, Cover
-   written on line two. */
 .review-answer.lifted {
   flex-direction: column;
   align-items: flex-start;
-  gap: 0;
+  gap: 0.375rem;
 }
 
+/* Lifted, the revealed answer is a card in the tutor's white stock. */
 .review-detail {
   flex: 0 0 auto;
   width: 100%;
   min-width: 0;
   margin: 0;
+  padding: 0.5rem 0.75rem;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-card);
+  box-shadow: 0 1px 0 var(--card-drop);
   font-family: var(--font-sans);
   font-size: var(--fs-label);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--pencil);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -309,29 +310,32 @@ async function expand() {
   }
 }
 
-/* Covered, the answer cell is a ruled box: a graphite frame with page ground
-   over the rules and the way in written inside it. */
+/* Covered, the answer cell is a card in the learner's blue stock: the way
+   in written inside it. */
 .review-cover {
   flex: 1 1 auto;
-  padding: 13px 1rem;
-  border: 1px solid var(--ink);
-  border-radius: 0;
-  background: var(--color-background);
+  padding: 0.8125rem 1rem;
+  border: 1px solid var(--card-learner-edge);
+  border-radius: var(--radius-card);
+  background: var(--card-learner);
+  box-shadow: 0 1px 0 var(--card-drop);
   color: var(--ink-learner);
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
   font-weight: 700;
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   text-align: left;
   cursor: pointer;
 }
 
-/* Lifted, the box is gone and Cover is a plain blue text line. */
-.review-answer.lifted .review-cover {
+/* Lifted, the card turns to white stock and shrinks to a text-sized
+   control: Cover reads as a plain blue line under the revealed aside. */
+.review-cover--lifted {
   flex: 0 0 auto;
   padding: 0;
   border: 0;
   background: transparent;
+  box-shadow: none;
   text-align: left;
 }
 
@@ -351,7 +355,7 @@ async function expand() {
   max-width: 42rem;
   font-family: var(--font-sans);
   font-size: var(--fs-body);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--pencil);
 }
 
@@ -374,7 +378,7 @@ async function expand() {
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
   font-weight: 700;
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   text-decoration: underline;
   text-underline-offset: 3px;
   cursor: pointer;
