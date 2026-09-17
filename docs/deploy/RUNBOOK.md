@@ -26,7 +26,8 @@ Run them deliberately and observed instead:
 
 There is deliberately NO `crux-worker` service. The web service drains the
 ingestion queue itself in a background thread (`INGEST_IN_PROCESS`, default
-on) per `docs/superpowers/specs/2026-08-12-defer-render-worker-design.md`.
+on) per the 2026-08-12 worker-deferral spec (removed from the tree; see git
+history).
 This accepts the B-02 isolation revert for beta (ingestion CPU and memory
 share the web instance).
 

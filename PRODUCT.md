@@ -53,7 +53,6 @@ None binding. The product name is Crux. The current four-point star mark, coral 
 - Real product copy across all routes (`frontend/src/views`, `frontend/src/components`).
 - Real learner-profile data shapes in `backend/db/schemas.py` and `docs/api/openapi.yaml`.
 - Legal texts in `frontend/src/legal/`.
-- Frontend critique with scores and evidence: `docs/reviews/2026-09-10-frontend-critique.md` (23/40; verdict: the learning model is rendered as chips and numbers, never as a designed artifact).
 - No testimonials, customer logos, benchmarks, or pricing exist. Do not invent them.
 
 ## Product Principles
