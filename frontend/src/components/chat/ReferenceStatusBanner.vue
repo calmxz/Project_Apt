@@ -211,26 +211,30 @@ defineExpose({ refresh })
 </script>
 
 <style scoped>
-/* Status caption grammar: one line, ink on paper, a full 1px rule. */
+/* Status caption card: card stock with a 3px tab-colour rule at the head,
+   never a side border. */
 .ref-status {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  padding: 0.25rem 0.75rem;
-  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.75rem;
+  background: var(--card);
+  /* Head rule reads as a tab edge: top corners square, bottom corners card radius. */
+  border-radius: 0 0 var(--radius-card) var(--radius-card);
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
-  line-height: var(--line-pitch);
-  border: 1px solid var(--rule-strong);
+  line-height: var(--lh-body);
+  border: 1px solid var(--card-edge);
+  border-top: 3px solid var(--color-accent);
   color: var(--ink);
 }
 
 .ref-status.is-ready {
-  border-color: var(--signal-success);
+  border-top-color: var(--tab-mastered);
 }
 
 .ref-status.is-failed {
-  border-color: var(--ink-marker);
+  border-top-color: var(--tab-focus);
   color: var(--ink-marker-text);
 }
 
@@ -273,8 +277,8 @@ defineExpose({ refresh })
   align-items: center;
   gap: 0.5rem;
   font-size: var(--fs-label);
-  line-height: var(--line-pitch);
-  border-top: 1px solid var(--rule);
+  line-height: 1.75rem;
+  border-top: 1px solid var(--card-edge);
 }
 .ref-file-name {
   flex: 1;

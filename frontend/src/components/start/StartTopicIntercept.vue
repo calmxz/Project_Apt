@@ -94,23 +94,25 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-/* A ruled box: the page pauses on it. 1px graphite border over the page,
-   no radius, half a pitch of frame at each end, actions written not stamped. */
+/* A card: the page pauses on it. White stock, same grammar as the tutor's
+   own card, actions written not stamped. */
 .intercept {
   position: relative;
   display: flex;
   flex-direction: column;
-  padding: 13px 2.5rem 13px 1rem;
-  border: 1px solid var(--ink);
-  border-radius: 0;
-  background: var(--color-background);
+  gap: 0.5rem;
+  padding: 0.875rem 2.5rem 0.875rem 1rem;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-card);
+  box-shadow: 0 1px 0 var(--card-drop);
 }
 
 .intercept-line {
   margin: 0;
   font-family: var(--font-sans);
   font-size: var(--fs-body);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--ink);
 }
 
@@ -122,7 +124,7 @@ onMounted(async () => {
   display: flex;
   flex-wrap: wrap;
   gap: 0 1.25rem;
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
 }
 
 .intercept-primary,
@@ -135,7 +137,7 @@ onMounted(async () => {
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
   font-weight: 700;
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   text-decoration: underline;
   text-underline-offset: 3px;
   cursor: pointer;
@@ -148,13 +150,13 @@ onMounted(async () => {
 
 .intercept-cancel {
   position: absolute;
-  top: 13px;
+  top: 0.6rem;
   right: 0.5rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 2rem;
-  height: var(--line-pitch);
+  height: 1.75rem;
   padding: 0;
   background: transparent;
   border: 0;

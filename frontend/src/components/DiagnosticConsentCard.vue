@@ -63,38 +63,42 @@ const LETTERS = { beginner: 'A', intermediate: 'B', advanced: 'C' }
 </template>
 
 <style scoped>
-/* Same box grammar as a check: a ruled box in the notes column. */
+/* Same grammar as a check card. */
 .diag-card {
+  max-width: 84%;
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--ink);
-  /* 13px + the 1px border = half a pitch of frame at each end. */
-  padding: calc(var(--line-pitch) / 2 - 1px) 1rem;
-  background: var(--color-background);
+  gap: 0.4rem;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-card);
+  box-shadow: 0 1px 0 var(--card-drop);
+  padding: 0.55rem 0.9rem 0.7rem;
   font-family: var(--font-sans);
 }
 
-/* Centred, not baseline: the icon button has no text baseline, so aligning to
-   one made the head taller than a pitch. */
+/* Same head grammar as a check card: a 3px graphite rule closes the head. */
 .diag-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 3px solid var(--ink);
 }
 
 .diag-title {
   margin: 0;
   font-size: var(--fs-body);
   font-weight: 700;
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--ink);
 }
 
 .diag-sub {
   margin: 0;
   font-size: var(--fs-caption);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--pencil);
 }
 
@@ -107,7 +111,7 @@ const LETTERS = { beginner: 'A', intermediate: 'B', advanced: 'C' }
   border: none;
   cursor: pointer;
   width: 1.75rem;
-  height: var(--line-pitch);
+  height: 1.75rem;
   border-radius: var(--radius-sm);
   color: var(--ink-learner);
 }
@@ -139,13 +143,13 @@ const LETTERS = { beginner: 'A', intermediate: 'B', advanced: 'C' }
   text-align: left;
   background: transparent;
   border: 0;
-  /* Painted, not laid out, so each action line is exactly one pitch. */
+  /* Painted, not laid out: each action is a line inside the card. */
   box-shadow: inset 0 -1px 0 var(--rule);
   border-radius: 0;
-  padding: 0;
+  padding: 0.4rem 0;
   font-family: var(--font-sans);
   font-size: var(--fs-body);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--ink);
   cursor: pointer;
 }
@@ -178,7 +182,7 @@ const LETTERS = { beginner: 'A', intermediate: 'B', advanced: 'C' }
 .diag-error {
   margin: 0;
   font-size: var(--fs-caption);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--ink-marker-text);
 }
 </style>

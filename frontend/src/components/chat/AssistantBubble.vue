@@ -8,7 +8,7 @@ import CheckRecap from './CheckRecap.vue'
 const props = defineProps({
   message: { type: Object, required: true },
   streaming: { type: Boolean, default: false },
-  // Cue-lands: this turn changed the profile, so its gutter carries the tick.
+  // Cue-lands: this turn changed the profile, so its head line carries the tick.
   landed: { type: Boolean, default: false },
 })
 
@@ -21,6 +21,12 @@ const visibleToolCalls = computed(() => {
   )
   return calls.filter((tc) => tc.state !== 'error' || !succeeded.has(tc.name))
 })
+
+const TIME_FMT = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' })
+// The head line carries the time only when the server sent one; never invent it.
+const timeLabel = computed(() =>
+  props.message.created_at ? TIME_FMT.format(new Date(props.message.created_at)) : '',
+)
 </script>
 
 <template>
@@ -30,6 +36,7 @@ const visibleToolCalls = computed(() => {
   >
     <div class="msg-gutter">
       <span class="role-tag">tutor</span>
+      <span v-if="timeLabel" class="msg-time">{{ timeLabel }}</span>
       <svg
         v-if="landed"
         class="landed-tick"
@@ -72,21 +79,26 @@ const visibleToolCalls = computed(() => {
 </template>
 
 <style scoped>
-/* No bubble and no avatar: the tutor writes on the rules, its name sits in
-   the gutter in pencil. */
+/* The tutor's card: white stock, told apart from the learner by material,
+   never by an avatar. The head line carries the role and time in pencil. */
 .msg {
-  display: grid;
-  grid-template-columns: 5rem minmax(0, 1fr);
-  gap: 0 0.75rem;
-  max-width: 100%;
-  padding: var(--line-pitch) 0 0;
+  align-self: flex-start;
+  max-width: 78%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-card);
+  box-shadow: 0 1px 0 var(--card-drop);
+  padding: 0.55rem 0.9rem 0.7rem;
 }
 
 .msg-gutter {
   position: relative;
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  align-items: baseline;
+  gap: 0.5rem;
   min-width: 0;
 }
 
@@ -94,16 +106,21 @@ const visibleToolCalls = computed(() => {
   font-family: var(--font-sans);
   font-size: var(--fs-label);
   font-weight: 700;
-  line-height: var(--line-pitch);
-  color: var(--ink);
+  color: var(--pencil);
 }
 
-/* The tick hangs under the role tag without adding height: in flow it made the
-   gutter 44px and knocked the turn off the 28px pitch. */
+.msg-time {
+  margin-left: auto;
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  color: var(--pencil);
+}
+
+/* Top-right of the head line: filing the profile never reflows the card. */
 .landed-tick {
   position: absolute;
-  top: var(--line-pitch);
-  left: 0;
+  top: 0;
+  right: 0;
   fill: none;
   stroke: var(--ink-learner);
   stroke-width: 1.5;
@@ -126,6 +143,7 @@ const visibleToolCalls = computed(() => {
 .msg-body {
   display: flex;
   flex-direction: column;
+  gap: 0.35rem;
   min-width: 0;
 }
 
@@ -133,7 +151,7 @@ const visibleToolCalls = computed(() => {
   margin: 0;
   font-family: var(--font-sans);
   font-size: var(--fs-body);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--ink);
 }
 
@@ -145,7 +163,6 @@ const visibleToolCalls = computed(() => {
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
   font-style: italic;
-  line-height: var(--line-pitch);
   color: var(--pencil);
 }
 
@@ -157,20 +174,7 @@ const visibleToolCalls = computed(() => {
 
 @media (max-width: 599px) {
   .msg {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0;
-  }
-
-  .msg-gutter {
-    flex-direction: row;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  /* One row here, so the tick sits beside the label instead of over the first
-     line of the message; the row is still one pitch tall. */
-  .landed-tick {
-    position: static;
+    max-width: 92%;
   }
 }
 </style>

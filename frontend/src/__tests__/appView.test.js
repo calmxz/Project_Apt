@@ -80,6 +80,79 @@ describe('App.vue error listener', () => {
   })
 })
 
+describe('shell keyboard shortcuts', () => {
+  let wrapper
+  let sidebarTest
+  let panelTest
+
+  beforeEach(async () => {
+    setActivePinia(createPinia())
+    localStorage.clear()
+    sidebarTest = (await import('@/composables/useSidebar.js')).__test__
+    panelTest = (await import('@/composables/usePanel.js')).__test__
+    // jsdom reports innerWidth 1024 and both composables snapshot it at module
+    // load, so force the desktop branch and a known starting state.
+    sidebarTest._setViewport(1280)
+    sidebarTest._setExpanded(true)
+    panelTest._setViewport(1280)
+    panelTest._setExpanded(true)
+    wrapper = mount(App)
+  })
+  afterEach(() => wrapper.unmount())
+
+  const press = (key, target = window, init = {}) => {
+    const e = new KeyboardEvent('keydown', { key, ctrlKey: true, bubbles: true, ...init })
+    const spy = vi.spyOn(e, 'preventDefault')
+    target.dispatchEvent(e)
+    return spy
+  }
+
+  it('Ctrl+B toggles the sidebar and prevents the default', () => {
+    const spy = press('b')
+    expect(localStorage.getItem('crux.sidebar.expanded')).toBe('0')
+    expect(spy).toHaveBeenCalled()
+  })
+
+  it('Ctrl+. toggles the profile panel and prevents the default', () => {
+    const spy = press('.')
+    expect(localStorage.getItem('crux.panel.expanded')).toBe('0')
+    expect(spy).toHaveBeenCalled()
+  })
+
+  it('ignores Ctrl+Shift+B (browser bookmarks bar)', () => {
+    const spy = press('b', window, { shiftKey: true })
+    expect(localStorage.getItem('crux.sidebar.expanded')).toBe(null)
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  it('ignores both shortcuts while the target is a text field', () => {
+    const input = document.createElement('input')
+    document.body.appendChild(input)
+    press('b', input)
+    press('.', input)
+    expect(localStorage.getItem('crux.sidebar.expanded')).toBe(null)
+    expect(localStorage.getItem('crux.panel.expanded')).toBe(null)
+    input.remove()
+  })
+
+  it('ignores both shortcuts while a PrimeVue overlay is open', () => {
+    const overlay = document.createElement('div')
+    overlay.className = 'p-dialog'
+    document.body.appendChild(overlay)
+    press('b')
+    press('.')
+    expect(localStorage.getItem('crux.sidebar.expanded')).toBe(null)
+    expect(localStorage.getItem('crux.panel.expanded')).toBe(null)
+    overlay.remove()
+  })
+
+  it('unbinds the listener on unmount', () => {
+    wrapper.unmount()
+    press('b')
+    expect(localStorage.getItem('crux.sidebar.expanded')).toBe(null)
+  })
+})
+
 /* global process */
 // Source-text assertions: what is under test is the CSS the SFC ships, and
 // jsdom neither applies stylesheets nor runs animations, so mounting cannot

@@ -48,7 +48,11 @@ function tickAt(i) {
   <div class="message-list">
     <TransitionGroup name="msg-fade" tag="div" class="msg-list">
       <template v-for="(m, i) in visibleMessages" :key="m.message_id || `m-${i}`">
-        <UserBubble v-if="m.role === 'user'" :content="m.content || ''" />
+        <UserBubble
+          v-if="m.role === 'user'"
+          :content="m.content || ''"
+          :created-at="m.created_at || null"
+        />
         <AssistantBubble v-else :message="m" :streaming="false" :landed="tickAt(i)" />
       </template>
     </TransitionGroup>
@@ -76,9 +80,15 @@ function tickAt(i) {
   display: block;
 }
 
-/* Ink appears; it never slides. */
+.msg-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* A card appears; it never slides. */
 .msg-fade-enter-active {
-  transition: opacity var(--motion-base) ease;
+  transition: opacity var(--motion-fast) ease;
 }
 
 .msg-fade-enter-from {
@@ -93,40 +103,32 @@ function tickAt(i) {
   opacity: 0;
 }
 
-/* Turns apart: a change of voice is worth two pitches, consecutive turns in
-   the same voice keep one. A parent's scoped rule reaches the root element of
-   a child component, which is exactly the turn block being spaced here. */
-.msg.user + .msg.assistant,
-.msg.assistant + .msg.user {
-  padding-top: calc(var(--line-pitch) * 2);
+/* The typing row and the streaming turn are siblings of the list, not
+   children of it: give them the same card gap as everything else. */
+.msg-list + .msg.typing,
+.msg-list + .msg.assistant {
+  margin-top: 0.75rem;
 }
 
-/* The typing row and the streaming turn are siblings of the list, not children
-   of it, so their adjacent neighbour is the list itself: they take the wider
-   gap only when the last thing written was the learner. */
-.msg-list:has(> .msg.user:last-child) + .msg.typing,
-.msg-list:has(> .msg.user:last-child) + .msg.assistant {
-  padding-top: calc(var(--line-pitch) * 2);
-}
-
-/* Typing indicator row (bespoke markup, same gutter grammar as a turn).
-   Scoped to .typing: a bare .msg rule here also lands on the root of every
-   child bubble (a parent's scoped rule reaches a child's root element) and
-   would override the learner turn's mirrored grid. */
+/* Typing indicator: a tutor card with three dots instead of prose. Scoped to
+   .typing so it never collides with the learner card's own rule. */
 .msg.typing {
-  display: grid;
-  grid-template-columns: 5rem minmax(0, 1fr);
-  gap: 0 0.75rem;
-  max-width: 100%;
-  padding: var(--line-pitch) 0 0;
-}
-
-/* Same reason as the turn gutters: an inline role tag in a block would share
-   the 17px strut and make the row 28.5px. */
-.msg.typing .msg-gutter {
+  align-self: flex-start;
+  max-width: 78%;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  gap: 0.35rem;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-card);
+  box-shadow: 0 1px 0 var(--card-drop);
+  padding: 0.55rem 0.9rem 0.7rem;
+}
+
+.msg.typing .msg-gutter {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
   min-width: 0;
 }
 
@@ -134,18 +136,14 @@ function tickAt(i) {
   font-family: var(--font-sans);
   font-size: var(--fs-label);
   font-weight: 700;
-  line-height: var(--line-pitch);
-  color: var(--ink);
+  color: var(--pencil);
 }
 
-/* Block-level, not inline-flex: inline would sit on the body's baseline and
-   add half-leading on top of its own 28px. */
 .msg.typing .content {
   display: flex;
   align-items: center;
   gap: 0.3rem;
   margin: 0;
-  height: var(--line-pitch);
 }
 
 .typing-dots span {
@@ -191,8 +189,7 @@ function tickAt(i) {
 
 @media (max-width: 599px) {
   .msg.typing {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0;
+    max-width: 92%;
   }
 }
 </style>

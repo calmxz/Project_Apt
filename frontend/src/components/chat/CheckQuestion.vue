@@ -47,6 +47,9 @@ watch(answered, async (is) => {
   >
     <div class="check-gutter">
       <span class="role-tag">check</span>
+      <p v-if="showProgress" class="check-progress" data-tabular>
+        {{ check.viewIndex + 1 }}/{{ check.total }}
+      </p>
     </div>
     <div class="check-box">
       <p class="check-question">{{ item.question }}</p>
@@ -146,59 +149,61 @@ watch(answered, async (is) => {
       >
         Done
       </button>
-
-      <p v-if="showProgress" class="check-progress" data-tabular>
-        {{ check.viewIndex + 1 }}/{{ check.total }}
-      </p>
     </div>
   </section>
 </template>
 
 <style scoped>
-/* Same gutter grammar as the tutor and learner turns: the role sits in the
-   5rem gutter in pencil, the box holds the question. */
+/* The check card pauses the stack: same white stock as the tutor, but the
+   head line carries a 3px graphite rule as part of the head, not a side
+   border, and the card runs a touch wider. */
 .check-card {
-  display: grid;
-  grid-template-columns: 5rem minmax(0, 1fr);
-  gap: 0 0.75rem;
-  max-width: 100%;
+  max-width: 84%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-card);
+  box-shadow: 0 1px 0 var(--card-drop);
+  padding: 0.55rem 0.9rem 0.7rem;
 }
 
 .check-gutter {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
   min-width: 0;
+  padding-bottom: 0.4rem;
+  border-bottom: 3px solid var(--ink);
 }
 
 .role-tag {
   font-family: var(--font-sans);
   font-size: var(--fs-label);
   font-weight: 400;
-  line-height: var(--line-pitch);
   color: var(--pencil);
 }
 
-/* A ruled box spanning the notes column: paper over the rules, 1px ink border,
-   no radius. The check pauses the page. */
 .check-box {
+  /* Containing block for the sr-only live region below; without it the
+     absolutely positioned box resolves against the page and can grow the
+     document past the fold on mobile. */
+  position: relative;
   display: flex;
   flex-direction: column;
   min-width: 0;
-  /* 13px + the 1px border = half a pitch of frame at each end, so the box is a
-     whole multiple of the pitch. */
-  padding: calc(var(--line-pitch) / 2 - 1px) 1rem;
-  border: 1px solid var(--ink);
-  background: var(--color-background);
+  gap: 0.5rem;
   font-family: var(--font-sans);
 }
 
-/* The count is a page number at the foot of the box, not a heading above it. */
+/* The count sits in the head line's right slot, matching tutor/learner
+   cards' timestamp -- same size as the "check" role label, pencil ink. */
 .check-progress {
   margin: 0;
-  align-self: flex-end;
+  flex: 0 0 auto;
   font-size: var(--fs-label);
-  line-height: var(--line-pitch);
   color: var(--pencil);
 }
 
@@ -206,7 +211,7 @@ watch(answered, async (is) => {
   margin: 0;
   font-size: var(--fs-body);
   font-weight: 700;
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--ink);
 }
 
@@ -227,10 +232,10 @@ watch(answered, async (is) => {
   /* Painted, not laid out: a border-bottom made every option 29px. */
   box-shadow: inset 0 -1px 0 var(--rule);
   border-radius: 0;
-  padding: 0;
+  padding: 0.4rem 0;
   font-family: var(--font-sans);
   font-size: var(--fs-body);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--ink);
   cursor: pointer;
 }
@@ -290,7 +295,7 @@ watch(answered, async (is) => {
   margin: 0;
   font-size: var(--fs-body);
   font-weight: 700;
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--ink);
 }
 
@@ -301,7 +306,7 @@ watch(answered, async (is) => {
 .check-explanation {
   margin: 0;
   font-size: var(--fs-body);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--ink);
 }
 
@@ -314,7 +319,6 @@ watch(answered, async (is) => {
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
   font-weight: 700;
-  line-height: var(--line-pitch);
   color: var(--ink-learner);
   cursor: pointer;
   text-decoration: underline;
@@ -344,18 +348,17 @@ watch(answered, async (is) => {
 
 @media (max-width: 599px) {
   .check-card {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0;
+    max-width: 92%;
   }
 }
 
-/* R1: rows are 28px with only a painted separator between them -- fine for
-   a mouse, too tight to tap reliably. On coarse pointers only, take each row
-   to two pitches (56px) and centre the letter and text within it; the
-   inset box-shadow separator keeps the ruled look unchanged. */
+/* R1: rows have only a painted separator between them -- fine for a mouse,
+   too tight to tap reliably. On coarse pointers only, grow each row and
+   centre the letter and text within it; the inset box-shadow separator
+   keeps the ruled look unchanged. */
 @media (pointer: coarse) {
   .check-option {
-    min-height: calc(var(--line-pitch) * 2);
+    min-height: 3.5rem;
     align-items: center;
   }
 }

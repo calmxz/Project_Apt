@@ -48,11 +48,7 @@
       </p>
     </form>
 
-    <section
-      v-if="authStore.isAuthenticated"
-      class="sec sec--ruled"
-      data-testid="settings-security"
-    >
+    <section v-if="authStore.isAuthenticated" class="sec" data-testid="settings-security">
       <h2 class="sec-title">Security</h2>
       <form class="pw-form" @submit.prevent="changePassword">
         <div class="field">
@@ -220,7 +216,7 @@ async function changePassword() {
 .account {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  column-gap: 3rem;
+  gap: var(--line-pitch);
   width: 100%;
 }
 
@@ -233,12 +229,12 @@ async function changePassword() {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-}
-
-.sec--ruled {
-  margin-top: var(--line-pitch);
-  padding-top: calc(var(--line-pitch) - 1px);
-  border-top: 1px solid var(--rule-strong);
+  gap: 0.5rem;
+  width: 100%;
+  background: var(--desk-deep);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-card);
+  padding: 1rem 1.25rem 1.25rem;
 }
 
 .sec-title {
@@ -331,19 +327,10 @@ async function changePassword() {
   width: 100%;
 }
 
-/* From 60rem the two sections sit side by side; the vertical rule replaces
-   the horizontal one. Kept last so it wins over the base .sec--ruled rule. */
+/* From 60rem the form and the security card sit side by side. */
 @media (min-width: 60rem) {
   .account {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  }
-
-  .sec--ruled {
-    margin-top: 0;
-    padding-top: 0;
-    border-top: 0;
-    border-left: 1px solid var(--rule-strong);
-    padding-left: 3rem;
   }
 }
 </style>

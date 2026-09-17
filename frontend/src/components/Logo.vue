@@ -18,14 +18,23 @@ defineProps({
 <template>
   <span class="logo" :data-size="size" :data-variant="variant">
     <svg class="logo-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
-      <path
-        d="M26.6 10.9 A8 8 0 1 0 26.6 21.1"
+      <path d="M3.5 9.5 V5.5 a2 2 0 0 1 2-2 H12.5 a2 2 0 0 1 2 2 V9.5" fill="var(--tab-focus)" />
+      <rect
+        x="3.5"
+        y="9.5"
+        width="25"
+        height="19"
+        rx="2"
         fill="none"
         stroke="currentColor"
-        stroke-width="6.5"
-        stroke-linecap="butt"
+        stroke-width="2.5"
       />
-      <line x1="5.5" y1="2" x2="5.5" y2="30" stroke="var(--margin-rule)" stroke-width="3" />
+      <path
+        d="M9 16 h14 M9 21.5 h8"
+        stroke="currentColor"
+        stroke-width="2.5"
+        stroke-linecap="round"
+      />
     </svg>
     <span v-if="variant === 'full'" class="logo-name">Crux</span>
   </span>

@@ -28,12 +28,14 @@ defineProps({
   padding: 0 0.75rem;
 }
 
+/* Card-shaped grey blocks: the rows that are about to arrive, at rest --
+   no shimmer, no pulse. */
 .sb-skel-line {
   height: 0.5rem;
   width: 70%;
+  border-radius: var(--radius-card);
   background: var(--pencil);
-  opacity: 0.25;
-  animation: sb-skel-pulse 1.4s ease-in-out infinite;
+  opacity: 0.19;
 }
 
 .sb-skel-line--0 {
@@ -42,24 +44,5 @@ defineProps({
 
 .sb-skel-line--2 {
   width: 80%;
-}
-
-@keyframes sb-skel-pulse {
-  0%,
-  100% {
-    opacity: 0.25;
-  }
-  50% {
-    opacity: 0.12;
-  }
-}
-
-/* The bars hold at the middle of the pulse rather than at one of its ends, so
-   a still list still reads as pencil waiting to be written on. */
-@media (prefers-reduced-motion: reduce) {
-  .sb-skel-line {
-    animation: none;
-    opacity: 0.19;
-  }
 }
 </style>

@@ -11,3 +11,13 @@ describe('EmptyState a11y — heading level (S1)', () => {
     expect(wrapper.find('h3').exists()).toBe(false)
   })
 })
+
+describe('EmptyState flat variant', () => {
+  it('strips the card chrome when flat is set, keeps it by default', () => {
+    const flat = mount(EmptyState, { props: { headline: 'Nothing here yet', flat: true } })
+    expect(flat.find('.empty-state').classes()).toContain('empty-state--flat')
+
+    const card = mount(EmptyState, { props: { headline: 'Nothing here yet' } })
+    expect(card.find('.empty-state').classes()).not.toContain('empty-state--flat')
+  })
+})

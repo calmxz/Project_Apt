@@ -13,16 +13,15 @@ defineProps({
     default: 'default',
     validator: (v) => ['default', 'celebrate', 'pause'].includes(v),
   },
+  // Content-only: strips the card background, border, radius and drop
+  // shadow. For call sites that already sit on their own card (e.g. inside
+  // a `.sec` panel) so the empty state doesn't nest a third edge.
+  flat: { type: Boolean, default: false },
 })
 </script>
 
 <template>
-  <div class="empty-state" :data-tone="tone">
-    <div class="empty-rules" aria-hidden="true">
-      <span class="empty-rule" />
-      <span class="empty-rule" />
-      <span class="empty-rule" />
-    </div>
+  <div class="empty-state" :class="{ 'empty-state--flat': flat }" :data-tone="tone">
     <h2 v-if="$slots.headline || headline" class="empty-headline">
       <slot name="headline">{{ headline }}</slot>
     </h2>
@@ -36,26 +35,32 @@ defineProps({
 </template>
 
 <style scoped>
-/* An empty sheet: three feint rules, a line in graphite, a pencil note under
-   it and the way out written in blue. No illustration, no tile, no eyebrow. */
+/* An empty sheet is a single centred card on the desk: a line in graphite, a
+   pencil note under it and the way out written in blue. No illustration, no
+   tile, no eyebrow. */
 .empty-state {
   display: flex;
   flex-direction: column;
-  padding: var(--line-pitch) 0;
-  text-align: left;
+  align-items: center;
+  max-width: 28rem;
+  margin: 0 auto;
+  padding: 2rem 1.75rem;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-card);
+  box-shadow: 0 1px 0 var(--card-drop);
+  text-align: center;
 }
 
-.empty-rules {
-  display: flex;
-  flex-direction: column;
-  margin-bottom: var(--line-pitch);
-}
-
-.empty-rule {
-  display: block;
-  height: calc(var(--line-pitch) - 1px);
-  border-bottom: 1px solid var(--rule);
-  max-width: 22rem;
+/* Content-only variant: no card, no border, no radius, no drop shadow --
+   just the headline, line and link, for call sites that already sit on
+   their own card. */
+.empty-state--flat {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
 }
 
 .empty-headline {
@@ -64,24 +69,26 @@ defineProps({
   font-size: 1.375rem;
   font-weight: 600;
   letter-spacing: var(--tracking-display);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-display);
   color: var(--ink);
 }
 
 .empty-subtext {
-  margin: 0;
+  margin: 0.5rem 0 0;
   max-width: 42rem;
   font-family: var(--font-sans);
   font-size: var(--fs-body);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--pencil);
 }
 
 .empty-cta {
   display: flex;
   flex-wrap: wrap;
-  gap: 0 1.25rem;
-  line-height: var(--line-pitch);
+  justify-content: center;
+  gap: 0.5rem 1.25rem;
+  margin-top: 1rem;
+  line-height: var(--lh-body);
 }
 
 /* The way out is a line of blue text, whatever the call site passes in. */
@@ -94,7 +101,7 @@ defineProps({
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
   font-weight: 700;
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   text-decoration: underline;
   text-underline-offset: 3px;
   cursor: pointer;

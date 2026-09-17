@@ -21,31 +21,20 @@
           @change="setTheme(opt.value)"
         />
         <span :class="['mode-swatch', `mode-swatch--${opt.value}`]" aria-hidden="true">
-          <svg
-            v-if="opt.value === 'auto'"
-            viewBox="0 0 36 48"
-            width="72"
-            height="96"
-            focusable="false"
-          >
-            <rect class="sw-page sw-page--lt" x="0.5" y="0.5" width="17.5" height="47" />
-            <rect class="sw-page sw-page--dk" x="18" y="0.5" width="17.5" height="47" />
-            <rect class="sw-frame" x="0.5" y="0.5" width="35" height="47" fill="none" />
-            <path class="sw-margin sw-margin--lt" d="M9 4 L9 44" />
-            <path class="sw-rule sw-rule--lt" d="M13 14 L18 14" />
-            <path class="sw-rule sw-rule--dk" d="M18 14 L31 14" />
-            <path class="sw-rule sw-rule--lt" d="M13 22 L18 22" />
-            <path class="sw-rule sw-rule--dk" d="M18 22 L31 22" />
-            <path class="sw-rule sw-rule--lt" d="M13 30 L18 30" />
-            <path class="sw-rule sw-rule--dk" d="M18 30 L31 30" />
-          </svg>
-          <svg v-else viewBox="0 0 36 48" width="72" height="96" focusable="false">
-            <rect class="sw-page" x="0.5" y="0.5" width="35" height="47" />
-            <path class="sw-margin" d="M9 4 L9 44" />
-            <path class="sw-rule" d="M13 14 L31 14" />
-            <path class="sw-rule" d="M13 22 L31 22" />
-            <path class="sw-rule" d="M13 30 L31 30" />
-          </svg>
+          <span v-if="opt.value === 'auto'" class="sw-split">
+            <span class="sw-half sw-half--lt">
+              <span class="sw-desk" />
+              <span class="sw-card" />
+            </span>
+            <span class="sw-half sw-half--dk">
+              <span class="sw-desk" />
+              <span class="sw-card" />
+            </span>
+          </span>
+          <span v-else class="sw-stack">
+            <span class="sw-desk" />
+            <span class="sw-card" />
+          </span>
         </span>
         <span class="mode-line">
           <span class="mode-label" :data-label="opt.label">{{ opt.label }}</span>
@@ -123,72 +112,79 @@ const MODES = [
   height: 0;
 }
 
-/* Each swatch is a page drawn in the inks of the theme it names, so the light
-   page stays light while the app is dark. Theme tokens cascade from
-   :root[data-theme], so they cannot express "the other theme" here: these
-   values come from the theme-independent --sw-* tokens declared once in
-   base.css's plain :root block (lifted verbatim from DESIGN.md's palette).
-   The system swatch cannot be drawn from the live tokens either -- that
-   would just mirror whichever theme happens to be active -- so it is drawn
-   as half light page, half dark page, literally split down the middle. */
+/* Each swatch is two small stacked cards drawn in the theme it names, so the
+   light swatch stays light while the app is dark. Theme tokens cascade from
+   :root[data-theme], so they cannot express "the other theme" here: the
+   ground and card layers come from the theme-independent --sw-* tokens
+   declared once in base.css's plain :root block. The card's stroke is the
+   live accent so it reads as blue, the one colour that carries across both
+   themes. The system swatch cannot be drawn from the live tokens either --
+   that would just mirror whichever theme happens to be active -- so it is
+   drawn as half light stack, half dark stack, literally split down the
+   middle. */
 .mode-swatch {
   display: inline-flex;
 }
 
 .mode-swatch--light {
-  --sw-page: var(--sw-light-paper);
+  --sw-desk: var(--sw-light-paper);
+  --sw-card: var(--sw-light-rule);
   --sw-ink: var(--sw-light-ink);
-  --sw-rule: var(--sw-light-rule);
-  --sw-margin: var(--sw-light-margin);
 }
 
 .mode-swatch--dark {
-  --sw-page: var(--sw-dark-paper);
+  --sw-desk: var(--sw-dark-paper);
+  --sw-card: var(--sw-dark-rule);
   --sw-ink: var(--sw-dark-ink);
-  --sw-rule: var(--sw-dark-rule);
-  --sw-margin: var(--sw-dark-margin);
 }
 
-.sw-page {
-  fill: var(--sw-page);
-  stroke: var(--sw-ink);
-  stroke-width: 1;
+.sw-stack {
+  position: relative;
+  display: inline-block;
+  width: 56px;
+  height: 72px;
 }
 
-.sw-margin {
-  stroke: var(--sw-margin);
-  stroke-width: 2;
-  stroke-linecap: round;
+.sw-split {
+  display: flex;
 }
 
-.sw-rule {
-  stroke: var(--sw-rule);
-  stroke-width: 1;
+.sw-half {
+  position: relative;
+  display: inline-block;
+  width: 28px;
+  height: 72px;
 }
 
-.sw-page--lt {
-  fill: var(--sw-light-paper);
+.sw-half--lt {
+  --sw-desk: var(--sw-light-paper);
+  --sw-card: var(--sw-light-rule);
+  --sw-ink: var(--sw-light-ink);
 }
 
-.sw-page--dk {
-  fill: var(--sw-dark-paper);
+.sw-half--dk {
+  --sw-desk: var(--sw-dark-paper);
+  --sw-card: var(--sw-dark-rule);
+  --sw-ink: var(--sw-dark-ink);
 }
 
-.sw-frame {
-  stroke: var(--sw-light-ink);
-  stroke-width: 1;
+.sw-desk {
+  position: absolute;
+  inset: 0;
+  background: var(--sw-desk);
+  border: 1px solid var(--sw-ink);
+  border-radius: var(--radius-card);
 }
 
-.sw-margin--lt {
-  stroke: var(--sw-light-margin);
-}
-
-.sw-rule--lt {
-  stroke: var(--sw-light-rule);
-}
-
-.sw-rule--dk {
-  stroke: var(--sw-dark-rule);
+.sw-card {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 3px;
+  bottom: 3px;
+  background: var(--sw-card);
+  border: 2px solid var(--color-accent);
+  border-radius: var(--radius-card);
 }
 
 .mode-line {

@@ -51,24 +51,31 @@ describe('Composer — touch targets', () => {
   })
 })
 
-describe('CueColumn — disclosure touch target', () => {
+describe('CueColumn — disclosure and panel-collapse touch targets', () => {
   let CueColumn
+
+  const entry = (name) => ({ name, evidence_type: null, last_event_at: null })
+  const profile = {
+    knowledge_level: null,
+    subtopic_levels: {},
+    confirmed_gaps: [entry('gap one')],
+    mastered_concepts: [],
+    focus_target_gap: null,
+    last_session_summary: null,
+  }
+
   beforeEach(async () => {
     CueColumn = (await import('@/components/chat/CueColumn.vue')).default
   })
 
   it('the cue disclosure carries hit-44', () => {
-    const entry = (name) => ({ name, evidence_type: null, last_event_at: null })
-    const profile = {
-      knowledge_level: null,
-      subtopic_levels: {},
-      confirmed_gaps: [entry('gap one')],
-      mastered_concepts: [],
-      focus_target_gap: null,
-      last_session_summary: null,
-    }
     const w = mount(CueColumn, { props: { profile, sessionId: 's1' } })
     expect(w.get('[data-testid="cue-disclosure"]').classes()).toContain('hit-44')
+  })
+
+  it('the panel collapse toggle carries hit-44', () => {
+    const w = mount(CueColumn, { props: { profile, sessionId: 's1' } })
+    expect(w.get('[data-testid="cue-collapse-toggle"]').classes()).toContain('hit-44')
   })
 })
 

@@ -1,5 +1,5 @@
 <template>
-  <div class="usage-tab">
+  <div class="usage-tab sec">
     <div v-if="loading" class="skel" data-testid="usage-tab-loading" aria-hidden="true">
       <span class="skel-block" />
       <span class="skel-block" />
@@ -36,6 +36,16 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.usage-tab.sec {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  background: var(--desk-deep);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-card);
+  padding: 1rem 1.25rem 1.25rem;
+}
+
 /* A failed read is a line of text-safe red on the pitch, not a banner. */
 .error {
   margin: 0;

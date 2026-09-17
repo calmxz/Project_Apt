@@ -360,18 +360,18 @@ defineExpose({ load }) // used by control/pagination tasks
 </template>
 
 <style scoped>
-/* The contents page: every session one ruled entry, the controls written in
-   blue above them. No cards, no radius, no shadow. */
+/* The contents page: every session a white card in a list, the controls
+   written in blue above them, desk ground around the list. */
 .library {
   max-width: 56rem;
   margin: 0 auto;
-  padding: var(--line-pitch) 0 calc(var(--line-pitch) * 2);
+  padding: 1.75rem 0 3.5rem;
 }
 
 .library-head {
   display: flex;
   flex-direction: column;
-  margin-bottom: var(--line-pitch);
+  margin-bottom: 1.75rem;
 }
 
 .library-back {
@@ -382,7 +382,7 @@ defineExpose({ load }) // used by control/pagination tasks
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
   font-weight: 700;
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--ink-learner);
   text-decoration: none;
 }
@@ -418,7 +418,7 @@ defineExpose({ load }) // used by control/pagination tasks
   flex-wrap: wrap;
   align-items: baseline;
   gap: 0 1.25rem;
-  margin-bottom: var(--line-pitch);
+  margin-bottom: 1.75rem;
 }
 
 .library-filter {
@@ -438,7 +438,7 @@ defineExpose({ load }) // used by control/pagination tasks
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
   font-weight: 700;
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   cursor: pointer;
 }
 
@@ -474,7 +474,7 @@ defineExpose({ load }) // used by control/pagination tasks
   caret-color: var(--ink-learner);
   font-family: var(--font-sans);
   font-size: var(--fs-body);
-  line-height: calc(var(--line-pitch) - 1px);
+  line-height: var(--lh-body);
 }
 
 .library-search::placeholder {
@@ -508,7 +508,7 @@ defineExpose({ load }) // used by control/pagination tasks
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
   font-weight: 700;
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   cursor: pointer;
 }
 
@@ -524,14 +524,14 @@ defineExpose({ load }) // used by control/pagination tasks
   pointer-events: none;
 }
 
-/* Ruled entries. */
+/* Session cards, one per row. */
 .library-list {
   list-style: none;
   margin: 0;
   padding: 0;
-  background-image: var(--ruled-bg);
-  background-position-y: var(--ruled-offset);
-  background-attachment: local;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
 }
 
 .library-row {
@@ -539,11 +539,15 @@ defineExpose({ load }) // used by control/pagination tasks
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
   column-gap: 1rem;
-  padding: 0 0.25rem 0 0.75rem;
+  padding: 0.875rem 1rem;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-card);
+  box-shadow: 0 1px 0 var(--card-drop);
 }
 
 .library-row:hover {
-  background: var(--color-surface-soft);
+  border-color: var(--card-drop);
 }
 
 .library-card-link {
@@ -565,7 +569,7 @@ defineExpose({ load }) // used by control/pagination tasks
   justify-content: space-between;
   gap: 0.5rem;
   min-width: 0;
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
 }
 
 .library-topic {
@@ -591,12 +595,13 @@ defineExpose({ load }) // used by control/pagination tasks
 
 .library-mastered-mark {
   flex: 0 0 auto;
-  color: var(--ink-learner);
+  /* Mastered tick is green everywhere (tab law). */
+  color: var(--tab-mastered);
 }
 
 .library-chips {
   display: block;
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
 }
 
 .library-desc {
@@ -606,7 +611,7 @@ defineExpose({ load }) // used by control/pagination tasks
   overflow: hidden;
   font-family: var(--font-sans);
   font-size: var(--fs-label);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--pencil);
 }
 
@@ -630,7 +635,7 @@ defineExpose({ load }) // used by control/pagination tasks
   display: block;
   font-family: var(--font-sans);
   font-size: var(--fs-label);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--pencil);
 }
 
@@ -643,7 +648,7 @@ defineExpose({ load }) // used by control/pagination tasks
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
   font-weight: 700;
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   text-decoration: underline;
   text-underline-offset: 3px;
   cursor: pointer;
@@ -672,7 +677,7 @@ defineExpose({ load }) // used by control/pagination tasks
   margin: 0;
   font-family: var(--font-sans);
   font-size: var(--fs-body);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   color: var(--ink-marker-text);
 }
 
@@ -680,7 +685,7 @@ defineExpose({ load }) // used by control/pagination tasks
   display: flex;
   align-items: baseline;
   gap: 1.25rem;
-  min-height: var(--line-pitch);
+  min-height: 1.75rem;
   padding: 0 0.25rem 0 0.75rem;
 }
 
@@ -696,7 +701,7 @@ defineExpose({ load }) // used by control/pagination tasks
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
   font-weight: 700;
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   text-decoration: underline;
   text-underline-offset: 3px;
   cursor: pointer;
@@ -721,7 +726,7 @@ defineExpose({ load }) // used by control/pagination tasks
   margin: 0;
   font-family: var(--font-sans);
   font-size: var(--fs-label);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
 }
 
 @media (max-width: 599px) {

@@ -5,6 +5,7 @@ import Toast from 'primevue/toast'
 import ConfirmDialog from 'primevue/confirmdialog'
 import { useToast } from './composables/useToast.js'
 import { useSidebar } from './composables/useSidebar.js'
+import { usePanel } from './composables/usePanel.js'
 import { errorBus } from './services/errorBus.js'
 import { friendlyError } from './lib/errors.js'
 import Sidebar from './components/sidebar/Sidebar.vue'
@@ -13,11 +14,12 @@ import RouteProgressBar from './components/RouteProgressBar.vue'
 
 const { showError } = useToast()
 const route = useRoute()
-const { isDesktop, mode, closeDrawer } = useSidebar()
+const { isDesktop, mode, closeDrawer, openDrawer, toggleDesktop } = useSidebar()
+const { toggleDesktop: togglePanel } = usePanel()
 
 const showShell = computed(() => route.meta?.sidebar !== false)
-// Sheet routes are the page itself: they run edge to edge so the ruled ground
-// and the margin rule reach the full width of the shell.
+// Sheet routes are the page itself: they run edge to edge so the desk ground
+// reaches the full width of the shell.
 const isSheet = computed(() => route.meta?.sheet === true)
 const { drawerOpen } = useSidebar()
 
@@ -63,6 +65,49 @@ const onApiError = (e) => {
 }
 onMounted(() => errorBus.addEventListener('api-error', onApiError))
 onBeforeUnmount(() => errorBus.removeEventListener('api-error', onApiError))
+
+// Shell shortcuts: Ctrl+B folds the sidebar, Ctrl+. folds the profile panel.
+// Both are no-ops while the user is typing, and while a PrimeVue overlay owns
+// the screen -- a dialog or popover is a modal context, not the shell.
+const EDITABLE_TAGS = ['INPUT', 'TEXTAREA', 'SELECT']
+
+function isEditableTarget(target) {
+  if (!target || typeof target !== 'object') return false
+  if (EDITABLE_TAGS.includes(target.tagName)) return true
+  return target.isContentEditable === true
+}
+
+function overlayOpen() {
+  if (typeof document === 'undefined') return false
+  return Boolean(document.querySelector('.p-overlay-mask, .p-dialog, .p-popover'))
+}
+
+function onShellKeydown(e) {
+  // Ctrl only: Ctrl+Shift+B is the browser's own bookmarks-bar toggle.
+  if (!e.ctrlKey || e.shiftKey || e.altKey || e.metaKey) return
+  if (isEditableTarget(e.target)) return
+  if (overlayOpen()) return
+
+  const key = typeof e.key === 'string' ? e.key.toLowerCase() : ''
+  if (key === 'b') {
+    if (isDesktop.value) toggleDesktop()
+    else if (drawerOpen.value) closeDrawer()
+    else openDrawer()
+    e.preventDefault()
+    return
+  }
+  if (key === '.' || e.code === 'Period') {
+    togglePanel()
+    e.preventDefault()
+  }
+}
+
+onMounted(() => {
+  if (typeof window !== 'undefined') window.addEventListener('keydown', onShellKeydown)
+})
+onBeforeUnmount(() => {
+  if (typeof window !== 'undefined') window.removeEventListener('keydown', onShellKeydown)
+})
 </script>
 
 <template>

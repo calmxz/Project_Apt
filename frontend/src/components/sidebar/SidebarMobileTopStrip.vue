@@ -77,8 +77,8 @@ const { openDrawer } = useSidebar()
   gap: 0.5rem;
   height: var(--sidebar-mobile-strip-height, 3rem);
   padding: 0 0.5rem;
-  background: var(--color-background);
-  border-bottom: 1px solid var(--rule-strong);
+  background: var(--desk-deep);
+  border-bottom: 1px solid var(--card-edge);
 }
 
 .sb-strip-brand {

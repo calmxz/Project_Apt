@@ -49,7 +49,8 @@ function onClick() {
 </script>
 
 <style scoped>
-/* A plain blue back line, not a labelled control block. */
+/* A plain pencil text control, not a labelled control block. Hover/focus
+   pick up the blue, matching every other interactive control. */
 .back-btn {
   display: inline-flex;
   align-items: center;
@@ -59,12 +60,17 @@ function onClick() {
   padding: 0;
   margin: 0;
   cursor: pointer;
-  color: var(--ink-learner);
+  color: var(--pencil);
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
   font-weight: 700;
-  line-height: var(--line-pitch);
+  line-height: 1.75rem;
   border-radius: var(--radius-sm);
+  transition: color var(--motion-fast) ease;
+}
+
+.back-btn:hover {
+  color: var(--color-accent);
 }
 
 .back-btn:hover .label {
@@ -73,6 +79,7 @@ function onClick() {
 }
 
 .back-btn:focus-visible {
+  color: var(--color-accent);
   outline: 2px solid var(--color-accent-ring);
   outline-offset: 2px;
 }

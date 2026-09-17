@@ -28,56 +28,75 @@ defineProps({
 </template>
 
 <style scoped>
-/* Pencil-gray bars on the rules; no shimmer, no gradients. */
+/* Card-shaped grey blocks; no shimmer, no gradients. */
 .msg-skel {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
 }
 
 .msg-skel-row {
-  display: grid;
-  grid-template-columns: 5rem minmax(0, 1fr);
-  gap: 0 0.75rem;
-  padding: var(--line-pitch) 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: 78%;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-card);
+  box-shadow: 0 1px 0 var(--card-drop);
+  padding: 0.55rem 0.9rem 0.7rem;
+}
+
+.msg-skel-row--user {
+  align-self: flex-end;
+  background: var(--card-learner);
+  border-color: var(--card-learner-edge);
 }
 
 .msg-skel-tag {
   display: block;
   width: 2.25rem;
-  height: 1px;
-  margin-top: calc(var(--line-pitch) / 2);
-  background: var(--rule-strong);
+  height: 0.5rem;
+  border-radius: var(--radius-sm);
+  background: var(--card-edge);
+}
+
+.msg-skel-row--user .msg-skel-tag {
+  background: var(--card-learner-edge);
 }
 
 .msg-skel-body {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
   min-width: 0;
 }
 
 .msg-skel-line {
   display: block;
-  height: 1px;
-  width: 36rem;
+  height: 0.6rem;
+  width: 20rem;
   max-width: 100%;
-  margin-top: calc(var(--line-pitch) - 1px);
-  background: var(--rule-strong);
+  border-radius: var(--radius-sm);
+  background: var(--card-edge);
 }
 
 .msg-skel-line--short {
-  width: 18rem;
+  width: 10rem;
 }
 
 .msg-skel-row--user .msg-skel-line {
-  width: 22rem;
+  width: 14rem;
+  background: var(--card-learner-edge);
 }
 
 .msg-skel-row--user .msg-skel-line--short {
-  width: 12rem;
+  width: 8rem;
 }
 
 @media (max-width: 599px) {
   .msg-skel-row {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 0;
+    max-width: 92%;
   }
 }
 </style>

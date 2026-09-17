@@ -1267,6 +1267,53 @@ describe('Sidebar.vue — review entry', () => {
   })
 })
 
+// Card Box redesign (Task 5): the desktop collapse toggle is a visible
+// half-tab on the sidebar's right edge instead of an icon buried in the
+// header, and the collapsed rail marks sessions as dots instead of strokes.
+describe('Sidebar.vue — card box collapse toggle and collapsed dots', () => {
+  let wrapper
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    routerPush.mockClear()
+    localStorage.clear()
+    setViewport(1400)
+    routeRef.params = {}
+    routeRef.fullPath = '/'
+  })
+  afterEach(() => wrapper?.unmount())
+
+  it('the half-tab collapse toggle carries hit-44 and a descriptive aria-label', async () => {
+    sidebarTest._setExpanded(true)
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    const toggle = wrapper.get('[data-testid="sidebar-collapse-toggle"]')
+    expect(toggle.classes()).toContain('hit-44')
+    expect(toggle.classes()).toContain('sb-toggle--edge')
+    expect(toggle.attributes('aria-label')).toBe('Collapse sidebar')
+
+    await toggle.trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="sidebar-collapse-toggle"]').attributes('aria-label')).toBe(
+      'Expand sidebar',
+    )
+  })
+
+  it('renders one dot per session in the collapsed rail, current session marked', async () => {
+    sidebarTest._setExpanded(false)
+    routeRef.params = { id: 'a1' }
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'a1', topic: 'Big-O', created_at: new Date().toISOString(), ended_at: null },
+      { id: 'a2', topic: 'Trees', created_at: new Date().toISOString(), ended_at: null },
+    ]
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    const marks = wrapper.findAll('.sb-session-list--collapsed .sb-row-mark')
+    expect(marks).toHaveLength(2)
+    expect(wrapper.find('[data-session-id="a1"]').classes()).toContain('sb-row--current')
+  })
+})
+
 describe('session store — rename + pin actions', () => {
   beforeEach(() => {
     setActivePinia(createPinia())

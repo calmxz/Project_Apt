@@ -72,6 +72,11 @@ defineProps({
   gap: 0.3125rem;
   min-width: 0;
   max-width: 100%;
+  padding: 0.15rem 0.5rem;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-card);
+  box-shadow: 0 1px 0 var(--card-drop);
   font-family: var(--font-sans);
   white-space: nowrap;
 }
@@ -124,7 +129,7 @@ defineProps({
 
 .chips--rail .chip {
   font-size: var(--fs-label);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
 }
 
 .chips--rail .chip--focus .chip-text {
@@ -133,7 +138,7 @@ defineProps({
 
 .chips--card .chip {
   font-size: var(--fs-label);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
 }
 
 .chips--card .chip--focus .chip-text {

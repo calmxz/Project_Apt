@@ -114,7 +114,7 @@ function select(value) {
   font-size: var(--fs-body);
   font-weight: 700;
   line-height: var(--line-pitch);
-  color: var(--ink-learner);
+  color: var(--color-accent);
 }
 
 .radio-body {
@@ -147,6 +147,9 @@ function select(value) {
   color: var(--pencil);
 }
 
+/* Blue tick: a control state, not a Mastered signal. Tab-colour law
+   reserves green for Mastered only, so the picker's own selected-state
+   mark uses the same learner-blue ink as other interactive affordances. */
 .radio-tick {
   align-self: center;
   flex: 0 0 auto;

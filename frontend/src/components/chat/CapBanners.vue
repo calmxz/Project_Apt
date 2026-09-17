@@ -39,19 +39,23 @@ const store = useSessionStore()
 </script>
 
 <style scoped>
-/* A status caption, not a banner: one line, ink on paper, inside a full rule. */
+/* A status caption card: card stock with a 3px tab-colour rule at the head,
+   never a side border. */
 .cap-banner {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 0.5rem;
-  padding: 0.25rem 0.75rem;
-  border: 1px solid var(--ink-marker);
-  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.75rem;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-top: 3px solid var(--tab-focus);
+  /* Head rule reads as a tab edge: top corners square, bottom corners card radius. */
+  border-radius: 0 0 var(--radius-card) var(--radius-card);
   color: var(--ink);
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
-  line-height: var(--line-pitch);
+  line-height: var(--lh-body);
   animation: cap-land var(--motion-ink) cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 

@@ -212,7 +212,7 @@ const ledger = computed(() =>
 .meter-fill {
   display: block;
   height: 100%;
-  background: var(--ink-learner);
+  background: var(--color-accent);
 }
 
 .tier-marker {
@@ -294,7 +294,7 @@ const ledger = computed(() =>
   display: block;
   height: 6px;
   width: 0;
-  background: var(--ink-learner);
+  background: var(--color-accent);
 }
 
 .ledger-bar--filled {
