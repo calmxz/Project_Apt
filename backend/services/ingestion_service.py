@@ -42,7 +42,13 @@ boundary: merge_into_session only flushes, and the closing db.commit() after
 step 6 covers it (F-27 applies only to this tail, not to the already-durable
 embedding batches). On exception at any step: db.rollback() first (discards
 any unflushed/uncommitted work from this run -- committed batches are
-unaffected), then status=failed, error=str(exc)[:1000], committed alone.
+unaffected), then status=failed and a fixed error string, committed alone.
+
+C-11: `documents.error` is rendered verbatim by the frontend, so it never
+carries exception text (which can embed server paths, blob keys, or provider
+payloads). Every value this module writes is one of the constants collected
+in INGEST_ERROR_MESSAGES, selected by the pipeline stage that failed; the
+original exception goes to the log line only.
 """
 
 import io
@@ -65,6 +71,37 @@ from services import cost_meter, object_store, pgvector_store
 log = logging.getLogger(__name__)
 
 EMBED_BATCH = 100
+
+# C-11: the complete inventory of strings that may reach `documents.error`.
+# The frontend renders this column verbatim (ReferenceStatusBanner.vue,
+# SessionView.vue), so each one is human-readable and free of any detail
+# derived from an exception, a path, or a provider response.
+ERR_EXTRACTION_FAILED = "text extraction failed"
+ERR_EMBEDDING_FAILED = "embedding failed"
+ERR_INGESTION_FAILED = "ingestion failed"
+ERR_CHUNK_LIMIT = "document too large to ingest (chunk limit)"
+ERR_COST_CAP = "daily cost cap reached; ingestion stopped"
+# Written by routes/upload.py when the blob write fails; listed here so this
+# frozenset stays the single inventory for the whole documents.error column.
+ERR_STORAGE_WRITE = "storage write failed"
+
+INGEST_ERROR_MESSAGES: frozenset[str] = frozenset(
+    {
+        ERR_EXTRACTION_FAILED,
+        ERR_EMBEDDING_FAILED,
+        ERR_INGESTION_FAILED,
+        ERR_CHUNK_LIMIT,
+        ERR_COST_CAP,
+        ERR_STORAGE_WRITE,
+    }
+)
+
+# Pipeline stage -> persisted message for the generic failure arm.
+_STAGE_ERRORS = {
+    "extract": ERR_EXTRACTION_FAILED,
+    "embed": ERR_EMBEDDING_FAILED,
+    "other": ERR_INGESTION_FAILED,
+}
 
 
 def _load_blob(
@@ -210,9 +247,15 @@ def run(document_id: int) -> None:
         # reusable after close(); the next statement checks out a fresh
         # connection. `doc` is detached from here until the re-fetch below.
         db.close()
+        # C-11: which stage is running decides which enumerated message the
+        # generic failure arm persists. Tracked here rather than inside the
+        # helpers so a raise from anywhere in the call tree is classified.
+        stage = "other"
         try:
             blob = _load_blob(object_store.get_store(), document_id, filename)
+            stage = "extract"
             pages = _extract(blob, filename)
+            stage = "other"
             # F-03: the cap is enforced inside the chunker so an oversized
             # document aborts mid-stream instead of materialising every chunk
             # first and only then failing the count check.
@@ -247,7 +290,9 @@ def run(document_id: int) -> None:
                 .where(SessionModel.id == session_id)
                 .values(chunk_centroid=None)
             )
+            stage = "embed"
             _embed_and_store(db, doc, chunks, user_id=owner_id)
+            stage = "other"
 
             stems: set[str] = set()
             for c in chunks:
@@ -274,7 +319,7 @@ def run(document_id: int) -> None:
             doc = db.get(Document, document_id)
             if doc is not None:
                 doc.status = "failed"
-                doc.error = "document too large to ingest (chunk limit)"
+                doc.error = ERR_CHUNK_LIMIT
                 db.commit()
             return
         except cost_meter.CostCapExceeded:
@@ -291,14 +336,14 @@ def run(document_id: int) -> None:
             doc = db.get(Document, document_id)
             if doc is not None:
                 doc.status = "failed"
-                doc.error = "daily cost cap reached; ingestion stopped"
+                doc.error = ERR_COST_CAP
                 db.commit()
             return
         except Exception as e:
             db.rollback()
             log.error(
-                "ingestion failed document_id=%s session_id=%s error=%s",
-                document_id, session_id, e,
+                "ingestion failed document_id=%s session_id=%s stage=%s error=%s",
+                document_id, session_id, stage, e,
                 extra={"err_type": type(e).__name__, "doc_id": document_id},
                 exc_info=settings.env != "prod",
             )
@@ -310,7 +355,8 @@ def run(document_id: int) -> None:
             doc = db.get(Document, document_id)
             if doc is not None:
                 doc.status = "failed"
-                doc.error = str(e)[:1000]
+                # C-11: never str(e) here -- the frontend renders this value.
+                doc.error = _STAGE_ERRORS[stage]
                 db.commit()
     finally:
         db.close()
