@@ -132,6 +132,15 @@ async def create_session(
     user_id: str = Depends(current_user_id),
     db: Session = Depends(get_db),
 ):
+    # C-09: minLength=1 in the contract only rejects "". A whitespace-only
+    # topic passes validation and used to be stored as "" after the
+    # downstream .strip(). Normalise and reject here, before any side effect
+    # (ensure_user, duplicate-topic lookup, prior claim-end, rate limit).
+    topic = req.topic.strip()
+    if not topic:
+        raise HTTPException(status_code=422, detail={"code": "empty_topic"})
+    req.topic = topic
+
     if req.seed_mode == "resume" and req.prior_session_id is None:
         raise HTTPException(
             status_code=400, detail="prior_session_id required when seed_mode=resume"
@@ -639,6 +648,13 @@ def update_session(
 ):
     if req.topic is None and req.pinned is None:
         raise HTTPException(status_code=400, detail="at least one field required")
+    if req.topic is not None:
+        # C-09: whitespace-only rename would blank the topic. Reject before
+        # the row lookup and any mutation.
+        topic = req.topic.strip()
+        if not topic:
+            raise HTTPException(status_code=422, detail={"code": "empty_topic"})
+        req.topic = topic
     row = db.get(SessionModel, session_id)
     if row is None or row.user_id != user_id:
         raise HTTPException(status_code=404, detail="session not found")
