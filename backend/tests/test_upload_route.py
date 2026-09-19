@@ -505,3 +505,74 @@ def test_pdf_upload_not_subject_to_byte_estimate(client, seeded, monkeypatch):
         files=files,
     )
     assert r.status_code == 202  # PDFs skip the estimate; worker cap catches them
+
+
+def _blank_pdf_bytes(pages: int) -> bytes:
+    from pypdf import PdfWriter
+
+    writer = PdfWriter()
+    for _ in range(pages):
+        writer.add_blank_page(width=72, height=72)
+    buf = io.BytesIO()
+    writer.write(buf)
+    return buf.getvalue()
+
+
+def test_pdf_over_page_limit_413(client, seeded, monkeypatch):
+    """F-03: an oversized PDF must be rejected at upload, before a worker ever
+    loads and tokenises the whole document."""
+    monkeypatch.setattr("routes.upload.settings.max_pages", 2)
+    files = {"file": ("big.pdf", io.BytesIO(_blank_pdf_bytes(3)), "application/pdf")}
+    r = client.post(
+        "/api/upload", data={"user_id": USER_ID, "session_id": SESSION_ID}, files=files
+    )
+    assert r.status_code == 413, r.text
+    detail = r.json()["detail"]
+    assert detail["code"] == "page_limit_exceeded"
+    assert detail["max_pages"] == 2
+    assert detail["page_count"] == 3
+
+
+def test_pdf_under_page_limit_accepted(client, seeded, monkeypatch):
+    monkeypatch.setattr("routes.upload.settings.max_pages", 5)
+    files = {"file": ("small.pdf", io.BytesIO(_blank_pdf_bytes(2)), "application/pdf")}
+    r = client.post(
+        "/api/upload", data={"user_id": USER_ID, "session_id": SESSION_ID}, files=files
+    )
+    assert r.status_code == 202, r.text
+
+
+def test_unparseable_pdf_passes_the_page_gate(client, seeded, monkeypatch):
+    """The gate is advisory: a file pypdf cannot open is let through so the
+    ingestion pipeline reports the extraction failure as it always has."""
+    monkeypatch.setattr("routes.upload.settings.max_pages", 1)
+    files = {"file": ("broken.pdf", io.BytesIO(b"%PDF-fake"), "application/pdf")}
+    r = client.post(
+        "/api/upload", data={"user_id": USER_ID, "session_id": SESSION_ID}, files=files
+    )
+    assert r.status_code == 202, r.text
+
+
+def test_pptx_over_slide_limit_413(client, seeded, monkeypatch):
+    from pptx import Presentation
+
+    monkeypatch.setattr("routes.upload.settings.max_pages", 1)
+    prs = Presentation()
+    for _ in range(2):
+        prs.slides.add_slide(prs.slide_layouts[6])
+    buf = io.BytesIO()
+    prs.save(buf)
+    files = {
+        "file": (
+            "deck.pptx",
+            io.BytesIO(buf.getvalue()),
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        )
+    }
+    r = client.post(
+        "/api/upload", data={"user_id": USER_ID, "session_id": SESSION_ID}, files=files
+    )
+    assert r.status_code == 413, r.text
+    detail = r.json()["detail"]
+    assert detail["code"] == "page_limit_exceeded"
+    assert detail["page_count"] == 2

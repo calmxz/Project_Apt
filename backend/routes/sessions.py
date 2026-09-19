@@ -11,6 +11,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from agent import prompts, tutor
 from agent.stream_events import StreamEvent
@@ -146,7 +147,33 @@ async def create_session(
             detail="declared_level forbidden when seed_mode=resume",
         )
 
-    ensure_user(db, user_id, accepted_terms=accepted_terms_from_request(request))
+    prior, allow_llm, owes_summary = await run_in_threadpool(
+        _create_session_claim,
+        req,
+        user_id,
+        db,
+        accepted_terms_from_request(request),
+    )
+    if owes_summary:
+        # A resume-triggered summary fires a full-transcript LLM call, so it is
+        # counted like a chat turn and the end is claimed first (see
+        # _create_session_claim), else a concurrent explicit end double-pays;
+        # the open check batch is abandoned inside generate_and_persist
+        # (F-03/F-30/F-31).
+        await summary_service.generate_and_persist(db, prior, allow_llm=allow_llm)
+    return await run_in_threadpool(_create_session_finish, req, user_id, db, prior)
+
+
+def _create_session_claim(
+    req: SessionCreateRequest, user_id: str, db: Session, accepted_terms: bool
+):
+    """F-11: synchronous guard + prior-claim segment of create_session.
+
+    Order is load-bearing and unchanged: ensure_user -> duplicate-topic 409
+    -> prior lookup/claim-end -> rate limit. Returns (prior, allow_llm,
+    owes_summary); prior is None unless this is a resume.
+    """
+    ensure_user(db, user_id, accepted_terms=accepted_terms)
 
     # This check must run BEFORE the resume block below. The resume block has
     # irreversible side effects (claim-end the prior, consume a rate-limit
@@ -164,25 +191,29 @@ async def create_session(
             detail={"code": "duplicate_topic", "session_id": existing},
         )
 
-    new_id = uuid.uuid4().hex
-    profile_json = TopicProfile(knowledge_level=req.declared_level).model_dump_json()
+    if req.seed_mode != "resume":
+        return None, None, False
 
-    if req.seed_mode == "resume":
-        prior = db.get(SessionModel, req.prior_session_id)
-        if prior is None or prior.user_id != user_id:
-            raise HTTPException(status_code=404, detail="prior session not found")
-        if prior.ended_at is None and _claim_end(db, prior.id):
-            # A resume-triggered summary fires a full-transcript LLM call, so
-            # count it like a chat turn and claim the end first, else a
-            # concurrent explicit end double-pays; the open check batch is
-            # abandoned inside generate_and_persist (F-03/F-30/F-31).
-            allow_llm, _ = rate_limit.check_and_increment(db, user_id)
-            await summary_service.generate_and_persist(db, prior, allow_llm=allow_llm)
+    prior = db.get(SessionModel, req.prior_session_id)
+    if prior is None or prior.user_id != user_id:
+        raise HTTPException(status_code=404, detail="prior session not found")
+    if prior.ended_at is None and _claim_end(db, prior.id):
+        allow_llm, _ = rate_limit.check_and_increment(db, user_id)
+        return prior, allow_llm, True
+    return prior, None, False
+
+
+def _create_session_finish(
+    req: SessionCreateRequest, user_id: str, db: Session, prior: SessionModel | None
+) -> SessionResponse:
+    """F-11: synchronous insert/response segment of create_session."""
+    profile_json = TopicProfile(knowledge_level=req.declared_level).model_dump_json()
+    if prior is not None:
         db.refresh(prior)
         profile_json = prior.topic_profile_json
 
     new_session = SessionModel(
-        id=new_id,
+        id=uuid.uuid4().hex,
         user_id=user_id,
         topic=req.topic.strip(),
         topic_profile_json=profile_json,
@@ -205,13 +236,20 @@ async def create_session(
 
 @router.get("/sessions", response_model=list[SessionListItem])
 def list_sessions(
+    limit: int = Query(100, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     user_id: str = Depends(current_user_id),
     db: Session = Depends(get_db),
 ):
+    # F-06: unbounded before -- a heavy account loaded (and enriched) every
+    # session it had ever created on one request. Default 100 keeps every
+    # current caller's behaviour intact.
     rows = db.execute(
         select(SessionModel)
         .where(SessionModel.user_id == user_id)
         .order_by(SessionModel.created_at.desc())
+        .limit(limit)
+        .offset(offset)
     ).scalars().all()
     return _enrich_list_items(db, rows)
 
@@ -355,7 +393,10 @@ def lookup_sessions_by_topic(
         return SessionLookupResult()
 
     def _to_match(row: SessionModel) -> SessionMatch:
-        profile = TopicProfile.model_validate_json(row.topic_profile_json)
+        # C-01: tolerant parse. TopicProfile is codegen'd with extra="forbid",
+        # so a row written under an older profile schema would 500 the whole
+        # lookup under a strict model_validate_json.
+        profile = profile_service.profile_from_row(row)
         return SessionMatch(
             session_id=row.id,
             title=row.topic,
@@ -449,6 +490,58 @@ def _claim_end(db: Session, session_id: str) -> bool:
     return result.rowcount == 1
 
 
+def _end_session_claim(session_id: str, user_id: str, db: Session):
+    """F-11: synchronous 404 guard + end-claim segment of end_session.
+
+    Returns (row, replay_response, warn, allow_llm). replay_response is
+    non-None only when the end was already claimed (F-30 idempotent replay);
+    in that case the caller must return it without any LLM call.
+    """
+    row = db.get(SessionModel, session_id)
+    if row is None or row.user_id != user_id:
+        raise HTTPException(status_code=404, detail="session not found")
+
+    if not _claim_end(db, session_id):
+        # Already ended, or lost the race to a concurrent end: replay the
+        # stored summary; no second LLM call (F-30).
+        db.refresh(row)
+        profile = profile_service.load_profile(db, session_id)
+        warn = cost_meter.cost_warning_header(db, user_id)
+        return (
+            row,
+            SessionEndResponse(
+                id=row.id,
+                ended_at=_aware_utc(row.ended_at),
+                summary=_build_end_summary(
+                    db, session_id, profile.last_session_summary or ""
+                ),
+            ),
+            warn,
+            None,
+        )
+
+    # F-03: an end fires a full-transcript LLM call; count it like a chat
+    # turn. At the cap the end still succeeds with a mechanical summary.
+    allow_llm, _ = rate_limit.check_and_increment(db, user_id)
+    return row, None, None, allow_llm
+
+
+def _end_session_finish(
+    session_id: str, user_id: str, db: Session, row: SessionModel, summary_text: str
+):
+    """F-11: synchronous post-summary segment of end_session."""
+    db.refresh(row)
+    warn = cost_meter.cost_warning_header(db, user_id)
+    return (
+        SessionEndResponse(
+            id=row.id,
+            ended_at=_aware_utc(row.ended_at),
+            summary=_build_end_summary(db, session_id, summary_text),
+        ),
+        warn,
+    )
+
+
 @router.post(
     "/sessions/{session_id}/end",
     response_model=SessionEndResponse,
@@ -462,37 +555,21 @@ async def end_session(
 ):
     t0 = time.perf_counter()
     try:
-        row = db.get(SessionModel, session_id)
-        if row is None or row.user_id != user_id:
-            raise HTTPException(status_code=404, detail="session not found")
-
-        if not _claim_end(db, session_id):
-            # Already ended, or lost the race to a concurrent end: replay the
-            # stored summary; no second LLM call (F-30).
-            db.refresh(row)
-            profile = profile_service.load_profile(db, session_id)
-            warn = cost_meter.cost_warning_header(db, user_id)
+        row, replay, warn, allow_llm = await run_in_threadpool(
+            _end_session_claim, session_id, user_id, db
+        )
+        if replay is not None:
             if warn:
                 response.headers["X-Cost-Warning"] = warn
-            return SessionEndResponse(
-                id=row.id,
-                ended_at=_aware_utc(row.ended_at),
-                summary=_build_end_summary(db, session_id, profile.last_session_summary or ""),
-            )
+            return replay
 
-        # F-03: an end fires a full-transcript LLM call; count it like a chat
-        # turn. At the cap the end still succeeds with a mechanical summary.
-        allow_llm, _ = rate_limit.check_and_increment(db, user_id)
         summary_text = await summary_service.generate_and_persist(db, row, allow_llm=allow_llm)
-        db.refresh(row)
-        warn = cost_meter.cost_warning_header(db, user_id)
+        result, warn = await run_in_threadpool(
+            _end_session_finish, session_id, user_id, db, row, summary_text
+        )
         if warn:
             response.headers["X-Cost-Warning"] = warn
-        return SessionEndResponse(
-            id=row.id,
-            ended_at=_aware_utc(row.ended_at),
-            summary=_build_end_summary(db, session_id, summary_text),
-        )
+        return result
     finally:
         if settings.debug_timing:
             logger.info(
@@ -662,23 +739,15 @@ def _recent_history(db: Session, session_id: str) -> list[dict]:
     return [{"role": m.role, "content": m.content} for m in reversed(rows)]
 
 
-@router.post(
-    "/sessions/{session_id}/check/complete",
-    dependencies=[Depends(velocity_limit.enforce_velocity)],
-)
-async def complete_check(
-    session_id: str,
-    request: Request,
-    user_id: str = Depends(current_user_id),
-    db: Session = Depends(get_db),
-):
-    """Hidden reactive follow-up after a batch fully resolves.
+def _complete_check_prepare(session_id: str, user_id: str, db: Session):
+    """F-11: the entire synchronous segment of complete_check.
 
-    Builds a server-side results summary, injects it as a NON-persisted synthetic
-    user turn, clears the batch, and streams the tutor's reaction. Only the
-    assistant reply is persisted (inside run_streaming). The follow-up is a real
-    LLM turn, so it counts against the daily message cap; grading and batch
-    resolution above are never blocked by the cap (see S2).
+    Guard/lock/claim order is load-bearing and unchanged. lock_session_row's
+    FOR UPDATE and every statement below run on the same Session and the same
+    connection, so running the whole segment in one worker thread is
+    equivalent to running it inline. Returns
+    (allowed, messages, system_prompt, ctx); on `allowed is False` the caller
+    emits the daily-cap skip stream and nothing else.
     """
     row = db.get(SessionModel, session_id)
     if row is None or row.user_id != user_id:
@@ -712,14 +781,7 @@ async def complete_check(
     # at the cap we skip only the tutor's reaction.
     allowed, _used = rate_limit.check_and_increment(db, user_id)
     if not allowed:
-        async def skipped_stream():
-            yield StreamEvent("followup_skipped", {"reason": "daily_cap"}).to_sse()
-
-        return StreamingResponse(
-            skipped_stream(),
-            media_type="text/event-stream",
-            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-        )
+        return False, None, None, None
 
     profile = profile_service.load_profile(db, session_id)
     ingestion_status = documents_service.session_ingestion_status(db, session_id)
@@ -746,6 +808,42 @@ async def complete_check(
         suppress_check=True,
         diagnostic_required=(profile.knowledge_level is None),
     )
+    return True, messages, system_prompt, ctx
+
+
+@router.post(
+    "/sessions/{session_id}/check/complete",
+    dependencies=[Depends(velocity_limit.enforce_velocity)],
+)
+async def complete_check(
+    session_id: str,
+    request: Request,
+    user_id: str = Depends(current_user_id),
+    db: Session = Depends(get_db),
+):
+    """Hidden reactive follow-up after a batch fully resolves.
+
+    Builds a server-side results summary, injects it as a NON-persisted synthetic
+    user turn, clears the batch, and streams the tutor's reaction. Only the
+    assistant reply is persisted (inside run_streaming). The follow-up is a real
+    LLM turn, so it counts against the daily message cap; grading and batch
+    resolution above are never blocked by the cap (see S2).
+
+    F-11: the synchronous DB work lives in _complete_check_prepare and runs in
+    a worker thread so it never blocks the event loop.
+    """
+    allowed, messages, system_prompt, ctx = await run_in_threadpool(
+        _complete_check_prepare, session_id, user_id, db
+    )
+    if not allowed:
+        async def skipped_stream():
+            yield StreamEvent("followup_skipped", {"reason": "daily_cap"}).to_sse()
+
+        return StreamingResponse(
+            skipped_stream(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     async def event_stream():
         queue: asyncio.Queue = asyncio.Queue()

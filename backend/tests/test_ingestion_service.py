@@ -1009,3 +1009,267 @@ def test_metering_commits_per_batch(db_session, setup_doc, monkeypatch):
     ingestion_service._embed_and_store(db_session, doc, chunks, user_id=None)
     # Before batch 2's embedding call, batch 1 was already metered:
     assert ledger_seen_at_call == [0, 1]
+
+
+def test_run_holds_no_db_transaction_during_blob_load_and_extract(
+    db_session, insert_capture, mock_embed, monkeypatch, tmp_path
+):
+    """F-02: blob load, extraction and chunking are the slow, memory-heavy part
+    of ingestion. Holding a pooled DB connection across them starves the pool
+    under concurrent uploads, so run() must close its session first and
+    re-acquire one only for the embed/persist phase."""
+    from sqlalchemy.orm import sessionmaker
+
+    from services import ingestion_service
+
+    db_session.add(User(id="u_notx"))
+    db_session.flush()
+    db_session.add(
+        SessionModel(
+            id="s_notx",
+            user_id="u_notx",
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.flush()
+    doc = Document(session_id="s_notx", filename="notes.txt", status="pending")
+    db_session.add(doc)
+    db_session.commit()
+    db_session.refresh(doc)
+
+    created: list = []
+    real_factory = sessionmaker(
+        autocommit=False, autoflush=False, bind=db_session.get_bind()
+    )
+
+    def recording_factory():
+        s = real_factory()
+        created.append(s)
+        return s
+
+    monkeypatch.setattr("services.ingestion_service.SessionLocal", recording_factory)
+    _write_blob_stub(monkeypatch, tmp_path, doc.id, doc.filename, content=b"hello there")
+
+    # Recorded, not asserted, inside the fakes: run() catches Exception (and
+    # therefore AssertionError) and would swallow a failed assertion.
+    in_tx: list[bool] = []
+
+    real_load = ingestion_service._load_blob
+    real_extract = ingestion_service._extract
+    real_chunk = ingestion_service.chunking.chunk_text
+
+    def spy_load(*a, **kw):
+        in_tx.append(created[-1].in_transaction())
+        return real_load(*a, **kw)
+
+    def spy_extract(*a, **kw):
+        in_tx.append(created[-1].in_transaction())
+        return real_extract(*a, **kw)
+
+    def spy_chunk(*a, **kw):
+        in_tx.append(created[-1].in_transaction())
+        return real_chunk(*a, **kw)
+
+    monkeypatch.setattr("services.ingestion_service._load_blob", spy_load)
+    monkeypatch.setattr("services.ingestion_service._extract", spy_extract)
+    monkeypatch.setattr("services.ingestion_service.chunking.chunk_text", spy_chunk)
+
+    ingestion_service.run(doc.id)
+
+    db_session.expire_all()
+    refreshed = db_session.get(Document, doc.id)
+    assert refreshed.status == "ready", refreshed.error
+    assert in_tx == [False, False, False]
+
+
+def test_run_marks_failed_when_extract_raises_outside_session(
+    db_session, insert_capture, mock_embed, monkeypatch, tmp_path
+):
+    """F-02 regression: the failure arms run after the session was closed, so
+    they must re-fetch the Document by id rather than touch a detached
+    instance."""
+    from sqlalchemy.orm import sessionmaker
+
+    from services import ingestion_service
+
+    db_session.add(User(id="u_notx2"))
+    db_session.flush()
+    db_session.add(
+        SessionModel(
+            id="s_notx2",
+            user_id="u_notx2",
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.flush()
+    doc = Document(session_id="s_notx2", filename="notes.txt", status="pending")
+    db_session.add(doc)
+    db_session.commit()
+    db_session.refresh(doc)
+
+    monkeypatch.setattr(
+        "services.ingestion_service.SessionLocal",
+        sessionmaker(autocommit=False, autoflush=False, bind=db_session.get_bind()),
+    )
+    _write_blob_stub(monkeypatch, tmp_path, doc.id, doc.filename, content=b"hello there")
+
+    def boom(*a, **kw):
+        raise RuntimeError("extract exploded")
+
+    monkeypatch.setattr("services.ingestion_service._extract", boom)
+
+    ingestion_service.run(doc.id)
+
+    db_session.expire_all()
+    refreshed = db_session.get(Document, doc.id)
+    assert refreshed.status == "failed"
+    assert "exploded" in (refreshed.error or "")
+
+
+def test_run_invalidates_session_chunk_centroid(
+    db_session, insert_capture, mock_embed, monkeypatch, tmp_path
+):
+    """F-05: new chunks move the session's mean embedding, so the materialised
+    centroid must be dropped; the next chat turn recomputes it once."""
+    from sqlalchemy.orm import sessionmaker
+
+    from config import settings
+    from services import ingestion_service
+
+    db_session.add(User(id="u_cinv"))
+    db_session.flush()
+    db_session.add(
+        SessionModel(
+            id="s_cinv",
+            user_id="u_cinv",
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+            chunk_centroid=[0.3] * settings.embedding_dim,
+        )
+    )
+    db_session.flush()
+    doc = Document(session_id="s_cinv", filename="notes.txt", status="pending")
+    db_session.add(doc)
+    db_session.commit()
+    db_session.refresh(doc)
+
+    monkeypatch.setattr(
+        "services.ingestion_service.SessionLocal",
+        sessionmaker(autocommit=False, autoflush=False, bind=db_session.get_bind()),
+    )
+    _write_blob_stub(monkeypatch, tmp_path, doc.id, doc.filename, content=b"hello there")
+
+    ingestion_service.run(doc.id)
+
+    db_session.expire_all()
+    assert db_session.get(Document, doc.id).status == "ready"
+    assert db_session.get(SessionModel, "s_cinv").chunk_centroid is None
+
+
+def test_run_passes_max_chunks_and_fails_on_early_abort(
+    db_session, insert_capture, mock_embed, monkeypatch, tmp_path
+):
+    """F-03: the cap is enforced inside the chunker (early abort), not by
+    counting a fully materialised chunk list afterwards."""
+    from sqlalchemy.orm import sessionmaker
+
+    from config import settings
+    from services import ingestion_service
+
+    db_session.add(User(id="u_cap2"))
+    db_session.flush()
+    db_session.add(
+        SessionModel(
+            id="s_cap2",
+            user_id="u_cap2",
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.flush()
+    doc = Document(session_id="s_cap2", filename="big.txt", status="pending")
+    db_session.add(doc)
+    db_session.commit()
+    db_session.refresh(doc)
+
+    monkeypatch.setattr(
+        "services.ingestion_service.SessionLocal",
+        sessionmaker(autocommit=False, autoflush=False, bind=db_session.get_bind()),
+    )
+    _write_blob_stub(monkeypatch, tmp_path, doc.id, doc.filename, content=b"word " * 50)
+
+    seen: dict = {}
+
+    def fake_chunk_text(pages, **kw):
+        seen.update(kw)
+        raise chunking.ChunkLimitExceeded(kw["max_chunks"])
+
+    monkeypatch.setattr("services.ingestion_service.chunking.chunk_text", fake_chunk_text)
+
+    ingestion_service.run(doc.id)
+
+    assert seen["max_chunks"] == settings.max_chunks
+    db_session.expire_all()
+    refreshed = db_session.get(Document, doc.id)
+    assert refreshed.status == "failed"
+    assert refreshed.error == "document too large to ingest (chunk limit)"
+    assert insert_capture == []
+
+
+def test_partial_ingest_failure_still_invalidates_centroid(
+    db_session, mock_embed, monkeypatch, tmp_path
+):
+    """F-05: _embed_and_store commits per batch, so a failure mid-document
+    leaves durable new chunks. The centroid must already be NULL by then --
+    otherwise a stale mean survives with nothing left to refresh it."""
+    from sqlalchemy.orm import sessionmaker
+
+    from config import settings
+    from services import ingestion_service
+
+    db_session.add(User(id="u_cinv2"))
+    db_session.flush()
+    db_session.add(
+        SessionModel(
+            id="s_cinv2",
+            user_id="u_cinv2",
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+            chunk_centroid=[0.3] * settings.embedding_dim,
+        )
+    )
+    db_session.flush()
+    doc = Document(session_id="s_cinv2", filename="notes.txt", status="pending")
+    db_session.add(doc)
+    db_session.commit()
+    db_session.refresh(doc)
+
+    monkeypatch.setattr(
+        "services.ingestion_service.SessionLocal",
+        sessionmaker(autocommit=False, autoflush=False, bind=db_session.get_bind()),
+    )
+    monkeypatch.setattr("services.ingestion_service.EMBED_BATCH", 1)
+    _write_blob_stub(
+        monkeypatch, tmp_path, doc.id, doc.filename, content=b"word " * 1200
+    )
+
+    calls = {"n": 0}
+
+    def fail_on_second_batch(db, *, session_id, document_id, rows):
+        calls["n"] += 1
+        if calls["n"] > 1:
+            raise RuntimeError("pgvector insert failed on batch 2")
+        return len(rows)
+
+    monkeypatch.setattr(
+        "services.ingestion_service.pgvector_store.insert_chunks", fail_on_second_batch
+    )
+
+    ingestion_service.run(doc.id)
+
+    db_session.expire_all()
+    assert calls["n"] > 1
+    assert db_session.get(Document, doc.id).status == "failed"
+    assert db_session.get(SessionModel, "s_cinv2").chunk_centroid is None

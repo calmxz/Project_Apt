@@ -94,3 +94,29 @@ def test_blank_topic_returns_empty(client, db_session):
     db_session.commit()
     body = _lookup(client, "   ").json()
     assert body == {"active_match": None, "ended_match": None}
+
+
+def test_legacy_profile_shape_does_not_500(client, db_session):
+    """C-01: lookup must use the tolerant parser. TopicProfile is codegen'd
+    with extra="forbid", so a row written under an older schema (retired
+    field still present) would 500 every lookup on that topic under a strict
+    model_validate_json."""
+    db_session.add(User(id=USER_ID))
+    db_session.add(
+        SessionModel(
+            id="s8",
+            user_id=USER_ID,
+            topic="thermodynamics",
+            topic_profile_json=(
+                '{"knowledge_level":"beginner","confirmed_gaps":[{"name":"entropy"}],'
+                '"mastered_concepts":[],"retired_field":1}'
+            ),
+        )
+    )
+    db_session.commit()
+    r = _lookup(client, "thermodynamics")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["active_match"]["session_id"] == "s8"
+    assert body["active_match"]["gap_count"] == 1
+    assert body["active_match"]["knowledge_level"] == "beginner"

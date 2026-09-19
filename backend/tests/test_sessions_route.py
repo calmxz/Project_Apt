@@ -226,6 +226,54 @@ def test_get_list_filters_by_user_desc(client, db_session, seeded_user):
     assert [row["id"] for row in rows] == ["s_new", "s_old"]
 
 
+def _seed_n_sessions(db_session, n):
+    """n sessions with strictly decreasing created_at so ordering is
+    deterministic on sqlite (default timestamps can collide)."""
+    base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    for i in range(n):
+        db_session.add(
+            SessionModel(
+                id=f"p{i}",
+                user_id=USER_ID,
+                topic=f"topic {i}",
+                topic_profile_json=TopicProfile().model_dump_json(),
+                created_at=base + timedelta(hours=i),
+            )
+        )
+    db_session.commit()
+    # newest first
+    return [f"p{i}" for i in reversed(range(n))]
+
+
+def test_list_rejects_limit_over_max(client, db_session, seeded_user):
+    r = client.get(f"/api/sessions?user_id={USER_ID}&limit=201")
+    assert r.status_code == 422, r.text
+
+
+def test_list_rejects_limit_zero(client, db_session, seeded_user):
+    r = client.get(f"/api/sessions?user_id={USER_ID}&limit=0")
+    assert r.status_code == 422, r.text
+
+
+def test_list_rejects_negative_offset(client, db_session, seeded_user):
+    r = client.get(f"/api/sessions?user_id={USER_ID}&offset=-1")
+    assert r.status_code == 422, r.text
+
+
+def test_list_limit_offset_slices_newest_first(client, db_session, seeded_user):
+    order = _seed_n_sessions(db_session, 5)
+    r = client.get(f"/api/sessions?user_id={USER_ID}&limit=2&offset=2")
+    assert r.status_code == 200, r.text
+    assert [row["id"] for row in r.json()] == order[2:4]
+
+
+def test_list_default_returns_up_to_100(client, db_session, seeded_user):
+    order = _seed_n_sessions(db_session, 5)
+    r = client.get(f"/api/sessions?user_id={USER_ID}")
+    assert r.status_code == 200, r.text
+    assert [row["id"] for row in r.json()] == order
+
+
 def test_list_returns_tz_aware_timestamps(client, db_session, seeded_user):
     # SQLite drops tzinfo on read; the route must re-attach UTC so the wire format
     # includes an offset and the frontend can parse it as an absolute instant.

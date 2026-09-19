@@ -465,10 +465,14 @@ def apply_patch(
                     f"check answer recorded for '{prior_focus}' in this session"
                 ),
             )
+        # G-05: gap strings are learner free text and can carry personal
+        # detail, so the audit line logs a sha256 prefix plus length instead
+        # of the raw name. Still correlatable across turns, no PII at rest.
         log.info(
-            "focus_clear session=%s gap=%s reason=%s",
+            "focus_clear session=%s gap_sha=%s gap_len=%d reason=%s",
             ctx.session_id,
-            prior_focus,
+            hashlib.sha256(prior_focus.encode()).hexdigest()[:8],
+            len(prior_focus),
             args.focus_clear_reason,
         )
         profile.focus_target_gap = None
@@ -568,12 +572,37 @@ def _learning_insights(
 def aggregate_for_user(
     db: Session, user_id: str, now: datetime | None = None
 ) -> AggregateProfileResponse:
-    """Cross-session aggregate. Pure SQL + Python, no LLM calls."""
-    sessions: list[SessionModel] = db.execute(
-        select(SessionModel)
+    """Cross-session aggregate. Pure SQL + Python, no LLM calls.
+
+    F-08: this scans every session the user owns, so it projects only the
+    five columns the aggregate actually reads. Loading whole ORM rows also
+    dragged kw_index_json, pending_check_json, quiz_cooldown_json and the
+    rolling summary of every session into memory (plus an identity-map entry
+    each) for a response that never mentions them.
+
+    The per-row profile parse stays in Python deliberately (plan deviation,
+    recorded here on purpose). _parse_profile's failure mode is all-or-
+    nothing per row: ConceptEntry and TopicProfile are both extra="forbid"
+    and evidence_type is a Literal, so one stale key or one retired
+    evidence_type on a single list element fails both validation attempts and
+    the ENTIRE row collapses to an empty profile -- contributing no concepts
+    and no knowledge_level. A jsonb aggregation in SQL would happily count
+    that row's other elements, so the two paths cannot be made equal, and the
+    disagreement would land on exactly the legacy rows the tolerant parser
+    exists for. Revisit if the aggregate moves to a materialised column or
+    the stored profile shape is version-stamped.
+    """
+    sessions = db.execute(
+        select(
+            SessionModel.id,
+            SessionModel.topic,
+            SessionModel.created_at,
+            SessionModel.ended_at,
+            SessionModel.topic_profile_json,
+        )
         .where(SessionModel.user_id == user_id)
         .order_by(SessionModel.created_at.asc())
-    ).scalars().all()
+    ).all()
 
     total = len(sessions)
     active = sum(1 for s in sessions if s.ended_at is None)

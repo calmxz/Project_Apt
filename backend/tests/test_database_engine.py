@@ -11,6 +11,14 @@ def test_postgres_engine_kwargs_have_pool_config():
     assert kw["connect_args"] == {"prepare_threshold": None}
 
 
+def test_postgres_engine_kwargs_have_pool_timeout():
+    """F-01: pool exhaustion must shed load, not block for SQLAlchemy's 30s default."""
+    from config import settings
+
+    kw = database._build_engine_kwargs("postgresql+psycopg://u:p@h/db")
+    assert kw["pool_timeout"] == settings.db_pool_timeout_s
+
+
 def test_sqlite_engine_kwargs_unchanged():
     kw = database._build_engine_kwargs("sqlite:///x.db")
     assert kw == {"connect_args": {"check_same_thread": False}}

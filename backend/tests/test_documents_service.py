@@ -318,3 +318,23 @@ def test_status_from_counts_treats_processing_as_in_flight(
         documents_service.status_from_counts(total, pending, ready, processing)
         == expected
     )
+
+
+def test_delete_document_invalidates_session_chunk_centroid(db_session, monkeypatch, tmp_path):
+    """F-05: removing a document changes the session's mean embedding, so the
+    materialised centroid must be dropped in the same transaction."""
+    monkeypatch.setattr(
+        "services.documents_service.pgvector_store.delete_document_chunks",
+        lambda db, document_id: 0,
+    )
+    monkeypatch.setattr("services.documents_service.settings.uploads_path", str(tmp_path))
+
+    doc = _seed_doc(db_session)
+    sess = db_session.get(SessionModel, doc.session_id)
+    sess.chunk_centroid = [0.4] * settings.embedding_dim
+    db_session.commit()
+
+    documents_service.delete_document(db_session, document_id=doc.id, user_id="u1")
+
+    db_session.expire_all()
+    assert db_session.get(SessionModel, "s1").chunk_centroid is None

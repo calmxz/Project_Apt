@@ -27,6 +27,10 @@ describe('friendlyError', () => {
     expect(friendlyError(coded(413, 'chunk_limit_exceeded'))).toMatch(/too large to ingest/i)
   })
 
+  it('maps page_limit_exceeded (413) to the too-many-pages copy', () => {
+    expect(friendlyError(coded(413, 'page_limit_exceeded'))).toMatch(/too many pages to ingest/i)
+  })
+
   it('falls back to the status copy for an unknown code', () => {
     expect(friendlyError(coded(429, 'something_new'))).toMatch(/daily limit/i)
     expect(friendlyError(coded(400, 'something_new'))).toMatch(/rejected/i)

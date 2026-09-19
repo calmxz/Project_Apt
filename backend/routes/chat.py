@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import func, literal, select
 from sqlalchemy.orm import Session
 from starlette.background import BackgroundTask
+from starlette.concurrency import run_in_threadpool
 
 from agent import context_budget, prompts, tutor
 from agent.excerpt import wrap_chunk
@@ -115,24 +116,19 @@ def _build_prompt_state(
     return prompt_state
 
 
-async def _prepare_turn(
+def _prepare_turn_guards(
     req: ChatRequest,
     user_id: str,
     db: Session,
-    accepted_terms: bool = False,
-) -> tuple[list[dict], str, ToolContext]:
-    """Pre-flight for /chat/stream.
+    accepted_terms: bool,
+):
+    """Synchronous guard segment of _prepare_turn (steps 1-5).
 
-    Guard order: cost cap -> session 404/409 -> ensure_user -> rate limit.
-    The session guard runs before ensure_user and the rate limiter so a
-    rejected turn (unknown/foreign session 404, ended session 409) neither
-    creates a user row nor consumes a daily rate-limit slot. ensure_user runs
-    before check_and_increment so the FK-bearing usage_counters insert never
-    races ahead of the users row it references (F-36); check_and_increment's
-    internal commit persists both together. Loads history, builds the system
-    prompt, then persists the user ChatMessage last (committed before
-    returning so it survives even if the stream ends early), and returns
-    (messages, system_prompt, ctx).
+    F-11: split out so the caller can run it via run_in_threadpool instead of
+    blocking the event loop on psycopg. The guard ORDER inside this function
+    is load-bearing -- see _prepare_turn's docstring -- and must not change.
+    Returns (session, ingestion_status); raises HTTPException on rejection
+    (propagates through run_in_threadpool unchanged).
     """
     # 1) Combined guard read: today's spend + user existence, one statement.
     exists_subq = select(literal(True)).where(User.id == user_id).exists()
@@ -213,41 +209,106 @@ async def _prepare_turn(
             },
         )
 
+    return session, ingestion_status
+
+
+def _prepare_turn_context(req: ChatRequest, db: Session, session: SessionModel):
+    """Synchronous history/profile/lexical-gate segment of _prepare_turn.
+
+    F-11: split out so the caller can run it via run_in_threadpool. Returns
+    (messages, profile, gap_accuracy, retrieval_required).
+    """
+    history = db.execute(
+        select(ChatMessage)
+        .where(ChatMessage.session_id == req.session_id)
+        .order_by(ChatMessage.created_at.desc())
+        .limit(20)
+    ).scalars().all()
+    history = list(reversed(history))
+
+    # P2: cap each history message; the current user message (appended below)
+    # and the system prompt are exempt.
+    messages = [
+        {"role": m.role, "content": context_budget.truncate_message(m.content)}
+        for m in history
+    ]
+    messages.append({"role": "user", "content": req.message})
+
+    profile = profile_service.profile_from_row(session)
+
+    # D1.2: per-gap accuracy, best-effort. Only run when there is something
+    # to enrich (confirmed_gaps non-empty) to keep the no-gaps path inside
+    # the P3.1 budget; a failure here must never kill the turn.
+    gap_accuracy: dict[str, dict] = {}
+    if profile.confirmed_gaps:
+        try:
+            gap_accuracy = learning_event_service.gap_accuracy(db, req.session_id)
+        except Exception as e:  # noqa: BLE001 - best-effort prompt enrichment
+            log.warning("gap_accuracy failed; continuing without it: %s", e)
+
+    retrieval_required = keyword_index.match_required(
+        req.message, json.loads(session.kw_index_json or "[]")
+    )
+    return messages, profile, gap_accuracy, retrieval_required
+
+
+def _persist_user_turn(req: ChatRequest, db: Session) -> None:
+    """F-11: synchronous user-message persist segment."""
+    db.add(ChatMessage(session_id=req.session_id, role="user", content=req.message))
+    db.commit()
+
+
+def _persist_user_turn_after_failure(
+    req: ChatRequest, db: Session, user_id: str, embed_cost_holder: list
+) -> None:
+    """F-11: synchronous failure-path persist segment.
+
+    Rollback discarded metered embedding spend flushed by the retrieval calls;
+    re-record it on the fresh transaction so real vendor cost is never lost.
+    The user-message commit publishes both (B-08/F-19).
+    """
+    db.rollback()
+    total_embed = sum(embed_cost_holder, Decimal("0"))
+    if total_embed > 0:
+        cost_meter.record_cost(db, user_id, total_embed)
+    db.add(ChatMessage(session_id=req.session_id, role="user", content=req.message))
+    db.commit()
+
+
+async def _prepare_turn(
+    req: ChatRequest,
+    user_id: str,
+    db: Session,
+    accepted_terms: bool = False,
+) -> tuple[list[dict], str, ToolContext]:
+    """Pre-flight for /chat/stream.
+
+    Guard order: cost cap -> session 404/409 -> ensure_user -> rate limit.
+    The session guard runs before ensure_user and the rate limiter so a
+    rejected turn (unknown/foreign session 404, ended session 409) neither
+    creates a user row nor consumes a daily rate-limit slot. ensure_user runs
+    before check_and_increment so the FK-bearing usage_counters insert never
+    races ahead of the users row it references (F-36); check_and_increment's
+    internal commit persists both together. Loads history, builds the system
+    prompt, then persists the user ChatMessage last (committed before
+    returning so it survives even if the stream ends early), and returns
+    (messages, system_prompt, ctx).
+
+    F-11: every synchronous DB segment runs via run_in_threadpool so psycopg
+    never blocks the event loop. The segments are sequential awaits, so no two
+    threadpool calls ever touch `db` concurrently.
+    """
+    session, ingestion_status = await run_in_threadpool(
+        _prepare_turn_guards, req, user_id, db, accepted_terms
+    )
+
     # 6) History through prompt build. An unexpected crash here must not lose
     # the user's message: persist it, then re-raise. Happy path pays no extra
     # statement.
     embed_cost_holder: list = []
     try:
-        history = db.execute(
-            select(ChatMessage)
-            .where(ChatMessage.session_id == req.session_id)
-            .order_by(ChatMessage.created_at.desc())
-            .limit(20)
-        ).scalars().all()
-        history = list(reversed(history))
-
-        # P2: cap each history message; the current user message (appended below)
-        # and the system prompt are exempt.
-        messages = [
-            {"role": m.role, "content": context_budget.truncate_message(m.content)}
-            for m in history
-        ]
-        messages.append({"role": "user", "content": req.message})
-
-        profile = profile_service.profile_from_row(session)
-
-        # D1.2: per-gap accuracy, best-effort. Only run when there is something
-        # to enrich (confirmed_gaps non-empty) to keep the no-gaps path inside
-        # the P3.1 budget; a failure here must never kill the turn.
-        gap_accuracy: dict[str, dict] = {}
-        if profile.confirmed_gaps:
-            try:
-                gap_accuracy = learning_event_service.gap_accuracy(db, req.session_id)
-            except Exception as e:  # noqa: BLE001 - best-effort prompt enrichment
-                log.warning("gap_accuracy failed; continuing without it: %s", e)
-
-        retrieval_required = keyword_index.match_required(
-            req.message, json.loads(session.kw_index_json or "[]")
+        messages, profile, gap_accuracy, retrieval_required = await run_in_threadpool(
+            _prepare_turn_context, req, db, session
         )
         query_vec = None
         if not retrieval_required:
@@ -278,23 +339,15 @@ async def _prepare_turn(
         )
         system_prompt = prompts.build_system_prompt(prompt_state)
     except Exception:
-        db.rollback()
-        # Rollback discarded metered embedding spend flushed by the retrieval
-        # calls; re-record it on the fresh transaction so real vendor cost is
-        # never lost. The user-message commit below publishes both (B-08/F-19).
-        total_embed = sum(embed_cost_holder, Decimal("0"))
-        if total_embed > 0:
-            cost_meter.record_cost(db, user_id, total_embed)
-        db.add(ChatMessage(session_id=req.session_id, role="user", content=req.message))
-        db.commit()
+        await run_in_threadpool(
+            _persist_user_turn_after_failure, req, db, user_id, embed_cost_holder
+        )
         raise
 
     # 7) Persist the user turn LAST (still committed before returning, so it
     # survives an early stream end) - after all reads, so commit-expiry does
     # not trigger a refresh SELECT.
-    user_msg = ChatMessage(session_id=req.session_id, role="user", content=req.message)
-    db.add(user_msg)
-    db.commit()
+    await run_in_threadpool(_persist_user_turn, req, db)
 
     ctx = ToolContext(
         db=db,

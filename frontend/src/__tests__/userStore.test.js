@@ -169,7 +169,9 @@ describe('user store', () => {
   it('setActiveUser(null) resets hydrated so a re-login re-hydrates', async () => {
     const u = useUserStore()
     u.setActiveUser('user-a')
-    fetchMock.mockReturnValue(ok({ display_name: null, feedback_pref: null, onboarding_complete: false }))
+    fetchMock.mockReturnValue(
+      ok({ display_name: null, feedback_pref: null, onboarding_complete: false }),
+    )
     await u.hydrateFromServer()
     expect(u.hydrated).toBe(true)
 
@@ -213,5 +215,31 @@ describe('user store', () => {
     expect(u.hydrated).toBe(true)
     expect(u.onboardingComplete).toBe(true)
     expect(u.name).toBe('Eddy')
+  })
+
+  // E-09: a failed hydrate used to be indistinguishable from a successful one
+  // that found onboardingComplete=false, which force-routed the learner into
+  // onboarding with no way out. hydrateFailed lets the router guard tell the
+  // two cases apart.
+  it('hydrateFromServer failure sets hydrateFailed and leaves onboardingComplete unchanged (E-09)', async () => {
+    fetchMock.mockReturnValue(Promise.reject(new Error('network down')))
+    const u = useUserStore()
+    u.setActiveUser('u1')
+    expect(u.onboardingComplete).toBe(false)
+    await u.hydrateFromServer()
+    expect(u.hydrateFailed).toBe(true)
+    expect(u.hydrated).toBe(true)
+    expect(u.onboardingComplete).toBe(false)
+  })
+
+  it('hydrateFromServer success clears hydrateFailed (E-09)', async () => {
+    fetchMock.mockReturnValue(
+      ok({ display_name: 'Ada', feedback_pref: 'direct', onboarding_complete: true }),
+    )
+    const u = useUserStore()
+    u.setActiveUser('u1')
+    u.hydrateFailed = true
+    await u.hydrateFromServer()
+    expect(u.hydrateFailed).toBe(false)
   })
 })

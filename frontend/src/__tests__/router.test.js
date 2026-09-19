@@ -166,6 +166,30 @@ describe('router', () => {
     expect(router.currentRoute.value.name).toBe('settings')
   })
 
+  // E-09: a failed hydrate on a device with no local snapshot used to
+  // force-route into onboarding with no way out (hydrateFailed did not
+  // exist, so a hydrate failure looked identical to a real
+  // onboardingComplete=false). Once hydrate has failed, do not redirect.
+  it('does not force-route to onboarding when hydrate has failed (E-09)', async () => {
+    setAuth(true)
+    const user = useUserStore()
+    user.onboardingComplete = false
+    user.hydrated = true
+    user.hydrateFailed = true
+    await router.push({ name: 'home' })
+    expect(router.currentRoute.value.name).toBe('home')
+  })
+
+  it('still redirects to onboarding when hydrate succeeded and onboarding is incomplete (E-09)', async () => {
+    setAuth(true)
+    const user = useUserStore()
+    user.onboardingComplete = false
+    user.hydrated = true
+    user.hydrateFailed = false
+    await router.push({ name: 'settings', params: { tab: 'profile' } })
+    expect(router.currentRoute.value.name).toBe('onboarding')
+  })
+
   it('focuses #main-content after push navigation', async () => {
     setAuth(true)
     const user = useUserStore()
