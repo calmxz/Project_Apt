@@ -49,7 +49,7 @@ import os
 import litellm
 from pptx import Presentation
 from pypdf import PdfReader
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from config import settings
 from db.database import SessionLocal
@@ -237,6 +237,14 @@ def run(document_id: int) -> None:
                 return
 
             _embed_and_store(db, doc, chunks, user_id=owner_id)
+
+            # F-05: new chunks move the session's mean embedding. Drop the
+            # materialised centroid; the next chat turn recomputes it once.
+            db.execute(
+                update(SessionModel)
+                .where(SessionModel.id == session_id)
+                .values(chunk_centroid=None)
+            )
 
             stems: set[str] = set()
             for c in chunks:

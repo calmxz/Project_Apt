@@ -66,6 +66,12 @@ class Session(Base):
     )
     rolling_summary: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     rolling_summary_count: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
+    # F-05: lazily materialised mean of this session's chunk embeddings.
+    # NULL means "not computed yet" (or invalidated by an ingest/delete);
+    # retrieval_service recomputes it once and writes it back.
+    chunk_centroid: Mapped[list[float] | None] = mapped_column(
+        Vector(settings.embedding_dim), nullable=True, default=None
+    )
 
     user: Mapped["User"] = relationship("User", back_populates="sessions")
     messages: Mapped[list["ChatMessage"]] = relationship("ChatMessage", back_populates="session")

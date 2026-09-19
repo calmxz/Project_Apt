@@ -1126,3 +1126,43 @@ def test_run_marks_failed_when_extract_raises_outside_session(
     refreshed = db_session.get(Document, doc.id)
     assert refreshed.status == "failed"
     assert "exploded" in (refreshed.error or "")
+
+
+def test_run_invalidates_session_chunk_centroid(
+    db_session, insert_capture, mock_embed, monkeypatch, tmp_path
+):
+    """F-05: new chunks move the session's mean embedding, so the materialised
+    centroid must be dropped; the next chat turn recomputes it once."""
+    from sqlalchemy.orm import sessionmaker
+
+    from config import settings
+    from services import ingestion_service
+
+    db_session.add(User(id="u_cinv"))
+    db_session.flush()
+    db_session.add(
+        SessionModel(
+            id="s_cinv",
+            user_id="u_cinv",
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+            chunk_centroid=[0.3] * settings.embedding_dim,
+        )
+    )
+    db_session.flush()
+    doc = Document(session_id="s_cinv", filename="notes.txt", status="pending")
+    db_session.add(doc)
+    db_session.commit()
+    db_session.refresh(doc)
+
+    monkeypatch.setattr(
+        "services.ingestion_service.SessionLocal",
+        sessionmaker(autocommit=False, autoflush=False, bind=db_session.get_bind()),
+    )
+    _write_blob_stub(monkeypatch, tmp_path, doc.id, doc.filename, content=b"hello there")
+
+    ingestion_service.run(doc.id)
+
+    db_session.expire_all()
+    assert db_session.get(Document, doc.id).status == "ready"
+    assert db_session.get(SessionModel, "s_cinv").chunk_centroid is None
