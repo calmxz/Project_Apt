@@ -7,6 +7,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 RENDER = REPO_ROOT / "render.yaml"
 VERCEL = REPO_ROOT / "frontend" / "vercel.json"
 COMPOSE_FILES = (REPO_ROOT / "docker-compose.yml", REPO_ROOT / "docker-compose.prod.yml")
+BACKUP_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "backup.yml"
 
 
 def _load(path):
@@ -84,6 +85,29 @@ def test_compose_files_do_not_define_worker_service():
     for path in ("docker-compose.yml", "docker-compose.prod.yml"):
         cfg = _load(path)
         assert "worker" not in cfg["services"]
+
+
+def test_backup_job_is_bounded():
+    """G-10: a hung pg_dump or R2 upload otherwise burns the full 6h runner
+    limit and the next night's run overlaps it."""
+    data = yaml.safe_load(BACKUP_WORKFLOW.read_text(encoding="utf-8"))
+    assert data["jobs"]["backup"]["timeout-minutes"] == 15
+
+
+def test_backup_workflow_can_open_issues():
+    data = yaml.safe_load(BACKUP_WORKFLOW.read_text(encoding="utf-8"))
+    assert data["permissions"]["contents"] == "read"
+    assert data["permissions"]["issues"] == "write"
+
+
+def test_backup_workflow_alerts_on_failure():
+    """A silently failing nightly backup is indistinguishable from a working
+    one until a restore is needed."""
+    data = yaml.safe_load(BACKUP_WORKFLOW.read_text(encoding="utf-8"))
+    steps = data["jobs"]["backup"]["steps"]
+    failure_steps = [s for s in steps if str(s.get("if", "")).strip() == "failure()"]
+    assert failure_steps, "no `if: failure()` alert step in the backup job"
+    assert any("gh issue" in str(s.get("run", "")) for s in failure_steps)
 
 
 def test_render_does_not_define_worker_service():
