@@ -187,7 +187,9 @@ def test_jwks_client_built_once_under_concurrent_refresh(monkeypatch):
         try:
             barrier.wait()
             results.append(_REAL_GET_JWKS_CLIENT())
-        except BaseException as e:  # noqa: BLE001 - surfaced via assert below
+        except BaseException as e:
+            # Re-surfaced via the `assert not errors` below; a bare raise here
+            # would die in the worker thread and leave the barrier deadlocked.
             errors.append(e)
 
     try:
