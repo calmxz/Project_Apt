@@ -9,3 +9,5 @@ export const ERR_CHUNK_LIMIT_EXCEEDED = 'chunk_limit_exceeded'
 // Velocity (burst) limiter, see backend/services/velocity_limit.py.
 // Copy: "Too many requests - wait a moment and retry."
 export const ERR_TOO_MANY_REQUESTS = 'too_many_requests'
+// Copy: "This document has too many pages to ingest. Try splitting it into smaller files."
+export const ERR_PAGE_LIMIT_EXCEEDED = 'page_limit_exceeded'

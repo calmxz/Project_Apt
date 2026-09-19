@@ -528,7 +528,7 @@ def test_pdf_over_page_limit_413(client, seeded, monkeypatch):
     )
     assert r.status_code == 413, r.text
     detail = r.json()["detail"]
-    assert detail["code"] == "PAGE_LIMIT_EXCEEDED"
+    assert detail["code"] == "page_limit_exceeded"
     assert detail["max_pages"] == 2
     assert detail["page_count"] == 3
 
@@ -574,5 +574,5 @@ def test_pptx_over_slide_limit_413(client, seeded, monkeypatch):
     )
     assert r.status_code == 413, r.text
     detail = r.json()["detail"]
-    assert detail["code"] == "PAGE_LIMIT_EXCEEDED"
+    assert detail["code"] == "page_limit_exceeded"
     assert detail["page_count"] == 2

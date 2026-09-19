@@ -71,3 +71,11 @@ def test_0025_chains_onto_0024():
     )
     assert mod.revision == "0025_learning_events_created_at_idx"
     assert mod.down_revision == "0024_sessions_chunk_centroid"
+
+
+def test_0024_chains_onto_0023():
+    mod = _load_versions_module(
+        "0024_sessions_chunk_centroid.py", "migration_0024"
+    )
+    assert mod.revision == "0024_sessions_chunk_centroid"
+    assert mod.down_revision == "0023_worker_queue"

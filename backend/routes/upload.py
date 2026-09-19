@@ -22,7 +22,7 @@ from config import settings
 from contracts import UploadResponse, UploadStatus
 from db.database import get_db
 from db.models import Document, Session as SessionModel
-from lib.error_codes import CHUNK_LIMIT_EXCEEDED, DAILY_CAP_REACHED
+from lib.error_codes import CHUNK_LIMIT_EXCEEDED, DAILY_CAP_REACHED, PAGE_LIMIT_EXCEEDED
 from services import cost_meter, object_store, rate_limit, velocity_limit
 from services.auth import current_user_id
 
@@ -48,9 +48,6 @@ log = logging.getLogger(__name__)
 
 READ_CHUNK = 1024 * 1024  # 1 MiB
 
-# Inline literal like CONTENT_TYPE_MISMATCH / INVALID_FILENAME above:
-# lib/error_codes.py holds only the codes the frontend switches on.
-PAGE_LIMIT_EXCEEDED = "PAGE_LIMIT_EXCEEDED"
 
 
 def _page_count(ext: str, data: bytes) -> int | None:

@@ -4,6 +4,7 @@ import {
   ERR_GLOBAL_COST_CAP_REACHED,
   ERR_CHUNK_LIMIT_EXCEEDED,
   ERR_TOO_MANY_REQUESTS,
+  ERR_PAGE_LIMIT_EXCEEDED,
 } from './errorCodes.js'
 
 const DAILY_LIMIT_COPY = "You've hit the daily limit. Try again tomorrow."
@@ -19,6 +20,8 @@ const CODE_COPY = {
   [ERR_CHUNK_LIMIT_EXCEEDED]:
     'This document is too large to ingest. Try splitting it into smaller files.',
   [ERR_TOO_MANY_REQUESTS]: THROTTLED_COPY,
+  [ERR_PAGE_LIMIT_EXCEEDED]:
+    'This document has too many pages to ingest. Try splitting it into smaller files.',
 }
 
 // Maps ApiError instances (and plain Errors) to user-facing copy.
