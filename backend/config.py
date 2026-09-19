@@ -64,6 +64,9 @@ class Settings(BaseSettings):
     supabase_secret_key: str = ""
     llm_soft_cap_usd: float = 2.00
     llm_hard_cap_usd: float = 3.00
+    # B-05: provisional per-turn charge reserved at the cost gate, released
+    # when the turn ends.
+    llm_turn_reserve_usd: float = 0.02
     max_chunks: int = 5000
     # F-03: upload-time page/slide ceiling for .pdf/.pptx. Cheap structural
     # check that rejects a document before a worker loads and tokenises it.
@@ -72,6 +75,12 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.3
     summary_temperature: float = 0.0
     retrieval_fallback_threshold: float = 0.75
+    # G-11: cosine-similarity floor for surfacing a retrieved chunk as a
+    # citation; None-scored chunks pass.
+    citation_min_similarity: float = 0.25
+    # F-10: SET LOCAL hnsw.ef_search on the retrieval transaction; pgvector
+    # default 40.
+    hnsw_ef_search: int = 100
 
     # F-06: explicit LiteLLM timeouts. Chat streams get the longest budget;
     # summaries and embeddings are shorter single-shot calls.
@@ -94,6 +103,13 @@ class Settings(BaseSettings):
     # F-35: hard cap per profile concept list (confirmed_gaps,
     # mastered_concepts); oldest entries evicted at write time.
     max_profile_list: int = 40
+
+    # C-03: non-multipart request bodies above this are rejected before
+    # parsing.
+    max_json_body_bytes: int = 64 * 1024
+
+    # G-07: /ready DB probe budget.
+    readiness_timeout_s: float = 2.0
 
     @property
     def cors_origin_list(self) -> list[str]:
