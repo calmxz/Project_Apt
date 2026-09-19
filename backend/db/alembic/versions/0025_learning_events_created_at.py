@@ -1,6 +1,6 @@
 """index on learning_events.created_at (F-07)
 
-Revision ID: 0025_learning_events_created_at_idx
+Revision ID: 0025_learning_events_created_at
 Revises: 0024_sessions_chunk_centroid
 Create Date: 2026-09-19
 
@@ -29,7 +29,7 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0025_learning_events_created_at_idx"
+revision: str = "0025_learning_events_created_at"
 down_revision: Union[str, None] = "0024_sessions_chunk_centroid"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

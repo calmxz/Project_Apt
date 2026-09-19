@@ -67,9 +67,9 @@ def test_learning_events_created_at_index_declared_on_model():
 
 def test_0025_chains_onto_0024():
     mod = _load_versions_module(
-        "0025_learning_events_created_at_idx.py", "migration_0025"
+        "0025_learning_events_created_at.py", "migration_0025"
     )
-    assert mod.revision == "0025_learning_events_created_at_idx"
+    assert mod.revision == "0025_learning_events_created_at"
     assert mod.down_revision == "0024_sessions_chunk_centroid"
 
 
@@ -79,3 +79,16 @@ def test_0024_chains_onto_0023():
     )
     assert mod.revision == "0024_sessions_chunk_centroid"
     assert mod.down_revision == "0023_worker_queue"
+
+
+def test_revision_ids_fit_alembic_version_column():
+    """alembic_version.version_num is varchar(32) on Postgres. A longer
+    revision id passes every sqlite test and then fails `alembic upgrade
+    head` live with "value too long for type character varying(32)"
+    (caught by CI on PR #327 for a 35-char id)."""
+    versions = Path(__file__).resolve().parents[1] / "db" / "alembic" / "versions"
+    for path in sorted(versions.glob("0*.py")):
+        spec = importlib.util.spec_from_file_location(f"chk_{path.stem}", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        assert len(mod.revision) <= 32, f"{path.name}: revision id {mod.revision!r} exceeds 32 chars"
