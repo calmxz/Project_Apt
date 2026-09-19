@@ -5,8 +5,12 @@ claims a pending document from the queue. Opens its own SessionLocal because
 no request-scoped DB session exists in the worker.
 
 Pipeline:
-  1. Load Document; load the blob via services.object_store (R2 in prod,
-     local disk in dev), not settings.uploads_path directly.
+  1. Load Document, capture its identifiers as plain locals, then close the
+     session (F-02) so steps 2-3 hold no pooled DB connection. Load the blob
+     via services.object_store (R2 in prod, local disk in dev), not
+     settings.uploads_path directly. The Document is re-fetched by id before
+     step 4; every failure arm re-fetches by id too, never touching the
+     detached instance.
   2. _extract(blob, filename) -> [(page_num | None, text), ...] by extension.
      - .pdf  : pypdf -> [(page_num, text), ...]
      - .pptx : python-pptx -> [(slide_num, text), ...]
@@ -60,18 +64,23 @@ log = logging.getLogger(__name__)
 EMBED_BATCH = 100
 
 
-def _load_blob(store: "object_store.ObjectStore", doc: Document) -> bytes:
+def _load_blob(
+    store: "object_store.ObjectStore", document_id: int, filename: str
+) -> bytes:
+    """F-02: takes plain identifiers, not the ORM instance -- run() closes its
+    session before calling this, so `doc` is detached and every attribute read
+    would emit a refresh SELECT on a session that holds no connection."""
     try:
-        return store.get(object_store.key_for(doc.id, doc.filename))
+        return store.get(object_store.key_for(document_id, filename))
     except object_store.ObjectNotFound:
         # Not under the canonical key - try the legacy layout below.
-        log.debug("blob miss on canonical key for doc %s; trying legacy key", doc.id)
+        log.debug("blob miss on canonical key for doc %s; trying legacy key", document_id)
     # Legacy fallback: pre-F-15 uploads were stored under the bare filename.
-    # LocalDiskStore path-containment rejects traversal in doc.filename.
+    # LocalDiskStore path-containment rejects traversal in filename.
     try:
-        return store.get(doc.filename)
+        return store.get(filename)
     except object_store.ObjectNotFound:
-        raise RuntimeError(f"uploaded file not found in object store: {doc.filename}") from None
+        raise RuntimeError(f"uploaded file not found in object store: {filename}") from None
 
 
 def _extract_pages(blob: bytes) -> list[tuple[int, str]]:
@@ -178,26 +187,44 @@ def run(document_id: int) -> None:
             log.warning("ingestion run: document %s not found", document_id)
             return
 
-        owner_id: str | None = None
-        # Hoisted local: except arms below read this after db.rollback(),
-        # which expires ORM instances -- reading doc.session_id there would
-        # trigger an implicit refresh SELECT that can itself raise if the
-        # original failure was DB/connection-related, skipping the
-        # mark-failed commit and stranding the doc in "pending".
+        # Hoisted locals: everything the rest of run() needs about the row,
+        # captured while the session is still open. The except arms below read
+        # these after db.rollback(), which expires ORM instances -- reading
+        # doc.session_id there would trigger an implicit refresh SELECT that
+        # can itself raise if the original failure was DB/connection-related,
+        # skipping the mark-failed commit and stranding the doc in "pending".
         session_id = doc.session_id
+        filename = doc.filename
+        owner_id: str | None = db.execute(
+            select(SessionModel.user_id).where(SessionModel.id == session_id)
+        ).scalar_one_or_none()
         log.info(
             "ingestion start document_id=%s session_id=%s filename=%s",
-            doc.id, session_id, doc.filename,
+            document_id, session_id, filename,
         )
+        # F-02: release the pooled connection for the slow, memory-heavy part
+        # (blob load, extraction, chunking). A SQLAlchemy 2.x Session is
+        # reusable after close(); the next statement checks out a fresh
+        # connection. `doc` is detached from here until the re-fetch below.
+        db.close()
         try:
-            blob = _load_blob(object_store.get_store(), doc)
-            pages = _extract(blob, doc.filename)
+            blob = _load_blob(object_store.get_store(), document_id, filename)
+            pages = _extract(blob, filename)
+            chunks = chunking.chunk_text(pages)
             # Count only pages/slides that carry a page number; plaintext yields
             # (None, text) so its sum is 0, which we collapse to None (no page
             # concept). Degenerate inputs (0-slide pptx) likewise store None.
-            doc.page_count = sum(1 for p, _ in pages if p is not None) or None
+            page_count = sum(1 for p, _ in pages if p is not None) or None
+            del blob, pages
 
-            chunks = chunking.chunk_text(pages)
+            doc = db.get(Document, document_id)
+            if doc is None:
+                log.warning(
+                    "ingestion run: document %s vanished during extraction", document_id
+                )
+                return
+            doc.page_count = page_count
+
             if not chunks:
                 doc.status = "ready"
                 db.commit()
@@ -209,20 +236,17 @@ def run(document_id: int) -> None:
                 db.commit()
                 return
 
-            owner_id = db.execute(
-                select(SessionModel.user_id).where(SessionModel.id == doc.session_id)
-            ).scalar_one_or_none()
             _embed_and_store(db, doc, chunks, user_id=owner_id)
 
             stems: set[str] = set()
             for c in chunks:
                 stems |= keyword_index.build_from_text(c.text)
             if stems:
-                keyword_index.merge_into_session(db, doc.session_id, stems)
+                keyword_index.merge_into_session(db, session_id, stems)
 
             log.info(
                 "ingestion done document_id=%s session_id=%s chunks=%s",
-                doc.id, doc.session_id, len(chunks),
+                document_id, session_id, len(chunks),
             )
             doc.status = "ready"
             doc.error = None

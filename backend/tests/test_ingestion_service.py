@@ -1009,3 +1009,120 @@ def test_metering_commits_per_batch(db_session, setup_doc, monkeypatch):
     ingestion_service._embed_and_store(db_session, doc, chunks, user_id=None)
     # Before batch 2's embedding call, batch 1 was already metered:
     assert ledger_seen_at_call == [0, 1]
+
+
+def test_run_holds_no_db_transaction_during_blob_load_and_extract(
+    db_session, insert_capture, mock_embed, monkeypatch, tmp_path
+):
+    """F-02: blob load, extraction and chunking are the slow, memory-heavy part
+    of ingestion. Holding a pooled DB connection across them starves the pool
+    under concurrent uploads, so run() must close its session first and
+    re-acquire one only for the embed/persist phase."""
+    from sqlalchemy.orm import sessionmaker
+
+    from services import ingestion_service
+
+    db_session.add(User(id="u_notx"))
+    db_session.flush()
+    db_session.add(
+        SessionModel(
+            id="s_notx",
+            user_id="u_notx",
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.flush()
+    doc = Document(session_id="s_notx", filename="notes.txt", status="pending")
+    db_session.add(doc)
+    db_session.commit()
+    db_session.refresh(doc)
+
+    created: list = []
+    real_factory = sessionmaker(
+        autocommit=False, autoflush=False, bind=db_session.get_bind()
+    )
+
+    def recording_factory():
+        s = real_factory()
+        created.append(s)
+        return s
+
+    monkeypatch.setattr("services.ingestion_service.SessionLocal", recording_factory)
+    _write_blob_stub(monkeypatch, tmp_path, doc.id, doc.filename, content=b"hello there")
+
+    # Recorded, not asserted, inside the fakes: run() catches Exception (and
+    # therefore AssertionError) and would swallow a failed assertion.
+    in_tx: list[bool] = []
+
+    real_load = ingestion_service._load_blob
+    real_extract = ingestion_service._extract
+    real_chunk = ingestion_service.chunking.chunk_text
+
+    def spy_load(*a, **kw):
+        in_tx.append(created[-1].in_transaction())
+        return real_load(*a, **kw)
+
+    def spy_extract(*a, **kw):
+        in_tx.append(created[-1].in_transaction())
+        return real_extract(*a, **kw)
+
+    def spy_chunk(*a, **kw):
+        in_tx.append(created[-1].in_transaction())
+        return real_chunk(*a, **kw)
+
+    monkeypatch.setattr("services.ingestion_service._load_blob", spy_load)
+    monkeypatch.setattr("services.ingestion_service._extract", spy_extract)
+    monkeypatch.setattr("services.ingestion_service.chunking.chunk_text", spy_chunk)
+
+    ingestion_service.run(doc.id)
+
+    db_session.expire_all()
+    refreshed = db_session.get(Document, doc.id)
+    assert refreshed.status == "ready", refreshed.error
+    assert in_tx == [False, False, False]
+
+
+def test_run_marks_failed_when_extract_raises_outside_session(
+    db_session, insert_capture, mock_embed, monkeypatch, tmp_path
+):
+    """F-02 regression: the failure arms run after the session was closed, so
+    they must re-fetch the Document by id rather than touch a detached
+    instance."""
+    from sqlalchemy.orm import sessionmaker
+
+    from services import ingestion_service
+
+    db_session.add(User(id="u_notx2"))
+    db_session.flush()
+    db_session.add(
+        SessionModel(
+            id="s_notx2",
+            user_id="u_notx2",
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.flush()
+    doc = Document(session_id="s_notx2", filename="notes.txt", status="pending")
+    db_session.add(doc)
+    db_session.commit()
+    db_session.refresh(doc)
+
+    monkeypatch.setattr(
+        "services.ingestion_service.SessionLocal",
+        sessionmaker(autocommit=False, autoflush=False, bind=db_session.get_bind()),
+    )
+    _write_blob_stub(monkeypatch, tmp_path, doc.id, doc.filename, content=b"hello there")
+
+    def boom(*a, **kw):
+        raise RuntimeError("extract exploded")
+
+    monkeypatch.setattr("services.ingestion_service._extract", boom)
+
+    ingestion_service.run(doc.id)
+
+    db_session.expire_all()
+    refreshed = db_session.get(Document, doc.id)
+    assert refreshed.status == "failed"
+    assert "exploded" in (refreshed.error or "")
