@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     # limits; env-tunable so the deploy can be sized without a code change.
     db_pool_size: int = 5
     db_max_overflow: int = 5
+    # F-01: how long a request waits for a pooled connection before failing.
+    # SQLAlchemy's default is 30s, which turns pool exhaustion into a pile-up
+    # of hung requests instead of fast, visible load shedding.
+    db_pool_timeout_s: float = 5.0
     llm_stub: bool = False
     debug_timing: bool = False
     # The web process drains the ingestion queue itself by default. Set false

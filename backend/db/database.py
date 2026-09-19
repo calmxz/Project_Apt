@@ -37,6 +37,9 @@ def _build_engine_kwargs(url: str) -> dict:
         kwargs["pool_size"] = settings.db_pool_size
         kwargs["max_overflow"] = settings.db_max_overflow
         kwargs["pool_recycle"] = 1800
+        # F-01: shed load instead of hanging 30 s (SQLAlchemy's default) on
+        # pool exhaustion -- a fast 500 beats a queue of stalled requests.
+        kwargs["pool_timeout"] = settings.db_pool_timeout_s
     return kwargs
 
 
