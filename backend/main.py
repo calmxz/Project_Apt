@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import assert_prod_database, settings
 from db.database import create_tables
+from lib.body_limit import BodySizeLimitMiddleware
 from lib.logging_config import configure_logging
 from lib.request_id import RequestIdMiddleware
 from routes import chat, documents, health, me, profile, review, sessions, upload, usage
@@ -63,6 +64,10 @@ app.add_middleware(
 )
 
 app.add_middleware(RequestIdMiddleware)
+
+# C-03: added last, so it is the outermost layer -- an oversized body is
+# rejected before any inner middleware or route handler is invoked.
+app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.max_json_body_bytes)
 
 app.include_router(health.router)
 app.include_router(chat.router)
