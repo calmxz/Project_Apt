@@ -115,6 +115,9 @@ class LearningEvent(Base):
     __tablename__ = "learning_events"
     __table_args__ = (
         Index("ix_learning_events_session", "session_id"),
+        # F-07: the review queue filters on created_at across every session a
+        # user owns, so session_id alone cannot serve that scan.
+        Index("ix_learning_events_created_at", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

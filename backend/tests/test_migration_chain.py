@@ -42,3 +42,32 @@ def test_session_rolling_summary_columns(db_session):
 
     assert s.rolling_summary == "earlier we covered X"
     assert s.rolling_summary_count == 12
+
+
+def _load_versions_module(filename: str, modname: str):
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "db" / "alembic" / "versions" / filename
+    )
+    spec = importlib.util.spec_from_file_location(modname, path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_learning_events_created_at_index_declared_on_model():
+    """F-07: the windowed review-queue scan filters on created_at, so the
+    column needs its own index (ix_learning_events_session covers session_id
+    only)."""
+    from db.models import LearningEvent
+
+    names = {ix.name for ix in LearningEvent.__table__.indexes}
+    assert "ix_learning_events_created_at" in names
+
+
+def test_0025_chains_onto_0024():
+    mod = _load_versions_module(
+        "0025_learning_events_created_at_idx.py", "migration_0025"
+    )
+    assert mod.revision == "0025_learning_events_created_at_idx"
+    assert mod.down_revision == "0024_sessions_chunk_centroid"
