@@ -124,6 +124,15 @@ paths:
       tags: [sessions]
       summary: List sessions for the authenticated user.
       operationId: listSessions
+      parameters:
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer, default: 100, minimum: 1, maximum: 200 }
+        - in: query
+          name: offset
+          required: false
+          schema: { type: integer, default: 0, minimum: 0 }
       responses:
         "200":
           description: Sessions grouped/sorted by recency.

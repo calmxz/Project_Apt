@@ -205,13 +205,20 @@ async def create_session(
 
 @router.get("/sessions", response_model=list[SessionListItem])
 def list_sessions(
+    limit: int = Query(100, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     user_id: str = Depends(current_user_id),
     db: Session = Depends(get_db),
 ):
+    # F-06: unbounded before -- a heavy account loaded (and enriched) every
+    # session it had ever created on one request. Default 100 keeps every
+    # current caller's behaviour intact.
     rows = db.execute(
         select(SessionModel)
         .where(SessionModel.user_id == user_id)
         .order_by(SessionModel.created_at.desc())
+        .limit(limit)
+        .offset(offset)
     ).scalars().all()
     return _enrich_list_items(db, rows)
 
