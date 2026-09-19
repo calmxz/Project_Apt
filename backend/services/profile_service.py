@@ -465,10 +465,14 @@ def apply_patch(
                     f"check answer recorded for '{prior_focus}' in this session"
                 ),
             )
+        # G-05: gap strings are learner free text and can carry personal
+        # detail, so the audit line logs a sha256 prefix plus length instead
+        # of the raw name. Still correlatable across turns, no PII at rest.
         log.info(
-            "focus_clear session=%s gap=%s reason=%s",
+            "focus_clear session=%s gap_sha=%s gap_len=%d reason=%s",
             ctx.session_id,
-            prior_focus,
+            hashlib.sha256(prior_focus.encode()).hexdigest()[:8],
+            len(prior_focus),
             args.focus_clear_reason,
         )
         profile.focus_target_gap = None
