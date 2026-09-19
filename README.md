@@ -13,9 +13,7 @@ Pick a topic, drop in your course PDFs, and chat with a tutor that builds a live
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688.svg)](https://fastapi.tiangolo.com/)
 [![pgvector](https://img.shields.io/badge/pgvector-0.8.x-336791.svg)](https://github.com/pgvector/pgvector)
 
-[**Screencast walkthrough**](docs/screencast/crux-walkthrough.mp4) · [**Design doc**](docs/superpowers/specs/2026-05-03-crux-v1-design.md) · [**API spec**](docs/api/openapi.yaml)
-
-![Crux hero](docs/assets/hero.png)
+[**Design doc**](docs/superpowers/specs/2026-05-03-crux-v1-design.md) · [**API spec**](docs/api/openapi.yaml)
 
 </div>
 
@@ -249,13 +247,9 @@ With the stack running on http://localhost:5173, here's the end-to-end happy pat
 
 ### 1. Register and onboarding
 
-![Onboarding view](docs/assets/screens/01-onboarding.png)
-
 First visit: register with email/password (or log in if you already have an account). Once authenticated, a short onboarding flow asks for a display name and how you like to learn (hints vs. direct answers) so the tutor can tune its style. Click **Begin**.
 
 ### 2. The home dashboard
-
-![Home view](docs/assets/screens/02-home.png)
 
 The home view (`HomeView`) shows:
 - Your existing sessions, grouped active vs ended.
@@ -263,8 +257,6 @@ The home view (`HomeView`) shows:
 - A **Profile** link to the cross-session aggregate dashboard.
 
 ### 3. Start a new session
-
-![New session view](docs/assets/screens/03-new-session.png)
 
 Click **New session**. Enter:
 - **Topic** — what you want to study (e.g. `"Linear Algebra: Eigenvalues"`).
@@ -274,8 +266,6 @@ Click **Start**. You're dropped into the chat view with an empty profile.
 
 ### 4. Optionally attach a PDF
 
-![Upload PDF](docs/assets/screens/04-upload.png)
-
 Inside a session, click the **paperclip** icon to upload a PDF. The backend:
 1. Returns `202 Accepted` immediately with a `document_id`.
 2. Runs chunking + embedding in the background.
@@ -284,8 +274,6 @@ Inside a session, click the **paperclip** icon to upload a PDF. The backend:
 Once `ready`, the agent can call `retrieve_chunks` on this material. Subsequent answers will include **citations** rendered as a list under the message.
 
 ### 5. Chat
-
-![Session chat](docs/assets/screens/05-session.png)
 
 Type a message. The tutor will:
 
@@ -305,8 +293,6 @@ Behind the scenes (visible in the dev console as `tool_calls`), it might call e.
 
 ### 6. Check your profile
 
-![Per-session profile view](docs/assets/screens/06-profile.png)
-
 Click the **profile icon** in the session header to open `ProfileView` (`/profile/:sessionId`). You'll see:
 
 - Current `knowledge_level`.
@@ -317,15 +303,11 @@ Click the **profile icon** in the session header to open `ProfileView` (`/profil
 
 ### 7. End the session
 
-![Session ended banner](docs/assets/screens/07-session-end.png)
-
 Click **End session**. The backend calls `POST /api/sessions/:id/end`, which generates a one-paragraph summary via the LLM. The session is now read-only.
 
 You can reopen it later via `POST /api/sessions/:id/reopen` (UI button on the ended-session banner).
 
 ### 8. Cross-session dashboard
-
-![Aggregate profile](docs/assets/screens/08-aggregate.png)
 
 Back on the home dashboard, click **Profile** to see `AggregateProfileView`. This is a pure SQL/Python aggregate — no LLM calls — showing:
 
@@ -464,11 +446,11 @@ Project_Apt/
 ├── docs/
 │   ├── superpowers/specs/      Design doc (source of truth)
 │   ├── api/openapi.yaml        API contract (codegen source)
-│   ├── deploy/ngrok.md         Public demo deploy guide
-│   ├── screencast/             Walkthrough script + recorded video
-│   ├── Crux_Spec.md      Original spec (v2 reference)
-│   └── Crux_DevPlan.md   Original dev plan (v2 reference)
-├── spike/                      Phase 0 validation spike (preserved)
+│   ├── deploy/                 RUNBOOK, RESTORE, ngrok public-demo guide
+│   ├── decisions.md            Durable decisions (ADR-lite)
+│   ├── reference.md            Technical reference and gotchas
+│   ├── Crux_Spec.md            Original spec (v2 reference)
+│   └── Crux_DevPlan.md         Original dev plan (v2 reference)
 ├── frontend/
 │   ├── src/
 │   │   ├── views/              HomeView, NewSessionView, SessionView,
