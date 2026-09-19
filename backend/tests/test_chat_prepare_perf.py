@@ -81,6 +81,22 @@ def _run_prepare(db, session_id):
     return asyncio.run(_prepare_turn(req, USER_ID, db))
 
 
+def test_prepare_turn_context_leaves_no_open_transaction(db_session, seeded_session):
+    """F-13: _prepare_turn_context's segment is read-only, and the two awaited
+    embedding round-trips follow it. It must commit so the pooled connection
+    is released while those awaits are in flight."""
+    from routes.chat import _prepare_turn_context
+
+    session_id = seeded_session.id
+    sess = db_session.get(SessionModel, session_id)
+    db_session.expunge(sess)
+    req = ChatRequest(session_id=session_id, message="explain factoring")
+
+    _prepare_turn_context(req, db_session, sess)
+
+    assert db_session.in_transaction() is False
+
+
 def test_prepare_turn_budget_no_gaps(db_session, seeded_session):
     # Evaluate .id BEFORE the counted block: the fixture's commit expires the
     # ORM instance (expire_on_commit=True), so accessing .id inside the block

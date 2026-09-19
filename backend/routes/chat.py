@@ -307,6 +307,13 @@ def _prepare_turn_context(req: ChatRequest, db: Session, session: SessionModel):
     retrieval_required = keyword_index.match_required(
         req.message, json.loads(session.kw_index_json or "[]")
     )
+    # F-13: this segment is read-only, and the caller's next two steps are
+    # awaited embedding round-trips (semantic_fallback_required /
+    # prefetch_for_prompt). Committing here releases the pooled connection for
+    # the duration of those awaits instead of holding an idle-in-transaction
+    # one. `session` was already expunged by the guards and everything read
+    # afterwards is a plain local, so commit-expiry costs no refresh SELECT.
+    db.commit()
     return messages, profile, gap_accuracy, retrieval_required
 
 
