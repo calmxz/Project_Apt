@@ -35,6 +35,7 @@ def retry_sync(fn: Callable[[], T]) -> T:
             if i == attempts:
                 raise
             time.sleep(base * (2**i))
+    raise RuntimeError("unreachable: retry_sync exited loop without returning or raising")
 
 
 async def retry_async(fn: Callable[[], Awaitable[T]]) -> T:
@@ -47,3 +48,4 @@ async def retry_async(fn: Callable[[], Awaitable[T]]) -> T:
             if i == attempts:
                 raise
             await asyncio.sleep(base * (2**i))
+    raise RuntimeError("unreachable: retry_async exited loop without returning or raising")
