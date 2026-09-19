@@ -5,6 +5,7 @@ import time
 from datetime import datetime, timezone
 from decimal import Decimal
 
+import anyio
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, literal, select
@@ -116,6 +117,51 @@ def _build_prompt_state(
     return prompt_state
 
 
+def _turn_reserve() -> Decimal:
+    """B-05: the provisional per-turn charge held at the cost gate."""
+    return Decimal(str(settings.llm_turn_reserve_usd))
+
+
+def _cost_cap_error(cost_status) -> HTTPException:
+    """The 429 envelope for a breached per-user daily cost cap (unchanged
+    payload; shared by the read gate and the B-05 reservation gate)."""
+    return HTTPException(
+        status_code=429,
+        detail={
+            "code": DAILY_COST_CAP_REACHED,
+            "soft_cap_usd": str(cost_status.soft_cap),
+            "hard_cap_usd": str(cost_status.hard_cap),
+            "used_usd": str(cost_status.used),
+            "resets_at": cost_meter.midnight_utc_iso(),
+        },
+    )
+
+
+def _release_reserve(db: Session, user_id: str) -> None:
+    """B-05: hand back this turn's provisional reservation. Synchronous; async
+    callers run it via run_in_threadpool.
+
+    Rolls back first: after a failed or cancelled turn the shared session can
+    be left in rollback-required state, and run_streaming owns its own commits,
+    so nothing publishable is discarded here. Never raises -- a failed release
+    must not turn a finished turn into an error; the residue expires at UTC
+    midnight with the ledger row.
+    """
+    reserve = _turn_reserve()
+    if reserve <= 0:
+        return
+    try:
+        db.rollback()
+        cost_meter.adjust_cost(db, user_id, -reserve)
+        db.commit()
+    except Exception as e:  # noqa: BLE001 - release is best-effort by design
+        log.warning("cost reserve release failed: %s", e)
+        try:
+            db.rollback()
+        except Exception:  # noqa: BLE001
+            pass
+
+
 def _prepare_turn_guards(
     req: ChatRequest,
     user_id: str,
@@ -138,16 +184,7 @@ def _prepare_turn_guards(
 
     cost_status = cost_meter.check_cap_from_spend(Decimal(str(spend_raw or 0)))
     if not cost_status.allowed:
-        raise HTTPException(  # unchanged detail payload
-            status_code=429,
-            detail={
-                "code": DAILY_COST_CAP_REACHED,
-                "soft_cap_usd": str(cost_status.soft_cap),
-                "hard_cap_usd": str(cost_status.hard_cap),
-                "used_usd": str(cost_status.used),
-                "resets_at": cost_meter.midnight_utc_iso(),
-            },
-        )
+        raise _cost_cap_error(cost_status)
 
     if settings.global_daily_cost_cap_usd is not None:
         if cost_meter.global_spend(db) >= Decimal(
@@ -196,9 +233,30 @@ def _prepare_turn_guards(
     if not user_exists:
         ensure_user(db, user_id, accepted_terms=accepted_terms)
 
+    # 3b) B-05: reserve this turn's provisional spend and gate on the
+    # PRE-increment total. The read gate in step 1 is an early-out only: N
+    # concurrent turns at cap-minus-epsilon all pass it. Routing every turn
+    # through the ledger upsert serializes them on the row, so each caller
+    # sees a distinct total and only those below the hard cap are admitted.
+    #
+    # Placement: AFTER ensure_user, because daily_cost_ledger.user_id is
+    # FK-bound to users.id -- reserving before that row exists raises
+    # IntegrityError on Postgres for a first-turn-ever user. Nothing is
+    # committed between ensure_user and here, so the reject arm below leaves
+    # nothing behind: get_db closes without committing and the flush is lost.
+    reserve = _turn_reserve()
+    pre_spend = cost_meter.reserve_cost(db, user_id, reserve)
+    reserve_status = cost_meter.check_cap_from_spend(pre_spend)
+    if not reserve_status.allowed:
+        raise _cost_cap_error(reserve_status)
+
     # 4-5) Rate limit: 2 statements on the allowed path.
     allowed, used = rate_limit.check_and_increment(db, user_id)
     if not allowed:
+        # B-05: check_and_increment's internal commit has just published the
+        # reservation, so this is the one reject arm that must give it back
+        # explicitly instead of relying on the transaction being discarded.
+        _release_reserve(db, user_id)
         raise HTTPException(  # unchanged detail payload
             status_code=429,
             detail={
@@ -275,33 +333,19 @@ def _persist_user_turn_after_failure(
     db.commit()
 
 
-async def _prepare_turn(
+async def _prepare_turn_after_guards(
     req: ChatRequest,
     user_id: str,
     db: Session,
-    accepted_terms: bool = False,
+    session: SessionModel,
+    ingestion_status,
 ) -> tuple[list[dict], str, ToolContext]:
-    """Pre-flight for /chat/stream.
+    """Steps 6-7 of _prepare_turn: history -> prompt build -> user-message
+    persist.
 
-    Guard order: cost cap -> session 404/409 -> ensure_user -> rate limit.
-    The session guard runs before ensure_user and the rate limiter so a
-    rejected turn (unknown/foreign session 404, ended session 409) neither
-    creates a user row nor consumes a daily rate-limit slot. ensure_user runs
-    before check_and_increment so the FK-bearing usage_counters insert never
-    races ahead of the users row it references (F-36); check_and_increment's
-    internal commit persists both together. Loads history, builds the system
-    prompt, then persists the user ChatMessage last (committed before
-    returning so it survives even if the stream ends early), and returns
-    (messages, system_prompt, ctx).
-
-    F-11: every synchronous DB segment runs via run_in_threadpool so psycopg
-    never blocks the event loop. The segments are sequential awaits, so no two
-    threadpool calls ever touch `db` concurrently.
+    Split out from _prepare_turn so the caller can release the B-05 cost
+    reservation (already committed by the guards) on any failure in here.
     """
-    session, ingestion_status = await run_in_threadpool(
-        _prepare_turn_guards, req, user_id, db, accepted_terms
-    )
-
     # 6) History through prompt build. An unexpected crash here must not lose
     # the user's message: persist it, then re-raise. Happy path pays no extra
     # statement.
@@ -373,6 +417,45 @@ async def _prepare_turn(
     return messages, system_prompt, ctx
 
 
+async def _prepare_turn(
+    req: ChatRequest,
+    user_id: str,
+    db: Session,
+    accepted_terms: bool = False,
+) -> tuple[list[dict], str, ToolContext]:
+    """Pre-flight for /chat/stream.
+
+    Guard order: cost cap -> session 404/409 -> ensure_user -> cost reserve ->
+    rate limit. The session guard runs before ensure_user and the rate limiter
+    so a rejected turn (unknown/foreign session 404, ended session 409) neither
+    creates a user row nor consumes a daily rate-limit slot. ensure_user runs
+    before check_and_increment so the FK-bearing usage_counters insert never
+    races ahead of the users row it references (F-36); check_and_increment's
+    internal commit persists both together, plus the B-05 reservation taken
+    between them. Loads history, builds the system prompt, then persists the
+    user ChatMessage last (committed before returning so it survives even if
+    the stream ends early), and returns (messages, system_prompt, ctx).
+
+    F-11: every synchronous DB segment runs via run_in_threadpool so psycopg
+    never blocks the event loop. The segments are sequential awaits, so no two
+    threadpool calls ever touch `db` concurrently.
+    """
+    session, ingestion_status = await run_in_threadpool(
+        _prepare_turn_guards, req, user_id, db, accepted_terms
+    )
+
+    # B-05: past the guards the reservation is committed, so any failure
+    # between here and the start of the stream must hand it back. Once
+    # chat_stream has the context, its event_stream finally owns the release.
+    try:
+        return await _prepare_turn_after_guards(
+            req, user_id, db, session, ingestion_status
+        )
+    except BaseException:
+        await run_in_threadpool(_release_reserve, db, user_id)
+        raise
+
+
 @router.post("/chat/stream", dependencies=[Depends(velocity_limit.enforce_velocity)])
 async def chat_stream(
     req: ChatRequest,
@@ -433,6 +516,15 @@ async def chat_stream(
                 except (asyncio.CancelledError, Exception):
                     # Producer cancelled or errored during disconnect cleanup; suppress.
                     pass
+            # B-05: hand back the per-turn reservation exactly once, AFTER the
+            # tutor task has finished or been cancelled -- it shares ctx.db, so
+            # the two must never touch the session concurrently. Shielded
+            # because on a real client disconnect the surrounding cancel scope
+            # re-raises CancelledError at every await (including the checkpoint
+            # inside run_in_threadpool), which would skip the release entirely
+            # and strand the reserve on the ledger until UTC midnight.
+            with anyio.CancelScope(shield=True):
+                await run_in_threadpool(_release_reserve, db, user_id)
 
     return StreamingResponse(
         event_stream(),
