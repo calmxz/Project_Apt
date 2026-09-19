@@ -17,10 +17,11 @@ from agent import context_budget, prompts, tutor
 from agent.excerpt import wrap_chunk
 from agent.types import ToolContext
 from config import settings
-from contracts import ChatRequest, Citation
+from contracts import ChatRequest
 from db.database import SessionLocal, get_db
 from db.models import ChatMessage, Document, Session as SessionModel, User
 from lib import keyword_index
+from lib.citations import chunks_to_citations
 from lib.error_codes import DAILY_CAP_REACHED, DAILY_COST_CAP_REACHED, GLOBAL_COST_CAP_REACHED
 from services import (
     check_question_service,
@@ -406,18 +407,10 @@ async def _prepare_turn_after_guards(
         user_id=user_id,
         turn_started_at=datetime.now(timezone.utc),
         diagnostic_required=bool(prompt_state.get("diagnostic_required", False)),
+        # G-11: floor applies to the surfaced citations only; the prefetched
+        # chunks themselves already went into the prompt above, unfiltered.
         prefetched_citations=(
-            [
-                Citation(
-                    doc_id=str(ch.get("doc_id", "")),
-                    text=ch.get("text", ""),
-                    page=ch.get("page"),
-                    doc_name=ch.get("doc_name"),
-                )
-                for ch in prefetched_chunks
-            ]
-            if prefetched_chunks
-            else None
+            chunks_to_citations(prefetched_chunks) if prefetched_chunks else None
         ),
     )
 
