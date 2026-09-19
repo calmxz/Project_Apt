@@ -1,3 +1,4 @@
+import io
 import logging
 import re
 from pathlib import Path
@@ -13,6 +14,8 @@ from fastapi import (
     UploadFile,
     status,
 )
+from pptx import Presentation
+from pypdf import PdfReader
 from sqlalchemy.orm import Session
 
 from config import settings
@@ -44,6 +47,28 @@ _MAGIC_BYTES = {
 log = logging.getLogger(__name__)
 
 READ_CHUNK = 1024 * 1024  # 1 MiB
+
+# Inline literal like CONTENT_TYPE_MISMATCH / INVALID_FILENAME above:
+# lib/error_codes.py holds only the codes the frontend switches on.
+PAGE_LIMIT_EXCEEDED = "PAGE_LIMIT_EXCEEDED"
+
+
+def _page_count(ext: str, data: bytes) -> int | None:
+    """Pages in a PDF / slides in a PPTX, or None when it cannot be determined.
+
+    Uses the same libraries as services.ingestion_service._extract_pages /
+    _extract_slides. Unparseable files return None and are let through:
+    ingestion already reports extraction failures on the document row, and a
+    parser disagreement must not turn into a confusing 413.
+    """
+    try:
+        if ext == ".pdf":
+            return len(PdfReader(io.BytesIO(data), strict=False).pages)
+        if ext == ".pptx":
+            return len(Presentation(io.BytesIO(data)).slides)
+    except Exception:
+        log.info("page-count probe failed for %s upload; skipping the gate", ext)
+    return None
 
 
 def _read_bounded(fh, max_bytes: int) -> bytes:
@@ -160,6 +185,20 @@ def upload_file(
             detail={
                 "code": "CONTENT_TYPE_MISMATCH",
                 "message": "file content does not match its extension",
+            },
+        )
+
+    # F-03: structural page gate. The plaintext estimate above has no
+    # equivalent for containers, so a 3000-page PDF would only be caught
+    # after a worker had already loaded and tokenised the whole document.
+    page_count = _page_count(ext, data)
+    if page_count is not None and page_count > settings.max_pages:
+        raise HTTPException(
+            status_code=413,
+            detail={
+                "code": PAGE_LIMIT_EXCEEDED,
+                "max_pages": settings.max_pages,
+                "page_count": page_count,
             },
         )
 

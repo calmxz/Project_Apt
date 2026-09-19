@@ -15,7 +15,10 @@ Pipeline:
      - .pdf  : pypdf -> [(page_num, text), ...]
      - .pptx : python-pptx -> [(slide_num, text), ...]
      - .txt / .md / .markdown : [(None, full_text)]
-  3. lib.chunking.chunk_text (500 / 50 overlap).
+  3. lib.chunking.chunk_text (500 / 50 overlap), streaming with
+     max_chunks=settings.max_chunks: an oversized document raises
+     ChunkLimitExceeded mid-stream and is marked failed without the
+     remaining pages ever being tokenised (F-03).
   4. _embed_and_store: per EMBED_BATCH slice (100 chunks) -- cap-check,
      embed (litellm.embedding), insert (pgvector_store.insert_chunks),
      meter (cost_meter.meter_embedding_response), commit. No DB transaction
@@ -210,7 +213,10 @@ def run(document_id: int) -> None:
         try:
             blob = _load_blob(object_store.get_store(), document_id, filename)
             pages = _extract(blob, filename)
-            chunks = chunking.chunk_text(pages)
+            # F-03: the cap is enforced inside the chunker so an oversized
+            # document aborts mid-stream instead of materialising every chunk
+            # first and only then failing the count check.
+            chunks = chunking.chunk_text(pages, max_chunks=settings.max_chunks)
             # Count only pages/slides that carry a page number; plaintext yields
             # (None, text) so its sum is 0, which we collapse to None (no page
             # concept). Degenerate inputs (0-slide pptx) likewise store None.
@@ -227,12 +233,6 @@ def run(document_id: int) -> None:
 
             if not chunks:
                 doc.status = "ready"
-                db.commit()
-                return
-
-            if len(chunks) > settings.max_chunks:
-                doc.status = "failed"
-                doc.error = "document too large to ingest (chunk limit)"
                 db.commit()
                 return
 
@@ -259,6 +259,21 @@ def run(document_id: int) -> None:
             doc.status = "ready"
             doc.error = None
             db.commit()
+        except chunking.ChunkLimitExceeded:
+            # F-03: raised from inside chunk_text, i.e. in the no-session
+            # window, so re-fetch by id rather than touching the detached row.
+            db.rollback()
+            log.warning(
+                "ingestion stopped: chunk cap reached document_id=%s session_id=%s",
+                document_id, session_id,
+                extra={"doc_id": document_id},
+            )
+            doc = db.get(Document, document_id)
+            if doc is not None:
+                doc.status = "failed"
+                doc.error = "document too large to ingest (chunk limit)"
+                db.commit()
+            return
         except cost_meter.CostCapExceeded:
             db.rollback()
             log.warning(

@@ -1166,3 +1166,53 @@ def test_run_invalidates_session_chunk_centroid(
     db_session.expire_all()
     assert db_session.get(Document, doc.id).status == "ready"
     assert db_session.get(SessionModel, "s_cinv").chunk_centroid is None
+
+
+def test_run_passes_max_chunks_and_fails_on_early_abort(
+    db_session, insert_capture, mock_embed, monkeypatch, tmp_path
+):
+    """F-03: the cap is enforced inside the chunker (early abort), not by
+    counting a fully materialised chunk list afterwards."""
+    from sqlalchemy.orm import sessionmaker
+
+    from config import settings
+    from services import ingestion_service
+
+    db_session.add(User(id="u_cap2"))
+    db_session.flush()
+    db_session.add(
+        SessionModel(
+            id="s_cap2",
+            user_id="u_cap2",
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.flush()
+    doc = Document(session_id="s_cap2", filename="big.txt", status="pending")
+    db_session.add(doc)
+    db_session.commit()
+    db_session.refresh(doc)
+
+    monkeypatch.setattr(
+        "services.ingestion_service.SessionLocal",
+        sessionmaker(autocommit=False, autoflush=False, bind=db_session.get_bind()),
+    )
+    _write_blob_stub(monkeypatch, tmp_path, doc.id, doc.filename, content=b"word " * 50)
+
+    seen: dict = {}
+
+    def fake_chunk_text(pages, **kw):
+        seen.update(kw)
+        raise chunking.ChunkLimitExceeded(kw["max_chunks"])
+
+    monkeypatch.setattr("services.ingestion_service.chunking.chunk_text", fake_chunk_text)
+
+    ingestion_service.run(doc.id)
+
+    assert seen["max_chunks"] == settings.max_chunks
+    db_session.expire_all()
+    refreshed = db_session.get(Document, doc.id)
+    assert refreshed.status == "failed"
+    assert refreshed.error == "document too large to ingest (chunk limit)"
+    assert insert_capture == []

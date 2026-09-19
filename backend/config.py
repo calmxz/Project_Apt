@@ -65,6 +65,9 @@ class Settings(BaseSettings):
     llm_soft_cap_usd: float = 2.00
     llm_hard_cap_usd: float = 3.00
     max_chunks: int = 5000
+    # F-03: upload-time page/slide ceiling for .pdf/.pptx. Cheap structural
+    # check that rejects a document before a worker loads and tokenises it.
+    max_pages: int = 400
     global_daily_cost_cap_usd: float | None = None
     llm_temperature: float = 0.3
     summary_temperature: float = 0.0
