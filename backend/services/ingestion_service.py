@@ -236,15 +236,18 @@ def run(document_id: int) -> None:
                 db.commit()
                 return
 
-            _embed_and_store(db, doc, chunks, user_id=owner_id)
-
-            # F-05: new chunks move the session's mean embedding. Drop the
+            # F-05: new chunks move the session's mean embedding, so drop the
             # materialised centroid; the next chat turn recomputes it once.
+            # Before _embed_and_store, not after: that loop commits per batch,
+            # so a failure part-way through leaves durable new chunks. Nulling
+            # first means the worst case is a stale NULL (recomputed on
+            # demand) instead of a stale centroid nothing would ever refresh.
             db.execute(
                 update(SessionModel)
                 .where(SessionModel.id == session_id)
                 .values(chunk_centroid=None)
             )
+            _embed_and_store(db, doc, chunks, user_id=owner_id)
 
             stems: set[str] = set()
             for c in chunks:

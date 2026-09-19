@@ -1216,3 +1216,60 @@ def test_run_passes_max_chunks_and_fails_on_early_abort(
     assert refreshed.status == "failed"
     assert refreshed.error == "document too large to ingest (chunk limit)"
     assert insert_capture == []
+
+
+def test_partial_ingest_failure_still_invalidates_centroid(
+    db_session, mock_embed, monkeypatch, tmp_path
+):
+    """F-05: _embed_and_store commits per batch, so a failure mid-document
+    leaves durable new chunks. The centroid must already be NULL by then --
+    otherwise a stale mean survives with nothing left to refresh it."""
+    from sqlalchemy.orm import sessionmaker
+
+    from config import settings
+    from services import ingestion_service
+
+    db_session.add(User(id="u_cinv2"))
+    db_session.flush()
+    db_session.add(
+        SessionModel(
+            id="s_cinv2",
+            user_id="u_cinv2",
+            topic="sql",
+            topic_profile_json=TopicProfile().model_dump_json(),
+            chunk_centroid=[0.3] * settings.embedding_dim,
+        )
+    )
+    db_session.flush()
+    doc = Document(session_id="s_cinv2", filename="notes.txt", status="pending")
+    db_session.add(doc)
+    db_session.commit()
+    db_session.refresh(doc)
+
+    monkeypatch.setattr(
+        "services.ingestion_service.SessionLocal",
+        sessionmaker(autocommit=False, autoflush=False, bind=db_session.get_bind()),
+    )
+    monkeypatch.setattr("services.ingestion_service.EMBED_BATCH", 1)
+    _write_blob_stub(
+        monkeypatch, tmp_path, doc.id, doc.filename, content=b"word " * 1200
+    )
+
+    calls = {"n": 0}
+
+    def fail_on_second_batch(db, *, session_id, document_id, rows):
+        calls["n"] += 1
+        if calls["n"] > 1:
+            raise RuntimeError("pgvector insert failed on batch 2")
+        return len(rows)
+
+    monkeypatch.setattr(
+        "services.ingestion_service.pgvector_store.insert_chunks", fail_on_second_batch
+    )
+
+    ingestion_service.run(doc.id)
+
+    db_session.expire_all()
+    assert calls["n"] > 1
+    assert db_session.get(Document, doc.id).status == "failed"
+    assert db_session.get(SessionModel, "s_cinv2").chunk_centroid is None
