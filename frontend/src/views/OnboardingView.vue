@@ -61,6 +61,15 @@
       <p v-if="submitError" class="status is-alert" role="alert" data-testid="onboarding-error">
         {{ submitError }}
       </p>
+
+      <!-- E-09: onboarding must not be a dead end for a learner who cannot
+           or does not want to complete it right now (e.g. force-landed here
+           after a failed hydrate). Mirrors Sidebar.vue's onSignOut. -->
+      <p class="line">
+        <button type="button" class="linkbtn" data-testid="onboarding-signout" @click="signOut">
+          Sign out
+        </button>
+      </p>
     </form>
   </AuthCover>
 </template>
@@ -75,9 +84,12 @@ import AuthCover from '../components/auth/AuthCover.vue'
 import FeedbackStylePicker from '../components/FeedbackStylePicker.vue'
 import { friendlyError } from '@/lib/errors.js'
 import { useUserStore } from '../stores/user.js'
+import { useAuthStore } from '../stores/auth.js'
+import { useToast } from '../composables/useToast.js'
 
 const router = useRouter()
 const userStore = useUserStore()
+const authStore = useAuthStore()
 
 const displayName = ref(userStore.name || '')
 const feedbackOptions = [
@@ -106,6 +118,17 @@ async function submit() {
   } finally {
     submitting.value = false
   }
+}
+
+// Mirrors Sidebar.vue's onSignOut exactly: sign out, then route to /login.
+async function signOut() {
+  try {
+    await authStore.signOut()
+  } catch (err) {
+    useToast().showError(err?.message || 'Sign out failed')
+    return
+  }
+  router.push('/login')
 }
 </script>
 
@@ -153,5 +176,27 @@ async function submit() {
     opacity: 1;
     animation: none;
   }
+}
+
+/* The sign-out control is a button that has to read as the cover's link. */
+.linkbtn {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-weight: 700;
+  color: var(--ink-learner);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.linkbtn:hover {
+  color: var(--color-accent-hover);
+}
+
+.linkbtn:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 </style>

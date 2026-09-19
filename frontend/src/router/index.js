@@ -172,6 +172,7 @@ router.beforeEach(async (to) => {
   if (
     auth.isAuthenticated &&
     !user.onboardingComplete &&
+    !user.hydrateFailed &&
     to.name !== 'onboarding' &&
     to.name !== 'reset-password'
   ) {

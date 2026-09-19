@@ -22,6 +22,11 @@ export const useUserStore = defineStore('user', () => {
   // trusting onboardingComplete, so a new device doesn't get force-routed
   // through onboarding off a stale/absent localStorage snapshot.
   const hydrated = ref(false)
+  // E-09: distinguishes "hydrate ran and the server said onboarding is
+  // incomplete" from "hydrate could not reach the server at all". The router
+  // guard must not force-route into onboarding on the latter -- that would
+  // trap a user with no local snapshot and no way to reach the app.
+  const hydrateFailed = ref(false)
 
   function _storageKey() {
     return `${STORAGE_PREFIX}:${activeUserId.value}`
@@ -32,6 +37,7 @@ export const useUserStore = defineStore('user', () => {
     interactionPreferences.value = null
     onboardingComplete.value = false
     hydrated.value = false
+    hydrateFailed.value = false
   }
 
   function setActiveUser(uid) {
@@ -77,6 +83,7 @@ export const useUserStore = defineStore('user', () => {
   // localStorage already loaded rather than blocking the app.
   async function hydrateFromServer() {
     if (!activeUserId.value) return
+    hydrateFailed.value = false
     try {
       const me = await apiGet('/me', undefined, { silent: true })
       if (me) {
@@ -92,6 +99,7 @@ export const useUserStore = defineStore('user', () => {
       }
     } catch {
       // Offline / API down: keep the localStorage snapshot already loaded.
+      hydrateFailed.value = true
     } finally {
       hydrated.value = true
     }
@@ -137,6 +145,7 @@ export const useUserStore = defineStore('user', () => {
     onboardingComplete,
     activeUserId,
     hydrated,
+    hydrateFailed,
     setActiveUser,
     loadFromLocalStorage,
     hydrateFromServer,
