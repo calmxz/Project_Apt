@@ -75,11 +75,6 @@ function tickAt(i) {
 </template>
 
 <style scoped>
-.message-list,
-.msg-list {
-  display: block;
-}
-
 .msg-list {
   display: flex;
   flex-direction: column;

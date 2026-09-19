@@ -1,5 +1,5 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
 
 const props = defineProps({
   /** 'active' | 'ended' — controls which action is offered */
@@ -25,16 +25,16 @@ function close() {
   open.value = false
 }
 
+function focusTrigger() {
+  triggerEl.value?.focus()
+}
+
+// Every item does the same three things; only the emitted name differs.
 function onAction(kind) {
   if (props.busy) return
-  if (kind === 'end') emit('end')
-  else if (kind === 'resume') emit('resume')
-  else if (kind === 'continue-topic') emit('continue-topic')
-  else if (kind === 'rename') emit('rename')
-  else if (kind === 'pin') emit('pin')
-  else if (kind === 'unpin') emit('unpin')
+  emit(kind)
   close()
-  triggerEl.value?.focus()
+  focusTrigger()
 }
 
 function onDocPointerDown(e) {
@@ -49,18 +49,33 @@ function onKey(e) {
   if (e.key === 'Escape') {
     e.stopPropagation()
     close()
-    triggerEl.value?.focus()
+    focusTrigger()
   }
 }
 
-onMounted(() => {
+// Bound only while this row's menu is open. A sidebar can hold 40 rows, and
+// document-level capture listeners kept for every row's whole lifetime would
+// run 80 handlers on every keystroke in the app.
+function addDocListeners() {
   document.addEventListener('pointerdown', onDocPointerDown, true)
   document.addEventListener('keydown', onKey, true)
-})
-onBeforeUnmount(() => {
+}
+
+function removeDocListeners() {
   document.removeEventListener('pointerdown', onDocPointerDown, true)
   document.removeEventListener('keydown', onKey, true)
+}
+
+watch(open, (isOpen) => {
+  if (isOpen) addDocListeners()
+  else removeDocListeners()
 })
+
+onBeforeUnmount(removeDocListeners)
+
+// Lets the owning row put focus back on this trigger after an action that
+// leaves the row mounted (rename).
+defineExpose({ focusTrigger })
 </script>
 
 <template>

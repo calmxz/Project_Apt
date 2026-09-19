@@ -4,6 +4,13 @@
 // "$null / $null" -- match the wording used by
 // frontend/src/components/chat/CapBanners.vue ("Service daily budget
 // reached." / "Daily cost limit reached.").
+export function dailyCapToastMessage(info, whenText) {
+  return {
+    message: `Daily limit reached (${info.used}/${info.cap}). Resets at ${whenText}.`,
+    summary: 'Cap reached',
+  }
+}
+
 export function costCapToastMessage(info, whenText) {
   if (info?.scope === 'global') {
     return {

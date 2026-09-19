@@ -36,15 +36,8 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.usage-tab.sec {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  background: var(--desk-deep);
-  border: 1px solid var(--card-edge);
-  border-radius: var(--radius-card);
-  padding: 1rem 1.25rem 1.25rem;
-}
+/* The card shell and .skel-block come from SettingsView's .panel; the tab
+   carries the .sec class and declares only what is its own. */
 
 /* A failed read is a line of text-safe red on the pitch, not a banner. */
 .error {
@@ -61,25 +54,7 @@ onMounted(async () => {
   flex-direction: column;
 }
 
-.skel-block {
-  display: block;
-  height: calc(var(--line-pitch) - 1px);
-  border-bottom: 1px solid var(--rule-strong);
-}
-
 .skel-short {
   width: 55%;
-}
-
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
 }
 </style>

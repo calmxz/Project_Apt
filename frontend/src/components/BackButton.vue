@@ -2,10 +2,8 @@
   <button
     type="button"
     class="back-btn"
-    :class="{ 'is-icon-only': iconOnly }"
     data-testid="back-button"
     :aria-label="label"
-    :title="iconOnly ? label : null"
     @click="onClick"
   >
     <svg
@@ -23,7 +21,7 @@
     >
       <path d="M16 10 L4 10 M9 4.5 L4 10 L9 15.5" />
     </svg>
-    <span v-if="!iconOnly" class="label">{{ label }}</span>
+    <span class="label">{{ label }}</span>
   </button>
 </template>
 
@@ -33,7 +31,6 @@ import { useRouter } from 'vue-router'
 const props = defineProps({
   label: { type: String, default: 'Back' },
   fallback: { type: String, default: '/' },
-  iconOnly: { type: Boolean, default: false },
 })
 
 const router = useRouter()

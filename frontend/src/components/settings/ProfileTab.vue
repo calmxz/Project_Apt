@@ -183,29 +183,15 @@ async function saveFeedback() {
   padding: 1rem 1.25rem;
 }
 
+/* Card shell, .sec-title, .saved-flash, .tick and .skel-block come from
+   SettingsView's .panel; only this tab's own alignment is declared here. */
 .sec {
-  display: flex;
-  flex-direction: column;
   align-items: stretch;
   gap: 0.5rem;
-  width: 100%;
-  background: var(--desk-deep);
-  border: 1px solid var(--card-edge);
-  border-radius: var(--radius-card);
-  padding: 1rem 1.25rem 1.25rem;
 }
 
 .btn-fill-row {
   align-self: flex-start;
-}
-
-.sec-title {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-size: var(--fs-caption);
-  font-weight: 700;
-  line-height: var(--line-pitch);
-  color: var(--ink);
 }
 
 .lede {
@@ -214,25 +200,6 @@ async function saveFeedback() {
   font-size: var(--fs-caption);
   line-height: var(--line-pitch);
   color: var(--pencil);
-}
-
-.saved-flash {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  font-family: var(--font-sans);
-  font-size: var(--fs-caption);
-  line-height: var(--line-pitch);
-  color: var(--ink);
-}
-
-.tick {
-  flex: 0 0 auto;
-  fill: none;
-  stroke: var(--ink-learner);
-  stroke-width: 1.5;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 
 .link {
@@ -261,24 +228,6 @@ async function saveFeedback() {
   border: 1px solid var(--card-edge);
   border-radius: var(--radius-card);
   padding: 1rem 1.25rem;
-}
-
-.skel-block {
-  display: block;
-  height: calc(var(--line-pitch) - 1px);
-  border-bottom: 1px solid var(--rule-strong);
-}
-
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
 }
 
 /* From 60rem the two cards sit side by side. */

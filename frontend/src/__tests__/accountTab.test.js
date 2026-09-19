@@ -150,7 +150,11 @@ describe('AccountTab', () => {
     await w.get('[data-testid="settings-pw-current"]').setValue('wrongpass')
     await w.get('[data-testid="settings-pw-new"]').setValue('newpass12')
     await w.get('[data-testid="settings-pw-confirm"]').setValue('newpass12')
-    await w.get('[data-testid="settings-pw-submit"]').trigger('click')
+    // The button submits the form rather than carrying its own click handler;
+    // jsdom does not run implicit submission for a synthetic click, so the
+    // test drives the form and asserts the button is wired to it.
+    expect(w.get('[data-testid="settings-pw-submit"]').attributes('type')).toBe('submit')
+    await w.get('form.pw-form').trigger('submit')
     await flushPromises()
     expect(w.find('[data-testid="settings-pw-error"]').exists()).toBe(true)
     expect(w.find('[data-testid="settings-pw-error"]').attributes('role')).toBe('alert')
@@ -167,7 +171,8 @@ describe('AccountTab', () => {
     await w.get('[data-testid="settings-pw-current"]').setValue('oldpass12')
     await w.get('[data-testid="settings-pw-new"]').setValue('newpass12')
     await w.get('[data-testid="settings-pw-confirm"]').setValue('newpass12')
-    await w.get('[data-testid="settings-pw-submit"]').trigger('click')
+    expect(w.get('[data-testid="settings-pw-submit"]').attributes('type')).toBe('submit')
+    await w.get('form.pw-form').trigger('submit')
     await flushPromises()
     expect(signIn).toHaveBeenCalledWith('a@b.c', 'oldpass12')
     expect(update).toHaveBeenCalledWith('newpass12')

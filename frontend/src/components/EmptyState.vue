@@ -1,11 +1,5 @@
 <script setup>
 defineProps({
-  /**
-   * Retained for call-site compatibility and deliberately not rendered: the
-   * world bans eyebrow labels (DESIGN.md, "Don't add eyebrow or kicker
-   * labels"). The heading carries its own weight.
-   */
-  eyebrow: { type: String, default: '' },
   headline: { type: String, default: '' },
   subtext: { type: String, default: '' },
   tone: {

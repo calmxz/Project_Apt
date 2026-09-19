@@ -38,13 +38,15 @@ const router = createRouter({
     {
       path: '/tos',
       name: 'tos',
-      component: () => import('../views/TosView.vue'),
+      component: () => import('../views/LegalView.vue'),
+      props: { doc: 'tos' },
       meta: { public: true, sidebar: false },
     },
     {
       path: '/privacy',
       name: 'privacy',
-      component: () => import('../views/PrivacyView.vue'),
+      component: () => import('../views/LegalView.vue'),
+      props: { doc: 'privacy' },
       meta: { public: true, sidebar: false },
     },
     {

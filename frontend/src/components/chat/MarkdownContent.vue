@@ -76,18 +76,47 @@ function scheduleSnap() {
 function observeBlocks() {
   const root = rootEl.value
   if (!root || typeof ResizeObserver === 'undefined') return
+  const blocks = root.querySelectorAll(SNAP_SELECTOR)
   _ro?.disconnect()
+  // Most turns are prose and match nothing here, so the observer is built on
+  // first need rather than once per rendered bubble. With no targets there is
+  // also nothing for snapBlocks to top up.
+  if (!blocks.length) return
   _ro = _ro || new ResizeObserver(() => scheduleSnap())
-  for (const el of root.querySelectorAll(SNAP_SELECTOR)) _ro.observe(el)
+  for (const el of blocks) _ro.observe(el)
   snapBlocks()
+}
+
+// One re-observe per tick at most, however many watchers asked for it (the
+// last streaming frame trips both of them in the same flush).
+let _observeQueued = false
+function scheduleObserve() {
+  if (_observeQueued) return
+  _observeQueued = true
+  nextTick(() => {
+    _observeQueued = false
+    observeBlocks()
+  })
 }
 
 // jsdom has no layout engine and no ResizeObserver; the snapper is a no-op there.
 if (typeof ResizeObserver !== 'undefined') {
-  onMounted(() => nextTick(observeBlocks))
+  onMounted(scheduleObserve)
+  // safeHtml changes on every frame of a stream; re-walking the DOM that often
+  // is pure waste, and blocks already observed keep snapping through the
+  // observer anyway. Skip while streaming and do one pass when the turn settles.
   watch(
     () => parts.value.safeHtml,
-    () => nextTick(observeBlocks),
+    () => {
+      if (props.streaming) return
+      scheduleObserve()
+    },
+  )
+  watch(
+    () => props.streaming,
+    (now) => {
+      if (!now) scheduleObserve()
+    },
   )
 }
 

@@ -206,4 +206,53 @@ function onKeydown(e, i) {
   outline: 2px solid var(--color-accent-ring);
   outline-offset: 2px;
 }
+
+/* Shared tab furniture. Every tab is mounted here and nowhere else, so the
+   card shell, its title, the "Saved." flash and its tick, and the skeleton
+   rule are declared once for the whole sheet instead of once per tab. Tabs
+   keep only what actually differs (e.g. their own .sec align-items/gap). */
+.panel :deep(.sec) {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  background: var(--desk-deep);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-card);
+  padding: 1rem 1.25rem 1.25rem;
+}
+
+.panel :deep(.sec-title) {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  line-height: var(--line-pitch);
+  color: var(--ink);
+}
+
+.panel :deep(.saved-flash) {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  line-height: var(--line-pitch);
+  color: var(--ink);
+}
+
+.panel :deep(.tick) {
+  flex: 0 0 auto;
+  fill: none;
+  stroke: var(--ink-learner);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.panel :deep(.skel-block) {
+  display: block;
+  height: calc(var(--line-pitch) - 1px);
+  border-bottom: 1px solid var(--rule-strong);
+}
 </style>

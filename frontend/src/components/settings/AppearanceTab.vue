@@ -20,18 +20,18 @@
           :data-testid="`settings-theme-${opt.value}`"
           @change="setTheme(opt.value)"
         />
-        <span :class="['mode-swatch', `mode-swatch--${opt.value}`]" aria-hidden="true">
+        <span class="mode-swatch" aria-hidden="true">
           <span v-if="opt.value === 'auto'" class="sw-split">
-            <span class="sw-half sw-half--lt">
+            <span class="sw-half sw-light">
               <span class="sw-desk" />
               <span class="sw-card" />
             </span>
-            <span class="sw-half sw-half--dk">
+            <span class="sw-half sw-dark">
               <span class="sw-desk" />
               <span class="sw-card" />
             </span>
           </span>
-          <span v-else class="sw-stack">
+          <span v-else :class="['sw-stack', `sw-${opt.value}`]">
             <span class="sw-desk" />
             <span class="sw-card" />
           </span>
@@ -126,46 +126,37 @@ const MODES = [
   display: inline-flex;
 }
 
-.mode-swatch--light {
+/* One pair of theme classes, worn by the whole stack or by half of the split
+   system swatch. */
+.sw-light {
   --sw-desk: var(--sw-light-paper);
   --sw-card: var(--sw-light-rule);
   --sw-ink: var(--sw-light-ink);
 }
 
-.mode-swatch--dark {
+.sw-dark {
   --sw-desk: var(--sw-dark-paper);
   --sw-card: var(--sw-dark-rule);
   --sw-ink: var(--sw-dark-ink);
 }
 
-.sw-stack {
+.sw-stack,
+.sw-half {
   position: relative;
   display: inline-block;
-  width: 56px;
   height: 72px;
+}
+
+.sw-stack {
+  width: 56px;
+}
+
+.sw-half {
+  width: 28px;
 }
 
 .sw-split {
   display: flex;
-}
-
-.sw-half {
-  position: relative;
-  display: inline-block;
-  width: 28px;
-  height: 72px;
-}
-
-.sw-half--lt {
-  --sw-desk: var(--sw-light-paper);
-  --sw-card: var(--sw-light-rule);
-  --sw-ink: var(--sw-light-ink);
-}
-
-.sw-half--dk {
-  --sw-desk: var(--sw-dark-paper);
-  --sw-card: var(--sw-dark-rule);
-  --sw-ink: var(--sw-dark-ink);
 }
 
 .sw-desk {
@@ -239,17 +230,5 @@ const MODES = [
 .mode:has(.mode-input:focus-visible) {
   outline: 2px solid var(--color-accent-ring);
   outline-offset: 2px;
-}
-
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
 }
 </style>

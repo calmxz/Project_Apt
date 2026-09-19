@@ -1,5 +1,5 @@
 <script setup>
-import { levelStroke } from './chat/levelMark.js'
+import { LEVEL_MARK_PATH, levelStroke } from './chat/levelMark.js'
 
 defineProps({
   /** Optional id so consumers can reference the chip row from aria-describedby. */
@@ -33,7 +33,7 @@ defineProps({
       <span v-else-if="chip.type === 'level'" class="chip chip--level" data-testid="chip-level">
         <span class="chip-glyph" aria-hidden="true">
           <svg viewBox="0 0 24 24" width="18" height="12" focusable="false">
-            <path d="M2 17 L22 7" :stroke-width="levelStroke(chip.level)" />
+            <path :d="LEVEL_MARK_PATH" :stroke-width="levelStroke(chip.level)" />
           </svg>
         </span>
         <span class="chip-text">{{ chip.label }}</span>
@@ -73,6 +73,8 @@ defineProps({
   min-width: 0;
   max-width: 100%;
   padding: 0.15rem 0.5rem;
+  font-size: var(--fs-label);
+  line-height: var(--lh-body);
   background: var(--card);
   border: 1px solid var(--card-edge);
   border-radius: var(--radius-card);
@@ -127,33 +129,11 @@ defineProps({
   min-width: 0;
 }
 
-.chips--rail .chip {
-  font-size: var(--fs-label);
-  line-height: var(--lh-body);
-}
-
 .chips--rail .chip--focus .chip-text {
   max-width: 8rem;
 }
 
-.chips--card .chip {
-  font-size: var(--fs-label);
-  line-height: var(--lh-body);
-}
-
 .chips--card .chip--focus .chip-text {
   max-width: 18rem;
-}
-
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
 }
 </style>

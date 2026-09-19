@@ -23,6 +23,7 @@ const busy = ref(false)
 const renaming = ref(false)
 const draft = ref('')
 const inputEl = ref(null)
+const menuEl = ref(null)
 
 const isCurrent = computed(() => route.params.id === props.session.id)
 const isCollapsed = computed(() => mode.value === 'collapsed')
@@ -97,6 +98,16 @@ async function onContinueTopic() {
   }
 }
 
+// Rename never moves the row between lists, so this instance's own menu is
+// still mounted and can be focused through its exposed method.
+function refocusOwnTrigger() {
+  nextTick(() => menuEl.value?.focusTrigger())
+}
+
+// Pinning DOES move the row: setPinned patches `pinned` optimistically, so the
+// row leaves the pinned <ul> for the active one (or back) and Vue mounts a
+// FRESH component. This instance's ref is nulled by then, so the replacement
+// has to be found in the document by session id.
 function refocusRowTrigger(id) {
   nextTick(() => {
     const row = document.querySelector(`[data-session-id="${id}"]`)
@@ -104,15 +115,11 @@ function refocusRowTrigger(id) {
   })
 }
 
-function onPin() {
+function setPin(on) {
   const id = props.session.id
-  store.setPinned(id, true).catch(() => showError('Could not pin the session.'))
-  refocusRowTrigger(id)
-}
-
-function onUnpin() {
-  const id = props.session.id
-  store.setPinned(id, false).catch(() => showError('Could not unpin the session.'))
+  store
+    .setPinned(id, on)
+    .catch(() => showError(on ? 'Could not pin the session.' : 'Could not unpin the session.'))
   refocusRowTrigger(id)
 }
 
@@ -125,10 +132,9 @@ async function startRename() {
 }
 
 function cancelRename() {
-  const id = props.session.id
   draft.value = props.session.topic || ''
   renaming.value = false
-  refocusRowTrigger(id)
+  refocusOwnTrigger()
 }
 
 async function commitRename() {
@@ -144,9 +150,8 @@ async function commitRename() {
 }
 
 function commitRenameFromKey() {
-  const id = props.session.id
   commitRename()
-  refocusRowTrigger(id)
+  refocusOwnTrigger()
 }
 </script>
 
@@ -171,55 +176,50 @@ function commitRenameFromKey() {
       @click="openSession"
     >
       <span v-if="isCollapsed" class="sb-row-mark" aria-hidden="true" />
-      <span v-else class="sb-row-body">
-        <input
-          v-if="renaming"
-          ref="inputEl"
-          v-model="draft"
-          type="text"
-          class="sb-row-rename-input"
-          aria-label="Rename session"
-          data-testid="sidebar-row-rename-input"
-          @keydown.enter.prevent="commitRenameFromKey"
-          @keydown.esc.prevent="cancelRename"
-          @blur="commitRename"
-          @click.stop
-        />
-        <template v-else>
-          <span class="sb-row-label">
-            <span class="sb-row-topic">
-              <svg
-                v-if="session.pinned && !session.ended_at"
-                class="sb-row-pin"
-                viewBox="0 0 20 20"
-                width="12"
-                height="12"
-                fill="currentColor"
-                stroke="currentColor"
-                stroke-width="1.5"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-                focusable="false"
-              >
-                <path d="M6 3.5 H14 V16.5 L10 13.5 L6 16.5 Z" />
-              </svg>
-              {{ session.topic || 'Untitled' }}
-            </span>
-          </span>
-        </template>
+      <input
+        v-else-if="renaming"
+        ref="inputEl"
+        v-model="draft"
+        type="text"
+        class="sb-row-rename-input"
+        aria-label="Rename session"
+        data-testid="sidebar-row-rename-input"
+        @keydown.enter.prevent="commitRenameFromKey"
+        @keydown.esc.prevent="cancelRename"
+        @blur="commitRename"
+        @click.stop
+      />
+      <span v-else class="sb-row-topic">
+        <svg
+          v-if="session.pinned && !session.ended_at"
+          class="sb-row-pin"
+          viewBox="0 0 20 20"
+          width="12"
+          height="12"
+          fill="currentColor"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path d="M6 3.5 H14 V16.5 L10 13.5 L6 16.5 Z" />
+        </svg>
+        {{ session.topic || 'Untitled' }}
       </span>
     </button>
     <SidebarRowMenu
       v-if="!isCollapsed"
+      ref="menuEl"
       :state="state"
       :busy="busy"
       :pinned="session.pinned ?? false"
       @end="onEnd"
       @resume="onResume"
       @continue-topic="onContinueTopic"
-      @pin="onPin"
-      @unpin="onUnpin"
+      @pin="setPin(true)"
+      @unpin="setPin(false)"
       @rename="startRename"
     />
   </li>
@@ -285,24 +285,12 @@ function commitRenameFromKey() {
   border-radius: 0;
 }
 
-.sb-row-body {
-  width: 100%;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.sb-row-label {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  min-width: 0;
-  line-height: var(--line-pitch);
-}
-
 .sb-row-topic {
   flex: 1;
   min-width: 0;
+  /* Carried down from the wrappers this span replaced: the row's height is a
+     whole multiple of the pitch so it sits on a rule. */
+  line-height: var(--line-pitch);
   font-family: var(--font-sans);
   font-size: 0.9375rem;
   font-weight: 400;

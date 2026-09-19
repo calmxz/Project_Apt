@@ -24,24 +24,24 @@
           <span class="meter-fill" :style="{ width: fillPct }" />
           <span
             class="tier-marker"
-            :style="{ left: markerPct(usage.soft_cap_usd) }"
+            :style="{ left: pctOfHard(usage.soft_cap_usd) }"
             :title="`soft cap $${usage.soft_cap_usd.toFixed(2)}`"
           />
           <span
             class="tier-marker"
-            :style="{ left: markerPct(usage.urgent_cap_usd) }"
+            :style="{ left: pctOfHard(usage.urgent_cap_usd) }"
             :title="`urgent cap $${usage.urgent_cap_usd.toFixed(2)}`"
           />
         </div>
         <div class="meter-labels" data-tabular>
           <span
             class="meter-label meter-label-soft"
-            :style="{ left: markerPct(usage.soft_cap_usd) }"
+            :style="{ left: pctOfHard(usage.soft_cap_usd) }"
             >soft ${{ usage.soft_cap_usd.toFixed(2) }}</span
           >
           <span
             class="meter-label meter-label-urgent"
-            :style="{ left: markerPct(usage.urgent_cap_usd) }"
+            :style="{ left: pctOfHard(usage.urgent_cap_usd) }"
             >urgent ${{ usage.urgent_cap_usd.toFixed(2) }}</span
           >
         </div>
@@ -70,10 +70,10 @@
       </div>
     </template>
 
-    <div v-if="usage.top_sessions.length" class="top-sessions">
+    <div v-if="topSessions.length" class="top-sessions">
       <h3 class="sub-title">Most expensive sessions</h3>
       <ul class="top-list">
-        <li v-for="(t, i) in usage.top_sessions" :key="t.session_id" class="top-row">
+        <li v-for="(t, i) in topSessions" :key="t.session_id" class="top-row">
           <router-link
             :to="{ name: 'session-profile', params: { id: t.session_id } }"
             class="top-link"
@@ -97,11 +97,13 @@ const props = defineProps({
 
 const maxDay = computed(() => Math.max(...props.usage.daily.map((d) => d.cost_usd), 0))
 
+// One reading of top_sessions for both the empty check and the list, so a
+// payload without the key cannot make noSpend true and still throw in the
+// template.
+const topSessions = computed(() => props.usage.top_sessions || [])
+
 const noSpend = computed(
-  () =>
-    maxDay.value === 0 &&
-    props.usage.today_spend_usd === 0 &&
-    (props.usage.top_sessions || []).length === 0,
+  () => maxDay.value === 0 && props.usage.today_spend_usd === 0 && topSessions.value.length === 0,
 )
 
 const last7 = computed(() => props.usage.daily.slice(-7).reduce((acc, d) => acc + d.cost_usd, 0))
@@ -109,7 +111,6 @@ const last7 = computed(() => props.usage.daily.slice(-7).reduce((acc, d) => acc 
 const pctOfHard = (v) => `${Math.min(100, Math.round((v / props.usage.hard_cap_usd) * 100))}%`
 
 const fillPct = computed(() => pctOfHard(props.usage.today_spend_usd))
-const markerPct = (v) => pctOfHard(v)
 
 function barPct(cost) {
   if (cost <= 0) return '0%'
@@ -130,7 +131,6 @@ function formatDay(iso) {
 const ledger = computed(() =>
   props.usage.daily
     .slice(-7)
-    .slice()
     .reverse()
     .map((d) => ({ ...d, label: formatDay(d.date_utc) })),
 )

@@ -1,7 +1,10 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 import { usePanel } from '@/composables/usePanel.js'
+import { NARROW_QUERY, useMediaQuery } from '@/composables/useMediaQuery.js'
+import { entryNames } from '@/utils/conceptEntry.js'
+import { LEVEL_MARK_PATH, levelStroke as levelStrokeFor } from './levelMark.js'
 
 const props = defineProps({
   // TopicProfile as served by the API: knowledge_level, subtopic_levels,
@@ -16,27 +19,13 @@ const props = defineProps({
 
 const emit = defineEmits(['landed'])
 
-// Five stepped stroke weights. KnowledgeLevel carries three values, so the
-// scale reads: unset hairline, then three inked steps with one step of
-// headroom below the top so "advanced" sits at the top of the scale.
-const LEVEL_STEPS = [0.75, 1.5, 2.25, 3, 3.75]
-const LEVEL_STEP_INDEX = { beginner: 1, intermediate: 2, advanced: 4 }
-
-// ConceptEntry is { name, evidence_type, last_event_at }; legacy blobs and the
-// gap-picker path hand over bare strings.
-function entryName(e) {
-  return typeof e === 'string' ? e : (e?.name ?? '')
-}
-
 const level = computed(() => props.profile?.knowledge_level ?? null)
 const levelLabel = computed(() => level.value || 'level not set')
-const levelStroke = computed(() => LEVEL_STEPS[LEVEL_STEP_INDEX[level.value] ?? 0])
+const levelStroke = computed(() => levelStrokeFor(level.value))
 
 const focus = computed(() => props.profile?.focus_target_gap || '')
-const gaps = computed(() => (props.profile?.confirmed_gaps ?? []).map(entryName).filter(Boolean))
-const mastered = computed(() =>
-  (props.profile?.mastered_concepts ?? []).map(entryName).filter(Boolean),
-)
+const gaps = computed(() => entryNames(props.profile?.confirmed_gaps).filter(Boolean))
+const mastered = computed(() => entryNames(props.profile?.mastered_concepts).filter(Boolean))
 // The focus cue has its own section; listing it twice would read as two gaps.
 const openGaps = computed(() => gaps.value.filter((g) => g !== focus.value))
 
@@ -51,7 +40,7 @@ const subtopics = computed(() => {
   return Object.keys(map).map((name) => ({
     name,
     level: map[name],
-    stroke: LEVEL_STEPS[LEVEL_STEP_INDEX[map[name]] ?? 0],
+    stroke: levelStrokeFor(map[name]),
   }))
 })
 
@@ -104,23 +93,7 @@ const { collapsed: panelCollapsed, toggleDesktop } = usePanel()
 // column only exists at >= 900px -- below it the panel is the horizontal strip.
 // Without this guard a panel collapsed on a laptop would follow the user down
 // to a phone width and hide the profile behind a rail that has nowhere to sit.
-// Kept in sync with the 899px breakpoint in <style> below.
-const NARROW_QUERY = '(max-width: 899px)'
-const isNarrow = ref(false)
-let narrowMql = null
-function onNarrowChange(e) {
-  isNarrow.value = e.matches
-}
-onMounted(() => {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
-  narrowMql = window.matchMedia(NARROW_QUERY)
-  isNarrow.value = narrowMql.matches
-  narrowMql.addEventListener?.('change', onNarrowChange)
-})
-onBeforeUnmount(() => {
-  narrowMql?.removeEventListener?.('change', onNarrowChange)
-  narrowMql = null
-})
+const isNarrow = useMediaQuery(NARROW_QUERY)
 
 const isCollapsed = computed(() => panelCollapsed.value && !isNarrow.value)
 </script>
@@ -324,7 +297,7 @@ const isCollapsed = computed(() => panelCollapsed.value && !isNarrow.value)
                 aria-hidden="true"
                 focusable="false"
               >
-                <path d="M2 17 L22 7" :stroke-width="levelStroke" />
+                <path :d="LEVEL_MARK_PATH" :stroke-width="levelStroke" />
               </svg>
               <span class="cue-level-label">{{ levelLabel }}</span>
             </p>
@@ -343,7 +316,7 @@ const isCollapsed = computed(() => panelCollapsed.value && !isNarrow.value)
                   aria-hidden="true"
                   focusable="false"
                 >
-                  <path d="M2 17 L22 7" :stroke-width="s.stroke" />
+                  <path :d="LEVEL_MARK_PATH" :stroke-width="s.stroke" />
                 </svg>
                 <span class="cue-subtopic-name">{{ s.name }}</span>
               </li>

@@ -183,7 +183,7 @@
 
             <SessionEndedBanner
               v-if="isEnded"
-              :ended-at="store.currentSession.ended_at"
+              :ended-at="current.ended_at"
               :summary="endedSummary"
               :loading="resuming"
               :has-gaps="hasGaps"
@@ -210,7 +210,7 @@
       <GapPickerDialog
         v-model:visible="gapPickerOpen"
         :gaps="confirmedGaps"
-        @select="onGapPicked"
+        @select="sendReviewSeed"
       />
 
       <Dialog
@@ -260,9 +260,17 @@ import { useToast } from '../composables/useToast.js'
 import { costBus } from '../services/costBus.js'
 import { getSessionProfile, patchProfile } from '../services/profileApi.js'
 import { getUploadStatus, uploadDocument, validateFile } from '../services/uploadApi.js'
-import { formatShortDateTime } from '../utils/formatDate.js'
+import { NARROW_QUERY, useMediaQuery } from '../composables/useMediaQuery.js'
+import { entryNames } from '../utils/conceptEntry.js'
+import { formatResetTime } from '../utils/formatDate.js'
+import {
+  session as sessionStorageThunk,
+  storageGet,
+  storageRemove,
+  storageSet,
+} from '../utils/safeStorage.js'
 import { stripAutoPrefix } from '../utils/sessionCard.js'
-import { costCapToastMessage } from '../lib/capToast.js'
+import { costCapToastMessage, dailyCapToastMessage } from '../lib/capToast.js'
 
 const props = defineProps({ id: { type: String, required: true } })
 
@@ -314,11 +322,8 @@ function diagDismissKey(id) {
 
 function dismissDiag() {
   diagDismissed.value = true
-  try {
-    sessionStorage.setItem(diagDismissKey(props.id), '1')
-  } catch {
-    // storage unavailable (private mode/quota) - in-memory dismissal still holds
-  }
+  // storage unavailable (private mode/quota) - in-memory dismissal still holds
+  storageSet(sessionStorageThunk, diagDismissKey(props.id), '1')
 }
 // F5: guards onDiagLevel's async body against a rapid second click firing a
 // second PATCH with the same (soon-to-be-stale) etag. Folded into the card's
@@ -354,14 +359,8 @@ async function loadDiagProfile(id) {
 // stopping), so the edges we care about are idle -> non-idle (start) and
 // non-idle -> idle (finish), not every individual hop.
 const streamAnnouncement = ref('')
-watch(
-  () => store.streamState,
-  (next, prev) => {
-    if (prev === 'idle' && next !== 'idle') streamAnnouncement.value = 'Tutor is replying.'
-    else if (prev !== 'idle' && next === 'idle') streamAnnouncement.value = 'Reply finished.'
-  },
-)
-
+// Both things this view does on a stream-state edge, in one watcher.
+//
 // F2: the agent may have conversationally recorded a declared level
 // (update_topic_profile) during the turn -- that only becomes visible to us
 // via a refetch. Once the tutor's turn finishes, refetch so the card hides
@@ -370,12 +369,17 @@ watch(
 // The same refetch is what keeps the cue column live: the store only writes
 // topic_profile on loadSession, so a turn that recorded a gap, a mastered
 // concept or a level would otherwise never reach the cues. Runs every turn,
-// not only while the level is unset; the implicit-decline accounting below
-// still reads the pre-refetch copy, exactly as before.
+// not only while the level is unset; the implicit-decline accounting still
+// reads the pre-refetch copy, exactly as before.
 watch(
   () => store.streamState,
   (next, prev) => {
+    if (prev === 'idle' && next !== 'idle') {
+      streamAnnouncement.value = 'Tutor is replying.'
+      return
+    }
     if (prev === 'idle' || next !== 'idle') return
+    streamAnnouncement.value = 'Reply finished.'
     const stillUnset =
       diagProfile.value &&
       diagProfile.value.profile?.knowledge_level == null &&
@@ -387,48 +391,40 @@ watch(
   },
 )
 
-// Use the same target-id discriminator as headerTopic so the ended-banner /
-// composer / resume action agree with the optimistic header during a switch.
-// While detail loads, store.currentSession still holds the PREVIOUS session, so
-// reading ended_at directly would show a stale banner and misdirect resume() to
-// the old session id. Falls back to not-ended until the target detail resolves.
-const isEnded = computed(() =>
-  store.currentSession?.id === props.id ? Boolean(store.currentSession.ended_at) : false,
+// THE target-id discriminator, written once. While the detail fetch is in
+// flight, store.currentSession still holds the PREVIOUS session (it is
+// overwritten only after the await resolves), so anything that reads a field
+// off it during a switch would show the old session's state: a stale ended
+// banner, a resume() pointed at the old id, or a composer enabled+pointed at
+// the old session (currentSessionId lags props.id until the await resolves) —
+// a send would land in the wrong session and then vanish when the target
+// detail loads. `current` is the session only when it IS this view's session,
+// and null otherwise; everything below derives from it.
+const current = computed(() =>
+  store.currentSession?.id === props.id ? store.currentSession : null,
 )
+
+// Falls back to not-ended until the target detail resolves.
+const isEnded = computed(() => Boolean(current.value?.ended_at))
 // The one profile the frontend holds. The store's copy is only written on
 // loadSession, so the per-turn GET /profile/:id refetch (diagProfile) is the
 // fresher of the two and wins when present; both are already discriminated on
 // props.id, so a switch never paints the previous session's cues.
 const liveProfile = computed(() => {
   if (diagProfile.value?.profile) return diagProfile.value.profile
-  return store.currentSession?.id === props.id ? (store.currentSession.topic_profile ?? null) : null
+  return current.value?.topic_profile ?? null
 })
 const profileLevel = computed(() => liveProfile.value?.knowledge_level || '')
-const startedAt = computed(() =>
-  store.currentSession?.id === props.id ? store.currentSession.created_at || '' : '',
-)
+const startedAt = computed(() => current.value?.created_at || '')
 const endedSummary = computed(() => stripAutoPrefix(liveProfile.value?.last_session_summary))
 // While a check batch is open, the cue it tests carries the red underline.
 const testingGap = computed(() => store.pendingCheck?.gap || '')
+// The full gap list drives the picker (single gap skips it, >1 gap opens it).
+const confirmedGaps = computed(() => entryNames(current.value?.topic_profile?.confirmed_gaps))
 // Gates the "Review my gaps" CTA — only meaningful once we're showing the
-// ended banner for this session, so read confirmed_gaps off the same
-// discriminator-checked currentSession rather than re-deriving it.
-const hasGaps = computed(
-  () => (store.currentSession?.topic_profile?.confirmed_gaps?.length ?? 0) > 0,
-)
-// Same discriminator-checked source as hasGaps, but the full list is needed to
-// drive the picker (single gap skips it, >1 gap opens it).
-const confirmedGaps = computed(() =>
-  (store.currentSession?.topic_profile?.confirmed_gaps ?? []).map((g) => g?.name ?? g),
-)
-// Discriminator-gated (same as isEnded/headerTopic): during a switch,
-// store.currentSession still holds the PREVIOUS session, so gating on raw
-// currentSession would leave the composer enabled+pointed at the old session
-// (currentSessionId lags props.id until the await resolves) — a send would
-// land in the wrong session and then vanish when the target detail loads.
-const canEnd = computed(
-  () => store.currentSession?.id === props.id && !store.currentSession.ended_at,
-)
+// ended banner for this session.
+const hasGaps = computed(() => confirmedGaps.value.length > 0)
+const canEnd = computed(() => Boolean(current.value) && !isEnded.value)
 const canSend = computed(() => canEnd.value && !store.dailyCapReached && !store.costCapReached)
 
 // Cue-lands: CueColumn diffs the live profile and tells us when new cues were
@@ -454,7 +450,7 @@ const topCaption = computed(() => {
 // keeps this clear of the PR #72 switch-reload bug class.
 const knownRow = computed(() => store.sessions.find((s) => s.id === props.id) || null)
 const headerTopic = computed(() => {
-  if (store.currentSession?.id === props.id) return store.currentSession.topic || ''
+  if (current.value) return current.value.topic || ''
   return knownRow.value?.topic || ''
 })
 
@@ -473,18 +469,16 @@ watch(
   () => store.dailyCapReached,
   (now) => {
     if (!now || !store.dailyCapInfo) return
-    const when = formatShortDateTime(store.dailyCapInfo.resets_at) || 'midnight UTC'
-    showError(
-      `Daily limit reached (${store.dailyCapInfo.used}/${store.dailyCapInfo.cap}). Resets at ${when}.`,
-      { summary: 'Cap reached', life: 8000 },
-    )
+    const when = formatResetTime(store.dailyCapInfo.resets_at)
+    const { message, summary } = dailyCapToastMessage(store.dailyCapInfo, when)
+    showError(message, { summary, life: 8000 })
   },
 )
 watch(
   () => store.costCapReached,
   (now) => {
     if (!now || !store.costCapInfo) return
-    const when = formatShortDateTime(store.costCapInfo.resets_at) || 'midnight UTC'
+    const when = formatResetTime(store.costCapInfo.resets_at)
     const { message, summary } = costCapToastMessage(store.costCapInfo, when)
     showError(message, { summary, life: 8000 })
   },
@@ -494,9 +488,10 @@ watch(
 // Soft and urgent are tracked separately so an urgent warning can still
 // surface even if a soft one already showed earlier in this mount (urgent
 // escalates the signal; it must never be silently swallowed by a prior soft
-// warning), while neither level repeats.
-const softCapShown = ref(false)
-const urgentCapShown = ref(false)
+// warning), while neither level repeats. Never read by the template, so plain
+// per-instance flags (setup scope, i.e. one pair per mount) rather than refs.
+let softCapShown = false
+let urgentCapShown = false
 function resolveCostWarningLevel(detail) {
   let level = detail?.level
   if (!level && typeof detail?.header === 'string') {
@@ -508,16 +503,16 @@ function resolveCostWarningLevel(detail) {
 function onCostWarning(event) {
   const level = resolveCostWarningLevel(event?.detail)
   if (level === 'urgent') {
-    if (urgentCapShown.value) return
-    urgentCapShown.value = true
+    if (urgentCapShown) return
+    urgentCapShown = true
     showError('You are very close to today’s cost limit.', {
       summary: 'Cost limit near',
       life: 8000,
     })
     return
   }
-  if (softCapShown.value) return
-  softCapShown.value = true
+  if (softCapShown) return
+  softCapShown = true
   showWarn('You’re approaching the daily cost limit for this session.', {
     summary: 'Cost warning',
     life: 6000,
@@ -529,23 +524,9 @@ onUnmounted(() => costBus.removeEventListener('cost-warning', onCostWarning))
 // R2: the check card's placement is width-dependent (see the template comment).
 // Driven by matchMedia rather than a CSS-only swap because the card has to move
 // between two different containers — the .messages scroller and the foot — which
-// CSS cannot do. Kept in sync with the 899px breakpoint in <style> below.
-const NARROW_QUERY = '(max-width: 899px)'
-const isNarrow = ref(false)
-let narrowMql = null
-function onNarrowChange(e) {
-  isNarrow.value = e.matches
-}
-onMounted(() => {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
-  narrowMql = window.matchMedia(NARROW_QUERY)
-  isNarrow.value = narrowMql.matches
-  narrowMql.addEventListener?.('change', onNarrowChange)
-})
-onUnmounted(() => {
-  narrowMql?.removeEventListener?.('change', onNarrowChange)
-  narrowMql = null
-})
+// CSS cannot do. NARROW_QUERY is kept in sync with the 899px breakpoint in
+// <style> below.
+const isNarrow = useMediaQuery(NARROW_QUERY)
 
 // App-shell lock: while in a session, the document itself must not scroll —
 // only the .messages box does. A body class drives the route-scoped overflow
@@ -581,25 +562,25 @@ function scrollToBottom() {
 // to the bottom right after older messages are spliced in. store.loadingEarlier
 // is already false by the time the watcher flushes (it's cleared before the
 // awaited nextTick below resolves), so it can't do this job - this local flag
-// is the whole point.
-const prepending = ref(false)
+// is the whole point. Never read by the template, so a plain flag, not a ref.
+let prepending = false
 
 async function onLoadEarlier() {
   const el = messagesEl.value
   const prevHeight = el ? el.scrollHeight : 0
   const prevTop = el ? el.scrollTop : 0
-  prepending.value = true
+  prepending = true
   try {
     await store.loadEarlierMessages()
     await nextTick()
     if (el) el.scrollTop = prevTop + (el.scrollHeight - prevHeight)
   } finally {
-    prepending.value = false
+    prepending = false
   }
 }
 
 watch([() => store.messages.length, awaitingResponse], () => {
-  if (prepending.value) return
+  if (prepending) return
   scrollToBottom()
 })
 
@@ -625,26 +606,12 @@ async function loadCurrent(id) {
   cuesLanded.value = false
   diagProfile.value = null
   diagNullTurns = 0
-  try {
-    diagDismissed.value = sessionStorage.getItem(diagDismissKey(id)) === '1'
-  } catch {
-    diagDismissed.value = false
-  }
+  diagDismissed.value = storageGet(sessionStorageThunk, diagDismissKey(id)) === '1'
   diagError.value = ''
   diagLevelBusy.value = false
   loadDiagProfile(id) // deliberately not awaited: card is best-effort
-  const startedAtMs = import.meta.env.DEV ? performance.now() : 0
   try {
     await store.loadSession(id)
-    if (import.meta.env.DEV) {
-      await nextTick()
-      // Dev-only WS3 gate measurement: navigate -> detail painted. This number
-      // decides whether the retention tail (warm prefetch + SWR cache) is worth
-      // building (see Task 5). Remove once that decision is recorded.
-      console.debug(
-        `[perf] session ${id} detail painted in ${Math.round(performance.now() - startedAtMs)}ms`,
-      )
-    }
   } catch (e) {
     // Superseded load: a newer navigation already changed props.id, so a late
     // 404 from the session we left must not flash its not-found over the one now
@@ -699,7 +666,7 @@ watch(
   () => route.query.review_gap,
   (gap) => {
     if (!gap) return
-    if (store.currentSession?.id !== props.id) return
+    if (!current.value) return
     handleReviewGapQuery()
   },
 )
@@ -709,7 +676,7 @@ watch(
   () => route.query.quiz,
   (quiz) => {
     if (!quiz) return
-    if (store.currentSession?.id !== props.id) return
+    if (!current.value) return
     handleQuizQuery()
   },
 )
@@ -745,13 +712,9 @@ async function send() {
       if (e.reason === 'auth_expired') {
         // E-05: this component is about to unmount via the login redirect, so
         // in-memory draft restore is not enough - park it where the post-login
-        // remount can find it.
-        try {
-          sessionStorage.setItem(`crux:draft:${props.id}`, text)
-        } catch {
-          // storage unavailable (private mode/quota) - the in-memory restore
-          // below is still the best we can do
-        }
+        // remount can find it. If storage is unavailable (private mode/quota)
+        // the in-memory restore below is still the best we can do.
+        storageSet(sessionStorageThunk, `crux:draft:${props.id}`, text)
       }
       draft.value = text
     } else {
@@ -777,14 +740,10 @@ async function retryLastMessage() {
 // login round-trip in sessionStorage; restore it exactly once.
 function restoreStashedDraft(id) {
   const key = `crux:draft:${id}`
-  try {
-    const stashed = sessionStorage.getItem(key)
-    if (stashed !== null) {
-      draft.value = stashed
-      sessionStorage.removeItem(key)
-    }
-  } catch {
-    // storage unavailable (private mode/quota) - nothing to restore
+  const stashed = storageGet(sessionStorageThunk, key)
+  if (stashed !== null) {
+    draft.value = stashed
+    storageRemove(sessionStorageThunk, key)
   }
 }
 
@@ -974,20 +933,16 @@ async function resumeReviewGaps() {
   await sendReviewSeed(confirmedGaps.value[0])
 }
 
-async function onGapPicked(gap) {
-  await sendReviewSeed(gap)
-}
-
 async function sendReviewSeed(gap) {
   // Covers the query-driven path (handleReviewGapQuery), which is only
   // gated on !notFound in loadCurrent -- a non-404 loadSession failure
   // leaves store.currentSession null or stale relative to props.id. The
   // button path (resumeReviewGaps) already guards on !store.currentSession
   // before calling in, but this covers both null and stale defensively.
-  if (!store.currentSession || store.currentSession.id !== props.id) return
+  if (!current.value) return
   resuming.value = true
   try {
-    if (isEnded.value) await store.reopenSession(store.currentSession.id)
+    if (isEnded.value) await store.reopenSession(current.value.id)
     await store.sendMessageStreaming({
       text: `Review my gap: ${gap}`,
       reviewGaps: true,
@@ -1025,7 +980,7 @@ async function handleQuizQuery() {
   const yieldToReviewGap = !!route.query.review_gap
   router.replace({ query: { ...route.query, quiz: undefined } })
   if (yieldToReviewGap) return
-  if (!store.currentSession || store.currentSession.id !== props.id) return
+  if (!current.value) return
   try {
     await store.sendMessageStreaming({
       text: 'Quiz me so you can pitch this at the right level.',
@@ -1054,10 +1009,12 @@ async function onSkipCheck() {
 
 async function onDoneCheck() {
   try {
+    // A graded diagnostic sets knowledge_level server-side. completeCheck runs
+    // the follow-up as a stream, and every way that stream can settle (done,
+    // cap, error, abort, superseded) puts streamState back to 'idle', so the
+    // stream-state watcher above already refetches the profile and the card
+    // stays gone. No second fetch here.
     await store.completeCheck()
-    // A graded diagnostic sets knowledge_level server-side; refetch so the
-    // card stays gone (showDiagnosticCard) instead of reappearing stale.
-    await loadDiagProfile(props.id)
   } catch (e) {
     lastError.value = e
   }

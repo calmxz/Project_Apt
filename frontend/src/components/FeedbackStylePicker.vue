@@ -69,18 +69,6 @@ function select(value) {
 </template>
 
 <style scoped>
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
 /* Two lettered lines, each on the pitch, separated by a painted feint rule so
    the line stays 28px tall. No card, no dot, no fill. */
 .radio-group {
