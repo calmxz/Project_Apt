@@ -226,6 +226,38 @@ def test_prepare_turn_failure_releases_the_reserve(client, db_session, monkeypat
     assert cost_meter.current_spend(db_session, USER_ID) == Decimal("0.0000")
 
 
+def test_whitespace_only_message_rejected_with_422(client, db_session, monkeypatch):
+    """C-10: minLength=1 in the contract stops "" but not "   ". The route
+    rejects whitespace-only input before any guard side effect."""
+    monkeypatch.setattr(settings, "llm_stub", True)
+
+    r = client.post(
+        "/api/chat/stream",
+        json={"session_id": SESSION_ID, "message": "   "},
+        headers=AUTH_HEADERS,
+    )
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "empty_message"
+
+    msgs = db_session.execute(
+        select(ChatMessage).where(ChatMessage.session_id == SESSION_ID)
+    ).scalars().all()
+    assert msgs == []
+
+
+def test_empty_message_rejected_by_contract(client, db_session):
+    r = client.post(
+        "/api/chat/stream",
+        json={"session_id": SESSION_ID, "message": ""},
+        headers=AUTH_HEADERS,
+    )
+    assert r.status_code == 422
+    msgs = db_session.execute(
+        select(ChatMessage).where(ChatMessage.session_id == SESSION_ID)
+    ).scalars().all()
+    assert msgs == []
+
+
 def _fake_session(topic="sql"):
     return SimpleNamespace(topic=topic)
 

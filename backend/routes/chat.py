@@ -440,6 +440,13 @@ async def _prepare_turn(
     never blocks the event loop. The segments are sequential awaits, so no two
     threadpool calls ever touch `db` concurrently.
     """
+    # C-10: the contract's minLength=1 stops "" but not "   ". Reject
+    # whitespace-only input as the very first statement, before any guard side
+    # effect (no cost reservation, no rate-limit slot, no persisted message).
+    # The stored message itself is never stripped.
+    if not req.message.strip():
+        raise HTTPException(status_code=422, detail={"code": "empty_message"})
+
     session, ingestion_status = await run_in_threadpool(
         _prepare_turn_guards, req, user_id, db, accepted_terms
     )
