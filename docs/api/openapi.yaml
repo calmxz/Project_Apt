@@ -110,6 +110,12 @@ paths:
                 $ref: "#/components/schemas/SessionResponse"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "404":
+          description: seed_mode is resume and prior_session_id does not name a session owned by this user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "409":
           description: An active session with this topic already exists (code duplicate_topic, session_id carries the existing id).
           content:
@@ -117,7 +123,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "422":
-          description: declared_level is forbidden when seed_mode is resume.
+          description: declared_level is forbidden when seed_mode is resume, or the topic is whitespace-only (code empty_topic).
           content:
             application/json:
               schema:
@@ -343,6 +349,12 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           description: An active session with this topic already exists (code duplicate_topic, session_id carries the existing id).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: The topic is whitespace-only (code empty_topic).
           content:
             application/json:
               schema:
