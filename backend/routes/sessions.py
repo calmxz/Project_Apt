@@ -355,7 +355,10 @@ def lookup_sessions_by_topic(
         return SessionLookupResult()
 
     def _to_match(row: SessionModel) -> SessionMatch:
-        profile = TopicProfile.model_validate_json(row.topic_profile_json)
+        # C-01: tolerant parse. TopicProfile is codegen'd with extra="forbid",
+        # so a row written under an older profile schema would 500 the whole
+        # lookup under a strict model_validate_json.
+        profile = profile_service.profile_from_row(row)
         return SessionMatch(
             session_id=row.id,
             title=row.topic,
