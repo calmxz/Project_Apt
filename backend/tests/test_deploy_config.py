@@ -26,7 +26,9 @@ def test_render_service_shape():
     svc = data["services"][0]
     assert svc["type"] == "web"
     assert svc["runtime"] == "docker"
-    assert svc["healthCheckPath"] == "/health"
+    # G-07: deliberately /ready, not /health -- the check must fail when the
+    # database is unreachable so Render restarts the instance.
+    assert svc["healthCheckPath"] == "/ready"
     assert svc["plan"] == "free"
     assert svc["dockerfilePath"] == "./backend/Dockerfile"
 

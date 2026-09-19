@@ -7,7 +7,9 @@ services:
     plan: free
     # Set region to match the Supabase project region to avoid cross-region latency.
     region: singapore
-    healthCheckPath: /health
+    # G-07: /ready also probes the database, so a Supabase outage fails the
+    # instance health check instead of serving 500s. /health stays liveness-only.
+    healthCheckPath: /ready
     envVars:
       - key: ENV
         value: prod

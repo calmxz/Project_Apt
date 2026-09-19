@@ -1,8 +1,19 @@
-from fastapi import APIRouter
+import asyncio
+import logging
 
+from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
+
+from config import settings
 from contracts import HealthResponse
+from db.database import get_db
 
 router = APIRouter()
+
+log = logging.getLogger(__name__)
 
 
 def _ok() -> HealthResponse:
@@ -17,3 +28,29 @@ def health():
 @router.get("/healthz", response_model=HealthResponse, include_in_schema=False)
 def healthz():
     return _ok()
+
+
+def _probe(db: Session) -> None:
+    """G-07: the cheapest round trip that proves the pool can hand out a
+    working connection."""
+    db.execute(select(1)).scalar_one()
+
+
+# include_in_schema=False: /ready is infrastructure (Render health check), not
+# part of the client-facing API contract in docs/api/openapi.yaml.
+@router.get("/ready", include_in_schema=False)
+async def ready(db: Session = Depends(get_db)):
+    """Readiness: the process answers AND the database answers.
+
+    /health and /healthz stay pure liveness -- they must keep returning 200
+    while the DB is down so the platform does not kill a process that is
+    merely waiting on an upstream.
+    """
+    try:
+        await asyncio.wait_for(
+            run_in_threadpool(_probe, db), timeout=settings.readiness_timeout_s
+        )
+    except Exception as e:
+        log.warning("readiness probe failed error=%s", e)
+        return JSONResponse(status_code=503, content={"status": "unavailable"})
+    return JSONResponse(status_code=200, content={"status": "ok"})
