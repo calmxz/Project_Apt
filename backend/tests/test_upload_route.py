@@ -1,6 +1,7 @@
 """TDD: POST /api/upload (multipart PDF -> Document row, queued for the worker)."""
 
 import io
+from datetime import datetime, timezone
 from decimal import Decimal
 
 import pytest
@@ -136,6 +137,23 @@ def test_unknown_session_id_404(client, seeded):
         files=files,
     )
     assert r.status_code == 404
+
+
+def test_upload_into_ended_session_409(client, seeded, db_session):
+    """C-07: an ended session is read-only. The 409 must land before the cost
+    gate and the rate limiter, so it burns no daily slot and writes no row."""
+    sess = db_session.get(SessionModel, SESSION_ID)
+    sess.ended_at = datetime.now(timezone.utc)
+    db_session.commit()
+
+    files = {"file": ("notes.pdf", io.BytesIO(b"%PDF-fake"), "application/pdf")}
+    r = client.post(
+        "/api/upload", data={"user_id": USER_ID, "session_id": SESSION_ID}, files=files
+    )
+    assert r.status_code == 409, r.text
+    assert r.json()["detail"]["code"] == "session_ended"
+    assert db_session.query(Document).count() == 0
+    assert db_session.query(UsageCounter).filter_by(user_id=USER_ID).count() == 0
 
 
 def test_missing_auth_header_401(client, seeded):

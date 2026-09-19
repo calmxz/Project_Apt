@@ -126,6 +126,12 @@ def upload_file(
     if sess is None or sess.user_id != user_id:
         raise HTTPException(status_code=404, detail="session not found")
 
+    # C-07: an ended session is read-only (same detail shape as routes/chat.py
+    # and the sessions routes). Placed immediately after the ownership check so
+    # it costs neither a cost-cap evaluation nor a daily rate-limit slot.
+    if sess.ended_at is not None:
+        raise HTTPException(status_code=409, detail={"code": "session_ended"})
+
     # B-01: cost caps gate before the rate-limit slot is consumed, mirroring
     # the chat turn's guard order (routes/chat.py:141-153) - a capped account
     # must not be able to burn a daily upload slot on a rejected request.
