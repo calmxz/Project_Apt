@@ -1,34 +1,29 @@
 <template>
-  <section class="login">
-    <header class="head">
-      <Logo size="lg" variant="mark-only" />
-      <span class="folio">sign in</span>
-      <h1 class="title">Welcome to Crux</h1>
-      <p class="lede">Sign in with your email and password.</p>
-    </header>
-
+  <AuthCover title="Welcome to Crux" lede="Sign in with your email and password.">
     <form class="form" data-testid="login-form" @submit.prevent="submit">
-      <p v-if="resetDone" class="sent" data-testid="login-reset-done">
+      <p v-if="resetDone" class="status is-done" data-testid="login-reset-done">
         Password updated — sign in with your new password.
       </p>
 
       <div class="field">
-        <label for="email" class="label">Email</label>
-        <InputText
-          id="email"
-          v-model="email"
-          type="email"
-          data-testid="login-email"
-          autocomplete="email"
-          placeholder="you@example.com"
-          required
-          class="input"
-        />
+        <label for="email" class="field-label">Email</label>
+        <div class="field-line">
+          <InputText
+            id="email"
+            v-model="email"
+            type="email"
+            data-testid="login-email"
+            autocomplete="email"
+            placeholder="you@example.com"
+            required
+            class="field-input"
+          />
+        </div>
       </div>
 
       <div class="field">
-        <label for="password" class="label">Password</label>
-        <div class="pwd-wrap">
+        <label for="password" class="field-label">Password</label>
+        <div class="field-line has-glyph">
           <InputText
             id="password"
             v-model="password"
@@ -37,28 +32,46 @@
             autocomplete="current-password"
             placeholder="Your password"
             required
-            class="input pwd-input"
+            class="field-input"
           />
           <button
             type="button"
-            class="pwd-toggle"
+            class="field-glyph"
             data-testid="login-toggle-password"
             :aria-label="showPassword ? 'Hide password' : 'Show password'"
             :aria-pressed="showPassword"
             @click="showPassword = !showPassword"
           >
-            <i :class="showPassword ? 'pi pi-eye-slash' : 'pi pi-eye'" aria-hidden="true" />
+            <svg
+              viewBox="0 0 20 20"
+              width="20"
+              height="20"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="M1.5 10 C4 5.5 6.9 3.5 10 3.5 C13.1 3.5 16 5.5 18.5 10" />
+              <path d="M18.5 10 C16 14.5 13.1 16.5 10 16.5 C6.9 16.5 4 14.5 1.5 10" />
+              <circle cx="10" cy="10" r="2.75" />
+              <path v-if="showPassword" d="M3.5 16.5 L16.5 3.5" />
+            </svg>
           </button>
         </div>
       </div>
 
-      <p v-if="error" class="error" role="alert" data-testid="login-error">{{ error }}</p>
-      <p v-if="needsConfirm" class="hint">
+      <p v-if="error" class="status is-alert" role="alert" data-testid="login-error">
+        {{ error }}
+      </p>
+      <p v-if="needsConfirm" class="line">
         <button type="button" class="linkbtn" data-testid="login-resend" @click="resend">
           Resend confirmation email
         </button>
       </p>
-      <p v-if="resent" class="sent" data-testid="login-resent">
+      <p v-if="resent" class="status is-done" data-testid="login-resent">
         Confirmation email re-sent to <strong>{{ email.trim() }}</strong
         >.
       </p>
@@ -66,24 +79,43 @@
       <div class="actions">
         <button
           type="submit"
-          class="cta"
+          class="cta hit-44"
           data-testid="login-submit"
           :disabled="!canSubmit || submitting"
         >
           <span>{{ submitting ? 'Signing in…' : 'Sign in' }}</span>
-          <i class="pi pi-arrow-right" aria-hidden="true" />
+          <svg
+            class="cta-arrow"
+            viewBox="0 0 20 20"
+            width="18"
+            height="18"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <path d="M3.5 10 L16.5 10" />
+            <path d="M11 4.5 L16.5 10 L11 15.5" />
+          </svg>
         </button>
       </div>
 
-      <p class="swap">
-        <RouterLink to="/forgot" data-testid="login-to-forgot">Forgot password?</RouterLink>
+      <p class="line">
+        <RouterLink class="link" to="/forgot" data-testid="login-to-forgot"
+          >Forgot password?</RouterLink
+        >
       </p>
-      <p class="swap">
+      <p class="line">
         New here?
-        <RouterLink to="/register" data-testid="login-to-register">Create an account</RouterLink>
+        <RouterLink class="link" to="/register" data-testid="login-to-register"
+          >Create an account</RouterLink
+        >
       </p>
     </form>
-  </section>
+  </AuthCover>
 </template>
 
 <script setup>
@@ -92,8 +124,9 @@ import { useRoute, useRouter } from 'vue-router'
 
 import InputText from 'primevue/inputtext'
 
-import Logo from '../components/Logo.vue'
+import AuthCover from '../components/auth/AuthCover.vue'
 import { useAuthStore } from '../stores/auth.js'
+import { isValidEmail } from '../utils/validation.js'
 import { safeRedirect } from '../utils/safeRedirect.js'
 
 const route = useRoute()
@@ -110,9 +143,7 @@ const error = ref('')
 const needsConfirm = ref(false)
 const resent = ref(false)
 
-const canSubmit = computed(
-  () => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.value.trim()) && password.value.length > 0,
-)
+const canSubmit = computed(() => isValidEmail(email.value.trim()) && password.value.length > 0)
 
 async function submit() {
   if (!canSubmit.value) return
@@ -131,6 +162,9 @@ async function submit() {
     const target = safeRedirect(route.query.redirect)
     await (target ? router.push(target) : router.push({ name: 'home' }))
   } catch (e) {
+    // Supabase AuthErrors carry an HTTP status, so friendlyError() would
+    // replace their copy with a generic status message and break the
+    // "not confirmed" detection below. Surface the SDK message instead.
     const msg = e?.message || 'Could not sign in. Try again.'
     error.value = msg
     if (/not confirmed/i.test(msg)) needsConfirm.value = true
@@ -151,187 +185,54 @@ async function resend() {
 </script>
 
 <style scoped>
-.login {
-  max-width: 30rem;
-  margin: 0 auto;
-  min-height: 100dvh;
-  /* Larger bottom padding biases the flex-centered block upward so the card,
-     not the header+card group, sits near the optical center of the viewport. */
-  padding: 2rem 1.25rem calc(2rem + 12vh);
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 1.75rem;
+.field-line.has-glyph {
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
-.head {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 0.5rem;
-}
-
-.folio {
-  font-family: var(--font-sans);
-  font-size: var(--fs-label);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  font-weight: 600;
-  color: var(--color-accent-text);
-}
-
-.title {
-  font-family: var(--font-display);
-  font-size: clamp(1.875rem, 4vw, 2.5rem);
-  font-weight: 700;
-  letter-spacing: var(--tracking-display);
-  line-height: 1.1;
-  margin: 0;
-  color: var(--color-heading);
-}
-
-.lede {
-  margin: 0;
-  font-size: 1rem;
-  color: var(--color-text-muted);
-  max-width: 24rem;
-  line-height: var(--lh-body);
-}
-
-.form {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-  padding: 1.75rem;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-lift);
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.label {
-  font-family: var(--font-sans);
-  font-size: var(--fs-label);
-  font-weight: 600;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-  color: var(--color-text-muted);
-}
-
-.input :deep(input),
-.input.p-inputtext {
-  font-family: var(--font-sans);
-  font-size: 1rem;
-  background: var(--color-surface-soft);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  padding: 0.7rem 1.1rem;
-  width: 100%;
-}
-
-.pwd-wrap {
-  position: relative;
-}
-
-.pwd-input :deep(input),
-.pwd-input.p-inputtext {
-  padding-right: 3rem;
-}
-
-.pwd-toggle {
-  position: absolute;
-  top: 50%;
-  right: 0.5rem;
-  transform: translateY(-50%);
+/* A drawn glyph in the learner's ink at the end of the line, not a glyph font. */
+.field-glyph {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.25rem;
-  height: 2.25rem;
-  border: 0;
-  border-radius: 50%;
+  width: 2rem;
+  height: 1.75rem;
+  flex-shrink: 0;
   background: transparent;
-  color: var(--color-text-muted);
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--ink-learner);
   cursor: pointer;
   transition: color var(--motion-fast) ease;
 }
 
-.pwd-toggle:hover,
-.pwd-toggle:focus-visible {
-  color: var(--color-heading);
+.field-glyph:hover {
+  color: var(--color-accent-hover);
 }
 
-.cta {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1.5rem;
-  border-radius: var(--radius-pill);
-  background: var(--color-accent-strong);
-  color: #fff;
-  border: 0;
-  font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 0.9375rem;
-  cursor: pointer;
-  transition: filter var(--motion-fast) ease;
+.field-glyph:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 
-.cta:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-  box-shadow: none;
-}
-
-.cta:not(:disabled):hover {
-  filter: brightness(1.08);
-}
-
-.actions {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.error {
-  margin: 0;
-  color: var(--color-error-text);
-  font-size: 0.875rem;
-}
-
-.sent {
-  margin: 0;
-  font-size: 0.875rem;
-  color: var(--color-success-text);
-}
-
-.hint {
-  margin: 0;
-  font-size: 0.875rem;
-}
-
+/* The resend control is a button that has to read as the cover's link. */
 .linkbtn {
   background: none;
   border: 0;
   padding: 0;
   font: inherit;
-  color: var(--color-accent-text);
+  font-weight: 700;
+  color: var(--ink-learner);
   cursor: pointer;
   text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
-.swap {
-  margin: 0;
-  font-size: 0.875rem;
-  color: var(--color-text-muted);
-  text-align: center;
+.linkbtn:hover {
+  color: var(--color-accent-hover);
+}
+
+.linkbtn:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 </style>

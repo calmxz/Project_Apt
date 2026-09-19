@@ -77,7 +77,8 @@ def test_compose_files_do_not_define_worker_service():
     web service (INGEST_IN_PROCESS, default on). Re-adding a worker
     service here means the scale-out path was taken deliberately --
     revisit the flag on the web service and the spec before deleting
-    this test (see docs/superpowers/specs/2026-08-12-defer-render-worker-design.md)."""
+    this test (spec removed from the tree; see git history for
+    docs/superpowers/specs/2026-08-12-defer-render-worker-design.md)."""
     for path in ("docker-compose.yml", "docker-compose.prod.yml"):
         cfg = _load(path)
         assert "worker" not in cfg["services"]

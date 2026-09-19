@@ -1,32 +1,32 @@
 <template>
-  <section class="onboarding">
-    <header class="head">
-      <Logo size="lg" variant="mark-only" />
-      <span class="folio">welcome</span>
-      <h1 class="title">Welcome to Crux.</h1>
-      <p class="lede">Tell us how you like to learn — we'll tune the tutor before you begin.</p>
-    </header>
-
+  <AuthCover
+    title="Welcome to Crux."
+    lede="Tell us how you like to learn — we'll tune the tutor before you begin."
+  >
     <form class="form" @submit.prevent="submit">
-      <div class="field" style="--delay: 0ms">
-        <label for="display-name" class="label">What we call you</label>
-        <InputText
-          id="display-name"
-          v-model="displayName"
-          data-testid="onboarding-name"
-          placeholder="Learner"
-          autocomplete="off"
-          class="input"
-        />
+      <div class="field stagger" style="--delay: 0ms">
+        <label for="display-name" class="field-label">What we call you</label>
+        <div class="field-line">
+          <InputText
+            id="display-name"
+            v-model="displayName"
+            data-testid="onboarding-name"
+            placeholder="Learner"
+            autocomplete="off"
+            class="field-input"
+          />
+        </div>
       </div>
 
-      <div class="field" style="--delay: 60ms">
-        <span class="label">When you get stuck</span>
-        <FeedbackStylePicker
-          v-model="feedback"
-          :options="feedbackOptions"
-          data-testid="onboarding-feedback"
-        />
+      <div class="field stagger" style="--delay: 60ms">
+        <div class="choice" data-testid="onboarding-feedback">
+          <p class="field-label">When you get stuck</p>
+          <FeedbackStylePicker
+            v-model="feedback"
+            :options="feedbackOptions"
+            name="feedback-style"
+          />
+        </div>
         <p class="help">
           {{
             feedback === 'hints'
@@ -36,33 +36,43 @@
         </p>
       </div>
 
-      <div class="actions" style="--delay: 120ms">
-        <button
-          type="submit"
-          class="cta"
-          data-testid="onboarding-submit"
-          :disabled="!canSubmit || submitting"
-        >
+      <div class="actions stagger" style="--delay: 120ms">
+        <button type="submit" class="cta" data-testid="onboarding-submit" :disabled="submitting">
           <span>Begin</span>
-          <i class="pi pi-arrow-right" aria-hidden="true" />
+          <svg
+            class="cta-arrow"
+            viewBox="0 0 20 20"
+            width="18"
+            height="18"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <path d="M3.5 10 L16.5 10" />
+            <path d="M11 4.5 L16.5 10 L11 15.5" />
+          </svg>
         </button>
       </div>
 
-      <p v-if="submitError" class="error" role="alert" data-testid="onboarding-error">
+      <p v-if="submitError" class="status is-alert" role="alert" data-testid="onboarding-error">
         {{ submitError }}
       </p>
     </form>
-  </section>
+  </AuthCover>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import InputText from 'primevue/inputtext'
 
+import AuthCover from '../components/auth/AuthCover.vue'
 import FeedbackStylePicker from '../components/FeedbackStylePicker.vue'
-import Logo from '../components/Logo.vue'
 import { friendlyError } from '@/lib/errors.js'
 import { useUserStore } from '../stores/user.js'
 
@@ -76,13 +86,11 @@ const feedbackOptions = [
 ]
 const feedback = ref(userStore.interactionPreferences?.feedback || 'hints')
 
-const canSubmit = computed(() => Boolean(feedback.value))
-
 const submitting = ref(false)
 const submitError = ref(null)
 
 async function submit() {
-  if (!canSubmit.value || submitting.value) return
+  if (submitting.value) return
   submitting.value = true
   submitError.value = null
   try {
@@ -102,182 +110,48 @@ async function submit() {
 </script>
 
 <style scoped>
-.onboarding {
-  max-width: 38rem;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 2.5rem;
+/* The picker's own label sits as a paragraph rather than a <label>, so it
+   needs the block box the cover's <label> elements already have. */
+.field-label {
+  display: block;
+  padding: 0;
 }
 
-.head {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 0.625rem;
+/* The lettered lines come from the shared FeedbackStylePicker, so the
+   grammar has one source; this wrapper only carries the pencil label. */
+.choice {
+  min-width: 0;
 }
 
-.head :deep(.logo-mark) {
-  filter: drop-shadow(0 4px 16px rgba(255, 107, 92, 0.35));
-  animation: gentle-spin 8s ease-in-out infinite;
-}
-
-@keyframes gentle-spin {
-  0%,
-  100% {
-    transform: rotate(0deg);
-  }
-  50% {
-    transform: rotate(12deg);
-  }
-}
-
-.folio {
-  font-family: var(--font-sans);
-  font-size: var(--fs-label);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  font-weight: 600;
-  color: var(--color-accent-text);
-}
-
-.title {
-  font-family: var(--font-display);
-  font-size: clamp(2.25rem, 5vw, 3rem);
-  font-weight: 700;
-  letter-spacing: var(--tracking-display);
-  line-height: 1.05;
-  color: var(--color-heading);
+.choice .field-label {
   margin: 0;
-}
-
-.lede {
-  margin: 0;
-  font-size: 1.0625rem;
-  color: var(--color-text-muted);
-  max-width: 30rem;
-  line-height: var(--lh-body);
-}
-
-.form {
-  display: flex;
-  flex-direction: column;
-  gap: 1.75rem;
-  padding: 2rem;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-lift);
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.625rem;
-  opacity: 0;
-  animation: rise 420ms cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
-  animation-delay: var(--delay, 0ms);
-}
-
-.label {
-  font-family: var(--font-sans);
-  font-size: var(--fs-label);
-  font-weight: 600;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-  color: var(--color-text-muted);
 }
 
 .help {
   margin: 0;
-  font-size: 0.8125rem;
-  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-body);
+  color: var(--pencil);
 }
 
-.actions {
-  display: flex;
-  justify-content: flex-end;
-  padding-top: 0.5rem;
+/* Ink appears: the sheet fills in line by line, nothing moves. */
+.stagger {
   opacity: 0;
-  animation: rise 420ms cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+  animation: ink-in var(--motion-ink) var(--motion-out-expo) forwards;
   animation-delay: var(--delay, 0ms);
 }
 
-.error {
-  margin: 0;
-  color: var(--color-error-text);
-  font-size: 0.875rem;
-}
-
-.input :deep(input),
-.input.p-inputtext {
-  font-family: var(--font-sans);
-  font-size: 1.0625rem;
-  font-weight: 500;
-  background: var(--color-surface-soft);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  padding: 0.75rem 1.25rem;
-  color: var(--color-heading);
-  width: 100%;
-  transition:
-    border-color var(--motion-fast) ease,
-    box-shadow var(--motion-fast) ease;
-}
-
-.input :deep(input):focus,
-.input.p-inputtext:focus {
-  border-color: var(--color-accent);
-  outline: none;
-  box-shadow: 0 0 0 4px var(--color-accent-ring);
-}
-
-.cta {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.9rem 1.75rem;
-  border-radius: var(--radius-pill);
-  background: var(--color-accent-strong);
-  color: #ffffff;
-  border: 0;
-  font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 1rem;
-  cursor: pointer;
-  transition:
-    filter var(--motion-fast) ease,
-    opacity var(--motion-fast) ease;
-}
-
-.cta:hover:not(:disabled) {
-  filter: brightness(1.08);
-}
-
-.cta:active:not(:disabled) {
-  filter: brightness(0.95);
-}
-
-.cta:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  box-shadow: none;
-}
-
-.cta:focus-visible {
-  outline: 2px solid var(--color-accent-ring);
-  outline-offset: 3px;
-}
-
-@keyframes rise {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
+@keyframes ink-in {
   to {
     opacity: 1;
-    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stagger {
+    opacity: 1;
+    animation: none;
   }
 }
 </style>

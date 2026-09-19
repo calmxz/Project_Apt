@@ -5,6 +5,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useSidebar } from '@/composables/useSidebar.js'
+import { useToast } from '@/composables/useToast.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useSessionStore } from '@/stores/session.js'
 import { useSessionGroups } from '@/composables/useSessionGroups.js'
@@ -90,18 +91,37 @@ onBeforeUnmount(() => {
   }
   clearTimeout(searchTimer)
   cancelIdleBadge?.()
+  listResizeObserver?.disconnect()
+  listResizeObserver = null
 })
 
 const searchQuery = ref('')
-const { searching, pinnedActive, activeGroups, endedRows } = useSessionGroups(
-  sessions,
-  searchQuery,
-  ref(null), // null => Date.now() captured at setup time
-)
+const { searching, pinnedActive, activeRows, endedRows } = useSessionGroups(sessions, searchQuery)
 
-const activeFlat = computed(() => activeGroups.value.flatMap((g) => g.rows))
+// SIDEBAR_CAP is the floor (and the fallback wherever the list's height cannot
+// be measured -- jsdom, or a browser without ResizeObserver). SIDEBAR_CAP_MAX
+// is the ceiling, and matches the store's SIDEBAR_PAGE_LIMIT window: rendering
+// past it would only ever draw rows the store does not hold.
+const SIDEBAR_CAP = 15
+const SIDEBAR_CAP_MAX = 40
+const DEFAULT_PITCH_PX = 28
 
-const SIDEBAR_CAP = 20
+// How many rows the list column actually has room for. Recomputed from the
+// measured height of `listEl` so a tall screen fills instead of stopping at
+// the floor and leaving dead space below the last row.
+const renderCap = ref(SIDEBAR_CAP)
+let listResizeObserver = null
+
+function measureRenderCap() {
+  const el = listEl.value
+  if (!el) return
+  const raw = getComputedStyle(el).getPropertyValue('--line-pitch')
+  const parsed = parseFloat(raw)
+  const pitchPx = Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_PITCH_PX
+  // One pitch is reserved for the closing "View all" line.
+  const fit = Math.floor((el.clientHeight - pitchPx) / pitchPx)
+  renderCap.value = Math.min(SIDEBAR_CAP_MAX, Math.max(SIDEBAR_CAP, fit))
+}
 
 // Search queries the library endpoint server-side (the store only holds a
 // SIDEBAR_CAP-windowed slice, so client-side filtering of `sessions` could
@@ -161,27 +181,31 @@ const showViewAllSearch = computed(
 
 // Pinned rows render first and count toward the cap; server's pinned_activity
 // sort already guarantees pinned rows are inside the fetched page. Pinned
-// itself is also sliced to the cap so >20 pinned rows can never push the
-// component's total render past SIDEBAR_CAP on their own.
-const cappedPinnedActive = computed(() => pinnedActive.value.slice(0, SIDEBAR_CAP))
+// itself is also sliced to the cap so a long pinned list can never push the
+// component's total render past renderCap on its own.
+const cappedPinnedActive = computed(() => pinnedActive.value.slice(0, renderCap.value))
 const cappedActiveFlat = computed(() =>
-  activeFlat.value.slice(0, Math.max(0, SIDEBAR_CAP - cappedPinnedActive.value.length)),
+  activeRows.value.slice(0, Math.max(0, renderCap.value - cappedPinnedActive.value.length)),
 )
-const cappedEndedRows = computed(() => endedRows.value.slice(0, SIDEBAR_CAP))
+const cappedEndedRows = computed(() => endedRows.value.slice(0, renderCap.value))
+
+// Collapsed icon rail: one flat spine of every row the expanded view would draw.
+const railRows = computed(() => [
+  ...cappedPinnedActive.value,
+  ...cappedActiveFlat.value,
+  ...cappedEndedRows.value,
+])
 
 const activeRendered = computed(
   () => cappedPinnedActive.value.length + cappedActiveFlat.value.length,
 )
-// Gated on rendered rows > 0: createSession bumps activeTotal without
-// pushing into the (windowed) `sessions` array, so a fresh account can sit
-// at activeTotal=1 with zero rendered rows. Without this guard the sidebar
+// View all is the list's closing line whenever rows are rendered. The
+// zero-rows guard stays: createSession bumps activeTotal without pushing
+// into the (windowed) `sessions` array, so a fresh account can sit at
+// activeTotal=1 with zero rendered rows. Without this guard the sidebar
 // would show "No sessions yet" and "View all 1 sessions" at once.
-const showViewAllActive = computed(
-  () => activeRendered.value > 0 && activeTotal.value > activeRendered.value,
-)
-const showViewAllEnded = computed(
-  () => cappedEndedRows.value.length > 0 && endedTotal.value > cappedEndedRows.value.length,
-)
+const showViewAllActive = computed(() => activeRendered.value > 0)
+const showViewAllEnded = computed(() => cappedEndedRows.value.length > 0)
 
 const showSkeleton = computed(() => loading.value && !sessions.value.length)
 
@@ -194,14 +218,21 @@ const showEmptyActiveHint = computed(
     !loading.value &&
     !searching.value &&
     sessions.value.length > 0 &&
-    !activeGroups.value.length &&
+    !activeRows.value.length &&
     !pinnedActive.value.length,
 )
 
 // Fetch only if we haven't loaded yet. HomeView also calls listSessions on mount;
-// shared Pinia store means second call refetches (and that's fine — it'll be
-// fresh data), but skipping when populated avoids the deep-link redundant fetch.
+// the store de-dupes concurrent calls via _inflight, and skipping when populated
+// avoids the deep-link redundant fetch.
 onMounted(async () => {
+  // Fit-to-height: measure once the list column exists (desktop or drawer) and
+  // again whenever it resizes. Guarded so jsdom -- which has no
+  // ResizeObserver -- keeps the SIDEBAR_CAP floor.
+  if (listEl.value && typeof ResizeObserver !== 'undefined') {
+    listResizeObserver = new ResizeObserver(() => measureRenderCap())
+    listResizeObserver.observe(listEl.value)
+  }
   if (isAuthenticated.value && !sessions.value.length) {
     await sessionStore.listSessions().catch(() => {})
   }
@@ -222,16 +253,17 @@ onMounted(async () => {
 // Scroll the active session row into view on route change.
 watch(
   () => route.params.id,
-  async () => {
+  async (id) => {
+    // Nothing to scroll to off a session route -- skip the nextTick + query.
+    if (!id) return
     await nextTick()
     if (!listEl.value) return
-    const target = listEl.value.querySelector(`[data-session-id="${route.params.id}"]`)
+    const target = listEl.value.querySelector(`[data-session-id="${id}"]`)
     target?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   },
 )
 
 const isExpanded = computed(() => mode.value === 'expanded' || mode.value === 'drawer-open')
-const showCollapseToggle = computed(() => isDesktop.value)
 const showDrawerClose = computed(() => !isDesktop.value && mode.value === 'drawer-open')
 
 // Clear search when collapsing so the icon rail is never gated empty.
@@ -242,6 +274,20 @@ watch(isExpanded, (expanded) => {
 function onNewSession() {
   closeDrawer()
   router.push({ name: 'new-session' })
+}
+
+// Sign out lives on the footer rail rather than inside Settings > Account:
+// it is a navigation act, not a setting, and it belongs with the other
+// written lines at the foot of the contents page.
+async function onSignOut() {
+  closeDrawer()
+  try {
+    await authStore.signOut()
+  } catch (err) {
+    useToast().showError(err?.message || 'Sign out failed')
+    return
+  }
+  router.push('/login')
 }
 </script>
 
@@ -268,36 +314,65 @@ function onNewSession() {
     aria-label="App navigation"
   >
     <div class="sb-header">
-      <RouterLink
-        v-if="isExpanded"
-        to="/"
-        class="sb-brand"
-        aria-label="Crux home"
-        @click="closeDrawer"
-      >
-        <Logo size="md" variant="full" />
+      <RouterLink to="/" class="sb-brand" aria-label="Crux home" @click="closeDrawer">
+        <Logo :size="isExpanded ? 'md' : 'sm'" :variant="isExpanded ? 'full' : 'mark-only'" />
       </RouterLink>
       <button
-        v-if="showCollapseToggle"
+        v-if="isDesktop"
         type="button"
-        class="sb-toggle"
+        class="sb-toggle sb-toggle--edge hit-44"
         :aria-label="isExpanded ? 'Collapse sidebar' : 'Expand sidebar'"
         :title="isExpanded ? 'Collapse sidebar' : 'Expand sidebar'"
         data-testid="sidebar-collapse-toggle"
         @click="toggleDesktop"
       >
-        <i :class="isExpanded ? 'pi pi-angle-double-left' : 'pi pi-angle-double-right'" />
+        <svg
+          class="sb-toggle-icon"
+          viewBox="0 0 20 20"
+          width="14"
+          height="14"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <template v-if="isExpanded">
+            <path d="M12.5 4.5 L7 10 L12.5 15.5" />
+            <path d="M17 4.5 L11.5 10 L17 15.5" />
+          </template>
+          <template v-else>
+            <path d="M7.5 4.5 L13 10 L7.5 15.5" />
+            <path d="M3 4.5 L8.5 10 L3 15.5" />
+          </template>
+        </svg>
       </button>
       <button
         v-if="showDrawerClose"
         type="button"
-        class="sb-toggle sb-toggle--end"
+        class="sb-toggle sb-toggle--end hit-44"
         aria-label="Close sessions sidebar"
         title="Close"
         data-testid="sidebar-drawer-close"
         @click="closeDrawer"
       >
-        <i class="pi pi-times" />
+        <svg
+          class="sb-toggle-icon"
+          viewBox="0 0 20 20"
+          width="14"
+          height="14"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path d="M5 5 L15 15 M15 5 L5 15" />
+        </svg>
       </button>
     </div>
 
@@ -310,7 +385,21 @@ function onNewSession() {
         data-testid="sidebar-new-session"
         @click="onNewSession"
       >
-        <i class="pi pi-plus" />
+        <svg
+          class="sb-inline-icon"
+          viewBox="0 0 20 20"
+          width="16"
+          height="16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path d="M10 4 L10 16 M4 10 L16 10" />
+        </svg>
         <span v-if="isExpanded">New session</span>
       </button>
     </div>
@@ -320,15 +409,46 @@ function onNewSession() {
       to="/review"
       class="sb-review"
       data-testid="sidebar-review"
+      :aria-label="`Review: ${reviewTotal} ${reviewTotal === 1 ? 'concept' : 'concepts'} due`"
       @click="closeDrawer"
     >
-      <i class="pi pi-history" aria-hidden="true" />
+      <svg
+        class="sb-inline-icon"
+        viewBox="0 0 20 20"
+        width="14"
+        height="14"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <circle cx="10" cy="10.5" r="7" />
+        <path d="M10 6.5 L10 10.5 L13 12.5" />
+      </svg>
       <span>Review</span>
-      <span class="sb-review-count">{{ reviewTotal }}</span>
+      <span class="sb-review-count" aria-hidden="true">{{ reviewTotal }}</span>
     </RouterLink>
 
     <div v-if="isExpanded" class="sb-search">
-      <i class="pi pi-search" aria-hidden="true" />
+      <svg
+        class="sb-inline-icon"
+        viewBox="0 0 20 20"
+        width="13"
+        height="13"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <circle cx="8.5" cy="8.5" r="6" />
+        <path d="M13 13 L17.5 17.5" />
+      </svg>
       <input
         v-model="searchQuery"
         type="search"
@@ -414,10 +534,25 @@ function onNewSession() {
               class="sb-section sb-section--pinned"
               data-testid="sidebar-section-pinned"
             >
-              <h3 class="sb-section-label label">
-                <i class="pi pi-bookmark-fill" aria-hidden="true" /> Pinned
+              <h2 class="sb-section-label label">
+                <svg
+                  class="sb-inline-icon"
+                  viewBox="0 0 20 20"
+                  width="12"
+                  height="12"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <path d="M6 3.5 H14 V16.5 L10 13.5 L6 16.5 Z" />
+                </svg>
+                Pinned
                 <span class="sb-section-count">({{ cappedPinnedActive.length }})</span>
-              </h3>
+              </h2>
               <ul class="sb-session-list">
                 <SidebarSessionRow
                   v-for="s in cappedPinnedActive"
@@ -499,7 +634,7 @@ function onNewSession() {
       <template v-else>
         <ul v-if="sessions.length" class="sb-session-list sb-session-list--collapsed">
           <SidebarSessionRow
-            v-for="s in [...cappedPinnedActive, ...cappedActiveFlat, ...cappedEndedRows]"
+            v-for="s in railRows"
             :key="s.id"
             :session="s"
             :state="s.ended_at ? 'ended' : 'active'"
@@ -518,72 +653,143 @@ function onNewSession() {
         data-testid="sidebar-settings"
         @click="closeDrawer"
       >
-        <i class="pi pi-cog" />
+        <svg
+          class="sb-inline-icon"
+          viewBox="0 0 20 20"
+          width="16"
+          height="16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <circle cx="10" cy="10" r="2.5" />
+          <path
+            d="M10 3.5 V5.5 M10 14.5 V16.5 M16.5 10 H14.5 M5.5 10 H3.5 M14.7 5.3 L13.3 6.7 M6.7 13.3 L5.3 14.7 M14.7 14.7 L13.3 13.3 M6.7 6.7 L5.3 5.3"
+          />
+        </svg>
         <span v-if="isExpanded" class="sb-icon-label">Settings</span>
       </RouterLink>
+      <button
+        v-if="isAuthenticated"
+        type="button"
+        class="sb-icon sb-icon-btn"
+        :class="{ 'sb-icon--row': isExpanded }"
+        aria-label="Sign out"
+        title="Sign out"
+        data-testid="sidebar-sign-out"
+        @click="onSignOut"
+      >
+        <svg
+          class="sb-inline-icon"
+          viewBox="0 0 20 20"
+          width="16"
+          height="16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path d="M12 4 H5 V16 H12" />
+          <path d="M9 10 H17 M14 7 L17 10 L14 13" />
+        </svg>
+        <span v-if="isExpanded" class="sb-icon-label">Sign out</span>
+      </button>
     </footer>
   </aside>
 </template>
 
 <style scoped>
+/* The contents page: paper, one rule down its right edge, nothing floating. */
 .sidebar {
   display: flex;
   flex-direction: column;
   height: 100vh;
   position: sticky;
   top: 0;
-  background: var(--color-background);
-  border-right: 1px solid var(--color-border);
+  background: var(--desk-deep);
+  border-right: 1px solid var(--card-edge);
   z-index: 30;
   overflow: hidden;
-  transition: width var(--motion-base) ease;
 }
 
-.sidebar--expanded {
-  width: var(--sidebar-width-expanded, 16rem);
-}
-
+.sidebar--expanded,
 .sidebar--collapsed {
-  width: var(--sidebar-width-collapsed, 3rem);
+  width: 100%;
 }
 
-/* Mobile drawer: fixed overlay that slides in from the left. The shell grid
-   column collapses to zero so the main column gets full width when the drawer
-   is closed. */
+/* P2: the shell column snaps rather than animating grid-template-columns (a
+   whole-shell relayout every frame). The collapse instead reads the way
+   everything else in this world does: the paper and its right-hand rule hold
+   still while the ink on it fades back in at the new measure. The class flip
+   between --expanded and --collapsed is what re-runs the animation, so this
+   needs no per-branch wrapper -- the expanded body and the collapsed rail are
+   the same interleaved v-if branches, and neither is ever mid-fade while
+   focusable, since only opacity moves. */
+@keyframes sb-mode-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.sidebar--expanded > *,
+.sidebar--collapsed > * {
+  animation: sb-mode-fade var(--motion-fast) ease;
+}
+
+/* Mobile drawer: the same paper, laid over the page. It appears and leaves in
+   opacity -- in this world ink is never slid into place. The shell grid column
+   collapses to zero so the main column gets full width when it is closed. */
 .sidebar--drawer {
   position: fixed;
   top: 0;
   left: 0;
-  width: var(--sidebar-width-expanded, 16rem);
+  width: var(--sidebar-width-expanded, 18rem);
   max-width: 85vw;
-  transform: translateX(-100%);
-  transition: transform var(--motion-base) ease;
   box-shadow: var(--shadow-lift);
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity var(--motion-fast) ease,
+    visibility 0s linear var(--motion-fast);
 }
 
 .sidebar--drawer-open {
-  transform: translateX(0);
-}
-
-/* Collapsed grid column when the drawer is closed on mobile. */
-.sidebar--drawer:not(.sidebar--drawer-open) {
-  pointer-events: none;
+  opacity: 1;
+  visibility: visible;
+  transition: opacity var(--motion-fast) ease;
 }
 
 .sb-backdrop {
   position: fixed;
   inset: 0;
   z-index: 29;
-  background: rgba(0, 0, 0, 0.5);
-  animation: sb-fade-in var(--motion-fast) ease;
+  background: color-mix(in srgb, var(--ink) 45%, transparent);
+  animation: sb-mode-fade var(--motion-fast) ease;
 }
 
-@keyframes sb-fade-in {
-  from {
-    opacity: 0;
+/* The contents, the backdrop and the drawer all arrive at their final state at
+   once: full opacity, no fade. Visibility still flips, so the closed drawer
+   stays out of the tab order. */
+@media (prefers-reduced-motion: reduce) {
+  .sb-backdrop,
+  .sidebar--expanded > *,
+  .sidebar--collapsed > * {
+    animation: none;
   }
-  to {
-    opacity: 1;
+
+  .sidebar--drawer,
+  .sidebar--drawer-open {
+    transition: visibility 0s;
   }
 }
 
@@ -596,8 +802,9 @@ function onNewSession() {
 }
 
 .sidebar--collapsed .sb-header {
-  justify-content: center;
-  padding: 0.75rem 0.25rem;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
 }
 
 .sb-toggle--end {
@@ -607,11 +814,7 @@ function onNewSession() {
 .sb-brand {
   display: inline-flex;
   text-decoration: none;
-  transition: transform var(--motion-base) var(--motion-bounce);
-}
-
-.sb-brand:hover {
-  transform: translateY(-1px);
+  color: var(--color-heading);
 }
 
 .sb-toggle {
@@ -620,71 +823,84 @@ function onNewSession() {
   justify-content: center;
   width: 1.75rem;
   height: 1.75rem;
-  border-radius: var(--radius-pill);
-  border: 1px solid transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--pencil);
   cursor: pointer;
   font-size: 0.875rem;
-  transition:
-    background var(--motion-fast) ease,
-    color var(--motion-fast) ease;
+  transition: color var(--motion-fast) ease;
 }
 
 .sb-toggle:hover {
-  background: var(--color-surface-soft);
-  color: var(--color-text);
+  color: var(--ink-learner);
 }
 
 .sb-toggle:focus-visible {
-  outline: 2px solid var(--color-accent-ring);
+  outline: 2px solid var(--ink-learner);
   outline-offset: 2px;
 }
 
+/* The collapse control is a half-tab standing off the sidebar's right edge,
+   the one control on the contents page allowed to look like a fixture rather
+   than a written line. */
+.sb-toggle--edge {
+  position: absolute;
+  top: 0.875rem;
+  right: -1px;
+  width: 22px;
+  height: 28px;
+  border: 1px solid var(--card-edge);
+  border-right: 0;
+  border-radius: 6px 0 0 6px;
+  background: var(--card);
+}
+
 .sb-cta {
-  padding: 0.5rem 0.75rem 0.75rem;
+  padding: 0 0.75rem 0.25rem;
 }
 
 .sidebar--collapsed .sb-cta {
-  padding: 0.25rem;
+  padding: 0 0 0.25rem;
   display: flex;
   justify-content: center;
 }
 
+/* Written, not stamped: the primary action is a line of blue text. */
 .sb-new-session {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
   gap: 0.5rem;
   width: 100%;
-  padding: 0.5rem 0.875rem;
-  background: var(--color-accent-strong);
-  color: #fff;
-  font-family: inherit;
-  font-size: var(--fs-body, 0.9375rem);
-  font-weight: 600;
-  border: none;
-  border-radius: var(--radius-pill);
+  min-height: var(--line-pitch);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-learner);
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  font-weight: 700;
   cursor: pointer;
-  transition:
-    filter var(--motion-fast) ease,
-    background var(--motion-fast) ease;
+  transition: color var(--motion-fast) ease;
 }
 
 .sb-new-session:hover {
-  filter: brightness(1.08);
+  color: var(--color-accent-hover);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .sb-new-session:focus-visible {
-  outline: 2px solid var(--color-accent-ring);
+  outline: 2px solid var(--ink-learner);
   outline-offset: 2px;
 }
 
 .sb-new-session--icon {
   width: 2.25rem;
   height: 2.25rem;
-  padding: 0;
-  border-radius: var(--radius-pill);
+  min-height: 0;
+  justify-content: center;
 }
 
 .sb-list-wrap {
@@ -692,78 +908,85 @@ function onNewSession() {
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 0.25rem 0.5rem;
+  padding: 0;
+  border-top: 1px solid var(--rule-strong);
 }
 
 .sb-section {
-  margin-bottom: 0.75rem;
+  margin: 0;
 }
 
+/* A section heading, set as a heading: no tracking, no uppercase, no eyebrow. */
 .sb-section-label {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 0.375rem;
   width: 100%;
-  padding: 0.5rem 0.75rem 0.25rem;
+  padding: 0 0.75rem;
   margin: 0;
+  line-height: var(--line-pitch);
   border: 0;
   background: transparent;
-  cursor: default;
   font-family: var(--font-sans);
-  font-size: var(--fs-label);
-  font-weight: 600;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-  color: var(--color-text-muted);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--color-text);
+}
+
+.sb-section-label .sb-inline-icon {
+  color: var(--pencil);
+}
+
+/* Drawn strokes, not a glyph font: one weight, round ends, the control's ink. */
+.sb-inline-icon,
+.sb-toggle-icon {
+  flex-shrink: 0;
 }
 
 .sb-section-count {
   font-variant-numeric: tabular-nums;
-  color: var(--color-text-faint);
-  font-weight: 500;
+  color: var(--pencil);
+  font-weight: 400;
+}
+
+.sb-section-label .sb-section-count {
+  margin-left: auto;
 }
 
 .sb-session-list {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 0.25rem 0;
   display: flex;
   flex-direction: column;
-  gap: 0.125rem;
 }
 
 .sb-session-list--collapsed {
-  align-items: center;
-  gap: 0.25rem;
+  align-items: stretch;
 }
 
 .sb-empty-hint {
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
-  color: var(--color-text-muted);
-  padding: 0.5rem 0.75rem;
+  color: var(--pencil);
+  padding: 0 0.75rem;
   margin: 0;
-  line-height: 1.4;
+  line-height: var(--line-pitch);
 }
 
 .sb-view-all {
   display: block;
-  padding: 0.375rem 0.75rem;
+  padding: 0 0.75rem;
+  line-height: var(--line-pitch);
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
-  font-weight: 600;
-  color: var(--color-accent-text);
-  text-decoration: none;
-  border-radius: var(--radius-md);
-}
-
-.sb-view-all:hover {
-  background: var(--color-surface-soft);
-  text-decoration: underline;
+  font-weight: 700;
+  color: var(--ink-learner);
 }
 
 .sb-view-all:focus-visible {
-  outline: 2px solid var(--color-accent-ring);
+  outline: 2px solid var(--ink-learner);
   outline-offset: -2px;
 }
 
@@ -771,28 +994,13 @@ function onNewSession() {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 0.125rem;
-  padding: 0.5rem;
-  border-top: 1px solid var(--color-border);
+  padding: 0.25rem 0.75rem;
+  border-top: 1px solid var(--rule-strong);
 }
 
 .sb-rail--column {
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 0.25rem;
-}
-
-.sb-icon.sb-icon--row {
-  width: 100%;
-  justify-content: flex-start;
-  gap: 0.625rem;
-  padding: 0.5rem 0.75rem;
-  border-radius: var(--radius-md);
-}
-
-.sb-icon-label {
-  font-family: var(--font-sans);
-  font-size: 0.875rem;
+  padding: 0.5rem 0;
 }
 
 .sb-icon {
@@ -801,45 +1009,63 @@ function onNewSession() {
   justify-content: center;
   width: 2.25rem;
   height: 2.25rem;
-  border-radius: var(--radius-pill);
-  border: 1px solid transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--color-text);
   cursor: pointer;
   text-decoration: none;
   font-size: 1rem;
-  transition:
-    background var(--motion-fast) ease,
-    color var(--motion-fast) ease,
-    border-color var(--motion-fast) ease,
-    transform var(--motion-fast) ease;
+  transition: color var(--motion-fast) ease;
+}
+
+.sb-icon.sb-icon--row {
+  width: 100%;
+  height: var(--line-pitch);
+  justify-content: flex-start;
+  gap: 0.625rem;
+  padding: 0;
+  border-radius: 0;
+}
+
+/* Sign out is a button, not a link; strip the UA chrome so it reads as the
+   same written line as Settings. */
+.sb-icon-btn {
+  background: transparent;
+  border: 0;
+  font: inherit;
+  text-align: left;
+}
+
+.sb-icon-label {
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
 }
 
 .sb-icon:hover {
-  color: var(--color-accent-text);
-  border-color: var(--color-accent-soft);
-  background: var(--color-accent-soft);
-  transform: translateY(-1px);
+  color: var(--ink-learner);
 }
 
 .sb-icon:focus-visible {
-  outline: 2px solid var(--color-accent-ring);
+  outline: 2px solid var(--ink-learner);
   outline-offset: 2px;
 }
 
+/* Search is written on a rule, not boxed in. */
 .sb-search {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  margin: 0 0.75rem 0.5rem;
-  padding: 0.375rem 0.625rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  color: var(--color-text-muted);
+  margin: 0 0.75rem 0.25rem;
+  padding: 0;
+  border-bottom: 1px solid var(--rule-strong);
+  color: var(--pencil);
 }
+
 .sb-search:focus-within {
-  border-color: var(--color-accent);
+  border-bottom-color: var(--ink-learner);
 }
+
 .sb-search-input {
   flex: 1;
   min-width: 0;
@@ -847,99 +1073,93 @@ function onNewSession() {
   background: transparent;
   color: var(--color-text);
   font-family: inherit;
-  font-size: var(--fs-body, 0.9375rem);
+  font-size: 0.9375rem;
+  line-height: calc(var(--line-pitch) - 1px);
   outline: none;
 }
-.sb-search-count {
-  padding: 0.25rem 0.75rem;
-  color: var(--color-text-muted);
+
+.sb-search-input::placeholder {
+  color: var(--pencil);
 }
 
+.sb-search-count {
+  padding: 0 0.75rem;
+  line-height: var(--line-pitch);
+  color: var(--pencil);
+}
+
+/* Two written toggles; the one in force is in ink and underlined. */
 .sb-status-toggle {
   display: flex;
-  gap: 0.25rem;
-  margin: 0 0.75rem 0.5rem;
+  gap: 1rem;
+  margin: 0 0.75rem 0.25rem;
 }
 
 .sb-status-btn {
-  flex: 1;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
   gap: 0.25rem;
-  padding: 0.3125rem 0.5rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
+  padding: 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
   background: transparent;
-  color: var(--color-text-muted);
+  color: var(--ink-learner);
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
-  font-weight: 600;
+  font-weight: 700;
+  line-height: calc(var(--line-pitch) - 4px);
   cursor: pointer;
   transition:
-    background var(--motion-fast) ease,
     color var(--motion-fast) ease,
     border-color var(--motion-fast) ease;
 }
 
 .sb-status-btn:hover {
-  border-color: var(--color-accent-soft);
-  color: var(--color-text);
+  color: var(--color-accent-hover);
 }
 
 .sb-status-btn:focus-visible {
-  outline: 2px solid var(--color-accent-ring);
+  outline: 2px solid var(--ink-learner);
   outline-offset: 2px;
+  border-radius: 0;
 }
 
 .sb-status-btn.active {
-  background: var(--color-accent-soft);
-  border-color: var(--color-accent);
-  color: var(--color-accent-text);
-}
-
-.sb-status-btn.active .sb-section-count {
-  color: var(--color-accent-text);
-}
-
-.sb-section--pinned .sb-section-label {
-  color: var(--color-accent-text);
+  color: var(--color-text);
+  border-bottom-color: var(--ink);
 }
 
 .sb-review {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  margin: 0.25rem 0.75rem 0;
-  padding: 0.4375rem 0.75rem;
-  border-radius: var(--radius-md);
-  color: var(--color-text-muted);
+  margin: 0 0.75rem;
+  padding: 0;
+  min-height: var(--line-pitch);
+  color: var(--ink-learner);
   font-family: var(--font-sans);
-  font-size: 0.875rem;
-  font-weight: 500;
+  font-size: 0.9375rem;
+  font-weight: 700;
   text-decoration: none;
-  transition:
-    background var(--motion-fast) ease,
-    color var(--motion-fast) ease;
 }
 
 .sb-review:hover {
-  background: var(--color-surface-soft);
-  color: var(--color-text);
+  color: var(--color-accent-hover);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .sb-review:focus-visible {
-  outline: 2px solid var(--color-accent-ring);
-  outline-offset: -2px;
+  outline: 2px solid var(--ink-learner);
+  outline-offset: 2px;
 }
 
 .sb-review-count {
   margin-left: auto;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--color-accent-text);
-  background: var(--color-accent-soft);
-  border-radius: var(--radius-pill);
-  padding: 0.0625rem 0.4375rem;
+  font-size: var(--fs-label);
+  font-weight: 400;
+  color: var(--pencil);
+  font-variant-numeric: tabular-nums;
 }
 </style>

@@ -38,7 +38,16 @@ onMounted(async () => {
       :disabled="busy"
       @click="$emit('cancel')"
     >
-      <i class="pi pi-times" aria-hidden="true" />
+      <svg
+        class="intercept-cancel-mark"
+        viewBox="0 0 20 20"
+        width="20"
+        height="20"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path d="M6 6 L14 14 M14 6 L6 14" />
+      </svg>
     </button>
     <p v-if="kind === 'active'" class="intercept-line">
       You have an active session on <strong>"{{ match.title }}"</strong>.
@@ -85,68 +94,98 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+/* A card: the page pauses on it. White stock, same grammar as the tutor's
+   own card, actions written not stamped. */
 .intercept {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
-  padding: 0.875rem 2.25rem 0.875rem 1rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
+  gap: 0.5rem;
+  padding: 0.875rem 2.5rem 0.875rem 1rem;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-card);
+  box-shadow: 0 1px 0 var(--card-drop);
 }
 
 .intercept-line {
   margin: 0;
-  color: var(--color-text-muted);
-  font-size: 0.875rem;
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--ink);
+}
+
+.intercept-line strong {
+  font-weight: 700;
 }
 
 .intercept-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0 1.25rem;
+  line-height: var(--lh-body);
 }
 
 .intercept-primary,
 .intercept-secondary {
-  padding: 0.4rem 0.875rem;
-  border-radius: var(--radius-pill);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-learner);
   font-family: var(--font-sans);
-  font-size: 0.8125rem;
-  font-weight: 500;
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  line-height: var(--lh-body);
+  text-decoration: underline;
+  text-underline-offset: 3px;
   cursor: pointer;
-  transition:
-    background var(--motion-fast) ease,
-    border-color var(--motion-fast) ease;
 }
 
-.intercept-primary {
-  background: var(--color-accent-soft);
-  color: var(--color-accent-text);
-  border: 1px solid var(--color-accent);
-}
-
-.intercept-secondary {
-  background: var(--color-surface);
-  color: var(--color-text-muted);
-  border: 1px solid var(--color-border);
+.intercept-primary:hover:not(:disabled),
+.intercept-secondary:hover:not(:disabled) {
+  color: var(--color-accent-hover);
 }
 
 .intercept-cancel {
   position: absolute;
-  top: 0.5rem;
+  top: 0.6rem;
   right: 0.5rem;
-  background: none;
-  border: none;
-  color: var(--color-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 1.75rem;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--ink-learner);
   cursor: pointer;
+}
+
+.intercept-cancel-mark {
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.intercept-primary:focus-visible,
+.intercept-secondary:focus-visible,
+.intercept-cancel:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 
 .intercept-primary:disabled,
 .intercept-secondary:disabled,
 .intercept-cancel:disabled {
-  opacity: 0.5;
+  color: var(--pencil);
+  text-decoration: none;
   cursor: default;
 }
 </style>

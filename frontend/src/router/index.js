@@ -38,13 +38,15 @@ const router = createRouter({
     {
       path: '/tos',
       name: 'tos',
-      component: () => import('../views/TosView.vue'),
+      component: () => import('../views/LegalView.vue'),
+      props: { doc: 'tos' },
       meta: { public: true, sidebar: false },
     },
     {
       path: '/privacy',
       name: 'privacy',
-      component: () => import('../views/PrivacyView.vue'),
+      component: () => import('../views/LegalView.vue'),
+      props: { doc: 'privacy' },
       meta: { public: true, sidebar: false },
     },
     {
@@ -104,12 +106,25 @@ const router = createRouter({
       name: 'session',
       component: () => import('../views/SessionView.vue'),
       props: true,
+      // The session is one full-width sheet: no centred column cap, no
+      // horizontal page padding.
+      meta: { sheet: true },
     },
     {
       path: '/session/:id/profile',
       name: 'session-profile',
       component: () => import('../views/ProfileView.vue'),
       props: true,
+    },
+    {
+      // Catch-all, last by definition. Public so a logged-out visitor lands on
+      // the page rather than a login redirect. Like every other public route it
+      // drops the shell: App.vue does not auth-gate the sidebar, so leaving it
+      // on would draw the session rail for an anonymous visitor.
+      path: '/:pathMatch(.*)*',
+      name: 'not-found',
+      component: () => import('../views/NotFoundView.vue'),
+      meta: { public: true, sidebar: false },
     },
   ],
 })

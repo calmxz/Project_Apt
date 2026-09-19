@@ -6,3 +6,6 @@ export const ERR_DAILY_COST_CAP_REACHED = 'daily_cost_cap_reached'
 export const ERR_GLOBAL_COST_CAP_REACHED = 'global_cost_cap_reached'
 // Copy: "This document is too large to ingest. Try splitting it into smaller files."
 export const ERR_CHUNK_LIMIT_EXCEEDED = 'chunk_limit_exceeded'
+// Velocity (burst) limiter, see backend/services/velocity_limit.py.
+// Copy: "Too many requests - wait a moment and retry."
+export const ERR_TOO_MANY_REQUESTS = 'too_many_requests'

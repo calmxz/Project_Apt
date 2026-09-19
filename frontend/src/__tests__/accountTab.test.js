@@ -46,24 +46,22 @@ describe('AccountTab', () => {
     user.onboardingComplete = true
   })
 
-  it('renders name field and danger zone testids', () => {
+  it('renders name field testids', () => {
     const w = mount(AccountTab, { global: { stubs } })
-    for (const id of [
-      'settings-name',
-      'settings-save',
-      'settings-danger',
-      'settings-retake-onboarding',
-    ]) {
+    for (const id of ['settings-name', 'settings-save']) {
       expect(w.find(`[data-testid="${id}"]`).exists()).toBe(true)
     }
   })
 
-  it('renders signout section when authenticated', async () => {
+  // Sign out is a navigation act, not a setting: it lives on the sidebar
+  // footer rail (see sidebar.test.js), never inside the Account tab.
+  it('does not render any sign-out control', async () => {
     const auth = useAuthStore()
     auth.session = { user: { id: 'u-1' }, access_token: 't' }
     const w = mount(AccountTab, { global: { stubs } })
     await flushPromises()
-    expect(w.find('[data-testid="settings-signout-section"]').exists()).toBe(true)
+    expect(w.find('[data-testid="settings-signout-section"]').exists()).toBe(false)
+    expect(w.find('[data-testid="settings-sign-out"]').exists()).toBe(false)
   })
 
   it('does not render the security card when unauthenticated', () => {
@@ -77,6 +75,17 @@ describe('AccountTab', () => {
     const w = mount(AccountTab, { global: { stubs } })
     await flushPromises()
     expect(w.find('[data-testid="settings-security"]').exists()).toBe(true)
+  })
+
+  // D2: every submit in Settings is the filled control now, not a text line.
+  it('both submits are filled buttons', async () => {
+    const auth = useAuthStore()
+    auth.session = { user: { id: 'u-1', email: 'a@b.c' }, access_token: 't' }
+    const w = mount(AccountTab, { global: { stubs } })
+    await flushPromises()
+    expect(w.get('[data-testid="settings-save"]').classes()).toContain('btn-fill')
+    expect(w.get('[data-testid="settings-pw-submit"]').classes()).toContain('btn-fill')
+    expect(w.find('.text-btn').exists()).toBe(false)
   })
 
   it('save button disabled until name changes (feedback no longer affects dirty)', async () => {
@@ -141,7 +150,11 @@ describe('AccountTab', () => {
     await w.get('[data-testid="settings-pw-current"]').setValue('wrongpass')
     await w.get('[data-testid="settings-pw-new"]').setValue('newpass12')
     await w.get('[data-testid="settings-pw-confirm"]').setValue('newpass12')
-    await w.get('[data-testid="settings-pw-submit"]').trigger('click')
+    // The button submits the form rather than carrying its own click handler;
+    // jsdom does not run implicit submission for a synthetic click, so the
+    // test drives the form and asserts the button is wired to it.
+    expect(w.get('[data-testid="settings-pw-submit"]').attributes('type')).toBe('submit')
+    await w.get('form.pw-form').trigger('submit')
     await flushPromises()
     expect(w.find('[data-testid="settings-pw-error"]').exists()).toBe(true)
     expect(w.find('[data-testid="settings-pw-error"]').attributes('role')).toBe('alert')
@@ -158,42 +171,13 @@ describe('AccountTab', () => {
     await w.get('[data-testid="settings-pw-current"]').setValue('oldpass12')
     await w.get('[data-testid="settings-pw-new"]').setValue('newpass12')
     await w.get('[data-testid="settings-pw-confirm"]').setValue('newpass12')
-    await w.get('[data-testid="settings-pw-submit"]').trigger('click')
+    expect(w.get('[data-testid="settings-pw-submit"]').attributes('type')).toBe('submit')
+    await w.get('form.pw-form').trigger('submit')
     await flushPromises()
     expect(signIn).toHaveBeenCalledWith('a@b.c', 'oldpass12')
     expect(update).toHaveBeenCalledWith('newpass12')
     expect(w.find('[data-testid="settings-pw-success"]').exists()).toBe(true)
     expect(w.find('[data-testid="settings-pw-success"]').attributes('role')).toBe('status')
     expect(showSuccess).toHaveBeenCalled()
-  })
-
-  it('sign-out button is hidden when unauthenticated', () => {
-    const w = mount(AccountTab, { global: { stubs } })
-    expect(w.find('[data-testid="settings-sign-out"]').exists()).toBe(false)
-  })
-
-  it('sign-out signs out and redirects to /login', async () => {
-    const auth = useAuthStore()
-    auth.session = { user: { id: 'u-1' }, access_token: 't' }
-    const w = mount(AccountTab, { global: { stubs } })
-    await flushPromises()
-    await w.get('[data-testid="settings-sign-out"]').trigger('click')
-    await flushPromises()
-    expect(globalThis.__supabaseAuthStub.signOut).toHaveBeenCalled()
-    expect(routerPush).toHaveBeenCalledWith('/login')
-  })
-
-  it('sign-out surfaces an error toast and does not redirect on failure', async () => {
-    globalThis.__supabaseAuthStub.signOut.mockResolvedValueOnce({
-      error: new Error('network down'),
-    })
-    const auth = useAuthStore()
-    auth.session = { user: { id: 'u-1' }, access_token: 't' }
-    const w = mount(AccountTab, { global: { stubs } })
-    await flushPromises()
-    await w.get('[data-testid="settings-sign-out"]').trigger('click')
-    await flushPromises()
-    expect(showError).toHaveBeenCalledWith('network down')
-    expect(routerPush).not.toHaveBeenCalled()
   })
 })

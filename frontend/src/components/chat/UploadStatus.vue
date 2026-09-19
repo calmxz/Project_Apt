@@ -22,25 +22,45 @@ defineProps({
 </script>
 
 <style scoped>
+/* A status caption card: card stock with a 3px tab-colour rule at the head,
+   never a side border. Lands in one snap and leaves clean. */
 .upload-status {
+  display: block;
   margin: 0;
-  padding: 0.5rem 0.875rem;
+  padding: 0.4rem 0.75rem;
+  background: var(--card);
   font-family: var(--font-sans);
-  font-size: 0.8125rem;
-  border-radius: var(--radius-pill);
-  background: var(--color-accent-soft);
-  color: var(--color-accent-text);
-  align-self: flex-start;
-  display: inline-block;
+  font-size: var(--fs-caption);
+  line-height: var(--lh-body);
+  border: 1px solid var(--card-edge);
+  border-top: 3px solid var(--color-accent);
+  /* Head rule reads as a tab edge: top corners square, bottom corners card radius. */
+  border-radius: 0 0 var(--radius-card) var(--radius-card);
+  color: var(--ink);
+  animation: upload-land var(--motion-ink) cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes upload-land {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0);
+  }
 }
 
 .upload-status-ready {
-  background: rgba(34, 197, 94, 0.12);
-  color: var(--color-success-text);
+  border-top-color: var(--tab-mastered);
 }
 
 .upload-status-failed {
-  background: rgba(239, 68, 68, 0.12);
-  color: var(--color-error-text);
+  border-top-color: var(--tab-focus);
+  color: var(--ink-marker-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .upload-status {
+    animation: none;
+  }
 }
 </style>

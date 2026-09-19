@@ -8,6 +8,8 @@ const props = defineProps({
   batch: { type: Object, required: true },
 })
 
+const LETTERS = ['A', 'B', 'C', 'D', 'E']
+
 const items = computed(() => props.batch.items || [])
 const graded = computed(() => items.value.filter((it) => it.status === 'answered'))
 const nCorrect = computed(() => graded.value.filter((it) => it.correct === true).length)
@@ -25,10 +27,10 @@ function isYourAnswer(item, i) {
 <template>
   <section class="recap-card" data-testid="check-recap">
     <header class="recap-header">
-      <span class="recap-eyebrow">Check question recap</span>
-      <span class="recap-score" data-testid="recap-score">
-        {{ nCorrect }} / {{ graded.length }} &middot; {{ batch.gap }}
+      <span class="recap-score" data-testid="recap-score" data-tabular>
+        {{ nCorrect }} / {{ graded.length }}
       </span>
+      <span class="recap-gap">{{ batch.gap }}</span>
     </header>
 
     <div v-for="(item, qi) in items" :key="qi" class="recap-item">
@@ -41,102 +43,161 @@ function isYourAnswer(item, i) {
           :class="optionClass(item, i)"
           data-testid="recap-option"
         >
+          <span class="recap-letter" aria-hidden="true">{{ LETTERS[i] ?? i + 1 }}.</span>
           <span class="recap-option-text">{{ opt }}</span>
           <span v-if="isYourAnswer(item, i)" class="recap-tag">your answer</span>
           <span v-else-if="i === item.correctIndex" class="recap-tag">correct</span>
+          <svg
+            v-if="i === item.correctIndex"
+            class="recap-mark"
+            viewBox="0 0 16 16"
+            width="16"
+            height="16"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <path d="M2.5 8.5 L6.3 12.2 L13.5 4" pathLength="1" />
+          </svg>
         </li>
       </ul>
-      <p
-        v-if="item.selectedIndex == null"
-        class="recap-norecord"
-      >
-        Answer not recorded
-      </p>
+      <p v-if="item.selectedIndex == null" class="recap-norecord">Answer not recorded</p>
       <p v-if="item.explanation" class="recap-explanation">{{ item.explanation }}</p>
     </div>
   </section>
 </template>
 
 <style scoped>
+/* Same card grammar as the check: the score is set in title-size, text-safe
+   red beside the gap name. */
 .recap-card {
+  max-width: 84%;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  padding: 1rem 1.125rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface-raised);
+  gap: 0.6rem;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-card);
+  box-shadow: 0 1px 0 var(--card-drop);
+  padding: 0.55rem 0.9rem 0.7rem;
+  font-family: var(--font-sans);
 }
+
 .recap-header {
   display: flex;
-  justify-content: space-between;
   align-items: baseline;
-  gap: 0.5rem;
+  gap: 0.625rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 3px solid var(--ink);
 }
-.recap-eyebrow {
-  font-size: var(--fs-label);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  font-weight: 600;
-  color: var(--color-text-faint);
-}
+
 .recap-score {
-  font-size: 0.8125rem;
+  font-family: var(--font-display);
+  font-size: var(--fs-h2);
   font-weight: 600;
-  color: var(--color-text-muted);
+  color: var(--ink-marker-text);
 }
+
+.recap-gap {
+  font-size: var(--fs-caption);
+  color: var(--pencil);
+}
+
 .recap-item {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 0.35rem;
 }
+
 .recap-question {
   margin: 0;
-  font-weight: 600;
-  color: var(--color-text);
+  font-size: var(--fs-body);
+  font-weight: 700;
+  line-height: var(--lh-body);
+  color: var(--ink);
 }
+
 .recap-options {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
 }
+
 .recap-option {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md, 0.6rem);
-  color: var(--color-text);
+  align-items: baseline;
+  gap: 0.625rem;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--ink);
 }
-.recap-option.is-correct {
-  border-color: var(--signal-success, #2e7d32);
-  background: color-mix(in srgb, var(--signal-success, #2e7d32) 14%, transparent);
+
+.recap-letter {
+  flex: 0 0 auto;
+  color: var(--ink-learner);
+  font-weight: 700;
 }
-.recap-option.is-incorrect {
-  border-color: var(--signal-warning, #b26a00);
-  background: color-mix(in srgb, var(--signal-warning, #b26a00) 14%, transparent);
+
+.recap-option-text {
+  flex: 1 1 auto;
+  min-width: 0;
 }
+
+/* Your answer is in your own ink; the correct one is ticked in red. */
+.recap-option.is-incorrect .recap-option-text {
+  color: var(--ink-learner);
+  text-decoration: line-through;
+  text-decoration-color: var(--ink-marker);
+}
+
+/* Not baseline-aligned: a 13px item on a 17px baseline adds half a pixel to
+   the option row. Its own line-height is a full pitch, so it still reads level. */
 .recap-tag {
   flex-shrink: 0;
-  font-size: 0.6875rem;
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  font-weight: 600;
-  color: var(--color-text-muted);
+  align-self: flex-start;
+  font-size: var(--fs-label);
+  color: var(--pencil);
 }
+
+.recap-mark {
+  flex: 0 0 auto;
+  align-self: center;
+  fill: none;
+  stroke: var(--ink-marker);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  animation: recap-mark-draw var(--motion-base) cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes recap-mark-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
 .recap-norecord {
   margin: 0;
-  font-size: 0.8125rem;
+  font-size: var(--fs-caption);
   font-style: italic;
-  color: var(--color-text-muted);
+  line-height: var(--lh-body);
+  color: var(--pencil);
 }
+
 .recap-explanation {
   margin: 0;
-  color: var(--color-text-muted);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--pencil);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recap-mark {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
 }
 </style>

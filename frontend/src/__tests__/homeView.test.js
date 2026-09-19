@@ -16,11 +16,6 @@ vi.mock('@/services/sessionsApi.js', () => ({
   endSession: (...args) => apiEndSession(...args),
 }))
 
-const apiAggregate = vi.fn()
-vi.mock('@/services/profileApi.js', () => ({
-  getAggregateProfile: (...args) => apiAggregate(...args),
-}))
-
 const stubs = {
   EmptyState: {
     props: ['tone', 'eyebrow', 'headline', 'subtext'],
@@ -48,8 +43,6 @@ describe('HomeView', () => {
     setActivePinia(createPinia())
     push.mockClear()
     apiEndSession.mockReset()
-    apiAggregate.mockReset()
-    apiAggregate.mockResolvedValue({ recent_topics: [] })
   })
 
   it('calls listSessions on mount', async () => {
@@ -60,11 +53,13 @@ describe('HomeView', () => {
     expect(spy).toHaveBeenCalledWith()
   })
 
-  it('shows loading state', () => {
+  it('does not render bare Loading text while the store is loading', () => {
     const store = useSessionStore()
     store.loading = true
-    const wrapper = mountView()
-    expect(wrapper.text()).toContain('Loading')
+    store.sessions = []
+    const w = mountView()
+    expect(w.text()).not.toContain('Loading...')
+    expect(w.find('[data-testid="home-mode-quick"]').exists()).toBe(true)
   })
 
   it('shows error from store', () => {
@@ -192,23 +187,15 @@ describe('HomeView', () => {
     expect(store.createSession).toHaveBeenCalledTimes(1)
   })
 
-  it('does not render the dupe banner or recent feed (relocated)', async () => {
+  // Redesign: recent sessions now live in the sidebar only. Home keeps only
+  // the prompt, so this guard narrows to the dupe banner staying gone.
+  it('does not render the dupe banner', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'listSessions').mockResolvedValue([])
     store.sessions = [makeSession('a1', 'Calc', false, -1), makeSession('a2', 'Calc', false, 0)]
     const wrapper = mountView()
     await flushPromises()
     expect(wrapper.find('[data-testid="home-dupe-banner"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="home-recent"]').exists()).toBe(false)
-  })
-
-  it('quick pick chip fills the topic input', async () => {
-    const store = useSessionStore()
-    vi.spyOn(store, 'listSessions').mockResolvedValue([])
-    const wrapper = mountView()
-    await flushPromises()
-    await wrapper.findAll('.quick-pick')[0].trigger('click')
-    expect(wrapper.get('[data-testid="home-quick-topic"]').element.value).toBe('Recursion')
   })
 
   it('does not render a file-attach control', async () => {

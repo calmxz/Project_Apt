@@ -23,9 +23,12 @@ const factory = (u = usage()) =>
   })
 
 describe('UsagePanel', () => {
-  it('renders the today / last-7-days glance line and no bar chart', () => {
+  it('renders the today figure, daily cap caption, and last-7-days line', () => {
     const w = factory()
-    expect(w.find('[data-testid="usage-glance"]').text()).toBe('Today $1.00 · Last 7 days $1.50')
+    const glance = w.find('[data-testid="usage-glance"]')
+    expect(glance.find('.glance-figure').text()).toBe('$1.00')
+    expect(glance.find('.glance-caption').text()).toBe('today · $3.00 daily cap')
+    expect(glance.find('.glance-week').text()).toBe('Last 7 days $1.50')
     expect(w.find('.spend-chart').exists()).toBe(false)
   })
 
@@ -45,7 +48,59 @@ describe('UsagePanel', () => {
         today_spend_usd: 0.1,
       }),
     )
-    expect(w.find('[data-testid="usage-glance"]').text()).toBe('Today $0.10 · Last 7 days $0.70')
+    const glance = w.find('[data-testid="usage-glance"]')
+    expect(glance.find('.glance-figure').text()).toBe('$0.10')
+    expect(glance.find('.glance-week').text()).toBe('Last 7 days $0.70')
+  })
+
+  it('lists the last 7 days as ledger rows, most recent first', () => {
+    const w = factory(
+      usage({
+        daily: [
+          { date_utc: '2026-07-03', cost_usd: 5.0 },
+          { date_utc: '2026-07-04', cost_usd: 0.1 },
+          { date_utc: '2026-07-05', cost_usd: 0.1 },
+          { date_utc: '2026-07-06', cost_usd: 0.1 },
+          { date_utc: '2026-07-07', cost_usd: 0.1 },
+          { date_utc: '2026-07-08', cost_usd: 0.1 },
+          { date_utc: '2026-07-09', cost_usd: 0.1 },
+          { date_utc: '2026-07-10', cost_usd: 0.1 },
+        ],
+        today_spend_usd: 0.1,
+      }),
+    )
+    const rows = w.findAll('[data-testid="usage-ledger-row"]')
+    expect(rows).toHaveLength(7)
+    expect(rows[0].text()).toContain('Jul 10')
+    expect(rows[0].text()).toContain('$0.10')
+    expect(rows.some((r) => r.text().includes('Jul 3'))).toBe(false)
+  })
+
+  it('sizes ledger bars proportionally to the max day, with no bar for zero-cost days', () => {
+    const w = factory(
+      usage({
+        daily: [
+          { date_utc: '2026-07-09', cost_usd: 0 },
+          { date_utc: '2026-07-10', cost_usd: 0.5 },
+          { date_utc: '2026-07-11', cost_usd: 1.0 },
+        ],
+      }),
+    )
+    const rows = w.findAll('[data-testid="usage-ledger-row"]')
+    // most recent first: Jul 11 (1.0, max) -> Jul 10 (0.5) -> Jul 9 (0)
+    expect(rows[0].find('.ledger-bar').attributes('style')).toContain('width: 100%')
+    expect(rows[1].find('.ledger-bar').attributes('style')).toContain('width: 50%')
+    expect(rows[2].find('.ledger-bar').attributes('style')).toContain('width: 0%')
+    expect(rows[2].find('.ledger-bar').classes()).not.toContain('ledger-bar--filled')
+    expect(rows[0].find('.ledger-bar').classes()).toContain('ledger-bar--filled')
+  })
+
+  it('shows the meter tier labels with soft/urgent amounts and the cap in the glance caption', () => {
+    const w = factory(usage({ hard_cap_usd: 4.0, soft_cap_usd: 1.0, urgent_cap_usd: 3.6 }))
+    expect(w.find('.meter-label-soft').text()).toBe('soft $1.00')
+    expect(w.find('.meter-label-urgent').text()).toBe('urgent $3.60')
+    expect(w.find('.meter-label-cap').exists()).toBe(false)
+    expect(w.find('.glance-caption').text()).toContain('$4.00 daily cap')
   })
 
   it('positions tier markers from response values, not literals', () => {
@@ -76,6 +131,21 @@ describe('UsagePanel', () => {
     expect(w.text()).toContain('$0.42')
   })
 
+  it('ranks top sessions in order', () => {
+    const w = factory(
+      usage({
+        top_sessions: [
+          { session_id: 's9', topic: 'algebra', cost_usd: 0.42 },
+          { session_id: 's8', topic: 'geometry', cost_usd: 0.3 },
+        ],
+      }),
+    )
+    const ranks = w.findAll('.top-rank')
+    expect(ranks).toHaveLength(2)
+    expect(ranks[0].text()).toBe('1.')
+    expect(ranks[1].text()).toBe('2.')
+  })
+
   it('shows empty state when there is no spend at all', () => {
     const w = factory(
       usage({
@@ -88,5 +158,24 @@ describe('UsagePanel', () => {
     )
     expect(w.find('[data-testid="usage-empty"]').exists()).toBe(true)
     expect(w.find('[data-testid="usage-glance"]').exists()).toBe(false)
+    expect(w.find('[data-testid="usage-ledger"]').exists()).toBe(false)
+  })
+
+  it('does not show the empty-state copy when top_sessions has rows', () => {
+    const w = factory(
+      usage({
+        daily: [],
+        today_spend_usd: 0,
+        top_sessions: [{ session_id: 's1', topic: 'CSS', cost_usd: 0.02 }],
+      }),
+    )
+    expect(w.find('[data-testid="usage-empty"]').exists()).toBe(false)
+    expect(w.text()).toContain('Most expensive sessions')
+  })
+
+  it('shows the empty-state copy only when there is no spend anywhere', () => {
+    const w = factory(usage({ daily: [], today_spend_usd: 0, top_sessions: [] }))
+    expect(w.find('[data-testid="usage-empty"]').exists()).toBe(true)
+    expect(w.text()).not.toContain('Most expensive sessions')
   })
 })

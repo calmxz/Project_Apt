@@ -1,7 +1,5 @@
 # Terms of Service
 
-**Draft — not legal advice. Seek professional review before large-scale data collection.**
-
 _Version 2026-07-03 · Effective 2026-07-03_
 
 ## Acceptance

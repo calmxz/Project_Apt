@@ -21,6 +21,14 @@ from db.models import ChatMessage, Session as SessionModel
 PREVIEW_CANDIDATES = 5
 PREVIEW_MAX = 120
 
+_VALID_KNOWLEDGE_LEVELS = {"beginner", "intermediate", "advanced"}
+
+
+def _valid_level(value: object) -> str | None:
+    # A corrupt/legacy profile must not 500 the sessions list -- only pass
+    # through a recognized KnowledgeLevel enum value, else None.
+    return value if value in _VALID_KNOWLEDGE_LEVELS else None
+
 
 def aware_utc(dt: datetime | None) -> datetime | None:
     # SQLite drops tzinfo on read even when the column is DateTime(timezone=True).
@@ -102,6 +110,7 @@ def compute_enrichment(
             last_session_summary=prof.get("last_session_summary"),
             progress=SessionProgress(
                 focus_target_gap=prof.get("focus_target_gap"),
+                level=_valid_level(prof.get("knowledge_level")),
                 mastered_count=len(prof.get("mastered_concepts") or []),
             ),
         )

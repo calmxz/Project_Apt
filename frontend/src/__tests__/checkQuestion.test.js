@@ -44,6 +44,11 @@ describe('CheckQuestion batch', () => {
     expect(w.emitted('answer')[0]).toEqual([1])
   })
 
+  it('R2: skip carries coarse-2x for a coarse-pointer two-pitch target', () => {
+    const w = mount(CheckQuestion, { props: { check: batch() } })
+    expect(w.find('[data-testid="check-skip"]').classes()).toContain('coarse-2x')
+  })
+
   it('shows Next when an answered item is not the last', () => {
     const b = batch({ currentIndex: 1 })
     b.items[0] = {
@@ -118,6 +123,67 @@ describe('CheckQuestion batch', () => {
     expect(done.find('[data-testid="check-done"]').element.disabled).toBe(true)
     const pending = mount(CheckQuestion, { props: { check: batch(), busy: true } })
     expect(pending.find('[data-testid="check-skip"]').element.disabled).toBe(true)
+  })
+})
+
+// Hidden-until-graded raise: the explanation is the reward for answering, so
+// it must not be reachable in the DOM before the item is graded.
+describe('CheckQuestion hidden-until-graded reveal', () => {
+  it('does not render the explanation or a grading mark before answering', () => {
+    const b = batch()
+    b.items[0] = { ...b.items[0], explanation: 'Because X.' }
+    const w = mount(CheckQuestion, { props: { check: b } })
+    expect(w.find('[data-testid="check-explanation"]').exists()).toBe(false)
+    expect(w.find('[data-testid="check-verdict"]').exists()).toBe(false)
+    expect(w.find('.check-mark').exists()).toBe(false)
+    expect(w.text()).not.toContain('Because X.')
+  })
+
+  it('reveals the explanation, the verdict and the drawn mark once graded', () => {
+    const b = batch({ total: 1, currentIndex: 1, viewIndex: 0 })
+    b.items = [
+      {
+        question: 'Q1',
+        options: ['a', 'b'],
+        status: 'answered',
+        selectedIndex: 1,
+        correctIndex: 0,
+        correct: false,
+        explanation: 'Because X.',
+      },
+    ]
+    const w = mount(CheckQuestion, { props: { check: b } })
+    expect(w.get('[data-testid="check-explanation"]').text()).toBe('Because X.')
+    expect(w.get('[data-testid="check-verdict"]').text()).toBe('Not quite')
+    const opts = w.findAll('[data-testid="check-option"]')
+    expect(opts[0].classes()).toContain('is-correct')
+    expect(opts[0].find('.check-mark--tick').exists()).toBe(true)
+    expect(opts[1].classes()).toContain('is-incorrect')
+    expect(opts[1].find('.check-mark--cross').exists()).toBe(true)
+  })
+
+  it('keeps the explanation hidden for a skipped item', () => {
+    const b = batch({ total: 1, currentIndex: 1, viewIndex: 0 })
+    b.items = [
+      {
+        question: 'Q1',
+        options: ['a', 'b'],
+        status: 'skipped',
+        selectedIndex: null,
+        correctIndex: 0,
+        correct: null,
+        explanation: 'Because X.',
+      },
+    ]
+    const w = mount(CheckQuestion, { props: { check: b } })
+    expect(w.find('[data-testid="check-explanation"]').exists()).toBe(false)
+  })
+
+  it('letters the options', () => {
+    const w = mount(CheckQuestion, { props: { check: batch() } })
+    const opts = w.findAll('[data-testid="check-option"]')
+    expect(opts[0].get('.check-letter').text()).toBe('A.')
+    expect(opts[1].get('.check-letter').text()).toBe('B.')
   })
 })
 

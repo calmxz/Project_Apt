@@ -78,6 +78,18 @@ export async function _refreshAccessToken() {
   }
 }
 
+// F-16: apiClient must not statically import the router -- router/index.js
+// statically imports stores/auth.js and stores/user.js, and apiClient
+// statically imports stores/auth.js, so a static router import here would
+// close a real cycle (also made the router's own dynamic-import-based
+// cycle-break ineffective, since apiClient was already in its chunk).
+// main.js wires the redirect handler once at boot instead.
+let _unauthorizedHandler = null
+
+export function setUnauthorizedHandler(fn) {
+  _unauthorizedHandler = fn
+}
+
 export async function _onAuthExpired() {
   try {
     const store = useAuthStore()
@@ -90,15 +102,9 @@ export async function _onAuthExpired() {
     // No active pinia (unit tests) -- nothing to sign out.
   }
   try {
-    const { default: router } = await import('../router/index.js')
-    // F-16: carry the location like the router guard does (F-49), so
-    // re-login returns the user to where the expiry hit them.
-    router.push({
-      name: 'login',
-      query: { redirect: router.currentRoute.value.fullPath },
-    })
+    _unauthorizedHandler?.()
   } catch {
-    // Router unavailable outside the app shell.
+    // Handler unavailable / threw outside the app shell.
   }
 }
 

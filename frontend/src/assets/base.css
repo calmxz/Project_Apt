@@ -1,62 +1,73 @@
 :root {
-  /* Cool-slate neutrals */
-  --ink-50: #f7f8fb;
-  --ink-100: #eef0f6;
-  --ink-200: #dde2ee;
-  --ink-300: #b7bfd2;
-  --ink-400: #7e8aa3;
-  --ink-450: #66718a;
-  --ink-500: #58637a;
-  --ink-700: #2a3142;
-  --ink-900: #141826;
+  /* --- The page ---------------------------------------------------------
+     Ground, rules and pitch. Structure comes from rules and whitespace, not
+     from cards or shadows. */
+  --line-pitch: 28px;
+  /* The rule paints at the foot of each 28px box, but the text baseline sits
+     above it. Atkinson Hyperlegible Next is upem 1000, ascent 984, descent 316
+     (USE_TYPO_METRICS set), so at 17px the content box is 22.1px, half-leading
+     is 2.95px and the baseline lands 19.68px below the box top -- 7.32px above
+     the rule. Shifting the pattern up by 7px puts the rule under the baseline.
+     Every consumer of --ruled-bg must also set
+     background-position-y: var(--ruled-offset). */
+  --ruled-offset: -7px;
+  --ruled-bg: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(var(--line-pitch) - 1px),
+    var(--rule) calc(var(--line-pitch) - 1px),
+    var(--rule) var(--line-pitch)
+  );
 
-  --paper-50: #ffffff;
-  --paper-100: #f5f7fc;
+  /* --- The three inks ---------------------------------------------------
+     Graphite is the tutor and all body text. Blue is the learner: their
+     messages, cue words, answers, every interactive control, links and focus
+     rings. Red is the margin rule and the marker's marks. Nothing else may
+     use blue or red. Pencil carries dates, counts and hints.
+     --ink-marker is a mark only: it never sets text. --ink-marker-text is the
+     text-safe red. */
+  --ink: #1b1b1a;
+  --ink-learner: #1d4fc4;
+  --ink-marker: #d8433a;
+  --ink-marker-text: #b8352c;
+  --ink-marker-text-hover: #94271f;
+  --pencil: #63635e;
+  --rule: #cbd6e3;
+  --rule-strong: #aebccf;
+  --margin-rule: #d8433a;
 
-  /* Coral accent ramp */
-  --accent-coral-50: #fff1ef;
-  --accent-coral-100: #ffd9d2;
-  --accent-coral-200: #ffb5a8;
-  --accent-coral-300: #ff8f7c;
-  --accent-coral-400: #ff7766;
-  --accent-coral-500: #ff6b5c;
-  --accent-coral-600: #e25a4a;
-  --accent-coral-700: #b5413a;
-  --accent-coral-800: #842922;
-  --accent-coral-900: #4d1611;
-  --accent-coral-950: #2b0a07;
-
-  /* Signal triad (independent from accent) */
-  --signal-success: #22c55e;
-  --signal-error: #ef4444;
-  --signal-warning: #ffb020;
-  --signal-info: #5b8def;
+  /* Signal triad, re-tuned to sit on paper (each clears AA as text). */
+  --signal-success: #1f7a3f;
+  --signal-error: #b8352c;
+  --signal-warning: #8a5a00;
+  --signal-info: #1d4fc4;
 
   /* Typography */
-  --font-display: 'Bricolage Grotesque', system-ui, -apple-system, sans-serif;
-  --font-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace;
+  --font-display: 'Familjen Grotesk', system-ui, sans-serif;
+  --font-sans: 'Atkinson Hyperlegible Next', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
-  --fs-display: clamp(2.5rem, 5.5vw, 3.75rem);
-  --fs-h1: 1.875rem;
+  --fs-display: 2.25rem;
+  --fs-h1: 1.75rem;
   --fs-h2: 1.375rem;
   --fs-h3: 1.125rem;
-  --fs-body: 1rem;
-  --fs-caption: 0.8125rem;
-  --fs-label: 0.6875rem;
+  --fs-body: 1.0625rem;
+  --fs-caption: 0.875rem;
+  --fs-label: 0.8125rem;
 
-  --tracking-display: -0.015em;
-  --tracking-label: 0.14em;
-  --tracking-tight: -0.01em;
+  /* No tracked labels in this world; the heading carries its own weight. */
+  --tracking-display: -0.01em;
+  --tracking-label: 0;
+  --tracking-tight: 0;
 
-  --lh-display: 1.1;
-  --lh-body: 1.6;
+  --lh-display: 1.15;
+  --lh-body: 1.647;
 
-  /* Radii */
-  --radius-sm: 8px;
-  --radius-md: 14px;
-  --radius-lg: 22px;
-  --radius-card: 20px;
+  /* Radii — paper has none; controls get 4px. The chip is the one pill. */
+  --radius-sm: 4px;
+  --radius-md: 4px;
+  --radius-lg: 4px;
+  --radius-card: 6px;
   --radius-pill: 999px;
 
   /* Spacing scale */
@@ -69,133 +80,207 @@
   --space-8: 3rem;
   --space-10: 4.5rem;
 
-  /* Shadows — chunky press-down */
-  --shadow-paper: 0 1px 0 rgba(20, 24, 38, 0.04), 0 2px 8px -2px rgba(20, 24, 38, 0.06);
-  --shadow-lift: 0 10px 20px -8px rgba(20, 24, 38, 0.18);
+  /* Paper does not float. --shadow-lift exists for teleported overlays only. */
+  --shadow-paper: none;
+  --shadow-lift: 0 12px 24px -12px rgba(0, 0, 0, 0.25);
 
-  /* Decorative gradients */
-  --gradient-spark: linear-gradient(135deg, #ff6b5c 0%, #ff8f7c 100%);
-  --gradient-surface: linear-gradient(180deg, var(--paper-50) 0%, var(--paper-100) 100%);
-
-  /* Motion */
-  --motion-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* Motion — ink appears, it never slides or bounces. Exponential ease-out. */
+  --motion-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --motion-fast: 140ms;
-  --motion-base: 220ms;
+  --motion-base: 240ms;
+  --motion-ink: 320ms;
 
   /* Sidebar shell */
-  --sidebar-width-expanded: 16rem;
+  --sidebar-width-expanded: 18rem;
   --sidebar-width-collapsed: 3rem;
   --sidebar-mobile-strip-height: 3rem;
 
-  /* Semantic colors — light */
-  --color-background: var(--paper-100);
-  --color-surface: var(--paper-50);
-  --color-surface-soft: var(--ink-50);
-  --color-surface-raised: var(--paper-50);
-  --color-text: var(--ink-900);
-  --color-text-muted: var(--ink-500);
-  --color-text-faint: var(--ink-450);
-  --color-heading: var(--ink-900);
-  --color-border: var(--ink-200);
-  --color-border-strong: var(--ink-300);
-  --color-accent: var(--accent-coral-500);
-  --color-accent-soft: var(--accent-coral-100);
-  --color-accent-hover: var(--accent-coral-600);
-  --color-accent-ring: rgba(255, 143, 124, 0.35);
-  /* AA-contrast variants. --color-accent (bright coral) stays for borders,
-     rings, hover, soft fills, and accent text on DARK surfaces. White text on
-     bright coral is only ~2.6:1, so filled buttons use --color-accent-strong,
-     and accent text on the light page background uses --color-accent-text
-     (both coral-700 -> >=4.5:1 white / >=5.2:1 as text). --color-accent-strong
-     is coral-700 in every theme (inherits); --color-accent-text stays bright on
-     dark, where coral-400 already clears 4.5:1, via the per-theme overrides. */
-  --color-accent-strong: var(--accent-coral-700);
-  --color-accent-text: var(--accent-coral-700);
-  --color-wordmark: var(--ink-900);
-  --color-stub-heading: var(--ink-700);
-  /* Foreground tokens that stay AA on LIGHT surfaces. Filled white-text CTAs use
-     --color-accent-strong (coral-700); --color-text-on-accent is that white.
-     Signal-as-text must use these darkened variants, NOT the raw --signal-* ramp
-     (tuned for fills/borders/dark surfaces; fails as light-bg text). */
+  /* --- Semantic colors, light (lamp on) --------------------------------
+     Literal hex, not indirection: the token contrast test reads this file and
+     resolves nothing. */
+  --color-background: #e6e8ec;
+  --color-surface: #ffffff;
+  --color-surface-soft: #dfe2e7;
+  --color-surface-raised: #fbfaf7;
+  --color-text: #1b1b1a;
+  --color-heading: #1b1b1a;
+  --color-text-muted: #63635e;
+  --color-text-faint: #63635e;
+  --color-border: #cbd6e3;
+  --color-border-strong: #aebccf;
+  --color-accent: #1d4fc4;
+  --color-accent-hover: #173fa0;
+  --color-accent-text: #1d4fc4;
+  --color-accent-strong: #1d4fc4;
+  --color-accent-soft: #e0e7f4;
+  --color-accent-ring: rgba(29, 79, 196, 0.35);
+  --btn-fill-hover: #173fa0;
   --color-text-on-accent: #ffffff;
-  --color-success-text: #0e7a36;
-  --color-error-text: #b91c1c;
+  --color-wordmark: #1b1b1a;
+  --color-stub-heading: #1b1b1a;
+  /* #1f7a3f is 4.374:1 on the new --color-background (#e6e8ec), just under
+     4.5:1; darkened minimally to #1d733b (4.798:1) rather than moving the
+     ground. */
+  --color-success-text: #1d733b;
+  --color-error-text: #b8352c;
   --color-warning-text: #8a5a00;
-  --color-info-text: #2e5dc4;
-  /* Darkened info fill for white-text CTAs (same recipe as
-     --color-accent-strong): raw --signal-info is ~3.0:1 with white. */
-  --color-info-strong: #2e5dc4;
+  --color-info-text: #1d4fc4;
+  --color-info-strong: #1d4fc4;
+
+  /* --- The card box ------------------------------------------------------
+     Desk is the page ground; cards float on it. Tab colours are law: red
+     only Focus, amber only Gaps, green only Mastered. Blue remains every
+     control, link and focus ring. */
+  --desk: #e6e8ec;
+  --desk-deep: #dfe2e7;
+  --card: #ffffff;
+  --card-edge: #cfd3da;
+  --card-drop: #c4c8d0;
+  --card-learner: #dbe6fb;
+  --card-learner-edge: #b9cdf5;
+  --tab-focus: #b8352c;
+  --tab-gaps: #8a5a00;
+  --tab-mastered: #1f7a3f;
+  --tab-level: #63635e;
+  --tab-ink: #ffffff;
+
+  /* T3: theme-swatch preview inks (AppearanceTab). These draw the OTHER
+     theme's page regardless of which theme is active, so they cannot come
+     from the live semantic tokens above; declared once here, in plain
+     :root only, so the dark-token drift guard (tokenContrast.test.js) does
+     not see them as a dark-theme override. */
+  --sw-light-paper: #f6f5f0;
+  --sw-light-ink: #aebccf;
+  --sw-light-rule: #cbd6e3;
+  --sw-light-margin: #d8433a;
+  --sw-dark-paper: #141518;
+  --sw-dark-ink: #363b47;
+  --sw-dark-rule: #262a33;
+  --sw-dark-margin: #ff6a5e;
 }
 
 :root[data-theme='dark'] {
-  /* On dark surfaces bright coral-400 already clears 4.5:1 as text, so keep it
-     (no change from before this token existed). --color-accent-strong inherits
-     coral-700 from :root for filled buttons. */
-  --color-accent-text: var(--accent-coral-400);
-  --color-background: #0f1220;
-  --color-surface: #161a2a;
-  --color-surface-soft: #1e2236;
-  --color-surface-raised: #262b43;
-  --color-text: var(--ink-100);
-  --color-text-muted: #8b95ae;
-  --color-text-faint: #5b6480;
-  --color-heading: #ffffff;
-  --color-border: #2a3050;
-  --color-border-strong: #3a4166;
-  --color-accent: var(--accent-coral-400);
-  --color-accent-soft: rgba(255, 119, 102, 0.18);
-  --color-accent-hover: var(--accent-coral-300);
-  --color-accent-ring: rgba(255, 143, 124, 0.45);
-  --color-wordmark: #ffffff;
-  --color-stub-heading: var(--ink-100);
+  /* The same desk with the lamp off. */
+  --ink: #ecebe6;
+  --ink-learner: #8fb0ff;
+  --ink-marker: #ff6a5e;
+  --ink-marker-text: #ff6a5e;
+  /* #ff6a5e itself fails 4.5:1 against white text; #c9463b clears it (see
+     tokenContrast.test.js). */
+  --ink-marker-text-hover: #c9463b;
+  --pencil: #a3a39c;
+  --rule: #262a33;
+  --rule-strong: #363b47;
+  --margin-rule: #ff6a5e;
 
-  --shadow-paper: 0 1px 0 rgba(0, 0, 0, 0.3), 0 2px 8px -2px rgba(0, 0, 0, 0.5);
-  --shadow-lift: 0 16px 36px -16px rgba(0, 0, 0, 0.6);
+  --signal-success: #5fcf8a;
+  --signal-error: #ff6a5e;
+  --signal-warning: #e6b450;
+  --signal-info: #8fb0ff;
 
-  --signal-success: #34d77b;
-  --signal-error: #ff6b6b;
-  --signal-warning: #ffc54d;
-  --signal-info: #7aa3f5;
+  --color-background: #15171b;
+  --color-surface: #22252b;
+  --color-surface-soft: #1b1d22;
+  --color-surface-raised: #1f2126;
+  --color-text: #ecebe6;
+  --color-heading: #ecebe6;
+  --color-text-muted: #a3a39c;
+  --color-text-faint: #a3a39c;
+  --color-border: #262a33;
+  --color-border-strong: #363b47;
+  --color-accent: #8fb0ff;
+  --color-accent-hover: #a9c2ff;
+  --color-accent-text: #8fb0ff;
+  /* Filled control on the dark page: white text needs a darker blue than the
+     dark-theme accent, while staying legible against the page itself. */
+  --color-accent-strong: #3b63d6;
+  --color-accent-soft: rgba(143, 176, 255, 0.14);
+  --color-accent-ring: rgba(143, 176, 255, 0.45);
+  --color-text-on-accent: #ffffff;
+  --btn-fill-hover: #2f52b8;
+  --color-wordmark: #ecebe6;
+  --color-stub-heading: #ecebe6;
+  --color-success-text: #5fcf8a;
+  --color-error-text: #ff6a5e;
+  --color-warning-text: #e6b450;
+  --color-info-text: #8fb0ff;
+  --color-info-strong: #3b63d6;
 
-  /* Dark surfaces: the bright signal ramp already clears AA as text. */
-  --color-success-text: #34d77b;
-  --color-error-text: #ff6b6b;
-  --color-warning-text: #ffc54d;
-  --color-info-text: #7aa3f5;
+  --shadow-paper: none;
+  --shadow-lift: 0 12px 24px -12px rgba(0, 0, 0, 0.7);
+
+  --desk: #15171b;
+  --desk-deep: #1b1d22;
+  --card: #22252b;
+  --card-edge: #2e323a;
+  --card-drop: #0b0c0e;
+  --card-learner: #1e2a44;
+  --card-learner-edge: #2f4470;
+  --tab-focus: #ff6a5e;
+  --tab-gaps: #e6b450;
+  --tab-mastered: #5fcf8a;
+  --tab-level: #a3a39c;
+  --tab-ink: #141518;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --color-accent-text: var(--accent-coral-400);
-    --color-background: #0f1220;
-    --color-surface: #161a2a;
-    --color-surface-soft: #1e2236;
-    --color-surface-raised: #262b43;
-    --color-text: var(--ink-100);
-    --color-text-muted: #8b95ae;
-    --color-text-faint: #5b6480;
-    --color-heading: #ffffff;
-    --color-border: #2a3050;
-    --color-border-strong: #3a4166;
-    --color-accent: var(--accent-coral-400);
-    --color-accent-soft: rgba(255, 119, 102, 0.18);
-    --color-accent-hover: var(--accent-coral-300);
-    --color-accent-ring: rgba(255, 143, 124, 0.45);
-    --color-wordmark: #ffffff;
-    --color-stub-heading: var(--ink-100);
+    --ink: #ecebe6;
+    --ink-learner: #8fb0ff;
+    --ink-marker: #ff6a5e;
+    --ink-marker-text: #ff6a5e;
+    --ink-marker-text-hover: #c9463b;
+    --pencil: #a3a39c;
+    --rule: #262a33;
+    --rule-strong: #363b47;
+    --margin-rule: #ff6a5e;
 
-    --shadow-paper: 0 1px 0 rgba(0, 0, 0, 0.3), 0 2px 8px -2px rgba(0, 0, 0, 0.5);
-    --shadow-lift: 0 16px 36px -16px rgba(0, 0, 0, 0.6);
+    --signal-success: #5fcf8a;
+    --signal-error: #ff6a5e;
+    --signal-warning: #e6b450;
+    --signal-info: #8fb0ff;
 
-    --signal-success: #34d77b;
-    --signal-error: #ff6b6b;
-    --signal-warning: #ffc54d;
-    --signal-info: #7aa3f5;
+    --color-background: #15171b;
+    --color-surface: #22252b;
+    --color-surface-soft: #1b1d22;
+    --color-surface-raised: #1f2126;
+    --color-text: #ecebe6;
+    --color-heading: #ecebe6;
+    --color-text-muted: #a3a39c;
+    --color-text-faint: #a3a39c;
+    --color-border: #262a33;
+    --color-border-strong: #363b47;
+    --color-accent: #8fb0ff;
+    --color-accent-hover: #a9c2ff;
+    --color-accent-text: #8fb0ff;
+    --color-accent-strong: #3b63d6;
+    --color-accent-soft: rgba(143, 176, 255, 0.14);
+    --color-accent-ring: rgba(143, 176, 255, 0.45);
+    --color-text-on-accent: #ffffff;
+    --btn-fill-hover: #2f52b8;
+    --color-wordmark: #ecebe6;
+    --color-stub-heading: #ecebe6;
+    --color-success-text: #5fcf8a;
+    --color-error-text: #ff6a5e;
+    --color-warning-text: #e6b450;
+    --color-info-text: #8fb0ff;
+    --color-info-strong: #3b63d6;
 
-    --color-success-text: #34d77b;
-    --color-error-text: #ff6b6b;
-    --color-warning-text: #ffc54d;
-    --color-info-text: #7aa3f5;
+    --shadow-paper: none;
+    --shadow-lift: 0 12px 24px -12px rgba(0, 0, 0, 0.7);
+
+    --desk: #15171b;
+    --desk-deep: #1b1d22;
+    --card: #22252b;
+    --card-edge: #2e323a;
+    --card-drop: #0b0c0e;
+    --card-learner: #1e2a44;
+    --card-learner-edge: #2f4470;
+    --tab-focus: #ff6a5e;
+    --tab-gaps: #e6b450;
+    --tab-mastered: #5fcf8a;
+    --tab-level: #a3a39c;
+    --tab-ink: #141518;
   }
 }
 
@@ -220,6 +305,7 @@ body {
   font-size: var(--fs-body);
   line-height: var(--lh-body);
   font-weight: 400;
+  caret-color: var(--ink-learner);
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -239,9 +325,18 @@ h4 {
   line-height: var(--lh-display);
 }
 
+code,
+kbd,
+pre,
+samp {
+  font-family: var(--font-mono);
+}
+
 a {
-  color: var(--color-accent-text);
-  text-decoration: none;
+  color: var(--ink-learner);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
   transition: color var(--motion-fast) ease;
 }
 
@@ -253,8 +348,14 @@ button {
   font-family: inherit;
 }
 
+input,
+textarea,
+select {
+  caret-color: var(--ink-learner);
+}
+
 :focus-visible {
-  outline: 2px solid var(--color-accent-ring);
+  outline: 2px solid var(--ink-learner);
   outline-offset: 2px;
   border-radius: var(--radius-sm);
 }
@@ -264,13 +365,38 @@ button {
   color: var(--color-text);
 }
 
+/* Browser surfaces belong to the page too. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule-strong) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--rule-strong);
+  border-radius: var(--radius-sm);
+}
+
+/* Figures line up column-wise wherever numbers are read as data. */
+table,
+[data-tabular] {
+  font-variant-numeric: tabular-nums;
+}
+
 .label {
   font-family: var(--font-sans);
-  font-size: var(--fs-label);
-  font-weight: 600;
+  font-size: var(--fs-caption);
+  font-weight: 700;
   letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-  color: var(--color-text-muted);
+  color: var(--pencil);
 }
 
 .hairline {
@@ -286,12 +412,12 @@ button {
   top: -2.5rem;
   z-index: 100;
   padding: 0.5rem 0.875rem;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   background: var(--color-accent-strong);
-  color: #fff;
+  color: var(--color-text-on-accent);
   font-family: var(--font-sans);
   font-weight: 600;
-  font-size: 0.875rem;
+  font-size: var(--fs-caption);
   text-decoration: none;
   transition: top var(--motion-fast) ease;
 }
@@ -299,8 +425,8 @@ button {
 .skip-link:focus,
 .skip-link:focus-visible {
   top: 0.75rem;
-  color: #fff;
-  outline: 2px solid var(--color-accent-ring);
+  color: var(--color-text-on-accent);
+  outline: 2px solid var(--ink-learner);
   outline-offset: 2px;
 }
 
@@ -309,28 +435,83 @@ body.sb-scroll-lock {
   overflow: hidden;
 }
 
+/* Reduced motion is an alternative, not a blanket kill (WCAG 2.3.3). A global
+   near-zero duration on every element froze the spinners on their first frame
+   and left a static arc with no replacement, so it is gone: every surface that
+   moves now declares its own final state beside its own keyframes, and only
+   the rules that belong to this file live here. reducedMotion.test.js keeps
+   the blanket from coming back. */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
+  html {
+    scroll-behavior: auto;
+  }
+
+  /* The skip link is the one control that travels; under reduced motion it
+     simply appears at its focused position. */
+  .skip-link {
+    transition: none;
   }
 }
 
-/* Destructive confirm accept (delete-file dialog). A touch darker than the
-   default danger red so it reads as the heavier action. ConfirmDialog teleports
-   to <body>, so this must be global, not scoped to the banner. base.css sits
-   outside PrimeVue's cascade layer, so it wins without !important. */
+/* Destructive confirm accept (delete-file dialog). Red pen, the text-safe
+   value in both themes so the white label stays readable. ConfirmDialog
+   teleports to <body>, so this must be global, not scoped to the banner.
+   base.css sits outside PrimeVue's cascade layer, so it wins without
+   !important. */
 .p-button.confirm-delete-strong {
-  background: #dc2626;
-  border-color: #dc2626;
+  background: var(--ink-marker-text);
+  border-color: var(--ink-marker-text);
+  color: var(--color-text-on-accent);
 }
 .p-button.confirm-delete-strong:hover {
-  background: #b91c1c;
-  border-color: #b91c1c;
+  background: var(--ink-marker-text-hover);
+  border-color: var(--ink-marker-text-hover);
+  color: var(--color-text-on-accent);
+}
+
+/* Spin animation for inline loading spinners (composer send, reference
+   status banner). Replaces primeicons' .pi-spin so the icon font is not
+   needed for a single keyframe. */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+/* A frozen arc says nothing, so each spinner's own stylesheet hides it under
+   reduced motion and shows its caption in words instead. */
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+}
+
+/* R1: touch targets. Drawn box stays on the 28px pitch; the hit area grows
+   to >= 44px on coarse pointers via an invisible pseudo-element. */
+.hit-44 {
+  position: relative;
+}
+@media (pointer: coarse) {
+  .hit-44::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+  }
+}
+
+/* R2: written controls (no drawn box to extend a hit area around) sit on
+   one 28px pitch by design. On coarse pointers only, this takes the whole
+   control to two pitches so the text itself is a full-height target,
+   without touching the fine-pointer rhythm. */
+@media (pointer: coarse) {
+  .coarse-2x {
+    display: inline-flex;
+    align-items: center;
+    min-height: calc(var(--line-pitch) * 2);
+  }
 }
 
 /* Visually hidden but screen-reader-accessible. F-18: discrete stream
@@ -345,4 +526,55 @@ body.sb-scroll-lock {
   clip: rect(0 0 0 0);
   white-space: nowrap;
   border: 0;
+}
+
+/* Shared filled button. The dialog footer's .p-button styling (dialogs.css)
+   is the reference this generalizes from, for any non-PrimeVue filled
+   action (e.g. a plain <button> or <a> that needs the same weight). */
+.btn-fill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  min-height: var(--line-pitch);
+  padding: 0 1rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-strong);
+  color: var(--color-text-on-accent);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  line-height: calc(var(--line-pitch) - 2px);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn-fill:hover:not(:disabled) {
+  background: var(--btn-fill-hover);
+}
+
+.btn-fill:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+}
+
+.btn-fill:disabled {
+  background: transparent;
+  color: var(--pencil);
+  border-color: var(--rule-strong);
+  cursor: default;
+}
+
+.btn-fill--busy {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.btn-fill-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: var(--line-pitch);
+  flex-wrap: wrap;
 }

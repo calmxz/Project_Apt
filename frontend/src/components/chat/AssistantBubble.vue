@@ -4,10 +4,13 @@ import MarkdownContent from './MarkdownContent.vue'
 import ToolCallChip from './ToolCallChip.vue'
 import CitationsList from './CitationsList.vue'
 import CheckRecap from './CheckRecap.vue'
+import { formatTime } from '../../utils/formatDate.js'
 
 const props = defineProps({
   message: { type: Object, required: true },
   streaming: { type: Boolean, default: false },
+  // Cue-lands: this turn changed the profile, so its head line carries the tick.
+  landed: { type: Boolean, default: false },
 })
 
 // A failed tool call that was retried successfully in the same message is
@@ -19,6 +22,9 @@ const visibleToolCalls = computed(() => {
   )
   return calls.filter((tc) => tc.state !== 'error' || !succeeded.has(tc.name))
 })
+
+// The head line carries the time only when the server sent one; never invent it.
+const timeLabel = computed(() => formatTime(props.message.created_at))
 </script>
 
 <template>
@@ -26,16 +32,23 @@ const visibleToolCalls = computed(() => {
     :class="['msg', 'assistant', { streaming }]"
     :data-testid="streaming ? 'msg-streaming' : 'msg-assistant'"
   >
-    <span class="msg-avatar" aria-hidden="true">
-      <svg viewBox="0 0 24 24" width="18" height="18" focusable="false">
-        <path
-          d="M12 0.5 L13.6 10.4 L23.5 12 L13.6 13.6 L12 23.5 L10.4 13.6 L0.5 12 L10.4 10.4 Z"
-          fill="currentColor"
-        />
-      </svg>
-    </span>
-    <div class="msg-body">
+    <div class="msg-gutter">
       <span class="role-tag">tutor</span>
+      <span v-if="timeLabel" class="msg-time">{{ timeLabel }}</span>
+      <svg
+        v-if="landed"
+        class="landed-tick"
+        viewBox="0 0 12 12"
+        width="12"
+        height="12"
+        aria-hidden="true"
+        focusable="false"
+        data-testid="msg-landed-tick"
+      >
+        <path d="M2 6.5 L4.8 9.2 L10 3.2" pathLength="1" />
+      </svg>
+    </div>
+    <div class="msg-body">
       <template v-if="message.check_batch">
         <CheckRecap :batch="message.check_batch" />
         <MarkdownContent
@@ -64,76 +77,102 @@ const visibleToolCalls = computed(() => {
 </template>
 
 <style scoped>
+/* The tutor's card: white stock, told apart from the learner by material,
+   never by an avatar. The head line carries the role and time in pencil. */
 .msg {
-  display: flex;
-  gap: 0.625rem;
-  max-width: 100%;
-  align-items: flex-start;
-}
-
-.msg-avatar {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: var(--radius-pill);
-  background: var(--color-accent-soft);
-  color: var(--color-accent-text);
-  margin-top: 0.125rem;
-}
-
-.msg-body {
+  align-self: flex-start;
+  max-width: 78%;
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 0.35rem;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-card);
+  box-shadow: 0 1px 0 var(--card-drop);
+  padding: 0.55rem 0.9rem 0.7rem;
+}
+
+.msg-gutter {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
   min-width: 0;
-  flex: 1 1 auto;
-  max-width: calc(100% - 2.6rem);
 }
 
 .role-tag {
   font-family: var(--font-sans);
   font-size: var(--fs-label);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  font-weight: 600;
-  color: var(--color-text-faint);
+  font-weight: 700;
+  color: var(--pencil);
+}
+
+.msg-time {
+  margin-left: auto;
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  color: var(--pencil);
+}
+
+/* Top-right of the head line: filing the profile never reflows the card. */
+.landed-tick {
+  position: absolute;
+  top: 0;
+  right: 0;
+  fill: none;
+  stroke: var(--ink-learner);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  animation: tick-draw var(--motion-base) cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes tick-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.msg-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
 }
 
 .content {
   margin: 0;
-  white-space: pre-wrap;
   font-family: var(--font-sans);
-  font-size: 0.9375rem;
-  line-height: 1.6;
-  color: var(--color-text);
-}
-
-.msg.assistant {
-  align-self: stretch;
-  width: 100%;
-  max-width: 100%;
-}
-
-.msg.assistant .content {
-  background: var(--color-surface-raised);
-  border: none;
-  padding: 0.875rem 1.125rem;
-  border-radius: var(--radius-sm) var(--radius-lg) var(--radius-lg) var(--radius-lg);
-  box-shadow: none;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--ink);
 }
 
 .tool-call-row {
-  display: inline-flex;
-  margin: 0 0 0.4rem;
+  display: block;
 }
 
 .cancelled-marker {
-  font-size: 0.8125rem;
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
   font-style: italic;
-  color: var(--color-text-muted, #888);
-  margin-top: 0.125rem;
+  color: var(--pencil);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landed-tick {
+    animation: none;
+  }
+}
+
+@media (max-width: 599px) {
+  .msg {
+    max-width: 92%;
+  }
 }
 </style>

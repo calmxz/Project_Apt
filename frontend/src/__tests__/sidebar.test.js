@@ -47,7 +47,7 @@ beforeEach(() => {
   apiReviewQueue.mockReset()
   apiReviewQueue.mockResolvedValue({ items: [], total: 0, limit: 1, offset: 0 })
   apiGetSessionLibrary.mockReset()
-  apiGetSessionLibrary.mockResolvedValue({ items: [], total: 0, limit: 20, offset: 0 })
+  apiGetSessionLibrary.mockResolvedValue({ items: [], total: 0, limit: 15, offset: 0 })
 })
 
 describe('Sidebar.vue — session list rendering', () => {
@@ -354,7 +354,7 @@ describe('sidebar server-side search', () => {
     expect(apiGetSessionLibrary).not.toHaveBeenCalled()
     await vi.advanceTimersByTimeAsync(1)
     expect(apiGetSessionLibrary).toHaveBeenCalledWith(
-      { status: 'active', q: 'gly', sort: 'last_activity', limit: 20, offset: 0 },
+      { status: 'active', q: 'gly', sort: 'last_activity', limit: 15, offset: 0 },
       { silent: true },
     )
   })
@@ -542,7 +542,7 @@ describe('sidebar server-side search', () => {
   })
 
   // Search results describe sessions that are routinely OUTSIDE the store's
-  // 20+20 window. A row action must still be visible on the rendered row --
+  // 15+15 window. A row action must still be visible on the rendered row --
   // otherwise nothing appears to happen, the user retries, and the server's
   // idempotent end/reopen replays 200 while the totals mirror skews again.
   it('reflects an End taken on a search row for a session outside the loaded window', async () => {
@@ -614,7 +614,7 @@ describe('sidebar server-side search', () => {
     expect(apiGetSessionLibrary).not.toHaveBeenCalled()
     await vi.advanceTimersByTimeAsync(1)
     expect(apiGetSessionLibrary).toHaveBeenCalledWith(
-      { status: 'ended', q: 'gly', sort: 'last_activity', limit: 20, offset: 0 },
+      { status: 'ended', q: 'gly', sort: 'last_activity', limit: 15, offset: 0 },
       { silent: true },
     )
   })
@@ -1060,13 +1060,12 @@ describe('Sidebar.vue — footer rail labels', () => {
     expect(wrapper.find('[data-testid="sidebar-settings"]').text()).not.toContain('Settings')
   })
 
-  it('footer rail no longer renders theme or sign-out controls', async () => {
+  it('footer rail no longer renders a theme control', async () => {
     const auth = useAuthStore()
     auth.session = { user: { id: 'u-1' }, access_token: 't' }
     wrapper = mount(Sidebar)
     await flushPromises()
     expect(wrapper.find('[data-testid="sidebar-theme-toggle"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="sidebar-sign-out"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="sidebar-settings"]').exists()).toBe(true)
   })
 
@@ -1075,6 +1074,64 @@ describe('Sidebar.vue — footer rail labels', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="sidebar-profile"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="sidebar-settings"]').exists()).toBe(true)
+  })
+})
+
+// Sign out moved out of Settings > Account and onto the footer rail: it is a
+// navigation act, not a setting.
+describe('Sidebar.vue — footer sign out', () => {
+  let wrapper
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    routerPush.mockClear()
+    showError.mockClear()
+    localStorage.clear()
+    setViewport(1400)
+    sidebarTest._setExpanded(true)
+    routeRef.params = {}
+    routeRef.fullPath = '/'
+  })
+  afterEach(() => wrapper?.unmount())
+
+  it('is hidden when unauthenticated', async () => {
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sidebar-sign-out"]').exists()).toBe(false)
+  })
+
+  it('renders a written Sign out line when authenticated and expanded', async () => {
+    const auth = useAuthStore()
+    auth.session = { user: { id: 'u-1' }, access_token: 't' }
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    const btn = wrapper.get('[data-testid="sidebar-sign-out"]')
+    expect(btn.text()).toContain('Sign out')
+    expect(btn.attributes('aria-label')).toBe('Sign out')
+  })
+
+  it('signs out and redirects to /login', async () => {
+    const auth = useAuthStore()
+    auth.session = { user: { id: 'u-1' }, access_token: 't' }
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    await wrapper.get('[data-testid="sidebar-sign-out"]').trigger('click')
+    await flushPromises()
+    expect(globalThis.__supabaseAuthStub.signOut).toHaveBeenCalled()
+    expect(routerPush).toHaveBeenCalledWith('/login')
+  })
+
+  it('surfaces an error toast and does not redirect on failure', async () => {
+    globalThis.__supabaseAuthStub.signOut.mockResolvedValueOnce({
+      error: new Error('network down'),
+    })
+    const auth = useAuthStore()
+    auth.session = { user: { id: 'u-1' }, access_token: 't' }
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    await wrapper.get('[data-testid="sidebar-sign-out"]').trigger('click')
+    await flushPromises()
+    expect(showError).toHaveBeenCalledWith('network down')
+    expect(routerPush).not.toHaveBeenCalled()
   })
 })
 
@@ -1210,6 +1267,53 @@ describe('Sidebar.vue — review entry', () => {
   })
 })
 
+// Card Box redesign (Task 5): the desktop collapse toggle is a visible
+// half-tab on the sidebar's right edge instead of an icon buried in the
+// header, and the collapsed rail marks sessions as dots instead of strokes.
+describe('Sidebar.vue — card box collapse toggle and collapsed dots', () => {
+  let wrapper
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    routerPush.mockClear()
+    localStorage.clear()
+    setViewport(1400)
+    routeRef.params = {}
+    routeRef.fullPath = '/'
+  })
+  afterEach(() => wrapper?.unmount())
+
+  it('the half-tab collapse toggle carries hit-44 and a descriptive aria-label', async () => {
+    sidebarTest._setExpanded(true)
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    const toggle = wrapper.get('[data-testid="sidebar-collapse-toggle"]')
+    expect(toggle.classes()).toContain('hit-44')
+    expect(toggle.classes()).toContain('sb-toggle--edge')
+    expect(toggle.attributes('aria-label')).toBe('Collapse sidebar')
+
+    await toggle.trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="sidebar-collapse-toggle"]').attributes('aria-label')).toBe(
+      'Expand sidebar',
+    )
+  })
+
+  it('renders one dot per session in the collapsed rail, current session marked', async () => {
+    sidebarTest._setExpanded(false)
+    routeRef.params = { id: 'a1' }
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'a1', topic: 'Big-O', created_at: new Date().toISOString(), ended_at: null },
+      { id: 'a2', topic: 'Trees', created_at: new Date().toISOString(), ended_at: null },
+    ]
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    const marks = wrapper.findAll('.sb-session-list--collapsed .sb-row-mark')
+    expect(marks).toHaveLength(2)
+    expect(wrapper.find('[data-session-id="a1"]').classes()).toContain('sb-row--current')
+  })
+})
+
 describe('session store — rename + pin actions', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -1311,11 +1415,15 @@ describe('Sidebar.vue — header states', () => {
     expect(toggle.attributes('aria-label')).toBe('Collapse sidebar')
   })
 
-  it('collapsed desktop header shows only the expand toggle, no logo', async () => {
+  // The collapsed rail carries the page mark (mark-only logo, no wordmark)
+  // above the expand toggle, so .sb-brand is present but "Crux" is not.
+  it('collapsed desktop header shows the page mark and the expand toggle', async () => {
     sidebarTest._setExpanded(false)
     wrapper = mount(Sidebar)
     await flushPromises()
-    expect(wrapper.find('.sb-brand').exists()).toBe(false)
+    const brand = wrapper.find('.sb-brand')
+    expect(brand.exists()).toBe(true)
+    expect(brand.text()).not.toContain('Crux')
     const toggle = wrapper.find('[data-testid="sidebar-collapse-toggle"]')
     expect(toggle.exists()).toBe(true)
     expect(toggle.attributes('aria-label')).toBe('Expand sidebar')
@@ -1359,7 +1467,25 @@ function makeEndedSessions(count) {
   }))
 }
 
-describe('sidebar 20-row cap and View all links', () => {
+// jsdom ships no ResizeObserver and reports clientHeight 0, so the component's
+// fit-to-height measurement is unreachable by default. This installs a stub
+// that reports `height` for the observed element and fires the callback once,
+// synchronously, on observe() -- i.e. the first measurement the browser makes.
+function installResizeObserverStub(height) {
+  globalThis.ResizeObserver = class {
+    constructor(cb) {
+      this._cb = cb
+    }
+    observe(el) {
+      Object.defineProperty(el, 'clientHeight', { configurable: true, value: height })
+      this._cb([{ target: el }], this)
+    }
+    unobserve() {}
+    disconnect() {}
+  }
+}
+
+describe('sidebar row cap and View all links', () => {
   let wrapper
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -1372,7 +1498,7 @@ describe('sidebar 20-row cap and View all links', () => {
   })
   afterEach(() => wrapper?.unmount())
 
-  it('renders at most 20 active rows (pinned count toward the cap)', async () => {
+  it('renders at most 15 active rows (pinned count toward the cap)', async () => {
     const store = useSessionStore()
     const pinnedRows = makeActiveSessions(3, { pinned: true, prefix: 'p' })
     const unpinnedRows = makeActiveSessions(25, { pinned: false, prefix: 'u' })
@@ -1384,7 +1510,7 @@ describe('sidebar 20-row cap and View all links', () => {
       wrapper.findAll('[data-testid="sidebar-section-pinned"] [data-session-id]'),
     ).toHaveLength(3)
     expect(wrapper.findAll('[data-testid="sidebar-quick-group"] [data-session-id]')).toHaveLength(
-      17,
+      12,
     )
     const viewAll = wrapper.find('[data-testid="sidebar-view-all-active"]')
     expect(viewAll.exists()).toBe(true)
@@ -1398,7 +1524,7 @@ describe('sidebar 20-row cap and View all links', () => {
     })
   })
 
-  it('caps pinned rows themselves at 20, leaving no room for unpinned rows', async () => {
+  it('caps pinned rows themselves at 15, leaving no room for unpinned rows', async () => {
     const store = useSessionStore()
     const pinnedRows = makeActiveSessions(25, { pinned: true, prefix: 'p' })
     const unpinnedRows = makeActiveSessions(5, { pinned: false, prefix: 'u' })
@@ -1408,21 +1534,21 @@ describe('sidebar 20-row cap and View all links', () => {
     await flushPromises()
     expect(
       wrapper.findAll('[data-testid="sidebar-section-pinned"] [data-session-id]'),
-    ).toHaveLength(20)
+    ).toHaveLength(15)
     expect(wrapper.findAll('[data-testid="sidebar-quick-group"] [data-session-id]')).toHaveLength(0)
   })
 
-  it('caps the collapsed icon rail at 20 pinned rows too', async () => {
+  it('caps the collapsed icon rail at 15 pinned rows too', async () => {
     sidebarTest._setExpanded(false)
     const store = useSessionStore()
     store.sessions = makeActiveSessions(25, { pinned: true, prefix: 'p' })
     store.activeTotal = 25
     wrapper = mount(Sidebar)
     await flushPromises()
-    expect(wrapper.findAll('.sb-session-list--collapsed [data-session-id]')).toHaveLength(20)
+    expect(wrapper.findAll('.sb-session-list--collapsed [data-session-id]')).toHaveLength(15)
   })
 
-  it('caps the ended tab at 20 and links with status=ended', async () => {
+  it('caps the ended tab at 15 and links with status=ended', async () => {
     const store = useSessionStore()
     store.sessions = makeEndedSessions(22)
     store.endedTotal = 40
@@ -1430,7 +1556,7 @@ describe('sidebar 20-row cap and View all links', () => {
     await flushPromises()
     await wrapper.find('[data-testid="sidebar-status-ended"]').trigger('click')
     expect(wrapper.findAll('[data-testid="sidebar-section-ended"] [data-session-id]')).toHaveLength(
-      20,
+      15,
     )
     const viewAll = wrapper.find('[data-testid="sidebar-view-all-ended"]')
     expect(viewAll.exists()).toBe(true)
@@ -1444,13 +1570,15 @@ describe('sidebar 20-row cap and View all links', () => {
     })
   })
 
-  it('hides View all when the tab total fits the rendered rows', async () => {
+  it('shows View all as the last line even when every session is rendered', async () => {
     const store = useSessionStore()
     store.sessions = makeActiveSessions(5)
     store.activeTotal = 5
     wrapper = mount(Sidebar)
     await flushPromises()
-    expect(wrapper.find('[data-testid="sidebar-view-all-active"]').exists()).toBe(false)
+    const viewAll = wrapper.find('[data-testid="sidebar-view-all-active"]')
+    expect(viewAll.exists()).toBe(true)
+    expect(viewAll.text()).toContain('View all 5 sessions')
   })
 
   it('ended tab badge shows the server total, not the loaded count', async () => {
@@ -1504,10 +1632,10 @@ describe('sidebar 20-row cap and View all links', () => {
     await flushPromises()
     expect(
       wrapper.findAll('[data-testid="sidebar-section-pinned"] [data-session-id]'),
-    ).toHaveLength(20)
+    ).toHaveLength(15)
     expect(
       wrapper.find('[data-testid="sidebar-section-pinned"] .sb-section-count').text(),
-    ).toContain('20')
+    ).toContain('15')
   })
 
   // The totals are a local mirror: createSession bumps activeTotal without
@@ -1524,6 +1652,42 @@ describe('sidebar 20-row cap and View all links', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="sidebar-empty-hint"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="sidebar-view-all-active"]').exists()).toBe(false)
+  })
+
+  // Fit-to-height: with a real ResizeObserver the cap grows to whatever the
+  // list column has room for (one pitch reserved for the View all line),
+  // clamped to [15, 40]. jsdom has no ResizeObserver, which is exactly why
+  // every case above still sees the 15-row floor.
+  it('renders as many rows as the measured list height allows, up to 40', async () => {
+    installResizeObserverStub(28 * 31)
+    try {
+      const store = useSessionStore()
+      store.sessions = makeActiveSessions(40)
+      store.activeTotal = 40
+      wrapper = mount(Sidebar)
+      await flushPromises()
+      expect(wrapper.findAll('[data-testid="sidebar-quick-group"] [data-session-id]')).toHaveLength(
+        30,
+      )
+    } finally {
+      delete globalThis.ResizeObserver
+    }
+  })
+
+  it('keeps the 15-row floor when the measured height fits fewer rows', async () => {
+    installResizeObserverStub(100)
+    try {
+      const store = useSessionStore()
+      store.sessions = makeActiveSessions(40)
+      store.activeTotal = 40
+      wrapper = mount(Sidebar)
+      await flushPromises()
+      expect(wrapper.findAll('[data-testid="sidebar-quick-group"] [data-session-id]')).toHaveLength(
+        15,
+      )
+    } finally {
+      delete globalThis.ResizeObserver
+    }
   })
 
   it('never offers the ended View all link while no ended rows are rendered', async () => {

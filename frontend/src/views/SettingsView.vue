@@ -1,7 +1,6 @@
 <template>
   <section class="settings" data-testid="settings">
     <header class="head">
-      <span class="folio">preferences</span>
       <h1 class="title">Settings</h1>
     </header>
 
@@ -21,13 +20,12 @@
           :aria-controls="`panel-${t.slug}`"
           :aria-selected="t.slug === tab ? 'true' : 'false'"
           :tabindex="t.slug === tab ? 0 : -1"
-          :class="['rail-tab', { 'rail-tab--active': t.slug === tab }]"
+          :class="['rail-tab', 'coarse-2x', { 'rail-tab--active': t.slug === tab }]"
           :data-testid="`settings-tab-${t.slug}`"
           type="button"
           @click="activate(i)"
           @keydown="onKeydown($event, i)"
         >
-          <i :class="['pi', t.icon]" aria-hidden="true" />
           <span>{{ t.label }}</span>
         </button>
       </nav>
@@ -48,7 +46,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import ProfileTab from '../components/settings/ProfileTab.vue'
@@ -62,11 +60,12 @@ const props = defineProps({
 
 const router = useRouter()
 
+// The rail is the contents list of this section: one row per page, no icons.
 const tabs = [
-  { slug: 'profile', label: 'Profile', icon: 'pi-user', component: ProfileTab },
-  { slug: 'usage', label: 'Usage', icon: 'pi-wallet', component: UsageTab },
-  { slug: 'account', label: 'Account', icon: 'pi-lock', component: AccountTab },
-  { slug: 'appearance', label: 'Appearance', icon: 'pi-moon', component: AppearanceTab },
+  { slug: 'profile', label: 'Profile', component: ProfileTab },
+  { slug: 'usage', label: 'Usage', component: UsageTab },
+  { slug: 'account', label: 'Account', component: AccountTab },
+  { slug: 'appearance', label: 'Appearance', component: AppearanceTab },
 ]
 
 const activeComponent = computed(
@@ -74,6 +73,12 @@ const activeComponent = computed(
 )
 
 const tabRefs = ref([])
+
+// The deep-desk ground must fill the whole routed pane, not just the
+// settings element, so it is painted on .page via a body class (same
+// mechanism SessionView uses for chat-locked).
+onMounted(() => document.body.classList.add('settings-page'))
+onUnmounted(() => document.body.classList.remove('settings-page'))
 
 async function activate(i) {
   const slug = tabs[i].slug
@@ -95,110 +100,159 @@ function onKeydown(e, i) {
 </script>
 
 <style scoped>
+/* The whole settings page sits on the deep desk. The ground is painted on
+   the routed pane (.page fills .shell-main, which is min-height 100vh), so
+   it runs edge to edge and to the fold however short the content is. */
+:global(body.settings-page .page) {
+  background: var(--desk-deep);
+}
+
 .settings {
-  max-width: 72rem;
-  margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
 }
 
 .head {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-}
-
-.folio {
-  font-family: var(--font-sans);
-  font-size: var(--fs-label);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  font-weight: 600;
-  color: var(--color-accent-text);
+  padding-bottom: var(--line-pitch);
 }
 
 .title {
   font-family: var(--font-display);
-  font-size: clamp(2rem, 4vw, 2.5rem);
-  font-weight: 700;
+  font-size: var(--fs-h1);
+  font-weight: 600;
   letter-spacing: var(--tracking-display);
-  line-height: 1.05;
-  color: var(--color-heading);
+  line-height: var(--lh-display);
+  color: var(--ink);
   margin: 0;
 }
 
+/* The page uses the full width: title on a strong rule, one pitch, then the
+   contents list laid down as one ruled tab line (the sidebar's own Active /
+   Ended grammar), then the panel full width beneath it. */
 .layout {
-  display: grid;
-  grid-template-columns: 12rem 1fr;
-  gap: 2rem;
-  align-items: start;
-}
-
-.rail {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  position: sticky;
-  top: 1rem;
+}
+
+/* Divider tabs: each is its own tab shape on the deep desk; the one in
+   force lifts to the sheet's own white and sits flush against it (negative
+   margin overlaps the panel's top border) so rail and sheet read as one
+   joined object. */
+.rail {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 0.375rem;
+  overflow-x: auto;
+  position: static;
+  padding: 0;
+  margin-top: var(--line-pitch);
 }
 
 .rail-tab {
   display: flex;
   align-items: center;
-  gap: 0.625rem;
-  padding: 0.625rem 0.875rem;
-  border: 0;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--color-text-muted);
+  flex-shrink: 0;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--card-edge);
+  border-bottom: 0;
+  border-radius: var(--radius-card) var(--radius-card) 0 0;
+  background: var(--desk);
+  color: var(--pencil);
   font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 0.9375rem;
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  line-height: calc(var(--line-pitch) - 1px);
   text-align: left;
   cursor: pointer;
-  transition:
-    background var(--motion-fast) ease,
-    color var(--motion-fast) ease;
 }
 
 .rail-tab:hover {
-  background: var(--color-surface-soft);
-  color: var(--color-heading);
+  background: var(--card);
+  color: var(--ink);
 }
 
 .rail-tab--active {
-  background: var(--color-accent-soft);
-  color: var(--color-accent-text);
+  position: relative;
+  z-index: 1;
+  margin-bottom: -1px;
+  background: var(--card);
+  color: var(--ink);
 }
 
 .rail-tab:focus-visible {
-  outline: 2px solid var(--color-accent-ring);
+  outline: 2px solid var(--ink-learner);
   outline-offset: 2px;
 }
 
+/* The sheet: a white card joined to the active tab, square only at the
+   top-left where the rail starts. Each tab lays its own sections out (see
+   ProfileTab, AccountTab) as desk-deep cards on this sheet. */
 .panel {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: var(--line-pitch);
+  padding: 1.5rem 2rem 2rem;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: 0 var(--radius-card) var(--radius-card) var(--radius-card);
+  box-shadow: 0 1px 0 var(--card-drop);
 }
 
-@media (max-width: 48rem) {
-  .layout {
-    grid-template-columns: 1fr;
-    gap: 1rem;
-  }
+.panel:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+}
 
-  .rail {
-    position: static;
-    flex-direction: row;
-    overflow-x: auto;
-    padding-bottom: 0.25rem;
-  }
+/* Shared tab furniture. Every tab is mounted here and nowhere else, so the
+   card shell, its title, the "Saved." flash and its tick, and the skeleton
+   rule are declared once for the whole sheet instead of once per tab. Tabs
+   keep only what actually differs (e.g. their own .sec align-items/gap). */
+.panel :deep(.sec) {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  background: var(--desk-deep);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-card);
+  padding: 1rem 1.25rem 1.25rem;
+}
 
-  .rail-tab {
-    flex-shrink: 0;
-  }
+.panel :deep(.sec-title) {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  line-height: var(--line-pitch);
+  color: var(--ink);
+}
+
+.panel :deep(.saved-flash) {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  line-height: var(--line-pitch);
+  color: var(--ink);
+}
+
+.panel :deep(.tick) {
+  flex: 0 0 auto;
+  fill: none;
+  stroke: var(--ink-learner);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.panel :deep(.skel-block) {
+  display: block;
+  height: calc(var(--line-pitch) - 1px);
+  border-bottom: 1px solid var(--rule-strong);
 }
 </style>

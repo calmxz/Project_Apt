@@ -1,131 +1,234 @@
 <template>
-  <section class="card" data-testid="settings-appearance">
-    <h2 class="card-title">
-      <i class="pi pi-moon card-icon" aria-hidden="true" />
-      Appearance
-    </h2>
-    <div class="switch-row">
-      <span class="switch-body">
-        <span class="switch-label">Dark mode</span>
-        <span class="switch-sub">Use a dark theme across the app.</span>
-      </span>
-      <button
-        type="button"
-        class="switch"
-        :class="{ 'switch--on': isDark }"
-        role="switch"
-        :aria-checked="isDark"
-        aria-label="Dark mode"
-        data-testid="settings-theme-toggle"
-        @click="toggleTheme"
+  <section class="appearance" data-testid="settings-appearance">
+    <h2 class="heading">Appearance</h2>
+    <p class="note">The same desk, with the lamp on or off.</p>
+
+    <fieldset class="modes" data-testid="settings-theme-toggle">
+      <legend class="sr-only">Theme</legend>
+      <label
+        v-for="opt in MODES"
+        :key="opt.value"
+        class="mode"
+        :class="{ selected: override === opt.value }"
       >
-        <span class="switch-knob" aria-hidden="true" />
-      </button>
-    </div>
+        <input
+          type="radio"
+          class="mode-input"
+          name="crux-theme"
+          :value="opt.value"
+          :checked="override === opt.value"
+          :data-testid="`settings-theme-${opt.value}`"
+          @change="setTheme(opt.value)"
+        />
+        <span class="mode-swatch" aria-hidden="true">
+          <span v-if="opt.value === 'auto'" class="sw-split">
+            <span class="sw-half sw-light">
+              <span class="sw-desk" />
+              <span class="sw-card" />
+            </span>
+            <span class="sw-half sw-dark">
+              <span class="sw-desk" />
+              <span class="sw-card" />
+            </span>
+          </span>
+          <span v-else :class="['sw-stack', `sw-${opt.value}`]">
+            <span class="sw-desk" />
+            <span class="sw-card" />
+          </span>
+        </span>
+        <span class="mode-line">
+          <span class="mode-label" :data-label="opt.label">{{ opt.label }}</span>
+          <svg
+            class="mode-tick"
+            :class="{ 'mode-tick--on': override === opt.value }"
+            viewBox="0 0 12 12"
+            width="12"
+            height="12"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <path d="M2 6.5 L4.8 9.2 L10 3.2" />
+          </svg>
+        </span>
+      </label>
+    </fieldset>
   </section>
 </template>
 
 <script setup>
 import { useTheme } from '../../composables/useTheme.js'
 
-const { isDark, toggle: toggleTheme } = useTheme()
+const { override, setTheme } = useTheme()
+
+const MODES = [
+  { value: 'light', label: 'Lamp on' },
+  { value: 'dark', label: 'Lamp off' },
+  { value: 'auto', label: 'Match system' },
+]
 </script>
 
 <style scoped>
-.card {
+.appearance {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  padding: 1.5rem;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-paper);
 }
 
-.card-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-family: var(--font-display);
-  font-size: 1.125rem;
+.heading {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
   font-weight: 700;
-  letter-spacing: var(--tracking-tight);
-  color: var(--color-heading);
+  line-height: var(--line-pitch);
+  color: var(--ink);
+}
+
+.note {
+  margin: 0 0 var(--line-pitch);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
+}
+
+.modes {
+  display: flex;
+  gap: 3rem;
+  border: 0;
+  padding: 0;
   margin: 0;
 }
 
-.card-icon {
-  font-size: 1rem;
-  color: var(--color-accent-text);
-}
-
-.switch-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.switch-body {
+.mode {
   display: flex;
   flex-direction: column;
-  gap: 0.125rem;
-  min-width: 0;
-}
-
-.switch-label {
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 1rem;
-  color: var(--color-heading);
-  letter-spacing: var(--tracking-tight);
-}
-
-.switch-sub {
-  font-family: var(--font-sans);
-  font-size: 0.8125rem;
-  color: var(--color-text-muted);
-}
-
-.switch {
-  position: relative;
-  flex-shrink: 0;
-  width: 2.75rem;
-  height: 1.5rem;
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--color-border-strong);
-  background: var(--color-border-strong);
+  gap: 0.5rem;
   cursor: pointer;
-  transition:
-    background var(--motion-fast) ease,
-    border-color var(--motion-fast) ease;
 }
 
-.switch--on {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
+.mode-input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
 }
 
-.switch:focus-visible {
+/* Each swatch is two small stacked cards drawn in the theme it names, so the
+   light swatch stays light while the app is dark. Theme tokens cascade from
+   :root[data-theme], so they cannot express "the other theme" here: the
+   ground and card layers come from the theme-independent --sw-* tokens
+   declared once in base.css's plain :root block. The card's stroke is the
+   live accent so it reads as blue, the one colour that carries across both
+   themes. The system swatch cannot be drawn from the live tokens either --
+   that would just mirror whichever theme happens to be active -- so it is
+   drawn as half light stack, half dark stack, literally split down the
+   middle. */
+.mode-swatch {
+  display: inline-flex;
+}
+
+/* One pair of theme classes, worn by the whole stack or by half of the split
+   system swatch. */
+.sw-light {
+  --sw-desk: var(--sw-light-paper);
+  --sw-card: var(--sw-light-rule);
+  --sw-ink: var(--sw-light-ink);
+}
+
+.sw-dark {
+  --sw-desk: var(--sw-dark-paper);
+  --sw-card: var(--sw-dark-rule);
+  --sw-ink: var(--sw-dark-ink);
+}
+
+.sw-stack,
+.sw-half {
+  position: relative;
+  display: inline-block;
+  height: 72px;
+}
+
+.sw-stack {
+  width: 56px;
+}
+
+.sw-half {
+  width: 28px;
+}
+
+.sw-split {
+  display: flex;
+}
+
+.sw-desk {
+  position: absolute;
+  inset: 0;
+  background: var(--sw-desk);
+  border: 1px solid var(--sw-ink);
+  border-radius: var(--radius-card);
+}
+
+.sw-card {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 3px;
+  bottom: 3px;
+  background: var(--sw-card);
+  border: 2px solid var(--color-accent);
+  border-radius: var(--radius-card);
+}
+
+.mode-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.mode-label {
+  position: relative;
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  line-height: var(--line-pitch);
+  color: var(--ink);
+}
+
+/* Reserves the width the label would need at 700 weight, invisibly, so
+   selecting a mode never widens its label and pushes its siblings. */
+.mode-label::after {
+  content: attr(data-label);
+  display: block;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+  font-weight: 700;
+}
+
+.mode.selected .mode-label {
+  font-weight: 700;
+}
+
+.mode:hover .mode-label {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.mode-tick {
+  flex: 0 0 auto;
+  visibility: hidden;
+  fill: none;
+  stroke: var(--ink-learner);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.mode-tick--on {
+  visibility: visible;
+}
+
+.mode:has(.mode-input:focus-visible) {
   outline: 2px solid var(--color-accent-ring);
   outline-offset: 2px;
-}
-
-.switch-knob {
-  position: absolute;
-  top: 50%;
-  left: 0.1875rem;
-  width: 1.125rem;
-  height: 1.125rem;
-  transform: translateY(-50%);
-  border-radius: var(--radius-pill);
-  background: #ffffff;
-  box-shadow: var(--shadow-paper);
-  transition: left var(--motion-fast) var(--motion-bounce);
-}
-
-.switch--on .switch-knob {
-  left: calc(100% - 1.3125rem);
 }
 </style>

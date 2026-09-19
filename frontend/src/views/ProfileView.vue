@@ -4,14 +4,9 @@
 
     <header class="head">
       <div class="head-text">
-        <span class="folio">session profile</span>
         <h1 class="title">{{ topicLabel }}</h1>
         <p v-if="data?.profile?.knowledge_level" class="lede">
-          Working at the
-          <span class="level-pill" :data-level="data.profile.knowledge_level">{{
-            data.profile.knowledge_level
-          }}</span>
-          level.
+          Working at the <span class="level-word">{{ data.profile.knowledge_level }}</span> level.
         </p>
       </div>
 
@@ -19,33 +14,19 @@
         <button
           v-if="data.profile.confirmed_gaps?.length"
           type="button"
-          class="review-gaps-btn"
+          class="text-btn"
           data-testid="sprof-review-gaps"
           @click="startReview"
         >
-          <i class="pi pi-bullseye" aria-hidden="true" />
           Review gaps
         </button>
-
-        <div class="level-edit" data-testid="level-select">
-          <button
-            v-for="lvl in LEVELS"
-            :key="lvl"
-            type="button"
-            class="level-opt"
-            :class="{ active: data.profile.knowledge_level === lvl }"
-            @click="setLevel(lvl)"
-          >
-            {{ lvl }}
-          </button>
-        </div>
       </div>
     </header>
 
     <GapPickerDialog v-model:visible="gapPickerOpen" :gaps="gapNames" @select="goReview" />
 
     <div v-if="loading" class="skel" data-testid="sprof-loading" aria-hidden="true">
-      <span class="skel-block skel-row-tall" />
+      <span class="skel-block" />
       <span class="skel-block" />
       <span class="skel-block skel-short" />
     </div>
@@ -60,21 +41,59 @@
         {{ writeError }}
       </p>
 
-      <div v-if="data.profile.focus_target_gap" class="focus" data-testid="sprof-focus">
-        <span class="focus-icon" aria-hidden="true">
-          <i class="pi pi-bullseye" />
-        </span>
-        <div class="focus-body">
-          <span class="focus-label">Current focus</span>
-          <span class="focus-gap">{{ data.profile.focus_target_gap }}</span>
+      <section class="divider divider--level" data-testid="sprof-level">
+        <h2 class="divider-tab divider-tab--level">Level</h2>
+        <div class="divider-body">
+          <div class="level-edit" data-testid="level-select">
+            <button
+              v-for="lvl in LEVELS"
+              :key="lvl"
+              type="button"
+              class="level-opt"
+              :class="{ active: data.profile.knowledge_level === lvl }"
+              @click="setLevel(lvl)"
+            >
+              <svg
+                class="level-mark"
+                viewBox="0 0 24 24"
+                width="18"
+                height="12"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <path :d="LEVEL_MARK_PATH" :stroke-width="levelStroke(lvl)" />
+              </svg>
+              {{ lvl }}
+            </button>
+          </div>
         </div>
-      </div>
+      </section>
 
-      <div v-if="subtopicEntries.length" class="subtopics" data-testid="sprof-subtopics">
-        <h2 class="section-title">
-          <i class="pi pi-sliders-h col-icon" aria-hidden="true" />
-          Subtopic levels
-        </h2>
+      <section
+        v-if="data.profile.focus_target_gap"
+        class="divider divider--focus"
+        data-testid="sprof-focus"
+      >
+        <h2 class="divider-tab divider-tab--focus">Focus</h2>
+        <div class="divider-body">
+          <p class="cue-entry cue-entry--focus">
+            <svg
+              class="cue-mark cue-mark--focus"
+              viewBox="0 0 12 12"
+              width="12"
+              height="12"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="M1 6 L11 6" />
+            </svg>
+            <span class="cue-word">{{ data.profile.focus_target_gap }}</span>
+          </p>
+        </div>
+      </section>
+
+      <section v-if="subtopicEntries.length" class="sec" data-testid="sprof-subtopics">
+        <h2 class="sec-title">Subtopic levels</h2>
         <ul class="subtopic-list">
           <li v-for="[name, lvl] in subtopicEntries" :key="`st-${name}`" class="subtopic-row">
             <span class="st-name">{{ name }}</span>
@@ -87,126 +106,122 @@
                 :class="{ active: lvl === l }"
                 @click="setSubtopicLevel(name, l)"
               >
+                <svg
+                  class="level-mark"
+                  viewBox="0 0 24 24"
+                  width="18"
+                  height="12"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <path :d="LEVEL_MARK_PATH" :stroke-width="levelStroke(l)" />
+                </svg>
                 {{ l }}
               </button>
             </div>
             <button
               type="button"
-              class="chip-x"
+              class="icon-btn hit-44"
               data-testid="subtopic-remove"
               :aria-label="`Remove ${name}`"
               @click="removeSubtopic(name)"
             >
-              <i class="pi pi-times" aria-hidden="true" />
+              <svg
+                class="icon-mark"
+                viewBox="0 0 16 16"
+                width="16"
+                height="16"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <path d="M4 4 L12 12 M12 4 L4 12" />
+              </svg>
             </button>
           </li>
         </ul>
-      </div>
+      </section>
 
-      <div class="two-col">
-        <div class="col" data-testid="sprof-mastered">
-          <h2 class="section-title">
-            <i class="pi pi-check-circle col-icon col-icon-green" aria-hidden="true" />
-            Mastered
-          </h2>
-          <p v-if="!data.profile.mastered_concepts?.length" class="muted">Nothing recorded yet.</p>
-          <ul v-else class="chip-list">
+      <section
+        v-for="sec in CUE_SECTIONS"
+        :key="sec.key"
+        :class="sec.sectionClass"
+        :data-testid="sec.testid"
+      >
+        <h2 :class="sec.tabClass">{{ sec.label }}</h2>
+        <div class="divider-body">
+          <p v-if="!data.profile[sec.key]?.length" class="cue-none">{{ sec.empty }}</p>
+          <ul v-else class="cue-list">
             <li
-              v-for="c in data.profile.mastered_concepts"
-              :key="`m-${c.name}`"
-              class="chip chip-mastered"
+              v-for="it in data.profile[sec.key]"
+              :key="`${sec.keyPrefix}-${it.name}`"
+              class="chip"
             >
-              {{ c.name }}
-              <span v-if="c.evidence_type" class="chip-badge" data-testid="evidence-badge">
-                {{ c.evidence_type }}
+              <svg
+                :class="sec.markClass"
+                viewBox="0 0 12 12"
+                width="12"
+                height="12"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <path v-if="sec.markPath" :d="sec.markPath" />
+                <circle v-else cx="6" cy="6" r="4" />
+              </svg>
+              <span class="cue-word">{{ it.name }}</span>
+              <span v-if="it.evidence_type" class="chip-badge" data-testid="evidence-badge">
+                {{ it.evidence_type }}
               </span>
               <button
                 type="button"
-                class="chip-x"
+                class="icon-btn hit-44"
                 data-testid="chip-remove"
-                :aria-label="`Remove ${c.name}`"
-                @click="removeItem('mastered_concepts', c.name)"
+                :aria-label="`Remove ${it.name}`"
+                @click="removeItem(sec.key, it.name)"
               >
-                <i class="pi pi-times" aria-hidden="true" />
+                <svg
+                  class="icon-mark"
+                  viewBox="0 0 16 16"
+                  width="16"
+                  height="16"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <path d="M4 4 L12 12 M12 4 L4 12" />
+                </svg>
               </button>
             </li>
           </ul>
           <div class="add-row">
             <input
-              v-model="newMastered"
-              data-testid="add-mastered"
+              v-model="drafts[sec.key]"
+              :data-testid="sec.inputTestid"
               class="add-input"
-              placeholder="Add a concept"
+              :placeholder="sec.placeholder"
+              :aria-label="sec.inputLabel"
               maxlength="200"
-              @keydown.enter="addMastered"
+              @keydown.enter="addItem(sec)"
             />
             <button
               type="button"
-              data-testid="add-mastered-submit"
-              class="add-btn"
-              aria-label="Add concept"
-              @click="addMastered"
+              :data-testid="sec.submitTestid"
+              class="text-btn"
+              :aria-label="sec.submitLabel"
+              @click="addItem(sec)"
             >
               Add
             </button>
           </div>
         </div>
+      </section>
 
-        <div class="col" data-testid="sprof-gaps">
-          <h2 class="section-title">
-            <i class="pi pi-bolt col-icon col-icon-yellow" aria-hidden="true" />
-            Confirmed gaps
-          </h2>
-          <p v-if="!data.profile.confirmed_gaps?.length" class="muted">None.</p>
-          <ul v-else class="chip-list">
-            <li v-for="g in data.profile.confirmed_gaps" :key="`g-${g.name}`" class="chip chip-gap">
-              {{ g.name }}
-              <span v-if="g.evidence_type" class="chip-badge" data-testid="evidence-badge">
-                {{ g.evidence_type }}
-              </span>
-              <button
-                type="button"
-                class="chip-x"
-                data-testid="chip-remove"
-                :aria-label="`Remove ${g.name}`"
-                @click="removeItem('confirmed_gaps', g.name)"
-              >
-                <i class="pi pi-times" aria-hidden="true" />
-              </button>
-            </li>
-          </ul>
-          <div class="add-row">
-            <input
-              v-model="newGap"
-              data-testid="add-gap"
-              class="add-input"
-              placeholder="Add a gap"
-              maxlength="200"
-              @keydown.enter="addGap"
-            />
-            <button
-              type="button"
-              data-testid="add-gap-submit"
-              class="add-btn"
-              aria-label="Add gap"
-              @click="addGap"
-            >
-              Add
-            </button>
-          </div>
-        </div>
-      </div>
+      <section v-if="data.profile.last_session_summary" class="sec" data-testid="sprof-summary">
+        <h2 class="sec-title">Session summary</h2>
+        <p class="summary-text">{{ stripAutoPrefix(data.profile.last_session_summary) }}</p>
+      </section>
 
-      <div v-if="data.profile.last_session_summary" class="summary" data-testid="sprof-summary">
-        <h2 class="section-title">Session summary</h2>
-        <div class="summary-card">
-          <p class="summary-text">{{ stripAutoPrefix(data.profile.last_session_summary) }}</p>
-        </div>
-      </div>
-
-      <div class="events" data-testid="sprof-events">
-        <h2 class="section-title">Recent check-questions</h2>
-        <p v-if="!data.recent_learning_events.length" class="muted">
+      <section class="sec" data-testid="sprof-events">
+        <h2 class="sec-title">Recent check-questions</h2>
+        <p v-if="!data.recent_learning_events.length" class="cue-none">
           No learning events logged yet.
         </p>
         <ol v-else class="event-list">
@@ -215,23 +230,33 @@
             :key="ev.id"
             :class="['event-row', ev.correct ? 'evt-ok' : 'evt-bad']"
           >
-            <div class="event-head">
+            <span class="event-mark" :aria-label="ev.correct ? 'correct' : 'missed'">
+              <svg
+                class="event-mark-draw"
+                viewBox="0 0 16 16"
+                width="16"
+                height="16"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <path v-if="ev.correct" d="M3 8.5 L6.5 12 L13 4" />
+                <path v-else d="M4 4 L12 12 M12 4 L4 12" />
+              </svg>
+            </span>
+            <span class="event-body">
               <span class="event-gap">{{ ev.gap_tested }}</span>
-              <span class="event-mark" :aria-label="ev.correct ? 'correct' : 'missed'">
-                <i :class="['pi', ev.correct ? 'pi-check' : 'pi-times']" aria-hidden="true" />
-              </span>
-            </div>
-            <p class="event-q">{{ ev.question }}</p>
-            <span class="event-when">{{ formatRelative(ev.created_at) }}</span>
+              <span class="event-q">{{ ev.question }}</span>
+              <span class="event-when">{{ formatRelative(ev.created_at) }}</span>
+            </span>
           </li>
         </ol>
-      </div>
+      </section>
     </template>
   </section>
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import BackButton from '../components/BackButton.vue'
@@ -241,24 +266,62 @@ import { deleteProfileItem, getSessionProfile, patchProfile } from '../services/
 import { useSessionStore } from '../stores/session.js'
 import { formatRelative } from '../utils/formatDate.js'
 import { stripAutoPrefix } from '../utils/sessionCard.js'
+import { LEVEL_MARK_PATH, levelStroke } from '../components/chat/levelMark.js'
 
 const props = defineProps({ id: { type: String, required: true } })
 
 const LEVELS = ['beginner', 'intermediate', 'advanced']
+
+// The two cue cards are identical apart from these values; the template renders
+// one body for both. `key` doubles as the profile list name and the draft key.
+const CUE_SECTIONS = [
+  {
+    key: 'confirmed_gaps',
+    label: 'Gaps',
+    sectionClass: 'divider divider--gaps',
+    tabClass: 'divider-tab divider-tab--gaps',
+    testid: 'sprof-gaps',
+    keyPrefix: 'g',
+    empty: 'None.',
+    markClass: 'cue-mark cue-mark--gap',
+    markPath: '',
+    patchKey: 'add_gap',
+    inputTestid: 'add-gap',
+    placeholder: 'Add a gap',
+    inputLabel: 'Add a gap',
+    submitTestid: 'add-gap-submit',
+    submitLabel: 'Add gap',
+  },
+  {
+    key: 'mastered_concepts',
+    label: 'Mastered',
+    sectionClass: 'divider divider--mastered',
+    tabClass: 'divider-tab divider-tab--mastered',
+    testid: 'sprof-mastered',
+    keyPrefix: 'm',
+    empty: 'Nothing recorded yet.',
+    markClass: 'cue-mark cue-mark--tick',
+    markPath: 'M2 6.5 L4.8 9.2 L10 3.2',
+    patchKey: 'add_mastered',
+    inputTestid: 'add-mastered',
+    placeholder: 'Add a concept',
+    inputLabel: 'Add a mastered concept',
+    submitTestid: 'add-mastered-submit',
+    submitLabel: 'Add concept',
+  },
+]
 
 const router = useRouter()
 const store = useSessionStore()
 const data = ref(null)
 const loading = ref(false)
 const error = ref('')
-const etag = ref('')
 const conflict = ref(false)
 // F-05: write failures get their own ref. Reusing the load-path `error`
 // would swap the whole loaded profile for an error paragraph (the template
 // chain is loading -> error -> data) with no control left to retry.
 const writeError = ref('')
-const newMastered = ref('')
-const newGap = ref('')
+const drafts = reactive({ confirmed_gaps: '', mastered_concepts: '' })
 const gapPickerOpen = ref(false)
 
 const topicLabel = computed(() => {
@@ -275,7 +338,6 @@ async function load() {
   error.value = ''
   try {
     data.value = await getSessionProfile(props.id)
-    etag.value = data.value.etag
   } catch (e) {
     error.value = friendlyError(e)
   } finally {
@@ -288,8 +350,9 @@ async function _applyWrite(fn) {
   writeError.value = ''
   try {
     const res = await fn()
-    data.value = { ...data.value, profile: res.profile }
-    etag.value = res.etag
+    // One source of truth for the etag: keeping a separate ref alongside
+    // data.etag let the spread re-seed the stale value on the next write.
+    data.value = { ...data.value, profile: res.profile, etag: res.etag }
   } catch (e) {
     if (e?.status === 412) {
       conflict.value = true
@@ -300,36 +363,29 @@ async function _applyWrite(fn) {
   }
 }
 
-function addMastered() {
-  const v = newMastered.value.trim()
+function addItem(sec) {
+  const v = drafts[sec.key].trim()
   if (!v) return
-  newMastered.value = ''
-  return _applyWrite(() => patchProfile(props.id, { add_mastered: v }, etag.value))
-}
-
-function addGap() {
-  const v = newGap.value.trim()
-  if (!v) return
-  newGap.value = ''
-  return _applyWrite(() => patchProfile(props.id, { add_gap: v }, etag.value))
+  drafts[sec.key] = ''
+  return _applyWrite(() => patchProfile(props.id, { [sec.patchKey]: v }, data.value.etag))
 }
 
 function setLevel(level) {
-  return _applyWrite(() => patchProfile(props.id, { knowledge_level: level }, etag.value))
+  return _applyWrite(() => patchProfile(props.id, { knowledge_level: level }, data.value.etag))
 }
 
 function removeItem(listName, item) {
-  return _applyWrite(() => deleteProfileItem(props.id, listName, item, etag.value))
+  return _applyWrite(() => deleteProfileItem(props.id, listName, item, data.value.etag))
 }
 
 function setSubtopicLevel(name, level) {
   return _applyWrite(() =>
-    patchProfile(props.id, { subtopic: name, subtopic_level: level }, etag.value),
+    patchProfile(props.id, { subtopic: name, subtopic_level: level }, data.value.etag),
   )
 }
 
 function removeSubtopic(name) {
-  return _applyWrite(() => deleteProfileItem(props.id, 'subtopic_levels', name, etag.value))
+  return _applyWrite(() => deleteProfileItem(props.id, 'subtopic_levels', name, data.value.etag))
 }
 
 function startReview() {
@@ -345,6 +401,10 @@ onMounted(load)
 </script>
 
 <style scoped>
+/* The session profile is a stack of full-width cards: what the tutor knows
+   about this session, editable in place. The four coloured dividers (Level,
+   Focus, Gaps, Mastered) carry the profile's law-bound colours; the rest
+   are plain white cards on the desk. */
 .sprof {
   max-width: 72rem;
   margin: 0 auto;
@@ -353,527 +413,463 @@ onMounted(load)
   gap: 1.5rem;
 }
 
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--rule-strong);
+}
+
 .head-text {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-}
-
-.folio {
-  font-family: var(--font-sans);
-  font-size: var(--fs-label);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  font-weight: 600;
-  color: var(--color-accent-text);
+  min-width: 0;
 }
 
 .title {
-  font-family: var(--font-display);
-  font-size: clamp(1.875rem, 4vw, 2.25rem);
-  font-weight: 700;
-  letter-spacing: var(--tracking-display);
-  line-height: 1.1;
-  color: var(--color-heading);
   margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-h1);
+  font-weight: 600;
+  letter-spacing: var(--tracking-display);
+  line-height: var(--lh-display);
+  color: var(--ink);
+  overflow-wrap: anywhere;
 }
 
 .lede {
   margin: 0;
-  color: var(--color-text-muted);
-  font-size: 1rem;
-}
-
-.level-pill {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.15rem 0.625rem;
-  border-radius: var(--radius-pill);
   font-family: var(--font-sans);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  text-transform: capitalize;
-  border: 1px solid transparent;
+  font-size: var(--fs-caption);
+  line-height: var(--lh-body);
+  color: var(--pencil);
 }
 
-.level-pill[data-level='beginner'] {
-  background: rgba(91, 141, 239, 0.16);
-  color: var(--color-info-text);
-  border-color: rgba(91, 141, 239, 0.3);
-}
-:root[data-theme='dark'] .level-pill[data-level='beginner'] {
-  color: #7aa3f5;
+.level-word {
+  color: var(--ink);
 }
 
-.level-pill[data-level='intermediate'] {
-  background: var(--accent-coral-100);
-  color: var(--accent-coral-700);
-  border-color: var(--accent-coral-200);
-}
-:root[data-theme='dark'] .level-pill[data-level='intermediate'] {
-  background: rgba(255, 119, 102, 0.2);
-  color: var(--accent-coral-300);
-  border-color: rgba(255, 119, 102, 0.35);
-}
-
-.level-pill[data-level='advanced'] {
-  background: rgba(34, 197, 94, 0.16);
-  color: var(--color-success-text);
-  border-color: rgba(34, 197, 94, 0.3);
-}
-:root:not([data-theme='dark']) .level-pill[data-level='advanced'] {
-  color: var(--color-success-text);
-}
-
-.level-pill[data-level='unknown'] {
-  background: var(--color-surface-soft);
-  color: var(--color-text-muted);
-  border-color: var(--color-border);
-}
-
-.muted {
-  color: var(--color-text-muted);
-}
-.error {
-  color: var(--color-error-text);
-}
-
-/* Focus */
-.focus {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.875rem;
-  padding: 0.875rem 1.125rem;
-  background: linear-gradient(135deg, var(--accent-coral-100) 0%, var(--accent-coral-50) 100%);
-  border: 1px solid var(--accent-coral-200);
-  border-radius: var(--radius-lg);
-  align-self: flex-start;
-  box-shadow: var(--shadow-paper);
-}
-
-:root[data-theme='dark'] .focus {
-  background: linear-gradient(135deg, rgba(255, 107, 92, 0.18) 0%, rgba(255, 107, 92, 0.08) 100%);
-  border-color: rgba(255, 107, 92, 0.35);
-}
-
-.focus-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.25rem;
-  height: 2.25rem;
-  border-radius: var(--radius-pill);
-  background: var(--color-accent-strong);
-  color: #ffffff;
-  font-size: 1rem;
-  flex-shrink: 0;
-}
-
-.focus-body {
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
-}
-
-.focus-label {
-  font-family: var(--font-sans);
-  font-size: var(--fs-label);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  font-weight: 600;
-  color: var(--accent-coral-700);
-}
-:root[data-theme='dark'] .focus-label {
-  color: var(--accent-coral-300);
-}
-
-.focus-gap {
-  font-family: var(--font-display);
-  font-size: 1.0625rem;
-  font-weight: 600;
-  color: var(--color-heading);
-  letter-spacing: var(--tracking-tight);
-}
-
-/* Section title */
-.section-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-family: var(--font-display);
-  font-size: 1.25rem;
-  font-weight: 700;
-  letter-spacing: var(--tracking-tight);
-  color: var(--color-heading);
-  margin: 0 0 0.875rem 0;
-}
-
-.col-icon {
-  font-size: 1.05rem;
-}
-.col-icon-green {
-  color: var(--color-success-text);
-}
-.col-icon-yellow {
-  color: var(--color-warning-text);
-}
-
-.two-col {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
-  gap: 2rem;
-}
-
-/* Chips */
-.chip-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.chip {
-  padding: 0.4rem 0.875rem;
-  border-radius: var(--radius-pill);
-  font-family: var(--font-sans);
-  font-size: 0.875rem;
-  font-weight: 500;
-  border: 1px solid transparent;
-  transition: transform var(--motion-fast) var(--motion-bounce);
-}
-
-.chip:hover {
-  transform: translateY(-1px);
-}
-
-.chip-mastered {
-  background: rgba(34, 197, 94, 0.14);
-  color: var(--color-success-text);
-  border-color: rgba(34, 197, 94, 0.3);
-}
-:root:not([data-theme='dark']) .chip-mastered {
-  color: var(--color-success-text);
-}
-
-.chip-gap {
-  background: rgba(255, 176, 32, 0.16);
-  color: var(--color-warning-text);
-  border-color: rgba(255, 176, 32, 0.35);
-}
-:root[data-theme='dark'] .chip-gap {
-  color: var(--signal-warning);
-}
-
-/* Summary card */
-.summary-card {
-  padding: 1.125rem 1.25rem;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-paper);
-}
-
-.summary-text {
-  margin: 0;
-  color: var(--color-text);
-  font-size: 0.9375rem;
-  line-height: 1.6;
-  white-space: pre-wrap;
-}
-
-/* Events */
-.event-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.625rem;
-}
-
-.event-row {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  padding: 0.875rem 1.125rem;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-paper);
-  transition: transform var(--motion-fast) var(--motion-bounce);
-}
-
-.event-row:hover {
-  transform: translateY(-1px);
-}
-
-.evt-ok {
-  border-left: 3px solid var(--signal-success);
-}
-.evt-bad {
-  border-left: 3px solid var(--signal-warning);
-}
-
-.event-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.event-gap {
-  font-family: var(--font-sans);
-  font-size: var(--fs-label);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  font-weight: 600;
-  color: var(--color-text-muted);
-}
-
-.event-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.5rem;
-  height: 1.5rem;
-  border-radius: var(--radius-pill);
-  font-size: 0.7rem;
-  color: #ffffff;
-}
-
-.evt-ok .event-mark {
-  background: var(--signal-success);
-}
-.evt-bad .event-mark {
-  background: var(--signal-warning);
-  color: #2a1f00;
-}
-
-.event-q {
-  margin: 0;
-  font-family: var(--font-display);
-  font-weight: 500;
-  color: var(--color-heading);
-  font-size: 1rem;
-  letter-spacing: var(--tracking-tight);
-}
-
-.event-when {
-  font-family: var(--font-sans);
-  font-size: 0.75rem;
-  color: var(--color-text-faint);
-}
-
-.chip-badge {
-  margin-left: 0.375rem;
-  font-size: 0.6875rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  opacity: 0.75;
-}
-
-/* Chip remove button */
-.chip-x {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-left: 0.375rem;
-  padding: 0;
-  width: 1.125rem;
-  height: 1.125rem;
-  border: none;
-  background: transparent;
-  color: inherit;
-  font-size: 0.7rem;
-  cursor: pointer;
-  border-radius: var(--radius-pill);
-  opacity: 0.7;
-  transition: opacity var(--motion-fast) var(--motion-bounce);
-}
-.chip-x:hover {
-  opacity: 1;
-}
-
-/* Add-item row */
-.add-row {
-  display: flex;
-  gap: 0.5rem;
-  margin-top: 0.75rem;
-}
-
-.add-input {
-  flex: 1;
-  min-width: 0;
-  padding: 0.4rem 0.75rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  font-family: var(--font-sans);
-  font-size: 0.875rem;
-  background: var(--color-surface);
-  color: var(--color-text);
-}
-
-.add-btn {
-  padding: 0.4rem 0.875rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  font-family: var(--font-sans);
-  font-size: 0.875rem;
-  font-weight: 600;
-  background: var(--color-surface);
-  color: var(--color-accent-strong);
-  cursor: pointer;
-}
-.add-btn:hover {
-  background: var(--color-surface-soft);
-}
-
-/* Header actions */
 .header-actions {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 0.625rem;
+  gap: 0.25rem;
 }
 
-.review-gaps-btn {
+.sec {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 1.25rem 1.5rem;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-card);
+  box-shadow: 0 1px 0 var(--card-drop);
+}
+
+.sec-title {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  line-height: var(--lh-body);
+  color: var(--ink);
+}
+
+/* The four full-width dividers: a coloured tab (law: red only Focus, amber
+   only Gaps, green only Mastered; Level stays neutral) joined to a white
+   card body, same grammar as the Settings rail + sheet. */
+.divider {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.divider-tab {
+  align-self: flex-start;
+  margin: 0;
+  padding: 0.375rem 1rem;
+  border-radius: var(--radius-card) var(--radius-card) 0 0;
+  color: var(--tab-ink);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  line-height: var(--lh-body);
+}
+
+.divider-tab--focus {
+  background: var(--tab-focus);
+}
+
+.divider-tab--gaps {
+  background: var(--tab-gaps);
+}
+
+.divider-tab--mastered {
+  background: var(--tab-mastered);
+}
+
+.divider-tab--level {
+  background: var(--tab-level);
+}
+
+.divider-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 1.25rem 1.5rem;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: 0 var(--radius-card) var(--radius-card) var(--radius-card);
+  box-shadow: 0 1px 0 var(--card-drop);
+}
+
+.cue-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.chip,
+.cue-entry {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.cue-word {
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--ink-learner);
+  overflow-wrap: anywhere;
+}
+
+/* The focus cue stays in ink and is marked in red; the word is never set in
+   red. */
+.cue-entry--focus .cue-word {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--ink-marker);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+
+.cue-mark {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  margin-top: 0.35rem;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+
+.cue-mark--focus {
+  stroke: var(--ink-marker);
+  stroke-width: 2;
+}
+
+.cue-mark--gap {
+  stroke: var(--pencil);
+}
+
+.cue-mark--tick {
+  /* Mastered tick is green everywhere (tab law); the word stays blue. */
+  stroke: var(--tab-mastered);
+}
+
+.cue-none {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--pencil);
+}
+
+.chip-badge {
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  line-height: var(--lh-body);
+  color: var(--pencil);
+}
+
+/* Controls: blue text, or a drawn stroke in an icon button. Nothing stamped. */
+.text-btn {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-learner);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  line-height: var(--lh-body);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.text-btn:hover:not(:disabled) {
+  color: var(--color-accent-hover);
+}
+
+.text-btn:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+}
+
+.icon-btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.4rem 0.875rem;
-  border: 1px solid var(--accent-coral-200);
-  border-radius: var(--radius-pill);
-  font-family: var(--font-sans);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  background: var(--accent-coral-100);
-  color: var(--accent-coral-700);
+  justify-content: center;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  width: 1.5rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-learner);
   cursor: pointer;
-  transition:
-    transform var(--motion-fast) var(--motion-bounce),
-    background var(--motion-fast) ease;
 }
 
-.review-gaps-btn:hover {
-  transform: translateY(-1px);
-  background: var(--accent-coral-200);
+.icon-btn:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 
-:root[data-theme='dark'] .review-gaps-btn {
-  background: rgba(255, 119, 102, 0.18);
-  color: var(--accent-coral-300);
-  border-color: rgba(255, 119, 102, 0.35);
-}
-:root[data-theme='dark'] .review-gaps-btn:hover {
-  background: rgba(255, 119, 102, 0.28);
+.icon-mark {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
 }
 
-/* Level control */
+/* The level control: one word per step, the step drawn beside it. The level in
+   force is graphite; the rest are written in blue. */
 .level-edit {
   display: inline-flex;
-  gap: 0.375rem;
+  gap: 1rem;
+  flex-wrap: wrap;
 }
 
 .level-opt {
-  padding: 0.3rem 0.75rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-learner);
   font-family: var(--font-sans);
-  font-size: 0.8125rem;
-  font-weight: 600;
-  text-transform: capitalize;
-  background: var(--color-surface);
-  color: var(--color-text-muted);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-body);
   cursor: pointer;
 }
 
+.level-opt:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .level-opt.active {
-  background: var(--color-accent-strong);
-  color: #ffffff;
-  border-color: var(--color-accent-strong);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.level-opt:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+}
+
+.level-mark {
+  flex: 0 0 auto;
+  fill: none;
+  stroke: var(--pencil);
+  stroke-linecap: round;
+}
+
+.level-opt.active .level-mark {
+  stroke: var(--ink);
 }
 
 .subtopic-list {
   list-style: none;
   padding: 0;
   margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  width: 100%;
 }
 
 .subtopic-row {
   display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.5rem 0.875rem;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  align-items: baseline;
+  gap: 1rem;
+  box-shadow: inset 0 -1px 0 var(--rule);
 }
 
 .st-name {
   flex: 1;
   min-width: 0;
   font-family: var(--font-sans);
-  font-size: 0.9375rem;
-  font-weight: 500;
-  color: var(--color-text);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--ink);
   overflow-wrap: anywhere;
 }
 
-/* Conflict notice */
-.conflict {
-  margin: 0;
-  padding: 0.625rem 1rem;
-  border: 1px solid var(--color-error-text);
-  border-radius: var(--radius-lg);
-  color: var(--color-error-text);
-  font-size: 0.875rem;
+/* A field on a rule, with the action written in blue beside it. */
+.add-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  width: 100%;
+  max-width: 24rem;
 }
 
+.add-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--rule-strong);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-learner);
+  caret-color: var(--ink-learner);
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+}
+
+.add-input::placeholder {
+  color: var(--pencil);
+}
+
+.add-input:focus {
+  outline: none;
+  border-bottom-color: var(--ink-learner);
+}
+
+.summary-text {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--ink);
+  white-space: pre-wrap;
+  max-width: 72ch;
+}
+
+/* Check-questions as marked lines: the mark drawn in red pen, the gap in blue,
+   the question in graphite and the date in pencil. No side bar, no fill. */
+.event-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  width: 100%;
+}
+
+.event-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding-bottom: 0.75rem;
+  box-shadow: inset 0 -1px 0 var(--rule);
+}
+
+.event-row + .event-row {
+  padding-top: 0.75rem;
+}
+
+.event-mark {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  height: 1.75rem;
+}
+
+.event-mark-draw {
+  fill: none;
+  stroke: var(--ink-marker);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.event-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.event-gap {
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-body);
+  color: var(--ink-learner);
+  overflow-wrap: anywhere;
+}
+
+.event-q {
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.event-when {
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  line-height: var(--lh-body);
+  color: var(--pencil);
+}
+
+.error {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--ink-marker-text);
+}
+
+/* A status caption: a small card with a head rule; the alert tab is red pen. */
+.conflict {
+  align-self: flex-start;
+  margin: 1.75rem 0 0;
+  padding: 0.25rem 0.75rem;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-top: 3px solid var(--tab-focus);
+  border-radius: 0 0 var(--radius-card) var(--radius-card);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-body);
+  color: var(--ink);
+}
+
+/* Skeleton: pencil-weight rules on the pitch, no shimmer. */
 .skel {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  padding-top: 1.75rem;
 }
 
 .skel-block {
-  height: 1.25rem;
-  border-radius: var(--radius-md);
-  background: var(--color-surface-soft);
-  animation: skel-pulse 1.4s ease-in-out infinite;
-}
-
-.skel-row-tall {
-  height: 5.5rem;
+  display: block;
+  height: 1.75rem;
+  border-bottom: 1px solid var(--rule-strong);
 }
 
 .skel-short {
   width: 55%;
-}
-
-@keyframes skel-pulse {
-  0%,
-  100% {
-    opacity: 0.65;
-  }
-  50% {
-    opacity: 0.35;
-  }
-}
-
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
 }
 </style>

@@ -57,4 +57,21 @@ describe('CapBanners', () => {
     expect(wrapper.find('[data-testid="session-cap-banner"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="session-cost-cap-banner"]').exists()).toBe(true)
   })
+
+  it('shows service-budget copy, no dollar figures, when the cost cap scope is global', () => {
+    const store = useSessionStore()
+    store.costCapInfo = {
+      used_usd: null,
+      soft_cap_usd: null,
+      hard_cap_usd: null,
+      resets_at: '2026-05-25T00:00:00Z',
+      scope: 'global',
+    }
+    const wrapper = mount(CapBanners)
+    const banner = wrapper.find('[data-testid="session-cost-cap-banner"]')
+    expect(banner.exists()).toBe(true)
+    expect(banner.text()).toContain('Service daily budget reached')
+    expect(banner.text()).not.toContain('$')
+    expect(banner.text()).not.toContain('Daily cost limit reached')
+  })
 })

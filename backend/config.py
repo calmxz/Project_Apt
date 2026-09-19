@@ -72,6 +72,18 @@ class Settings(BaseSettings):
     summary_timeout_s: float = 20.0
     embedding_timeout_s: float = 15.0
 
+    # B-07: per-user burst limit on paid endpoints (chat turn, upload, end,
+    # check/complete). Rolling 60 s window, in-process (single Render
+    # instance, single uvicorn worker). 0 disables. Independent of daily_cap.
+    burst_limit_per_minute: int = 0
+
+    # Bounded retry for transient provider failures on idempotent LiteLLM
+    # embedding calls. Summaries (session end, rolling) and streaming chat are
+    # not retried (design doc: summary falls back to the mechanical [auto]
+    # summary). attempts = extra tries after the first; 0 disables.
+    llm_retry_attempts: int = 2
+    llm_retry_base_delay_s: float = 0.5
+
     # F-35: hard cap per profile concept list (confirmed_gaps,
     # mastered_concepts); oldest entries evicted at write time.
     max_profile_list: int = 40

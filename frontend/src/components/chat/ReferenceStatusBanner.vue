@@ -1,10 +1,5 @@
 <template>
-  <div
-    v-if="status"
-    class="ref-status"
-    :class="`is-${status}`"
-    data-testid="reference-status"
-  >
+  <div v-if="status" class="ref-status" :class="`is-${status}`" data-testid="reference-status">
     <button
       type="button"
       class="ref-header"
@@ -12,16 +7,83 @@
       :aria-expanded="expanded"
       @click="expanded = !expanded"
     >
-      <i :class="iconClass" aria-hidden="true" />
+      <svg
+        v-if="status === 'pending'"
+        class="ref-icon ref-spinner spin"
+        viewBox="0 0 20 20"
+        width="16"
+        height="16"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path d="M17 10 A7 7 0 1 1 10 3" />
+      </svg>
+      <svg
+        v-else-if="status === 'failed'"
+        class="ref-icon"
+        viewBox="0 0 20 20"
+        width="16"
+        height="16"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path d="M10 2.5 L18 17 H2 Z" />
+        <path d="M10 8 L10 12" />
+        <path d="M10 14.5 L10 14.6" />
+      </svg>
+      <svg
+        v-else-if="status === 'ready'"
+        class="ref-icon"
+        viewBox="0 0 20 20"
+        width="16"
+        height="16"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <circle cx="10" cy="10" r="7.5" />
+        <path d="M6.8 10.2 L9 12.5 L13.2 7.5" />
+      </svg>
       <span class="ref-text" role="status" aria-live="polite">{{ message }}</span>
-      <i class="pi" :class="expanded ? 'pi-chevron-up' : 'pi-chevron-down'" aria-hidden="true" />
+      <svg
+        class="ref-icon ref-chevron"
+        viewBox="0 0 20 20"
+        width="16"
+        height="16"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path v-if="expanded" d="M5 12.5 L10 7.5 L15 12.5" />
+        <path v-else d="M5 7.5 L10 12.5 L15 7.5" />
+      </svg>
     </button>
 
     <ul v-if="expanded" class="ref-file-list" data-testid="ref-file-list">
       <li v-for="doc in documents" :key="doc.id" class="ref-file-row">
         <span class="ref-file-name">{{ doc.filename }}</span>
         <span class="ref-file-status" :class="`is-${doc.status}`">{{ doc.status }}</span>
-        <span v-if="doc.status === 'failed' && doc.error" class="ref-file-error">{{ doc.error }}</span>
+        <span v-if="doc.status === 'failed' && doc.error" class="ref-file-error">{{
+          doc.error
+        }}</span>
         <button
           type="button"
           class="ref-file-delete"
@@ -29,7 +91,23 @@
           :aria-label="`Delete ${doc.filename}`"
           @click="confirmDelete(doc)"
         >
-          <i class="pi pi-trash" aria-hidden="true" />
+          <svg
+            class="ref-icon"
+            viewBox="0 0 20 20"
+            width="16"
+            height="16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <path
+              d="M4 5.5 H16 M8 5.5 V4 a1 1 0 0 1 1 -1 h2 a1 1 0 0 1 1 1 v1.5 M6 5.5 L6.7 16 a1 1 0 0 0 1 0.9 h4.6 a1 1 0 0 0 1 -0.9 L14 5.5"
+            />
+          </svg>
         </button>
       </li>
     </ul>
@@ -74,13 +152,6 @@ const message = computed(() => {
   return ''
 })
 
-const iconClass = computed(() => {
-  if (status.value === 'pending') return 'pi pi-spin pi-spinner'
-  if (status.value === 'failed') return 'pi pi-exclamation-triangle'
-  if (status.value === 'ready') return 'pi pi-check-circle'
-  return ''
-})
-
 async function poll(gen) {
   if (stopped || gen !== generation) return
   try {
@@ -109,7 +180,7 @@ function confirmDelete(doc) {
   confirm.require({
     message: `Remove "${doc.filename}" from this chat? This deletes the file and its indexed content.`,
     header: 'Delete file',
-    icon: 'pi pi-exclamation-triangle',
+    // No glyph icon font in this world -- the dialog carries no mark.
     rejectLabel: 'Cancel',
     acceptLabel: 'Delete',
     // Neutral cancel (drops the default primary/coral fill); darker destructive
@@ -140,27 +211,31 @@ defineExpose({ refresh })
 </script>
 
 <style scoped>
+/* Status caption card: card stock with a 3px tab-colour rule at the head,
+   never a side border. */
 .ref-status {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 0.5rem;
-  padding: 0.6rem 0.9rem;
-  border-radius: var(--radius-lg);
-  font-size: 0.875rem;
-  border: 1px solid var(--color-border);
-  background: var(--color-surface-soft);
-  color: var(--color-text-muted);
+  padding: 0.4rem 0.75rem;
+  background: var(--card);
+  /* Head rule reads as a tab edge: top corners square, bottom corners card radius. */
+  border-radius: 0 0 var(--radius-card) var(--radius-card);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-body);
+  border: 1px solid var(--card-edge);
+  border-top: 3px solid var(--color-accent);
+  color: var(--ink);
 }
 
 .ref-status.is-ready {
-  color: var(--color-accent-text);
-  border-color: var(--color-accent-soft);
-  background: var(--color-accent-soft);
+  border-top-color: var(--tab-mastered);
 }
 
 .ref-status.is-failed {
-  color: var(--color-error-text);
+  border-top-color: var(--tab-focus);
+  color: var(--ink-marker-text);
 }
 
 .ref-header {
@@ -176,23 +251,34 @@ defineExpose({ refresh })
   font: inherit;
   text-align: left;
 }
-.ref-header .pi-chevron-up,
-.ref-header .pi-chevron-down {
+/* Drawn strokes, not a glyph font: one weight, round ends, the caption's ink. */
+.ref-icon {
+  flex-shrink: 0;
+}
+.ref-chevron {
   margin-left: auto;
+}
+/* A still arc says nothing, and .ref-text already spells the state out beside
+   it, so the spinner simply leaves rather than freezing. */
+@media (prefers-reduced-motion: reduce) {
+  .ref-spinner {
+    display: none;
+  }
 }
 .ref-file-list {
   list-style: none;
-  margin: 0.6rem 0 0;
+  margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
 }
 .ref-file-row {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.8125rem;
+  font-size: var(--fs-label);
+  line-height: 1.75rem;
+  border-top: 1px solid var(--card-edge);
 }
 .ref-file-name {
   flex: 1;
@@ -202,25 +288,24 @@ defineExpose({ refresh })
   white-space: nowrap;
 }
 .ref-file-status {
-  color: var(--color-text-muted);
-  text-transform: capitalize;
+  color: var(--pencil);
 }
 .ref-file-status.is-failed {
-  color: var(--color-error-text);
+  color: var(--ink-marker-text);
 }
 .ref-file-error {
-  color: var(--color-error-text);
-  font-size: 0.75rem;
+  color: var(--ink-marker-text);
 }
 .ref-file-delete {
   background: none;
   border: none;
   cursor: pointer;
-  color: var(--color-text-muted);
+  color: var(--ink-learner);
   padding: 0.2rem;
   border-radius: var(--radius-sm);
 }
-.ref-file-delete:hover {
-  color: var(--color-error-text);
+.ref-file-delete:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 </style>

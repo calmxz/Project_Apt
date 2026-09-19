@@ -1,59 +1,59 @@
 <template>
   <section class="home">
-    <h1 class="title">What do you want to learn?</h1>
+    <div class="home-card">
+      <h1 class="home-head">What do you want to learn?</h1>
 
-    <p v-if="store.loading && !store.sessions.length" class="muted">Loading...</p>
-    <p v-else-if="store.error && !store.sessions.length" class="error" data-testid="home-error">
-      {{ friendlyError(store.error) }}
-    </p>
+      <p v-if="store.error && !store.sessions.length" class="error" data-testid="home-error">
+        {{ friendlyError(store.error) }}
+      </p>
 
-    <template v-else>
-      <div class="quick" data-testid="home-mode-quick">
-        <label for="home-topic" class="sr-only">Topic</label>
-        <input
-          id="home-topic"
-          v-model="quickTopic"
-          class="quick-input"
-          data-testid="home-quick-topic"
-          placeholder="e.g. Recursion, the Krebs cycle, French passe compose..."
-          autocomplete="off"
-          @keydown.enter="startQuick"
-        />
+      <template v-else>
+        <div class="quick" data-testid="home-mode-quick">
+          <label for="home-topic" class="sr-only">Topic</label>
+          <input
+            id="home-topic"
+            v-model="quickTopic"
+            class="quick-input"
+            data-testid="home-quick-topic"
+            placeholder="a topic, a chapter, a thing that will not stick..."
+            autocomplete="off"
+            @keydown.enter="startQuick"
+          />
 
-        <div class="quick-picks" aria-label="Quick topic ideas">
-          <button
-            v-for="pick in quickPicks"
-            :key="pick"
-            type="button"
-            class="quick-pick"
-            @click="quickTopic = pick"
-          >
-            {{ pick }}
-          </button>
+          <p class="quick-go">
+            <button
+              type="button"
+              class="cta-primary hit-44"
+              data-testid="home-quick-go"
+              :disabled="busy"
+              @click="startQuick"
+            >
+              <span>{{ startLabel }}</span>
+              <svg
+                class="cta-mark"
+                viewBox="0 0 20 20"
+                width="18"
+                height="18"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <path d="M4 10 L15 10 M10.5 5.5 L15 10 L10.5 14.5" />
+              </svg>
+            </button>
+          </p>
         </div>
-
-        <button
-          type="button"
-          class="cta-primary"
-          data-testid="home-quick-go"
-          :disabled="busy"
-          @click="startQuick"
-        >
-          <span>{{ startLabel }}</span
-          ><i class="pi pi-arrow-right" aria-hidden="true" />
-        </button>
-      </div>
-      <StartTopicIntercept
-        v-if="stage === 'intercept'"
-        :match="interceptMatch"
-        :kind="interceptKind"
-        :busy="busy"
-        @open-existing="openExisting"
-        @continue-topic="continuePrior"
-        @start-fresh="startFresh"
-        @cancel="cancel"
-      />
-    </template>
+        <StartTopicIntercept
+          v-if="stage === 'intercept'"
+          :match="interceptMatch"
+          :kind="interceptKind"
+          :busy="busy"
+          @open-existing="openExisting"
+          @continue-topic="continuePrior"
+          @start-fresh="startFresh"
+          @cancel="cancel"
+        />
+      </template>
+    </div>
   </section>
 </template>
 
@@ -69,15 +69,6 @@ import { friendlyError } from '../lib/errors.js'
 const router = useRouter()
 const store = useSessionStore()
 const quickTopic = ref('')
-
-const quickPicks = [
-  'Recursion',
-  'CSS grid',
-  'Photosynthesis',
-  'Big-O notation',
-  'French verbs',
-  'World War II',
-]
 
 const {
   stage,
@@ -109,152 +100,138 @@ function startQuick() {
 </script>
 
 <style scoped>
+/* One centred white card on the desk: the question, the topic field and
+   Start live on the sheet, the desk ground shows around it. */
 .home {
-  max-width: 42rem;
-  /* Fill the viewport minus .page-inner's top/bottom padding (App.vue) so
-     the prompt block sits vertically centered rather than pinned to the top. */
-  min-height: calc(100dvh - clamp(2rem, 6vw, 4.5rem) - 4rem);
+  max-width: 44rem;
   margin: 0 auto;
+  min-height: calc(100dvh - clamp(2rem, 6vw, 4.5rem) - 4rem);
   display: flex;
   flex-direction: column;
-  align-items: center;
   justify-content: center;
-  gap: 2rem;
 }
 
-.title {
-  font-family: var(--font-display);
-  font-size: clamp(2.25rem, 4vw, 2.75rem);
-  font-weight: 700;
-  letter-spacing: var(--tracking-display);
-  line-height: 1.05;
-  color: var(--color-heading);
-  text-align: center;
+.home-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+  padding: 2.5rem 2.5rem 2.75rem;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-card);
+  box-shadow: 0 1px 0 var(--card-drop);
+}
+
+.home-head {
   margin: 0;
-}
-
-.muted {
-  color: var(--color-text-muted);
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: var(--tracking-display);
+  line-height: var(--lh-display);
+  color: var(--ink);
+  text-align: center;
 }
 
 .error {
-  color: var(--color-error-text);
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--ink-marker-text);
+  text-align: center;
 }
 
 .quick {
-  width: 100%;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 1rem;
 }
 
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
+/* Field on a rule: no box, no radius, one bottom rule that inks on focus.
+   overflow/text-overflow/white-space clip a long placeholder to an ellipsis
+   on narrow viewports instead of letting it wrap or overflow mid-word. */
 .quick-input {
   display: block;
   width: 100%;
-  padding: 1.125rem 1.5rem;
-  border-radius: var(--radius-pill);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  color: var(--color-heading);
-  font-family: var(--font-display);
-  font-size: 1.25rem;
-  font-weight: 500;
-  letter-spacing: var(--tracking-tight);
-  box-shadow: var(--shadow-paper);
-  transition: border-color var(--motion-fast) ease;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--rule-strong);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-learner);
+  caret-color: var(--ink-learner);
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .quick-input::placeholder {
-  color: var(--color-text-faint);
-  font-weight: 400;
-}
-
-.quick-input:hover {
-  border-color: var(--color-border-strong);
+  color: var(--pencil);
 }
 
 .quick-input:focus {
   outline: none;
-  border-color: var(--color-accent);
+  border-bottom-color: var(--ink-learner);
 }
 
-.quick-picks {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.5rem;
+.quick-go {
+  margin: 0;
+  padding-top: 1.75rem;
+  line-height: var(--lh-body);
+  text-align: center;
 }
 
-.quick-pick {
-  padding: 0.375rem 0.875rem;
-  border-radius: var(--radius-pill);
-  background: transparent;
-  border: 1px solid var(--color-border);
-  color: var(--color-text-muted);
-  font-family: var(--font-sans);
-  font-size: 0.8125rem;
-  cursor: pointer;
-  transition:
-    border-color var(--motion-fast) ease,
-    color var(--motion-fast) ease;
-}
-
-.quick-pick:hover {
-  border-color: var(--color-border-strong);
-  color: var(--color-heading);
-}
-
-.quick-pick:focus-visible {
-  outline: 2px solid var(--color-accent-ring);
-  outline-offset: 2px;
-}
-
+/* Written, not stamped: the default action is a line of blue text with a
+   drawn arrow after the word. */
 .cta-primary {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1.625rem;
-  border-radius: var(--radius-pill);
-  background: var(--color-accent-strong);
-  color: #ffffff;
+  gap: 0.375rem;
+  padding: 0;
   border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-learner);
   font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 0.9375rem;
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  line-height: var(--lh-body);
   cursor: pointer;
-  transition:
-    filter var(--motion-fast) ease,
-    opacity var(--motion-fast) ease;
+}
+
+.cta-primary > span {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .cta-primary:hover:not(:disabled) {
-  filter: brightness(1.08);
-}
-
-.cta-primary:active:not(:disabled) {
-  filter: brightness(0.95);
+  color: var(--color-accent-hover);
 }
 
 .cta-primary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+  color: var(--pencil);
+  cursor: default;
+}
+
+.cta-primary:disabled > span {
+  text-decoration: none;
+}
+
+.cta-mark {
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .cta-primary:focus-visible {
   outline: 2px solid var(--color-accent-ring);
-  outline-offset: 3px;
+  outline-offset: 2px;
 }
 </style>

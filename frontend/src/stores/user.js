@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import { useSessionStore } from './session.js'
+import { apiGet, apiPatch } from '../services/apiClient.js'
 
 // Phase 7+: identity comes from `useAuthStore` (Supabase JWT). This store
 // only persists local UX preferences -- name + feedback style + onboarding
@@ -77,7 +78,6 @@ export const useUserStore = defineStore('user', () => {
   async function hydrateFromServer() {
     if (!activeUserId.value) return
     try {
-      const { apiGet } = await import('../services/apiClient.js')
       const me = await apiGet('/me', undefined, { silent: true })
       if (me) {
         if (me.display_name != null) name.value = me.display_name
@@ -99,7 +99,6 @@ export const useUserStore = defineStore('user', () => {
 
   async function completeOnboarding({ name: displayName, feedback }) {
     const finalName = displayName?.trim() || 'Learner'
-    const { apiPatch } = await import('../services/apiClient.js')
     await apiPatch('/me', {
       display_name: finalName,
       feedback_pref: feedback,
@@ -123,7 +122,6 @@ export const useUserStore = defineStore('user', () => {
     if (displayName != null) body.display_name = displayName.trim() || 'Learner'
     if (feedback != null) body.feedback_pref = feedback
     if (Object.keys(body).length) {
-      const { apiPatch } = await import('../services/apiClient.js')
       await apiPatch('/me', body)
     }
     if (displayName != null) name.value = displayName.trim() || 'Learner'

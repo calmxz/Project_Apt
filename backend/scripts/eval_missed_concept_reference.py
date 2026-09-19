@@ -17,7 +17,7 @@ Scenario:
 PASS for a replicate when the tutor's reply case-insensitively contains
 any of "2/6", "3/4", "1/2 + 1/4".
 
-Per CLAUDE.md line 105-107 idiom: PASS threshold is >=85% across
+Per the CLAUDE.md reliability checkpoints: PASS threshold is >=85% across
 replicates.
 
 Run (paid, owed post-merge human gate -- do NOT run automatically):
@@ -235,13 +235,13 @@ def _write_report(report_path: Path, block: str) -> None:
     else:
         existing = (
             "# D1 AC3 - missed-concept-reference reliability\n\n"
-            "Per CLAUDE.md line 105-107 idiom: gate threshold is >=85% across"
+            "Per the CLAUDE.md reliability checkpoints: gate threshold is >=85% across"
             " replicates. Scenario: user asks \"can you explain that again?\""
             " right after a missed quiz item; PASS requires the tutor's reply"
             " to reference the missed concept (chosen/correct answer or"
             " question stem). Below 85% triggers prompt iteration; if still"
             " failing after 2-3 iterations, swap default model to"
-            " `anthropic/claude-sonnet-4-6`.\n\n"
+            " `anthropic/claude-sonnet-5`.\n\n"
         )
     report_path.write_text(existing + block, encoding="utf-8")
 

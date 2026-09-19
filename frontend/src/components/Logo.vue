@@ -5,7 +5,7 @@ defineProps({
   size: {
     type: String,
     default: 'md',
-    validator: (v) => ['sm', 'md', 'lg'].includes(v),
+    validator: (v) => ['sm', 'md'].includes(v),
   },
   variant: {
     type: String,
@@ -17,20 +17,23 @@ defineProps({
 
 <template>
   <span class="logo" :data-size="size" :data-variant="variant">
-    <svg
-      class="logo-mark"
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path
-        d="M12 0.5 L13.6 10.4 L23.5 12 L13.6 13.6 L12 23.5 L10.4 13.6 L0.5 12 L10.4 10.4 Z"
-        fill="currentColor"
+    <svg class="logo-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+      <path d="M3.5 9.5 V5.5 a2 2 0 0 1 2-2 H12.5 a2 2 0 0 1 2 2 V9.5" fill="var(--tab-focus)" />
+      <rect
+        x="3.5"
+        y="9.5"
+        width="25"
+        height="19"
+        rx="2"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2.5"
       />
       <path
-        d="M19 2.5 L19.7 5.3 L22.5 6 L19.7 6.7 L19 9.5 L18.3 6.7 L15.5 6 L18.3 5.3 Z"
-        fill="currentColor"
-        opacity="0.55"
+        d="M9 16 h14 M9 21.5 h8"
+        stroke="currentColor"
+        stroke-width="2.5"
+        stroke-linecap="round"
       />
     </svg>
     <span v-if="variant === 'full'" class="logo-name">Crux</span>
@@ -44,7 +47,7 @@ defineProps({
   gap: 0.625rem;
   color: var(--color-wordmark, var(--color-heading));
   font-family: var(--font-display);
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: var(--tracking-tight);
   line-height: 1;
 }
@@ -56,14 +59,10 @@ defineProps({
 .logo[data-size='md'] {
   font-size: 1.1875rem;
 }
-.logo[data-size='lg'] {
-  font-size: 2rem;
-  gap: 0.875rem;
-}
 
 .logo-mark {
   flex-shrink: 0;
-  color: var(--color-accent-text);
+  color: currentColor;
 }
 
 .logo[data-size='sm'] .logo-mark {
@@ -73,9 +72,5 @@ defineProps({
 .logo[data-size='md'] .logo-mark {
   width: 28px;
   height: 28px;
-}
-.logo[data-size='lg'] .logo-mark {
-  width: 56px;
-  height: 56px;
 }
 </style>

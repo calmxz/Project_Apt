@@ -1,6 +1,5 @@
 <script setup>
 defineProps({
-  eyebrow: { type: String, default: '' },
   headline: { type: String, default: '' },
   subtext: { type: String, default: '' },
   tone: {
@@ -8,38 +7,18 @@ defineProps({
     default: 'default',
     validator: (v) => ['default', 'celebrate', 'pause'].includes(v),
   },
+  // Content-only: strips the card background, border, radius and drop
+  // shadow. For call sites that already sit on their own card (e.g. inside
+  // a `.sec` panel) so the empty state doesn't nest a third edge.
+  flat: { type: Boolean, default: false },
 })
 </script>
 
 <template>
-  <div class="empty-state" :data-tone="tone">
-    <div class="empty-illustration">
-      <slot name="illustration">
-        <svg
-          viewBox="0 0 64 64"
-          width="64"
-          height="64"
-          aria-hidden="true"
-          focusable="false"
-        >
-          <path
-            d="M32 4 L34.4 27 L58 32 L34.4 37 L32 60 L29.6 37 L6 32 L29.6 27 Z"
-            fill="currentColor"
-          />
-          <path
-            d="M50 8 L51.2 14 L57 16 L51.2 18 L50 24 L48.8 18 L43 16 L48.8 14 Z"
-            fill="currentColor"
-            opacity="0.55"
-          />
-        </svg>
-      </slot>
-    </div>
-    <p v-if="$slots.eyebrow || eyebrow" class="empty-eyebrow">
-      <slot name="eyebrow">{{ eyebrow }}</slot>
-    </p>
-    <h3 v-if="$slots.headline || headline" class="empty-headline">
+  <div class="empty-state" :class="{ 'empty-state--flat': flat }" :data-tone="tone">
+    <h2 v-if="$slots.headline || headline" class="empty-headline">
       <slot name="headline">{{ headline }}</slot>
-    </h3>
+    </h2>
     <p v-if="$slots.subtext || subtext" class="empty-subtext">
       <slot name="subtext">{{ subtext }}</slot>
     </p>
@@ -50,69 +29,84 @@ defineProps({
 </template>
 
 <style scoped>
+/* An empty sheet is a single centred card on the desk: a line in graphite, a
+   pencil note under it and the way out written in blue. No illustration, no
+   tile, no eyebrow. */
 .empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
+  max-width: 28rem;
+  margin: 0 auto;
+  padding: 2rem 1.75rem;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-card);
+  box-shadow: 0 1px 0 var(--card-drop);
   text-align: center;
-  padding: clamp(2.5rem, 6vw, 4rem) 1.5rem;
-  gap: 0.75rem;
 }
 
-.empty-illustration {
-  color: var(--color-accent-text);
-  margin-bottom: 0.25rem;
-  display: inline-flex;
-  filter: drop-shadow(0 2px 8px rgba(255, 107, 92, 0.25));
-}
-
-.empty-state[data-tone='celebrate'] .empty-illustration {
-  animation: empty-bounce 1.4s var(--motion-bounce) infinite;
-}
-
-.empty-state[data-tone='pause'] .empty-illustration {
-  opacity: 0.7;
-  filter: none;
-  color: var(--color-text-muted);
-}
-
-@keyframes empty-bounce {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-6px); }
-}
-
-.empty-eyebrow {
-  font-family: var(--font-sans);
-  font-size: var(--fs-label);
-  font-weight: 600;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-  color: var(--color-text-muted);
-  margin: 0;
+/* Content-only variant: no card, no border, no radius, no drop shadow --
+   just the headline, line and link, for call sites that already sit on
+   their own card. */
+.empty-state--flat {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
 }
 
 .empty-headline {
-  font-family: var(--font-display);
-  font-size: var(--fs-h2);
-  font-weight: 600;
-  color: var(--color-heading);
   margin: 0;
-  letter-spacing: var(--tracking-tight);
+  font-family: var(--font-display);
+  font-size: 1.375rem;
+  font-weight: 600;
+  letter-spacing: var(--tracking-display);
   line-height: var(--lh-display);
+  color: var(--ink);
 }
 
 .empty-subtext {
+  margin: 0.5rem 0 0;
+  max-width: 42rem;
   font-family: var(--font-sans);
   font-size: var(--fs-body);
-  color: var(--color-text-muted);
-  max-width: 32rem;
-  margin: 0;
   line-height: var(--lh-body);
+  color: var(--pencil);
 }
 
 .empty-cta {
-  margin-top: 0.75rem;
-  display: inline-flex;
-  gap: 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem 1.25rem;
+  margin-top: 1rem;
+  line-height: var(--lh-body);
+}
+
+/* The way out is a line of blue text, whatever the call site passes in. */
+.empty-cta :deep(a),
+.empty-cta :deep(button) {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-learner);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  line-height: var(--lh-body);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.empty-cta :deep(a:hover),
+.empty-cta :deep(button:hover) {
+  color: var(--color-accent-hover);
+}
+
+.empty-cta :deep(.pi) {
+  display: none;
 }
 </style>

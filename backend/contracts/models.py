@@ -115,16 +115,43 @@ class UpdateTopicProfileArgs(BaseModel):
         extra="forbid",
     )
     session_id: constr(max_length=64)
+    """
+    Ignored; the server injects the authoritative session id.
+    """
     knowledge_level: Literal["beginner", "intermediate", "advanced"] | None = None
+    """
+    New session-wide level. Requires evidence_type declared or tested; the patch fails without it.
+    """
     add_confirmed_gap: constr(max_length=200) | None = None
+    """
+    Concept the learner does not yet know. Short noun phrase. Upserted into confirmed_gaps (an existing entry is refreshed, not duplicated) and removed from mastered_concepts if present there.
+    """
     add_mastered_concept: constr(max_length=200) | None = None
+    """
+    Concept the learner has demonstrated. Recorded only with evidence_type declared (learner said so) or tested; inferred is ignored server-side. Upserted into mastered_concepts and removed from confirmed_gaps if present there.
+    """
     focus_target_gap: constr(max_length=200) | None = None
+    """
+    Gap to concentrate on. Omit to leave focus unchanged. Send null together with focus_clear_reason to clear it.
+    """
     focus_clear_reason: (
         Literal["demonstrated", "tested_correct", "user_redirected"] | None
     ) = None
+    """
+    Required when focus_target_gap is null. tested_correct is accepted only if a correct check answer for that gap was recorded this session.
+    """
     evidence_type: Literal["declared", "inferred", "tested"] | None = None
+    """
+    How you know. declared = learner stated it; inferred = observed from engagement; tested = check-question outcome (server-owned; if sent it is stored as declared). Optional for a focus-only patch.
+    """
     subtopic: constr(min_length=1, max_length=100) | None = None
+    """
+    Subtopic name for a per-subtopic level. Short noun phrase; reuse an existing name when one matches. Must be sent with subtopic_level.
+    """
     subtopic_level: Literal["beginner", "intermediate", "advanced"] | None = None
+    """
+    Learner's level on subtopic. Must be sent with subtopic.
+    """
 
 
 class RetrieveChunksArgs(BaseModel):
@@ -132,8 +159,17 @@ class RetrieveChunksArgs(BaseModel):
         extra="forbid",
     )
     session_id: constr(max_length=64)
+    """
+    Ignored; the server injects the authoritative session id.
+    """
     query: constr(max_length=500)
+    """
+    Natural-language search text. Phrase it as the learner's question or the concept name, not as an instruction.
+    """
     k: conint(ge=1, le=20) | None = 5
+    """
+    Maximum number of chunks to return, 1-20. Default 5.
+    """
 
 
 class Item(BaseModel):
@@ -141,15 +177,28 @@ class Item(BaseModel):
         extra="forbid",
     )
     question: constr(max_length=1000)
+    """
+    The stem only. Do not number or letter the options inside it; the options array is rendered by the UI.
+    """
     options: list[constr(max_length=200)] = Field(..., max_length=4, min_length=2)
+    """
+    Answer choices, exactly one correct, all plausible.
+    """
     correct_index: conint(ge=0)
+    """
+    0-based index into options of the correct answer. Must be less than the number of options.
+    """
     explanation: constr(max_length=500)
+    """
+    One sentence shown to the learner after they answer, whether right or wrong.
+    """
 
 
 class AskCheckQuestionsArgs(BaseModel):
     """
     Register an ordered batch of 1..5 multiple-choice check-questions and end
-    the turn. The first question's text is also streamed as assistant text.
+    the turn. The card renders from this payload; any lead-in prose is the
+    model's own text in the same turn.
     Per-item correct_index must be < len(options); that cross-field rule is
     enforced in check_question_service, not here.
 
@@ -159,8 +208,17 @@ class AskCheckQuestionsArgs(BaseModel):
         extra="forbid",
     )
     session_id: constr(max_length=64)
+    """
+    Ignored; the server injects the authoritative session id.
+    """
     gap: constr(max_length=200)
+    """
+    The single confirmed gap every item probes. Use the exact name from confirmed_gaps so grading updates the right profile entry.
+    """
     items: list[Item] = Field(..., max_length=5, min_length=1)
+    """
+    Ordered batch of questions, all on gap. One batch per turn.
+    """
 
 
 class Item1(BaseModel):
@@ -317,6 +375,7 @@ class SessionProgress(BaseModel):
         extra="forbid",
     )
     focus_target_gap: str | None = None
+    level: Literal["beginner", "intermediate", "advanced"] | None = None
     mastered_count: int
 
 

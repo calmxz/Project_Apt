@@ -26,7 +26,8 @@ Run them deliberately and observed instead:
 
 There is deliberately NO `crux-worker` service. The web service drains the
 ingestion queue itself in a background thread (`INGEST_IN_PROCESS`, default
-on) per `docs/superpowers/specs/2026-08-12-defer-render-worker-design.md`.
+on) per the 2026-08-12 worker-deferral spec (removed from the tree; see git
+history).
 This accepts the B-02 isolation revert for beta (ingestion CPU and memory
 share the web instance).
 
@@ -47,6 +48,9 @@ correlated with uploads):
    the single most important value, NOT sqlite), `SUPABASE_URL`,
    `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`.
    Leave `CORS_ORIGINS` blank for now (set in step 6).
+   Also set `GLOBAL_DAILY_COST_CAP_USD` (fleet-wide kill switch, `config.py`),
+   and confirm `SUPABASE_JWKS_URL_OVERRIDE` is ABSENT from the prod env,
+   not merely empty (gate W-15 from the 2026-08-06 QA audit).
 5. Deploy. Wait for the build + first boot (entrypoint runs `alembic upgrade
    head`, then uvicorn on `$PORT`).
 6. Verify: open `https://<api>.onrender.com/health` → expect an ok response.
@@ -95,6 +99,22 @@ If the CSP blocks a needed origin, widen the relevant directive in
 `frontend/cspPlugin.js` and rebuild/redeploy (the policy is generated at
 build time into `dist/index.html`, not read from `vercel.json`).
 
+Deploy-time gates carried from the 2026-08-06 QA audit checklist (archived
+2026-09-19, see `docs/decisions.md`). Each was blocked on the deploy itself:
+
+- W-03: curl the live Vercel URL and confirm the CSP header carries the real
+  Render host, not the `CRUX_API_HOST` placeholder.
+- W-04: from the Vercel origin, confirm `X-Cost-Warning` is readable
+  cross-origin (`Access-Control-Expose-Headers` over the wire).
+- W-05: observe live time-to-first-token and the DB pool ceiling (computed
+  ceiling is 10 concurrent DB-holding requests on one uvicorn worker).
+- W-08: once `chunk_embeddings` has meaningful volume, re-run
+  `EXPLAIN ANALYZE ... ORDER BY embedding <=> ...` and confirm the HNSW index
+  is used (at 8 rows the planner correctly seq-scans, so earlier runs proved
+  nothing).
+- W-13: owed paid smokes from PRs #103, #104, #108, #110, #111, #114, #179.
+  Run each PR body's smoke steps against the live stack.
+
 ## Step 8 — Uploads caveat
 
 Render free tier disk is ephemeral: uploaded PDFs are lost on restart / cold
@@ -111,3 +131,10 @@ Rate limiting: nginx throttles `/api/` at 10 requests/second per IP (burst 20,
 HTTP 429 beyond). This applies to nginx-fronted deploys only; the Render
 backend has no per-request throttle -- its spend guard is the daily LLM
 cost cap and rate counter.
+
+On Render there is no nginx tier. The equivalent guard is the in-process
+per-user burst limiter (`BURST_LIMIT_PER_MINUTE`, default 20 on Render, 0 =
+off locally). It is process-local: keep the API at one instance and one
+uvicorn worker, or move the window to Postgres before scaling out. The same
+single-process assumption already applies to the in-process ingest loop and
+to `alembic upgrade head` running from `entrypoint.sh` on every start.

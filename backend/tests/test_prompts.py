@@ -160,8 +160,6 @@ def test_diagnostic_block_offers_instead_of_forcing():
     assert "before any teaching" not in block
     # consent semantics must be present
     assert "unprompted" in block
-    assert "offer" in block.lower()
-    assert "beginner / intermediate / advanced" in block
     # both consent outcomes are wired to real tools
     assert "ask_check_questions" in block
     assert "update_topic_profile" in block
@@ -174,13 +172,29 @@ def test_diagnostic_first_reply_must_answer_before_offer():
     # 3-question check..." with zero content. The model over-weights the "do not
     # teach in depth yet" prohibition and rounds "briefly address" down to a
     # greeting. The answer obligation must be as imperative as the prohibition
-    # and explicitly forbid the offer-only reply.
+    # and explicitly forbid the greeting-only reply.
     rules = prompts.IMMUTABLE_RULES
     block = rules.split("KNOWLEDGE DIAGNOSTIC:")[1].split("REVIEW-GAPS MODE:")[0]
-    low = block.lower()
+    low = " ".join(block.lower().split())
     assert "must contain" in low
-    assert "never instead of" in low
-    assert "incomplete" in low
+    assert "only greets" in low
+
+
+def test_diagnostic_required_never_asks_level_in_prose():
+    # Issue #287: the app renders DiagnosticConsentCard (Quiz me / Beginner /
+    # Intermediate / Advanced) under the first reply, so a prose offer of a
+    # check or a level question duplicates it in one viewport. The REQUIRED
+    # branch must forbid the prose ask outright and say why.
+    rules = prompts.IMMUTABLE_RULES
+    block = rules.split("KNOWLEDGE DIAGNOSTIC:")[1].split("REVIEW-GAPS MODE:")[0]
+    low = " ".join(block.lower().split())
+    assert "do not ask the learner for their level" in low
+    assert "do not offer a quick check" in low
+    assert "picker card" in low
+    assert "offer a choice" not in low
+    # the tool wiring for both card outcomes stays
+    assert "ask_check_questions" in block
+    assert 'evidence_type="declared"' in block
 
 
 def test_diagnostic_off_forbids_reasking_known_level():

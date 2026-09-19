@@ -1,79 +1,83 @@
 <script setup>
+import { computed } from 'vue'
 import MarkdownContent from './MarkdownContent.vue'
+import { formatTime } from '../../utils/formatDate.js'
 
-defineProps({
+const props = defineProps({
   content: { type: String, default: '' },
+  createdAt: { type: String, default: null },
 })
+
+// The head line carries the time only when the server sent one; never invent it.
+const timeLabel = computed(() => formatTime(props.createdAt))
 </script>
 
 <template>
   <article class="msg user" data-testid="msg-user">
-    <div class="msg-body">
+    <div class="msg-gutter">
       <span class="role-tag">you</span>
+      <span v-if="timeLabel" class="msg-time">{{ timeLabel }}</span>
+    </div>
+    <div class="msg-body">
       <MarkdownContent class="content" :text="content || ''" />
     </div>
   </article>
 </template>
 
 <style scoped>
+/* The learner's card: blue stock, right-aligned. Same card grammar as the
+   tutor, different material -- that is how the two voices are told apart. */
 .msg {
-  display: flex;
-  gap: 0.625rem;
-  max-width: 100%;
-  align-items: flex-start;
-}
-
-.msg-body {
+  align-self: flex-end;
+  max-width: 78%;
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 0.35rem;
+  background: var(--card-learner);
+  border: 1px solid var(--card-learner-edge);
+  border-radius: var(--radius-card);
+  box-shadow: 0 1px 0 var(--card-drop);
+  padding: 0.55rem 0.9rem 0.7rem;
+}
+
+.msg-gutter {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
   min-width: 0;
-  max-width: calc(100% - 2.6rem);
 }
 
 .role-tag {
   font-family: var(--font-sans);
   font-size: var(--fs-label);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  font-weight: 600;
-  color: var(--color-text-faint);
+  font-weight: 700;
+  color: var(--ink-learner);
+  opacity: 0.75;
+}
+
+.msg-time {
+  margin-left: auto;
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  color: var(--ink-learner);
+  opacity: 0.75;
+}
+
+.msg-body {
+  min-width: 0;
 }
 
 .content {
   margin: 0;
-  white-space: pre-wrap;
   font-family: var(--font-sans);
-  font-size: 0.9375rem;
-  line-height: 1.6;
-  color: var(--color-text);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--ink-learner);
 }
 
-.msg.user {
-  flex-direction: row-reverse;
-  align-self: flex-end;
-  max-width: 88%;
-}
-
-.msg.user .msg-body {
-  align-items: flex-end;
-  text-align: left;
-  max-width: 100%;
-}
-
-.msg.user .role-tag {
-  color: var(--color-accent-text);
-}
-
-.msg.user .content {
-  display: inline-block;
-  background: var(--color-accent-strong);
-  color: #FFFFFF;
-  padding: 0.875rem 1.125rem;
-  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-lg);
-  font-family: var(--font-sans);
-  font-size: 0.9375rem;
-  text-align: left;
-  box-shadow: 0 2px 8px -4px rgba(255, 107, 92, 0.22);
+@media (max-width: 599px) {
+  .msg {
+    max-width: 92%;
+  }
 }
 </style>

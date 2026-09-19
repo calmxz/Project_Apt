@@ -1,140 +1,132 @@
 <template>
-  <form class="form" @submit.prevent="save">
-    <section class="card">
-      <h2 class="card-title">
-        <i class="pi pi-user card-icon" aria-hidden="true" />
-        Account
-      </h2>
-      <div class="field">
-        <label class="lbl" for="set-name">Display name</label>
-        <input
-          id="set-name"
-          v-model="displayName"
-          data-testid="settings-name"
-          maxlength="40"
-          class="input"
-          type="text"
-          placeholder="Learner"
-        />
-        <p class="hint">How the tutor refers to you.</p>
-      </div>
-    </section>
+  <div class="account" data-testid="settings-account">
+    <form class="form" @submit.prevent="save">
+      <section class="sec">
+        <h2 class="sec-title">Account</h2>
+        <div class="field">
+          <label class="lbl" for="set-name">Display name</label>
+          <input
+            id="set-name"
+            v-model="displayName"
+            data-testid="settings-name"
+            maxlength="40"
+            class="input"
+            type="text"
+            placeholder="Learner"
+          />
+          <p class="hint">How the tutor refers to you.</p>
+        </div>
+      </section>
 
-    <div class="actions">
-      <button
-        type="submit"
-        class="save-btn"
-        data-testid="settings-save"
-        :disabled="!dirty || saving"
-      >
-        <i class="pi pi-check" aria-hidden="true" />
-        <span>Save name</span>
-      </button>
-      <span v-if="savedFlash" class="saved-flash" data-testid="settings-saved">
-        <i class="pi pi-check-circle" aria-hidden="true" />
-        Saved.
-      </span>
-    </div>
-
-    <p v-if="saveError" class="error" role="alert" data-testid="settings-error">
-      {{ saveError }}
-    </p>
-  </form>
-
-  <section v-if="authStore.isAuthenticated" class="card" data-testid="settings-security">
-    <h2 class="card-title">
-      <i class="pi pi-lock card-icon" aria-hidden="true" />
-      Security
-    </h2>
-    <form class="pw-form" @submit.prevent="changePassword">
-      <div class="field">
-        <label class="lbl" for="pw-current">Current password</label>
-        <input
-          id="pw-current"
-          v-model="pwCurrent"
-          data-testid="settings-pw-current"
-          class="input"
-          type="password"
-          autocomplete="current-password"
-        />
-      </div>
-      <div class="field">
-        <label class="lbl" for="pw-new">New password</label>
-        <input
-          id="pw-new"
-          v-model="pwNew"
-          data-testid="settings-pw-new"
-          class="input"
-          type="password"
-          autocomplete="new-password"
-          placeholder="At least 8 characters"
-        />
-      </div>
-      <div class="field">
-        <label class="lbl" for="pw-confirm">Confirm new password</label>
-        <input
-          id="pw-confirm"
-          v-model="pwConfirm"
-          data-testid="settings-pw-confirm"
-          class="input"
-          type="password"
-          autocomplete="new-password"
-        />
-      </div>
-      <p v-if="pwMismatch" class="hint" data-testid="settings-pw-mismatch">
-        New passwords do not match.
-      </p>
-      <p v-if="pwError" class="pw-error" role="alert" data-testid="settings-pw-error">
-        {{ pwError }}
-      </p>
-      <p v-if="pwSuccess" class="saved-flash" role="status" data-testid="settings-pw-success">
-        <i class="pi pi-check-circle" aria-hidden="true" />
-        Password updated.
-      </p>
-      <div class="actions">
+      <div class="btn-fill-row">
         <button
-          type="button"
-          class="save-btn"
-          data-testid="settings-pw-submit"
-          :disabled="!pwCanSubmit || pwSubmitting"
-          @click="changePassword"
+          type="submit"
+          class="btn-fill"
+          :class="{ 'btn-fill--busy': saving }"
+          data-testid="settings-save"
+          :disabled="!dirty || saving"
         >
-          <i class="pi pi-lock" aria-hidden="true" />
-          <span>{{ pwSubmitting ? 'Updating…' : 'Update password' }}</span>
+          Save name
         </button>
+        <span v-if="savedFlash" class="saved-flash" data-testid="settings-saved">
+          <svg
+            class="tick"
+            viewBox="0 0 12 12"
+            width="12"
+            height="12"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <path d="M2 6.5 L4.8 9.2 L10 3.2" />
+          </svg>
+          Saved.
+        </span>
       </div>
+
+      <p v-if="saveError" class="error" role="alert" data-testid="settings-error">
+        {{ saveError }}
+      </p>
     </form>
-  </section>
 
-  <section v-if="authStore.isAuthenticated" class="signout" data-testid="settings-signout-section">
-    <button type="button" class="signout-btn" data-testid="settings-sign-out" @click="signOut">
-      <i class="pi pi-sign-out" aria-hidden="true" />
-      <span>Sign out</span>
-    </button>
-  </section>
-
-  <section class="danger" data-testid="settings-danger">
-    <h2 class="card-title danger-title">
-      <i class="pi pi-exclamation-triangle card-icon" aria-hidden="true" />
-      Danger zone
-    </h2>
-    <p class="danger-text">
-      Reset removes your local profile and runs onboarding again. Sessions on the server stay put.
-    </p>
-    <router-link
-      to="/onboarding?retake=1"
-      class="danger-link"
-      data-testid="settings-retake-onboarding"
-    >
-      <span>Retake onboarding</span>
-      <i class="pi pi-arrow-right" aria-hidden="true" />
-    </router-link>
-  </section>
+    <section v-if="authStore.isAuthenticated" class="sec" data-testid="settings-security">
+      <h2 class="sec-title">Security</h2>
+      <form class="pw-form" @submit.prevent="changePassword">
+        <div class="field">
+          <label class="lbl" for="pw-current">Current password</label>
+          <input
+            id="pw-current"
+            v-model="pwCurrent"
+            data-testid="settings-pw-current"
+            class="input"
+            type="password"
+            autocomplete="current-password"
+          />
+        </div>
+        <div class="field">
+          <label class="lbl" for="pw-new">New password</label>
+          <input
+            id="pw-new"
+            v-model="pwNew"
+            data-testid="settings-pw-new"
+            class="input"
+            type="password"
+            autocomplete="new-password"
+            placeholder="At least 8 characters"
+          />
+        </div>
+        <div class="field">
+          <label class="lbl" for="pw-confirm">Confirm new password</label>
+          <input
+            id="pw-confirm"
+            v-model="pwConfirm"
+            data-testid="settings-pw-confirm"
+            class="input"
+            type="password"
+            autocomplete="new-password"
+          />
+        </div>
+        <p v-if="pwMismatch" class="hint" data-testid="settings-pw-mismatch">
+          New passwords do not match.
+        </p>
+        <p v-if="pwError" class="error" role="alert" data-testid="settings-pw-error">
+          {{ pwError }}
+        </p>
+        <div class="btn-fill-row">
+          <button
+            type="submit"
+            class="btn-fill"
+            :class="{ 'btn-fill--busy': pwSubmitting }"
+            data-testid="settings-pw-submit"
+            :disabled="!pwCanSubmit || pwSubmitting"
+          >
+            {{ pwSubmitting ? 'Updating…' : 'Update password' }}
+          </button>
+          <span
+            v-if="pwSuccess"
+            class="saved-flash"
+            role="status"
+            data-testid="settings-pw-success"
+          >
+            <svg
+              class="tick"
+              viewBox="0 0 12 12"
+              width="12"
+              height="12"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="M2 6.5 L4.8 9.2 L10 3.2" />
+            </svg>
+            Password updated.
+          </span>
+        </div>
+      </form>
+    </section>
+  </div>
 </template>
 
 <script setup>
 import { computed, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
 
 import { friendlyError } from '@/lib/errors.js'
 import { useUserStore } from '../../stores/user.js'
@@ -143,8 +135,7 @@ import { useToast } from '../../composables/useToast.js'
 
 const user = useUserStore()
 const authStore = useAuthStore()
-const router = useRouter()
-const { showSuccess, showError } = useToast()
+const { showSuccess } = useToast()
 
 const displayName = ref(user.name || '')
 const savedFlash = ref(false)
@@ -214,251 +205,97 @@ async function changePassword() {
     pwSubmitting.value = false
   }
 }
-
-async function signOut() {
-  try {
-    await authStore.signOut()
-  } catch (err) {
-    showError(err?.message || 'Sign out failed')
-    return
-  }
-  router.push('/login')
-}
 </script>
 
 <style scoped>
+/* Account is a ruled page: sections divided by one hairline and fields written
+   on a rule. The two submits are the one filled control on the page (.btn-fill,
+   base.css), each on its own row beside its saved caption. No card, no glyph
+   font. */
+.account {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--line-pitch);
+  width: 100%;
+}
+
 .form {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
 }
 
-.card {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  padding: 1.5rem;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-paper);
-}
-
-.card-title {
-  display: inline-flex;
-  align-items: center;
+/* Card shell, .sec-title, .saved-flash and .tick come from SettingsView's
+   .panel; only this tab's own alignment is declared here. */
+.sec {
+  align-items: flex-start;
   gap: 0.5rem;
-  font-family: var(--font-display);
-  font-size: 1.125rem;
-  font-weight: 700;
-  letter-spacing: var(--tracking-tight);
-  color: var(--color-heading);
-  margin: 0;
-}
-
-.card-icon {
-  font-size: 1rem;
-  color: var(--color-accent-text);
 }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  width: 100%;
+  max-width: 28rem;
 }
 
 .lbl {
   font-family: var(--font-sans);
   font-size: var(--fs-label);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  color: var(--color-text-muted);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
 }
 
+/* Field on a rule: no box, one bottom rule that inks up on focus. */
 .input {
   width: 100%;
-  padding: 0.75rem 1rem;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-border);
-  background: var(--color-surface-soft);
-  color: var(--color-heading);
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--rule-strong);
+  border-radius: 0;
+  background: transparent;
+  color: var(--ink-learner);
+  caret-color: var(--ink-learner);
   font-family: var(--font-sans);
-  font-size: 1rem;
-  transition:
-    border-color var(--motion-fast) ease,
-    box-shadow var(--motion-fast) ease;
+  font-size: var(--fs-body);
+  line-height: calc(var(--line-pitch) - 1px);
 }
 
 .input::placeholder {
-  color: var(--color-text-faint);
+  color: var(--pencil);
 }
 
 .input:focus {
   outline: none;
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 4px var(--color-accent-ring);
+  border-bottom-color: var(--ink-learner);
 }
 
 .hint {
   margin: 0;
   font-family: var(--font-sans);
-  font-size: 0.8125rem;
-  color: var(--color-text-muted);
-}
-
-/* Actions */
-.actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.875rem;
-  flex-wrap: wrap;
-}
-
-.save-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1.5rem;
-  border-radius: var(--radius-pill);
-  background: var(--color-accent-strong);
-  color: #ffffff;
-  border: 0;
-  font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 0.9375rem;
-  cursor: pointer;
-  transition:
-    filter var(--motion-fast) ease,
-    opacity var(--motion-fast) ease;
-}
-
-.save-btn:hover:not(:disabled) {
-  filter: brightness(1.08);
-}
-
-.save-btn:active:not(:disabled) {
-  filter: brightness(0.95);
-}
-
-.save-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-  box-shadow: none;
+  font-size: var(--fs-label);
+  line-height: var(--line-pitch);
+  color: var(--pencil);
 }
 
 .error {
   margin: 0;
-  color: var(--color-error-text);
-  font-size: 0.875rem;
-}
-
-.saved-flash {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
   font-family: var(--font-sans);
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--color-success-text);
-}
-
-/* Danger zone */
-.danger {
-  display: flex;
-  flex-direction: column;
-  gap: 0.625rem;
-  padding: 1.5rem;
-  border: 1px dashed var(--signal-error);
-  border-radius: var(--radius-card);
-  background: rgba(239, 68, 68, 0.04);
-}
-
-.danger-title {
-  color: var(--color-error-text);
-}
-
-.danger .card-icon {
-  color: var(--color-error-text);
-}
-
-.danger-text {
-  margin: 0;
-  color: var(--color-text-muted);
-  font-size: 0.9375rem;
-}
-
-.danger-link {
-  align-self: flex-start;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.5rem 1rem;
-  border-radius: var(--radius-pill);
-  background: transparent;
-  color: var(--color-error-text);
-  border: 1px solid var(--signal-error);
-  font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 0.8125rem;
-  text-decoration: none;
-  transition:
-    background var(--motion-fast) ease,
-    color var(--motion-fast) ease,
-    transform var(--motion-fast) var(--motion-bounce);
-}
-
-.danger-link:hover {
-  background: var(--signal-error);
-  color: #ffffff;
-  transform: translateY(-1px);
-}
-
-/* Sign out */
-.signout {
-  display: flex;
-}
-
-.signout-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.5rem 1rem;
-  border-radius: var(--radius-pill);
-  background: transparent;
-  color: var(--color-text-muted);
-  border: 1px solid var(--color-border-strong);
-  font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 0.8125rem;
-  cursor: pointer;
-  transition:
-    background var(--motion-fast) ease,
-    color var(--motion-fast) ease,
-    border-color var(--motion-fast) ease,
-    transform var(--motion-fast) var(--motion-bounce);
-}
-
-.signout-btn:hover {
-  color: var(--color-heading);
-  border-color: var(--color-text-muted);
-  transform: translateY(-1px);
-}
-
-.signout-btn:focus-visible {
-  outline: 2px solid var(--color-accent-ring);
-  outline-offset: 2px;
+  font-size: var(--fs-caption);
+  line-height: var(--line-pitch);
+  color: var(--ink-marker-text);
 }
 
 .pw-form {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  align-items: flex-start;
+  width: 100%;
 }
 
-.pw-error {
-  margin: 0;
-  color: var(--color-error-text);
-  font-size: 0.875rem;
+/* From 60rem the form and the security card sit side by side. */
+@media (min-width: 60rem) {
+  .account {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
 }
 </style>

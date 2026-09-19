@@ -1,57 +1,60 @@
 <template>
-  <section class="login">
-    <header class="head">
-      <Logo size="lg" variant="mark-only" />
-      <span class="folio">create account</span>
-      <h1 class="title">Join Crux</h1>
-      <p class="lede">Register with your email and a password.</p>
-    </header>
-
+  <AuthCover title="Join Crux" lede="Register with your email and a password.">
     <form v-if="!sent" class="form" data-testid="register-form" @submit.prevent="submit">
       <div class="field">
-        <label for="email" class="label">Email</label>
-        <InputText
-          id="email"
-          v-model="email"
-          type="email"
-          data-testid="register-email"
-          autocomplete="email"
-          placeholder="you@example.com"
-          required
-          class="input"
-        />
+        <label for="email" class="field-label">Email</label>
+        <div class="field-line">
+          <InputText
+            id="email"
+            v-model="email"
+            type="email"
+            data-testid="register-email"
+            autocomplete="email"
+            placeholder="you@example.com"
+            required
+            class="field-input"
+          />
+        </div>
       </div>
 
       <div class="field">
-        <label for="password" class="label">Password</label>
-        <InputText
-          id="password"
-          v-model="password"
-          type="password"
-          data-testid="register-password"
-          autocomplete="new-password"
-          placeholder="At least 8 characters"
-          required
-          class="input"
-        />
+        <label for="password" class="field-label">Password</label>
+        <div class="field-line">
+          <InputText
+            id="password"
+            v-model="password"
+            type="password"
+            data-testid="register-password"
+            autocomplete="new-password"
+            placeholder="At least 8 characters"
+            required
+            class="field-input"
+          />
+        </div>
       </div>
 
       <div class="field">
-        <label for="confirm" class="label">Confirm password</label>
-        <InputText
-          id="confirm"
-          v-model="confirm"
-          type="password"
-          data-testid="register-confirm"
-          autocomplete="new-password"
-          placeholder="Re-enter password"
-          required
-          class="input"
-        />
+        <label for="confirm" class="field-label">Confirm password</label>
+        <div class="field-line">
+          <InputText
+            id="confirm"
+            v-model="confirm"
+            type="password"
+            data-testid="register-confirm"
+            autocomplete="new-password"
+            placeholder="Re-enter password"
+            required
+            class="field-input"
+          />
+        </div>
       </div>
 
-      <p v-if="mismatch" class="hint" data-testid="register-mismatch">Passwords do not match.</p>
-      <p v-if="error" class="error" role="alert" data-testid="register-error">{{ error }}</p>
+      <p v-if="mismatch" class="field-error" data-testid="register-mismatch">
+        Passwords do not match.
+      </p>
+      <p v-if="error" class="status is-alert" role="alert" data-testid="register-error">
+        {{ error }}
+      </p>
 
       <label class="consent">
         <input
@@ -62,9 +65,9 @@
         />
         <span>
           I agree to the
-          <RouterLink to="/tos" target="_blank">Terms of Service</RouterLink>
+          <RouterLink class="link" to="/tos" target="_blank">Terms of Service</RouterLink>
           and
-          <RouterLink to="/privacy" target="_blank">Privacy Policy</RouterLink>.
+          <RouterLink class="link" to="/privacy" target="_blank">Privacy Policy</RouterLink>.
         </span>
       </label>
 
@@ -76,26 +79,43 @@
           :disabled="!canSubmit || submitting"
         >
           <span>{{ submitting ? 'Creating…' : 'Create account' }}</span>
-          <i class="pi pi-arrow-right" aria-hidden="true" />
+          <svg
+            class="cta-arrow"
+            viewBox="0 0 20 20"
+            width="18"
+            height="18"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <path d="M3.5 10 L16.5 10" />
+            <path d="M11 4.5 L16.5 10 L11 15.5" />
+          </svg>
         </button>
       </div>
 
-      <p class="swap">
+      <p class="line">
         Already have an account?
-        <RouterLink to="/login" data-testid="register-to-login">Sign in</RouterLink>
+        <RouterLink class="link" to="/login" data-testid="register-to-login">Sign in</RouterLink>
       </p>
     </form>
 
     <div v-else class="form" data-testid="register-sent">
-      <p class="sent">
+      <p class="status is-done">
         Check your inbox at <strong>{{ email.trim() }}</strong> to confirm your account, then sign
         in.
       </p>
-      <p class="swap">
-        <RouterLink to="/login" data-testid="register-sent-to-login">Back to sign in</RouterLink>
+      <p class="line">
+        <RouterLink class="link" to="/login" data-testid="register-sent-to-login"
+          >Back to sign in</RouterLink
+        >
       </p>
     </div>
-  </section>
+  </AuthCover>
 </template>
 
 <script setup>
@@ -103,8 +123,9 @@ import { computed, ref } from 'vue'
 
 import InputText from 'primevue/inputtext'
 
-import Logo from '../components/Logo.vue'
+import AuthCover from '../components/auth/AuthCover.vue'
 import { useAuthStore } from '../stores/auth.js'
+import { isValidEmail, isValidPassword, passwordsMismatch } from '../utils/validation.js'
 
 const auth = useAuthStore()
 
@@ -116,9 +137,9 @@ const error = ref('')
 const sent = ref(false)
 const consent = ref(false)
 
-const emailValid = computed(() => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.value.trim()))
-const passwordValid = computed(() => password.value.length >= 8)
-const mismatch = computed(() => confirm.value.length > 0 && confirm.value !== password.value)
+const emailValid = computed(() => isValidEmail(email.value.trim()))
+const passwordValid = computed(() => isValidPassword(password.value))
+const mismatch = computed(() => passwordsMismatch(password.value, confirm.value))
 const canSubmit = computed(
   () =>
     emailValid.value && passwordValid.value && confirm.value === password.value && consent.value,
@@ -132,6 +153,9 @@ async function submit() {
     await auth.register(email.value.trim(), password.value)
     sent.value = true
   } catch (e) {
+    // Supabase AuthErrors carry an HTTP status, so friendlyError() would swap
+    // their specific copy ("User already registered") for a generic status
+    // message. Surface the SDK message instead.
     error.value = e?.message || 'Could not create account. Try again.'
   } finally {
     submitting.value = false
@@ -140,156 +164,35 @@ async function submit() {
 </script>
 
 <style scoped>
-.login {
-  max-width: 30rem;
-  margin: 0 auto;
-  padding: 2rem 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1.75rem;
-}
-
-.head {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 0.5rem;
-}
-
-.folio {
-  font-family: var(--font-sans);
-  font-size: var(--fs-label);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  font-weight: 600;
-  color: var(--color-accent-text);
-}
-
-.title {
-  font-family: var(--font-display);
-  font-size: clamp(1.875rem, 4vw, 2.5rem);
-  font-weight: 700;
-  letter-spacing: var(--tracking-display);
-  line-height: 1.1;
-  margin: 0;
-  color: var(--color-heading);
-}
-
-.lede {
-  margin: 0;
-  font-size: 1rem;
-  color: var(--color-text-muted);
-  max-width: 24rem;
-  line-height: var(--lh-body);
-}
-
-.form {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-  padding: 1.75rem;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-lift);
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.label {
-  font-family: var(--font-sans);
-  font-size: var(--fs-label);
-  font-weight: 600;
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-  color: var(--color-text-muted);
-}
-
-.input :deep(input),
-.input.p-inputtext {
-  font-family: var(--font-sans);
-  font-size: 1rem;
-  background: var(--color-surface-soft);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  padding: 0.7rem 1.1rem;
-  width: 100%;
-}
-
-.cta {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1.5rem;
-  border-radius: var(--radius-pill);
-  background: var(--color-accent-strong);
-  color: #fff;
-  border: 0;
-  font-family: var(--font-sans);
-  font-weight: 600;
-  font-size: 0.9375rem;
-  cursor: pointer;
-  transition: filter var(--motion-fast) ease;
-}
-
-.cta:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
-  box-shadow: none;
-}
-
-.cta:not(:disabled):hover {
-  filter: brightness(1.08);
-}
-
-.actions {
-  display: flex;
-  justify-content: flex-end;
-}
-
 .consent {
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;
-  font-size: 0.875rem;
-  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
   line-height: var(--lh-body);
+  color: var(--pencil);
+  cursor: pointer;
 }
 
 .consent-box {
-  margin-top: 0.2rem;
   flex-shrink: 0;
+  width: 1rem;
+  height: 1rem;
+  margin: 6px 0 0;
+  accent-color: var(--ink-learner);
 }
 
-.error {
-  margin: 0;
-  color: var(--color-error-text);
-  font-size: 0.875rem;
+.consent-box:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 
-.hint {
+.field-error {
   margin: 0;
-  font-size: 0.875rem;
-  color: var(--color-text-muted);
-}
-
-.sent {
-  margin: 0;
-  font-size: 0.9375rem;
-  color: var(--color-success-text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
   line-height: var(--lh-body);
-}
-
-.swap {
-  margin: 0;
-  font-size: 0.875rem;
-  color: var(--color-text-muted);
-  text-align: center;
+  color: var(--ink-marker-text);
 }
 </style>

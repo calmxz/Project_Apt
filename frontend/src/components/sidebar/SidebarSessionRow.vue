@@ -23,11 +23,27 @@ const busy = ref(false)
 const renaming = ref(false)
 const draft = ref('')
 const inputEl = ref(null)
+const menuEl = ref(null)
 
 const isCurrent = computed(() => route.params.id === props.session.id)
 const isCollapsed = computed(() => mode.value === 'collapsed')
 
 const tooltip = computed(() => props.session.topic || 'Untitled')
+
+// Row label cells. SessionListItem.progress carries focus_target_gap, level,
+// and mastered_count. Only the topic is shown on the row; the rest still feed
+// the aria-label for screen readers.
+const masteredCount = computed(() => props.session.progress?.mastered_count || 0)
+const focusCue = computed(() => props.session.progress?.focus_target_gap || '')
+const level = computed(() => props.session.progress?.level || null)
+
+const rowLabel = computed(() => {
+  const parts = [`Open session: ${props.session.topic || 'Untitled'}`]
+  if (level.value) parts.push(`level ${level.value}`)
+  if (focusCue.value) parts.push(`focus ${focusCue.value}`)
+  if (masteredCount.value) parts.push(`${masteredCount.value} mastered`)
+  return parts.join(', ')
+})
 
 function openSession() {
   closeDrawer()
@@ -82,6 +98,16 @@ async function onContinueTopic() {
   }
 }
 
+// Rename never moves the row between lists, so this instance's own menu is
+// still mounted and can be focused through its exposed method.
+function refocusOwnTrigger() {
+  nextTick(() => menuEl.value?.focusTrigger())
+}
+
+// Pinning DOES move the row: setPinned patches `pinned` optimistically, so the
+// row leaves the pinned <ul> for the active one (or back) and Vue mounts a
+// FRESH component. This instance's ref is nulled by then, so the replacement
+// has to be found in the document by session id.
 function refocusRowTrigger(id) {
   nextTick(() => {
     const row = document.querySelector(`[data-session-id="${id}"]`)
@@ -89,15 +115,11 @@ function refocusRowTrigger(id) {
   })
 }
 
-function onPin() {
+function setPin(on) {
   const id = props.session.id
-  store.setPinned(id, true).catch(() => showError('Could not pin the session.'))
-  refocusRowTrigger(id)
-}
-
-function onUnpin() {
-  const id = props.session.id
-  store.setPinned(id, false).catch(() => showError('Could not unpin the session.'))
+  store
+    .setPinned(id, on)
+    .catch(() => showError(on ? 'Could not pin the session.' : 'Could not unpin the session.'))
   refocusRowTrigger(id)
 }
 
@@ -110,10 +132,9 @@ async function startRename() {
 }
 
 function cancelRename() {
-  const id = props.session.id
   draft.value = props.session.topic || ''
   renaming.value = false
-  refocusRowTrigger(id)
+  refocusOwnTrigger()
 }
 
 async function commitRename() {
@@ -129,9 +150,8 @@ async function commitRename() {
 }
 
 function commitRenameFromKey() {
-  const id = props.session.id
   commitRename()
-  refocusRowTrigger(id)
+  refocusOwnTrigger()
 }
 </script>
 
@@ -150,67 +170,91 @@ function commitRenameFromKey() {
       type="button"
       class="sb-row-button"
       :aria-current="isCurrent ? 'page' : undefined"
-      :aria-label="`Open session: ${session.topic || 'Untitled'}`"
+      :aria-label="rowLabel"
       :title="isCollapsed ? tooltip : ''"
       data-testid="sidebar-row-open"
       @click="openSession"
     >
-      <span class="sb-row-dot" :class="{ 'sb-row-dot--filled': isCurrent }" aria-hidden="true" />
-      <span v-if="!isCollapsed" class="sb-row-body">
-        <input
-          v-if="renaming"
-          ref="inputEl"
-          v-model="draft"
-          type="text"
-          class="sb-row-rename-input"
-          aria-label="Rename session"
-          data-testid="sidebar-row-rename-input"
-          @keydown.enter.prevent="commitRenameFromKey"
-          @keydown.esc.prevent="cancelRename"
-          @blur="commitRename"
-          @click.stop
-        />
-        <span v-else class="sb-row-topic">
-          <i
-            v-if="session.pinned && !session.ended_at"
-            class="pi pi-bookmark-fill sb-row-pin"
-            aria-hidden="true"
-          />
-          {{ session.topic || 'Untitled' }}
-        </span>
+      <span v-if="isCollapsed" class="sb-row-mark" aria-hidden="true" />
+      <input
+        v-else-if="renaming"
+        ref="inputEl"
+        v-model="draft"
+        type="text"
+        class="sb-row-rename-input"
+        aria-label="Rename session"
+        data-testid="sidebar-row-rename-input"
+        @keydown.enter.prevent="commitRenameFromKey"
+        @keydown.esc.prevent="cancelRename"
+        @blur="commitRename"
+        @click.stop
+      />
+      <span v-else class="sb-row-topic">
+        <svg
+          v-if="session.pinned && !session.ended_at"
+          class="sb-row-pin"
+          viewBox="0 0 20 20"
+          width="12"
+          height="12"
+          fill="currentColor"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path d="M6 3.5 H14 V16.5 L10 13.5 L6 16.5 Z" />
+        </svg>
+        {{ session.topic || 'Untitled' }}
       </span>
     </button>
     <SidebarRowMenu
       v-if="!isCollapsed"
+      ref="menuEl"
       :state="state"
       :busy="busy"
       :pinned="session.pinned ?? false"
       @end="onEnd"
       @resume="onResume"
       @continue-topic="onContinueTopic"
-      @pin="onPin"
-      @unpin="onUnpin"
+      @pin="setPin(true)"
+      @unpin="setPin(false)"
       @rename="startRename"
     />
   </li>
 </template>
 
 <style scoped>
+/* A row is a ruled line on the contents page: no card, no radius, no fill.
+   Height is a whole multiple of the pitch so every row sits on a rule. */
 .sb-row {
   position: relative;
   display: flex;
-  align-items: center;
-  gap: 0.25rem;
+  align-items: stretch;
   padding: 0;
   margin: 0;
-  border-radius: var(--radius-md);
   list-style: none;
-  transition: background var(--motion-fast) ease;
+  border-radius: var(--radius-card);
 }
 
 .sb-row:hover,
 .sb-row:focus-within {
-  background: var(--color-surface-soft);
+  background: color-mix(in srgb, var(--card) 60%, transparent);
+}
+
+/* The current session sits on its own white card, the one row on the
+   contents page that is allowed to lift off the ground. Collapsed rail rows
+   stay dots only (below), so the card treatment is expanded-only. */
+.sb-row--current:not(.sb-row--collapsed) {
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  box-shadow: 0 1px 0 var(--card-drop);
+}
+
+.sb-row--current:not(.sb-row--collapsed):hover,
+.sb-row--current:not(.sb-row--collapsed):focus-within {
+  background: var(--card);
 }
 
 .sb-row:hover :deep(.sb-row-menu-trigger),
@@ -218,107 +262,105 @@ function commitRenameFromKey() {
   opacity: 1;
 }
 
-.sb-row--current {
-  background: var(--color-accent-soft);
-}
-
-.sb-row--current:hover {
-  background: var(--color-accent-soft);
-}
-
 .sb-row-button {
   flex: 1;
   min-width: 0;
   display: flex;
-  align-items: center;
-  gap: 0.625rem;
-  padding: 0.4375rem 0.5rem 0.4375rem 0.75rem;
+  flex-direction: column;
+  justify-content: center;
+  min-height: var(--line-pitch);
+  padding: 0.25rem 0.25rem 0.25rem 0.75rem;
   border: 0;
+  border-radius: 0;
   background: transparent;
   text-align: left;
   cursor: pointer;
   font-family: inherit;
   color: var(--color-text);
-  border-radius: var(--radius-md);
 }
 
 .sb-row-button:focus-visible {
-  outline: 2px solid var(--color-accent-ring);
+  outline: 2px solid var(--ink-learner);
   outline-offset: -2px;
-}
-
-.sb-row-dot {
-  flex-shrink: 0;
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: var(--radius-pill);
-  border: 1.5px solid var(--color-text-faint);
-  background: transparent;
-  transition:
-    background var(--motion-fast) ease,
-    border-color var(--motion-fast) ease;
-}
-
-.sb-row-dot--filled {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-}
-
-.sb-row--ended .sb-row-dot {
-  border-color: var(--color-text-faint);
-}
-
-.sb-row-body {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.0625rem;
+  border-radius: 0;
 }
 
 .sb-row-topic {
+  flex: 1;
+  min-width: 0;
+  /* Carried down from the wrappers this span replaced: the row's height is a
+     whole multiple of the pitch so it sits on a rule. */
+  line-height: var(--line-pitch);
   font-family: var(--font-sans);
-  font-size: 0.875rem;
-  font-weight: 500;
+  font-size: 0.9375rem;
+  font-weight: 400;
   color: var(--color-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1.25;
 }
 
 .sb-row--ended .sb-row-topic {
-  color: var(--color-text-muted);
-  font-weight: 400;
+  color: var(--pencil);
 }
 
 .sb-row--current .sb-row-topic {
-  font-weight: 600;
+  font-weight: 700;
 }
 
+/* Collapsed rail: the row is a short pencil stroke; current turns blue. */
 .sb-row--collapsed {
   justify-content: center;
 }
 
 .sb-row--collapsed .sb-row-button {
-  padding: 0.5rem;
+  align-items: center;
   justify-content: center;
+  padding: 0;
 }
 
+/* Collapsed spine: one dot per session, current turns blue. */
+.sb-row-mark {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--pencil);
+  opacity: 0.6;
+}
+
+.sb-row--ended .sb-row-mark {
+  background: var(--rule-strong);
+  opacity: 1;
+}
+
+.sb-row--current .sb-row-mark {
+  background: var(--color-accent);
+  opacity: 1;
+}
+
+/* Renaming writes on the same rule the row sits on. */
 .sb-row-rename-input {
   width: 100%;
-  border: 1px solid var(--color-accent);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface);
+  border: 0;
+  border-bottom: 1px solid var(--ink-learner);
+  border-radius: 0;
+  background: transparent;
   color: var(--color-text);
   font-family: inherit;
-  font-size: 0.875rem;
-  padding: 0.125rem 0.375rem;
+  font-size: 0.9375rem;
+  line-height: calc(var(--line-pitch) - 1px);
+  padding: 0;
+}
+
+.sb-row-rename-input:focus-visible {
+  outline: none;
+  border-bottom-width: 2px;
 }
 
 .sb-row-pin {
-  font-size: 0.75rem;
-  color: var(--color-accent-text);
+  flex-shrink: 0;
+  vertical-align: middle;
+  color: var(--pencil);
   margin-right: 0.25rem;
 }
 </style>

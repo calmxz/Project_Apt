@@ -8,11 +8,14 @@ const props = defineProps({
   messages: { type: Array, required: true },
   streamingMessage: { type: Object, default: null },
   awaiting: { type: Boolean, default: false },
+  // Cue-lands: the latest tutor turn changed the profile, so its gutter
+  // carries the blue tick until the learner writes again.
+  landed: { type: Boolean, default: false },
 })
 
 // U-01: history can contain assistant rows with nothing to show (e.g. a
 // turn whose only output was tool activity that persisted no text).
-// AssistantBubble would render them as an empty bubble, so they are
+// AssistantBubble would render them as an empty row, so they are
 // skipped. Cancelled/partial rows keep their marker even without text.
 function _renderable(m) {
   if (m.role === 'user') return true
@@ -27,14 +30,30 @@ function _renderable(m) {
 }
 
 const visibleMessages = computed(() => props.messages.filter(_renderable))
+
+// Index of the last rendered assistant row; the tick belongs to that turn.
+const lastAssistantIndex = computed(() => {
+  for (let i = visibleMessages.value.length - 1; i >= 0; i -= 1) {
+    if (visibleMessages.value[i].role !== 'user') return i
+  }
+  return -1
+})
+
+function tickAt(i) {
+  return props.landed && !props.streamingMessage && i === lastAssistantIndex.value
+}
 </script>
 
 <template>
   <div class="message-list">
     <TransitionGroup name="msg-fade" tag="div" class="msg-list">
       <template v-for="(m, i) in visibleMessages" :key="m.message_id || `m-${i}`">
-        <UserBubble v-if="m.role === 'user'" :content="m.content || ''" />
-        <AssistantBubble v-else :message="m" :streaming="false" />
+        <UserBubble
+          v-if="m.role === 'user'"
+          :content="m.content || ''"
+          :created-at="m.created_at || null"
+        />
+        <AssistantBubble v-else :message="m" :streaming="false" :landed="tickAt(i)" />
       </template>
     </TransitionGroup>
     <article
@@ -42,16 +61,10 @@ const visibleMessages = computed(() => props.messages.filter(_renderable))
       class="msg assistant typing"
       data-testid="msg-typing"
     >
-      <span class="msg-avatar" aria-hidden="true">
-        <svg viewBox="0 0 24 24" width="18" height="18" focusable="false">
-          <path
-            d="M12 0.5 L13.6 10.4 L23.5 12 L13.6 13.6 L12 23.5 L10.4 13.6 L0.5 12 L10.4 10.4 Z"
-            fill="currentColor"
-          />
-        </svg>
-      </span>
-      <div class="msg-body">
+      <div class="msg-gutter">
         <span class="role-tag">tutor</span>
+      </div>
+      <div class="msg-body">
         <p class="content typing-dots" aria-label="Tutor is thinking">
           <span></span><span></span><span></span>
         </p>
@@ -62,91 +75,79 @@ const visibleMessages = computed(() => props.messages.filter(_renderable))
 </template>
 
 <style scoped>
-.message-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-}
-
 .msg-list {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 0.75rem;
 }
 
-.msg-fade-enter-active,
-.msg-fade-leave-active {
-  transition:
-    opacity var(--motion-base) ease,
-    transform var(--motion-base) var(--motion-bounce);
+/* A card appears; it never slides. */
+.msg-fade-enter-active {
+  transition: opacity var(--motion-fast) ease;
 }
 
 .msg-fade-enter-from {
   opacity: 0;
-  transform: translateY(8px);
 }
+
+.msg-fade-leave-active {
+  transition: opacity var(--motion-fast) ease;
+}
+
 .msg-fade-leave-to {
   opacity: 0;
-  transform: translateY(-4px);
 }
 
-/* Typing indicator article (bespoke markup) */
-.msg {
-  display: flex;
-  gap: 0.625rem;
-  max-width: 100%;
-  align-items: flex-start;
+/* The typing row and the streaming turn are siblings of the list, not
+   children of it: give them the same card gap as everything else. */
+.msg-list + .msg.typing,
+.msg-list + .msg.assistant {
+  margin-top: 0.75rem;
 }
 
-.msg-avatar {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: var(--radius-pill);
-  background: var(--color-accent-soft);
-  color: var(--color-accent);
-  margin-top: 0.125rem;
-}
-
-.msg-body {
+/* Typing indicator: a tutor card with three dots instead of prose. Scoped to
+   .typing so it never collides with the learner card's own rule. */
+.msg.typing {
+  align-self: flex-start;
+  max-width: 78%;
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 0.35rem;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-card);
+  box-shadow: 0 1px 0 var(--card-drop);
+  padding: 0.55rem 0.9rem 0.7rem;
+}
+
+.msg.typing .msg-gutter {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
   min-width: 0;
-  max-width: calc(100% - 2.6rem);
 }
 
 .role-tag {
   font-family: var(--font-sans);
   font-size: var(--fs-label);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  font-weight: 600;
-  color: var(--color-text-faint);
-}
-
-.msg.assistant {
-  align-self: flex-start;
-  max-width: 95%;
+  font-weight: 700;
+  color: var(--pencil);
 }
 
 .msg.typing .content {
-  display: inline-flex;
-  gap: 0.3rem;
-  padding: 0.875rem 1.125rem;
+  display: flex;
   align-items: center;
+  gap: 0.3rem;
+  margin: 0;
 }
 
 .typing-dots span {
   display: inline-block;
-  width: 7px;
-  height: 7px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
-  background: var(--color-accent);
-  animation: typing-bob 1200ms ease-in-out infinite;
+  background: var(--pencil);
+  animation: typing-fade 1200ms ease-in-out infinite;
 }
 
 .typing-dots span:nth-child(2) {
@@ -156,16 +157,34 @@ const visibleMessages = computed(() => props.messages.filter(_renderable))
   animation-delay: 400ms;
 }
 
-@keyframes typing-bob {
+@keyframes typing-fade {
   0%,
   60%,
   100% {
-    transform: translateY(0);
-    opacity: 0.5;
+    opacity: 0.35;
   }
   30% {
-    transform: translateY(-5px);
     opacity: 1;
+  }
+}
+
+/* The dots stop pulsing and settle between the two ends of the pulse, so the
+   row still reads as pencil-weight waiting ink rather than a frozen frame. */
+@media (prefers-reduced-motion: reduce) {
+  .typing-dots span {
+    animation: none;
+    opacity: 0.6;
+  }
+
+  .msg-fade-enter-active,
+  .msg-fade-leave-active {
+    transition: none;
+  }
+}
+
+@media (max-width: 599px) {
+  .msg.typing {
+    max-width: 92%;
   }
 }
 </style>

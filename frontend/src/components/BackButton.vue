@@ -2,14 +2,26 @@
   <button
     type="button"
     class="back-btn"
-    :class="{ 'is-icon-only': iconOnly }"
     data-testid="back-button"
     :aria-label="label"
-    :title="iconOnly ? label : null"
     @click="onClick"
   >
-    <span class="arrow" aria-hidden="true">&larr;</span>
-    <span v-if="!iconOnly" class="label">{{ label }}</span>
+    <svg
+      class="arrow"
+      viewBox="0 0 20 20"
+      width="14"
+      height="14"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.5"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M16 10 L4 10 M9 4.5 L4 10 L9 15.5" />
+    </svg>
+    <span class="label">{{ label }}</span>
   </button>
 </template>
 
@@ -19,7 +31,6 @@ import { useRouter } from 'vue-router'
 const props = defineProps({
   label: { type: String, default: 'Back' },
   fallback: { type: String, default: '/' },
-  iconOnly: { type: Boolean, default: false },
 })
 
 const router = useRouter()
@@ -35,45 +46,42 @@ function onClick() {
 </script>
 
 <style scoped>
+/* A plain pencil text control, not a labelled control block. Hover/focus
+   pick up the blue, matching every other interactive control. */
 .back-btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.4rem;
   background: transparent;
   border: 0;
-  padding: 0.375rem 0.5rem;
-  margin: 0 0 0.75rem -0.5rem;
-  cursor: pointer;
-  color: var(--color-text-muted);
-  font-family: var(--font-mono);
-  font-size: var(--fs-label);
-  letter-spacing: var(--tracking-label);
-  text-transform: uppercase;
-  border-radius: var(--radius-sm);
-  transition:
-    color 180ms ease,
-    background 180ms ease;
-}
-
-.back-btn.is-icon-only {
+  padding: 0;
   margin: 0;
-  padding: 0.375rem;
-  gap: 0;
+  cursor: pointer;
+  color: var(--pencil);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  line-height: 1.75rem;
+  border-radius: var(--radius-sm);
+  transition: color var(--motion-fast) ease;
 }
 
-.back-btn:hover,
-.back-btn:focus-visible {
-  color: var(--color-heading);
-  background: var(--color-surface-soft);
+.back-btn:hover {
+  color: var(--color-accent);
+}
+
+.back-btn:hover .label {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .back-btn:focus-visible {
+  color: var(--color-accent);
   outline: 2px solid var(--color-accent-ring);
   outline-offset: 2px;
 }
 
 .arrow {
-  font-size: 1.05rem;
-  line-height: 1;
+  flex-shrink: 0;
 }
 </style>

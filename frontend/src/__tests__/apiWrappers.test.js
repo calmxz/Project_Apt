@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
 import * as sessionsApi from '@/services/sessionsApi.js'
-import { getSessionProfile, getAggregateProfile } from '@/services/profileApi.js'
+import { getSessionProfile } from '@/services/profileApi.js'
 import { errorBus } from '@/services/errorBus.js'
 
 describe('api wrappers', () => {
@@ -74,13 +74,6 @@ describe('api wrappers', () => {
     fetchMock.mockReturnValueOnce(ok({}))
     await getSessionProfile('s1')
     expect(fetchMock.mock.calls[0][0]).toContain('/profile/s1')
-    expect(fetchMock.mock.calls[0][0]).not.toContain('user_id=')
-  })
-
-  it('getAggregateProfile hits /profile/aggregate without user_id query', async () => {
-    fetchMock.mockReturnValueOnce(ok({}))
-    await getAggregateProfile()
-    expect(fetchMock.mock.calls[0][0]).toContain('/profile/aggregate')
     expect(fetchMock.mock.calls[0][0]).not.toContain('user_id=')
   })
 })

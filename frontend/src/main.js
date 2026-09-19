@@ -1,6 +1,5 @@
 import './assets/main.css'
 import './assets/aura-tokens.css'
-import 'primeicons/primeicons.css'
 
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
@@ -13,10 +12,22 @@ import { definePreset } from '@primeuix/themes'
 import App from './App.vue'
 import router from './router'
 import { useAuthStore } from './stores/auth.js'
+import { setUnauthorizedHandler } from './services/apiClient.js'
 import { useTheme } from './composables/useTheme.js'
 import { adaptPresetConfig } from './theme/adaptPreset.js'
 
 const AdaptPreset = definePreset(Aura, adaptPresetConfig)
+
+// F-16: carry the location like the router guard does (F-49), so re-login
+// returns the user to where the expiry hit them. Wired here (rather than
+// apiClient importing the router directly) to avoid a static import cycle --
+// see the comment on setUnauthorizedHandler in apiClient.js.
+setUnauthorizedHandler(() => {
+  router.push({
+    name: 'login',
+    query: { redirect: router.currentRoute.value.fullPath },
+  })
+})
 
 // Both origins are hit within the first moments of boot (Supabase getSession
 // refresh, then /me + /sessions/library). Preconnect warms DNS+TCP+TLS while

@@ -11,11 +11,15 @@ const props = defineProps({
 })
 const emit = defineEmits(['answer', 'skip', 'next', 'done'])
 
+const LETTERS = ['A', 'B', 'C', 'D', 'E']
+
 const item = computed(() => props.check.items[props.check.viewIndex] || {})
 const answered = computed(() => item.value.status === 'answered' || item.value.status === 'skipped')
 const correct = computed(() => item.value.correct === true)
 const isLast = computed(() => props.check.viewIndex >= props.check.total - 1)
 const showProgress = computed(() => props.check.total > 1)
+// Hidden-until-graded: the explanation is a raise, not a hint.
+const graded = computed(() => item.value.status === 'answered')
 
 function optionClass(i) {
   if (item.value.status !== 'answered') return ''
@@ -41,204 +45,321 @@ watch(answered, async (is) => {
     :class="{ answered, correct, incorrect: answered && !correct }"
     data-testid="check-card"
   >
-    <span class="check-eyebrow">
-      Check question<template v-if="showProgress">
-        &middot; {{ check.viewIndex + 1 }}/{{ check.total }}</template
+    <div class="check-gutter">
+      <span class="role-tag">check</span>
+      <p v-if="showProgress" class="check-progress" data-tabular>
+        {{ check.viewIndex + 1 }}/{{ check.total }}
+      </p>
+    </div>
+    <div class="check-box">
+      <p class="check-question">{{ item.question }}</p>
+
+      <div
+        class="sr-only"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        data-testid="check-live"
       >
-    </span>
-    <p class="check-question">{{ item.question }}</p>
+        <template v-if="graded">
+          {{ correct ? 'Correct.' : 'Not quite.' }} {{ item.explanation || '' }}
+        </template>
+      </div>
 
-    <div
-      class="sr-only"
-      role="status"
-      aria-live="polite"
-      aria-atomic="true"
-      data-testid="check-live"
-    >
-      <template v-if="item.status === 'answered'">
-        {{ correct ? 'Correct.' : 'Not quite.' }} {{ item.explanation || '' }}
-      </template>
+      <ul class="check-options">
+        <li v-for="(opt, i) in item.options" :key="i">
+          <button
+            type="button"
+            class="check-option"
+            :class="optionClass(i)"
+            data-testid="check-option"
+            :aria-disabled="answered ? 'true' : undefined"
+            @click="answered ? undefined : emit('answer', i)"
+          >
+            <span class="check-letter" aria-hidden="true">{{ LETTERS[i] ?? i + 1 }}.</span>
+            <span class="check-option-text">{{ opt }}</span>
+            <svg
+              v-if="optionClass(i) === 'is-correct'"
+              class="check-mark check-mark--tick"
+              viewBox="0 0 16 16"
+              width="16"
+              height="16"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="M2.5 8.5 L6.3 12.2 L13.5 4" pathLength="1" />
+            </svg>
+            <svg
+              v-else-if="optionClass(i) === 'is-incorrect'"
+              class="check-mark check-mark--cross"
+              viewBox="0 0 16 16"
+              width="16"
+              height="16"
+              aria-hidden="true"
+              focusable="false"
+            >
+              <path d="M4 4 L12 12" pathLength="1" />
+              <path d="M12 4 L4 12" pathLength="1" />
+            </svg>
+          </button>
+        </li>
+      </ul>
+
+      <p v-if="graded" class="check-verdict" data-testid="check-verdict">
+        {{ correct ? 'Correct' : 'Not quite' }}
+      </p>
+      <p
+        v-if="graded && item.explanation"
+        class="check-explanation"
+        data-testid="check-explanation"
+      >
+        {{ item.explanation }}
+      </p>
+
+      <button
+        v-if="!answered"
+        type="button"
+        class="check-skip coarse-2x"
+        data-testid="check-skip"
+        :disabled="busy"
+        @click="emit('skip')"
+      >
+        Skip this question
+      </button>
+
+      <button
+        v-if="answered && !isLast"
+        ref="nextBtn"
+        type="button"
+        class="check-next"
+        data-testid="check-next"
+        :disabled="busy"
+        @click="emit('next')"
+      >
+        Next
+      </button>
+      <button
+        v-if="answered && isLast"
+        ref="doneBtn"
+        type="button"
+        class="check-next"
+        data-testid="check-done"
+        :disabled="busy"
+        @click="emit('done')"
+      >
+        Done
+      </button>
     </div>
-
-    <ul class="check-options">
-      <li v-for="(opt, i) in item.options" :key="i">
-        <button
-          type="button"
-          class="check-option"
-          :class="optionClass(i)"
-          data-testid="check-option"
-          :aria-disabled="answered ? 'true' : undefined"
-          @click="answered ? undefined : emit('answer', i)"
-        >
-          {{ opt }}
-        </button>
-      </li>
-    </ul>
-
-    <div v-if="item.status === 'answered'" class="check-verdict" data-testid="check-verdict">
-      {{ correct ? 'Correct' : 'Not quite' }}
-    </div>
-    <p v-if="item.status === 'answered' && item.explanation" class="check-explanation">
-      {{ item.explanation }}
-    </p>
-
-    <button
-      v-if="!answered"
-      type="button"
-      class="check-skip"
-      data-testid="check-skip"
-      :disabled="busy"
-      @click="emit('skip')"
-    >
-      Skip this question
-    </button>
-
-    <button
-      v-if="answered && !isLast"
-      ref="nextBtn"
-      type="button"
-      class="check-next"
-      data-testid="check-next"
-      :disabled="busy"
-      @click="emit('next')"
-    >
-      Next
-    </button>
-    <button
-      v-if="answered && isLast"
-      ref="doneBtn"
-      type="button"
-      class="check-next"
-      data-testid="check-done"
-      :disabled="busy"
-      @click="emit('done')"
-    >
-      Done
-    </button>
   </section>
 </template>
 
 <style scoped>
+/* The check card pauses the stack: same white stock as the tutor, but the
+   head line carries a 3px graphite rule as part of the head, not a side
+   border, and the card runs a touch wider. */
 .check-card {
+  max-width: 84%;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  padding: 1rem 1.125rem;
-  border: 1px solid var(--color-accent);
-  border-radius: var(--radius-lg);
-  background: var(--color-accent-soft);
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-card);
+  box-shadow: 0 1px 0 var(--card-drop);
+  padding: 0.55rem 0.9rem 0.7rem;
 }
-.check-eyebrow {
+
+.check-gutter {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-width: 0;
+  padding-bottom: 0.4rem;
+  border-bottom: 3px solid var(--ink);
+}
+
+.role-tag {
+  font-family: var(--font-sans);
   font-size: var(--fs-label);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-label);
-  font-weight: 600;
-  color: var(--color-accent-text);
+  font-weight: 400;
+  color: var(--pencil);
 }
+
+.check-box {
+  /* Containing block for the sr-only live region below; without it the
+     absolutely positioned box resolves against the page and can grow the
+     document past the fold on mobile. */
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 0.5rem;
+  font-family: var(--font-sans);
+}
+
+/* The count sits in the head line's right slot, matching tutor/learner
+   cards' timestamp -- same size as the "check" role label, pencil ink. */
+.check-progress {
+  margin: 0;
+  flex: 0 0 auto;
+  font-size: var(--fs-label);
+  color: var(--pencil);
+}
+
 .check-question {
   margin: 0;
-  font-weight: 600;
-  color: var(--color-text);
+  font-size: var(--fs-body);
+  font-weight: 700;
+  line-height: var(--lh-body);
+  color: var(--ink);
 }
+
 .check-options {
   list-style: none;
-  margin: 0.25rem 0 0;
+  margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
 }
+
 .check-option {
+  display: flex;
+  align-items: baseline;
+  gap: 0.625rem;
   width: 100%;
   text-align: left;
-  background: var(--color-surface, transparent);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md, 0.6rem);
-  padding: 0.6rem 0.85rem;
-  color: var(--color-text);
+  background: transparent;
+  border: 0;
+  /* Painted, not laid out: a border-bottom made every option 29px. */
+  box-shadow: inset 0 -1px 0 var(--rule);
+  border-radius: 0;
+  padding: 0.4rem 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--ink);
   cursor: pointer;
-  transition:
-    border-color 0.15s,
-    background 0.15s;
 }
-.check-option:not(:disabled):not([aria-disabled='true']):hover {
-  border-color: var(--color-accent);
+
+.check-letter {
+  flex: 0 0 auto;
+  color: var(--ink-learner);
+  font-weight: 700;
 }
-.check-option:not(:disabled):not([aria-disabled='true']):focus-visible {
-  border-color: var(--color-accent);
+
+.check-option-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.check-option:not([aria-disabled='true']):hover .check-option-text {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.check-option:not([aria-disabled='true']):focus-visible {
   outline: 2px solid var(--color-accent-ring);
   outline-offset: 2px;
 }
-.check-option:disabled,
+
 .check-option[aria-disabled='true'] {
   cursor: default;
 }
-.check-option.is-correct {
-  border-color: var(--signal-success, #2e7d32);
-  background: color-mix(in srgb, var(--signal-success, #2e7d32) 14%, transparent);
+
+/* Grading is the marker's hand: red marks beside the line, never a fill. */
+.check-mark {
+  flex: 0 0 auto;
+  align-self: center;
+  fill: none;
+  stroke: var(--ink-marker);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  animation: mark-draw var(--motion-base) cubic-bezier(0.16, 1, 0.3, 1) both;
 }
-.check-option.is-incorrect {
-  border-color: var(--signal-warning, #b26a00);
-  background: color-mix(in srgb, var(--signal-warning, #b26a00) 14%, transparent);
+
+@keyframes mark-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
 }
-.check-skip {
-  align-self: flex-start;
-  background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-pill);
-  padding: 0.35rem 0.9rem;
-  font-size: 0.8125rem;
-  color: var(--color-text-muted);
-  cursor: pointer;
+
+.check-option.is-incorrect .check-option-text {
+  color: var(--pencil);
 }
-.check-skip:disabled,
-.check-next:disabled {
-  opacity: 0.55;
-  cursor: default;
-  pointer-events: none;
-}
-.check-skip:hover {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
-}
-.check-skip:focus-visible {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
-  outline: 2px solid var(--color-accent-ring);
-  outline-offset: 2px;
-}
+
 .check-verdict {
-  font-weight: 600;
+  margin: 0;
+  font-size: var(--fs-body);
+  font-weight: 700;
+  line-height: var(--lh-body);
+  color: var(--ink);
 }
+
+.check-card.incorrect .check-verdict {
+  color: var(--ink-marker-text);
+}
+
 .check-explanation {
   margin: 0;
-  color: var(--color-text-muted);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--ink);
 }
-.check-card.correct {
-  border-color: var(--signal-success, #2e7d32);
-}
-.check-card.incorrect {
-  border-color: var(--signal-warning, #b26a00);
-}
+
+.check-skip,
 .check-next {
   align-self: flex-start;
-  background: var(--color-accent-strong);
-  /* On the solid accent fill, foreground must be light. --color-accent-text is
-     the accent COLOR itself (for text on dark surfaces, e.g. the eyebrow), so it
-     would render coral-on-coral (invisible). Use the app's on-accent light text. */
-  color: var(--color-text-on-accent);
-  border: 1px solid var(--color-accent-strong);
-  border-radius: var(--radius-pill);
-  padding: 0.4rem 1.1rem;
-  font-weight: 600;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  color: var(--ink-learner);
   cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
-.check-next:hover {
-  filter: brightness(1.05);
+
+.check-skip:disabled,
+.check-next:disabled {
+  color: var(--pencil);
+  cursor: default;
+  pointer-events: none;
+  text-decoration: none;
 }
+
+.check-skip:focus-visible,
 .check-next:focus-visible {
-  filter: brightness(1.05);
   outline: 2px solid var(--color-accent-ring);
   outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .check-mark {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
+
+@media (max-width: 599px) {
+  .check-card {
+    max-width: 92%;
+  }
+}
+
+/* R1: rows have only a painted separator between them -- fine for a mouse,
+   too tight to tap reliably. On coarse pointers only, grow each row and
+   centre the letter and text within it; the inset box-shadow separator
+   keeps the ruled look unchanged. */
+@media (pointer: coarse) {
+  .check-option {
+    min-height: 3.5rem;
+    align-items: center;
+  }
 }
 </style>

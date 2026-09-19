@@ -1,13 +1,10 @@
 name: E2E
 
 on:
+  # No paths filter: this job is a required branch-protection check, and a
+  # PR filtered out by paths would never trigger it, leaving the check stuck
+  # at "Expected - Waiting for status" forever.
   pull_request:
-    paths:
-      - 'frontend/**'
-      - 'backend/**'
-      - 'docker-compose.yml'
-      - 'docker-compose.prod.yml'
-      - '.github/workflows/e2e.yml'
   push:
     branches: [main, dev]
   workflow_dispatch:
@@ -20,8 +17,7 @@ jobs:
   playwright:
     name: Playwright (chromium)
     runs-on: ubuntu-latest
-    # Non-blocking soak per design doc Phase 3 acceptance.
-    continue-on-error: true
+    # Blocking since 2026-09-02 (Phase 6 complete; 16/16 green PR runs).
     timeout-minutes: 12
 
     steps:

@@ -4,8 +4,6 @@ import { apiDelete, apiGet, apiPatch } from './apiClient.js'
 // prefix. user_id is resolved from the Authorization header server-side.
 export const getSessionProfile = (sessionId) => apiGet(`/profile/${sessionId}`)
 
-export const getAggregateProfile = () => apiGet('/profile/aggregate')
-
 export const getUsageSummary = () => apiGet('/usage/summary')
 
 // Both write calls send If-Match so the server can enforce optimistic

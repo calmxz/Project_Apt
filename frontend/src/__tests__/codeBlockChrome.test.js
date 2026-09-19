@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { renderMarkdown } from '../lib/markdownRenderer.js'
+import { renderMarkdown, whenRendererReady } from '../lib/markdownRenderer.js'
 import MarkdownContent from '../components/chat/MarkdownContent.vue'
 
 describe('code-block chrome', () => {
@@ -16,7 +16,19 @@ describe('code-block chrome', () => {
     expect(html).toMatch(/class="code-block-lang"[^>]*>plain/)
   })
 
-  it('preserves highlight.js spans inside the code block', () => {
+  // R2: the copy button measured 49x28 on coarse pointer; it sits directly
+  // above the code with no room to grow in layout, so it gets the invisible
+  // hit-area extension rather than coarse-2x.
+  it('R2: copy button carries hit-44 for a coarse-pointer hit area', () => {
+    const html = renderMarkdown('```python\nprint("hi")\n```')
+    expect(html).toMatch(/class="code-block-copy hit-44"/)
+  })
+
+  // P1: highlight.js is loaded on demand by the first fence, so the highlighted
+  // markup lands on the render after the plugin arrives.
+  it('preserves highlight.js spans inside the code block', async () => {
+    renderMarkdown('```python\ndef foo(): pass\n```')
+    await whenRendererReady()
     const html = renderMarkdown('```python\ndef foo(): pass\n```')
     expect(html).toContain('hljs-keyword')
   })
