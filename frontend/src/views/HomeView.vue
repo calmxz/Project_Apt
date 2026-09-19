@@ -147,18 +147,6 @@ function startQuick() {
   flex-direction: column;
 }
 
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
 /* Field on a rule: no box, no radius, one bottom rule that inks on focus.
    overflow/text-overflow/white-space clip a long placeholder to an ellipsis
    on narrow viewports instead of letting it wrap or overflow mid-word. */

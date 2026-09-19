@@ -1,7 +1,8 @@
 <script setup>
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useSessionStore } from '@/stores/session.js'
+import { friendlyError } from '@/lib/errors.js'
 import { cardStory, cardChips, cardMeta } from '@/utils/sessionCard.js'
 import EmptyState from '@/components/EmptyState.vue'
 import SessionChips from '@/components/SessionChips.vue'
@@ -30,29 +31,38 @@ async function continueSession(s) {
   }
 }
 
-// Row label cells, the same three-cell label Home and the sidebar carry:
-// topic + mastered count on line one, the focus cue underneath. The mastered
-// chip is dropped from the chip row so the count is written once per row.
-function masteredOf(s) {
-  return s?.progress?.mastered_count || 0
-}
-
-function rowChips(s) {
-  return cardChips(s).filter((c) => c.type !== 'mastered')
-}
-
-// Status is no longer a word beside the topic; under the All filter it reads
-// off the pencil meta line instead.
-function rowMeta(s) {
-  return s.ended_at ? `${cardMeta(s)} · ended` : cardMeta(s)
-}
-
 const items = ref([])
 const total = ref(0)
 const limit = ref(20)
 const offset = ref(0)
 const loading = ref(false)
 const error = ref(null)
+
+// Row label cells, the same three-cell label Home and the sidebar carry:
+// topic + mastered count on line one, the focus cue underneath. The mastered
+// chip is dropped from the chip row so the count is written once per row.
+// Status is no longer a word beside the topic; under the All filter it reads
+// off the pencil meta line instead.
+//
+// Derived once per row per list change rather than per template reference:
+// the template read each of these two or three times, and cardStory alone is
+// fifteen regex passes.
+const rows = computed(() =>
+  items.value.map((s) => {
+    const story = cardStory(s)
+    return {
+      s,
+      story,
+      chips: cardChips(s).filter((c) => c.type !== 'mastered'),
+      meta: s.ended_at ? `${cardMeta(s)} · ended` : cardMeta(s),
+      mastered: s?.progress?.mastered_count || 0,
+      descClass: {
+        'library-desc-muted': !story,
+        'library-desc-quote': !s.ended_at && !!story,
+      },
+    }
+  }),
+)
 
 // Controls, seeded from the route query (produced by the sidebar's "View
 // all" links -- Tasks 3-4). Vue Router does not remount this component on
@@ -91,7 +101,9 @@ async function load({ append = false } = {}) {
     offset.value = page.offset
   } catch (e) {
     if (seq !== _loadSeq) return
-    error.value = e?.message || 'Failed to load sessions'
+    // friendlyError keeps a raw `API 500 /sessions: {...}` off the page; a
+    // rejection with no message at all still gets the generic line.
+    error.value = e?.message ? friendlyError(e) : 'Failed to load sessions'
   } finally {
     if (seq === _loadSeq) loading.value = false
   }
@@ -191,8 +203,6 @@ onUnmounted(() => {
   if (observer) observer.disconnect()
   observer = null
 })
-
-defineExpose({ load }) // used by control/pagination tasks
 </script>
 
 <template>
@@ -277,12 +287,17 @@ defineExpose({ load }) // used by control/pagination tasks
       subtext="Try a different filter or start a new session."
     />
 
-    <ul v-else-if="items.length" class="library-list">
-      <li v-for="s in items" :key="s.id" class="library-row" :data-testid="`library-card-${s.id}`">
+    <ul v-else class="library-list">
+      <li
+        v-for="{ s, story, chips, meta, mastered, descClass } in rows"
+        :key="s.id"
+        class="library-row"
+        :data-testid="`library-card-${s.id}`"
+      >
         <RouterLink class="library-card-link" :to="{ name: 'session', params: { id: s.id } }">
           <span class="library-card-head">
             <span class="library-topic">{{ s.topic || 'Untitled' }}</span>
-            <span v-if="masteredOf(s)" class="library-mastered" data-tabular aria-hidden="true">
+            <span v-if="mastered" class="library-mastered" data-tabular aria-hidden="true">
               <svg
                 class="library-mastered-mark"
                 viewBox="0 0 12 12"
@@ -297,25 +312,14 @@ defineExpose({ load }) // used by control/pagination tasks
               >
                 <path d="M2 6.5 L4.8 9.2 L10 3.2" />
               </svg>
-              {{ masteredOf(s) }}
+              {{ mastered }}
             </span>
           </span>
-          <SessionChips
-            v-if="rowChips(s).length"
-            class="library-chips"
-            :chips="rowChips(s)"
-            variant="card"
-          />
-          <span
-            class="library-desc"
-            :class="{
-              'library-desc-muted': !cardStory(s),
-              'library-desc-quote': !s.ended_at && !!cardStory(s),
-            }"
-          >
-            {{ cardStory(s) || 'No activity yet' }}
+          <SessionChips v-if="chips.length" class="library-chips" :chips="chips" variant="card" />
+          <span class="library-desc" :class="descClass">
+            {{ story || 'No activity yet' }}
           </span>
-          <span class="library-meta">{{ rowMeta(s) }}</span>
+          <span class="library-meta">{{ meta }}</span>
         </RouterLink>
         <button
           v-if="s.ended_at"
@@ -615,10 +619,7 @@ defineExpose({ load }) // used by control/pagination tasks
   color: var(--pencil);
 }
 
-.library-desc-muted {
-  font-style: italic;
-}
-
+.library-desc-muted,
 .library-desc-quote {
   font-style: italic;
 }
@@ -639,8 +640,10 @@ defineExpose({ load }) // used by control/pagination tasks
   color: var(--pencil);
 }
 
-.library-continue {
-  align-self: start;
+/* The row's Continue and the sentinel's More/Retry are the same blue text
+   control; only the row one has to place itself in the card grid. */
+.library-continue,
+.library-pg-btn {
   padding: 0;
   border: 0;
   background: transparent;
@@ -654,19 +657,26 @@ defineExpose({ load }) // used by control/pagination tasks
   cursor: pointer;
 }
 
-.library-continue:hover:not(:disabled) {
+.library-continue:hover:not(:disabled),
+.library-pg-btn:hover:not(:disabled) {
   color: var(--color-accent-hover);
 }
 
-.library-continue:disabled {
+.library-continue:disabled,
+.library-pg-btn:disabled {
   color: var(--pencil);
   text-decoration: none;
   cursor: default;
 }
 
-.library-continue:focus-visible {
+.library-continue:focus-visible,
+.library-pg-btn:focus-visible {
   outline: 2px solid var(--color-accent-ring);
   outline-offset: 2px;
+}
+
+.library-continue {
+  align-self: start;
 }
 
 .muted {
@@ -691,35 +701,6 @@ defineExpose({ load }) // used by control/pagination tasks
 
 .library-sentinel > :deep(*) {
   flex: 0 1 auto;
-}
-
-.library-pg-btn {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--ink-learner);
-  font-family: var(--font-sans);
-  font-size: var(--fs-caption);
-  font-weight: 700;
-  line-height: var(--lh-body);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  cursor: pointer;
-}
-
-.library-pg-btn:hover:not(:disabled) {
-  color: var(--color-accent-hover);
-}
-
-.library-pg-btn:disabled {
-  color: var(--pencil);
-  text-decoration: none;
-  cursor: default;
-}
-
-.library-pg-btn:focus-visible {
-  outline: 2px solid var(--color-accent-ring);
-  outline-offset: 2px;
 }
 
 .library-end {

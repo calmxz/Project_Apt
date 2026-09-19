@@ -96,13 +96,7 @@ onBeforeUnmount(() => {
 })
 
 const searchQuery = ref('')
-const { searching, pinnedActive, activeGroups, endedRows } = useSessionGroups(
-  sessions,
-  searchQuery,
-  ref(null), // null => Date.now() captured at setup time
-)
-
-const activeFlat = computed(() => activeGroups.value.flatMap((g) => g.rows))
+const { searching, pinnedActive, activeRows, endedRows } = useSessionGroups(sessions, searchQuery)
 
 // SIDEBAR_CAP is the floor (and the fallback wherever the list's height cannot
 // be measured -- jsdom, or a browser without ResizeObserver). SIDEBAR_CAP_MAX
@@ -191,9 +185,16 @@ const showViewAllSearch = computed(
 // component's total render past renderCap on its own.
 const cappedPinnedActive = computed(() => pinnedActive.value.slice(0, renderCap.value))
 const cappedActiveFlat = computed(() =>
-  activeFlat.value.slice(0, Math.max(0, renderCap.value - cappedPinnedActive.value.length)),
+  activeRows.value.slice(0, Math.max(0, renderCap.value - cappedPinnedActive.value.length)),
 )
 const cappedEndedRows = computed(() => endedRows.value.slice(0, renderCap.value))
+
+// Collapsed icon rail: one flat spine of every row the expanded view would draw.
+const railRows = computed(() => [
+  ...cappedPinnedActive.value,
+  ...cappedActiveFlat.value,
+  ...cappedEndedRows.value,
+])
 
 const activeRendered = computed(
   () => cappedPinnedActive.value.length + cappedActiveFlat.value.length,
@@ -217,13 +218,13 @@ const showEmptyActiveHint = computed(
     !loading.value &&
     !searching.value &&
     sessions.value.length > 0 &&
-    !activeGroups.value.length &&
+    !activeRows.value.length &&
     !pinnedActive.value.length,
 )
 
 // Fetch only if we haven't loaded yet. HomeView also calls listSessions on mount;
-// shared Pinia store means second call refetches (and that's fine — it'll be
-// fresh data), but skipping when populated avoids the deep-link redundant fetch.
+// the store de-dupes concurrent calls via _inflight, and skipping when populated
+// avoids the deep-link redundant fetch.
 onMounted(async () => {
   // Fit-to-height: measure once the list column exists (desktop or drawer) and
   // again whenever it resizes. Guarded so jsdom -- which has no
@@ -252,16 +253,17 @@ onMounted(async () => {
 // Scroll the active session row into view on route change.
 watch(
   () => route.params.id,
-  async () => {
+  async (id) => {
+    // Nothing to scroll to off a session route -- skip the nextTick + query.
+    if (!id) return
     await nextTick()
     if (!listEl.value) return
-    const target = listEl.value.querySelector(`[data-session-id="${route.params.id}"]`)
+    const target = listEl.value.querySelector(`[data-session-id="${id}"]`)
     target?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   },
 )
 
 const isExpanded = computed(() => mode.value === 'expanded' || mode.value === 'drawer-open')
-const showCollapseToggle = computed(() => isDesktop.value)
 const showDrawerClose = computed(() => !isDesktop.value && mode.value === 'drawer-open')
 
 // Clear search when collapsing so the icon rail is never gated empty.
@@ -316,7 +318,7 @@ async function onSignOut() {
         <Logo :size="isExpanded ? 'md' : 'sm'" :variant="isExpanded ? 'full' : 'mark-only'" />
       </RouterLink>
       <button
-        v-if="showCollapseToggle"
+        v-if="isDesktop"
         type="button"
         class="sb-toggle sb-toggle--edge hit-44"
         :aria-label="isExpanded ? 'Collapse sidebar' : 'Expand sidebar'"
@@ -632,7 +634,7 @@ async function onSignOut() {
       <template v-else>
         <ul v-if="sessions.length" class="sb-session-list sb-session-list--collapsed">
           <SidebarSessionRow
-            v-for="s in [...cappedPinnedActive, ...cappedActiveFlat, ...cappedEndedRows]"
+            v-for="s in railRows"
             :key="s.id"
             :session="s"
             :state="s.ended_at ? 'ended' : 'active'"
@@ -717,10 +719,7 @@ async function onSignOut() {
   overflow: hidden;
 }
 
-.sidebar--expanded {
-  width: 100%;
-}
-
+.sidebar--expanded,
 .sidebar--collapsed {
   width: 100%;
 }
@@ -770,26 +769,12 @@ async function onSignOut() {
   transition: opacity var(--motion-fast) ease;
 }
 
-/* Collapsed grid column when the drawer is closed on mobile. */
-.sidebar--drawer:not(.sidebar--drawer-open) {
-  pointer-events: none;
-}
-
 .sb-backdrop {
   position: fixed;
   inset: 0;
   z-index: 29;
   background: color-mix(in srgb, var(--ink) 45%, transparent);
-  animation: sb-fade-in var(--motion-fast) ease;
-}
-
-@keyframes sb-fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  animation: sb-mode-fade var(--motion-fast) ease;
 }
 
 /* The contents, the backdrop and the drawer all arrive at their final state at
@@ -869,11 +854,6 @@ async function onSignOut() {
   border-right: 0;
   border-radius: 6px 0 0 6px;
   background: var(--card);
-  color: var(--pencil);
-}
-
-.sb-toggle--edge:hover {
-  color: var(--ink-learner);
 }
 
 .sb-cta {

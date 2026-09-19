@@ -148,7 +148,7 @@
            never announced twice. -->
       <span
         v-if="uploading || sending"
-        class="composer-busy"
+        class="composer-busy sr-only"
         aria-hidden="true"
         data-testid="composer-busy"
       >
@@ -206,6 +206,9 @@ function autoResize() {
   inner.style.height = `${next}px`
 }
 
+// Every draft change reaches the textarea through v-model, so this covers
+// typing as well as programmatic writes (quick prompts, restored drafts,
+// clear-on-send); onInput does not need its own resize call.
 watch(
   () => props.modelValue,
   () => nextTick(autoResize),
@@ -213,7 +216,6 @@ watch(
 
 function onInput(e) {
   emit('update:modelValue', e.target.value)
-  autoResize()
 }
 
 function onKeydown(ev) {
@@ -294,6 +296,10 @@ defineExpose({ focus })
   align-self: stretch;
   width: 100%;
   min-height: 1.75rem;
+  /* COMPOSER_MAX_HEIGHT_PX (168px) in <script>, in rem. autoResize clamps the
+     inline height, but it only runs once the draft first changes, so this caps
+     the frames before that -- and it tracks the root font size, which the px
+     clamp cannot. */
   max-height: 10.5rem;
   padding: 0;
   margin: 0;
@@ -316,10 +322,6 @@ defineExpose({ focus })
 .composer-input::placeholder {
   color: var(--pencil);
   opacity: 1;
-}
-
-.composer-input:disabled {
-  cursor: not-allowed;
 }
 
 .composer-input::-webkit-scrollbar {
@@ -414,9 +416,13 @@ defineExpose({ focus })
 .composer-stop:disabled,
 .composer-send:disabled:not(.is-armed) {
   color: var(--pencil);
-  cursor: not-allowed;
 }
 
+/* An armed send greys out nowhere, but every disabled control still refuses
+   the pointer. */
+.composer-input:disabled,
+.composer-attach:disabled,
+.composer-stop:disabled,
 .composer-send:disabled {
   cursor: not-allowed;
 }
@@ -465,20 +471,10 @@ defineExpose({ focus })
 }
 
 /* .spin (base.css) does the rotation; the arc is a whole <svg> so it turns
-   about its own centre. The caption beside it is out of sight while it turns. */
-.composer-busy {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-  border: 0;
-}
+   about its own centre. The caption beside it is out of sight while it turns
+   -- .sr-only (base.css) hides it; the override below brings it back.
 
-/* A still arc says nothing, so under reduced motion it leaves and its caption
+   A still arc says nothing, so under reduced motion it leaves and its caption
    is written on the hint line instead, in pencil on the pitch. */
 @media (prefers-reduced-motion: reduce) {
   .composer-spinner {

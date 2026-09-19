@@ -4,6 +4,7 @@ import MarkdownContent from './MarkdownContent.vue'
 import ToolCallChip from './ToolCallChip.vue'
 import CitationsList from './CitationsList.vue'
 import CheckRecap from './CheckRecap.vue'
+import { formatTime } from '../../utils/formatDate.js'
 
 const props = defineProps({
   message: { type: Object, required: true },
@@ -22,11 +23,8 @@ const visibleToolCalls = computed(() => {
   return calls.filter((tc) => tc.state !== 'error' || !succeeded.has(tc.name))
 })
 
-const TIME_FMT = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' })
 // The head line carries the time only when the server sent one; never invent it.
-const timeLabel = computed(() =>
-  props.message.created_at ? TIME_FMT.format(new Date(props.message.created_at)) : '',
-)
+const timeLabel = computed(() => formatTime(props.message.created_at))
 </script>
 
 <template>

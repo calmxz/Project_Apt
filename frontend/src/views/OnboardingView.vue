@@ -1,90 +1,78 @@
 <template>
-  <main class="cover">
-    <div class="sheet">
-      <header class="cover-head">
-        <Logo size="md" variant="full" />
-        <h1 class="cover-title">Welcome to Crux.</h1>
-        <p class="cover-lede">
-          Tell us how you like to learn — we'll tune the tutor before you begin.
+  <AuthCover
+    title="Welcome to Crux."
+    lede="Tell us how you like to learn — we'll tune the tutor before you begin."
+  >
+    <form class="form" @submit.prevent="submit">
+      <div class="field stagger" style="--delay: 0ms">
+        <label for="display-name" class="field-label">What we call you</label>
+        <div class="field-line">
+          <InputText
+            id="display-name"
+            v-model="displayName"
+            data-testid="onboarding-name"
+            placeholder="Learner"
+            autocomplete="off"
+            class="field-input"
+          />
+        </div>
+      </div>
+
+      <div class="field stagger" style="--delay: 60ms">
+        <div class="choice" data-testid="onboarding-feedback">
+          <p class="field-label">When you get stuck</p>
+          <FeedbackStylePicker
+            v-model="feedback"
+            :options="feedbackOptions"
+            name="feedback-style"
+          />
+        </div>
+        <p class="help">
+          {{
+            feedback === 'hints'
+              ? 'Tutor will nudge you toward the answer.'
+              : 'Tutor will explain the answer outright when asked.'
+          }}
         </p>
-      </header>
+      </div>
 
-      <form class="form" @submit.prevent="submit">
-        <div class="field stagger" style="--delay: 0ms">
-          <label for="display-name" class="field-label">What we call you</label>
-          <div class="field-line">
-            <InputText
-              id="display-name"
-              v-model="displayName"
-              data-testid="onboarding-name"
-              placeholder="Learner"
-              autocomplete="off"
-              class="field-input"
-            />
-          </div>
-        </div>
-
-        <div class="field stagger" style="--delay: 60ms">
-          <div class="choice" data-testid="onboarding-feedback">
-            <p class="field-label">When you get stuck</p>
-            <FeedbackStylePicker
-              v-model="feedback"
-              :options="feedbackOptions"
-              name="feedback-style"
-            />
-          </div>
-          <p class="help">
-            {{
-              feedback === 'hints'
-                ? 'Tutor will nudge you toward the answer.'
-                : 'Tutor will explain the answer outright when asked.'
-            }}
-          </p>
-        </div>
-
-        <div class="actions stagger" style="--delay: 120ms">
-          <button
-            type="submit"
-            class="cta"
-            data-testid="onboarding-submit"
-            :disabled="!canSubmit || submitting"
+      <div class="actions stagger" style="--delay: 120ms">
+        <button type="submit" class="cta" data-testid="onboarding-submit" :disabled="submitting">
+          <span>Begin</span>
+          <svg
+            class="cta-arrow"
+            viewBox="0 0 20 20"
+            width="18"
+            height="18"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+            focusable="false"
           >
-            <span>Begin</span>
-            <svg
-              class="cta-arrow"
-              viewBox="0 0 20 20"
-              width="18"
-              height="18"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-              focusable="false"
-            >
-              <path d="M3.5 10 L16.5 10" />
-              <path d="M11 4.5 L16.5 10 L11 15.5" />
-            </svg>
-          </button>
-        </div>
+            <path d="M3.5 10 L16.5 10" />
+            <path d="M11 4.5 L16.5 10 L11 15.5" />
+          </svg>
+        </button>
+      </div>
 
-        <p v-if="submitError" class="status is-alert" role="alert" data-testid="onboarding-error">
-          {{ submitError }}
-        </p>
-      </form>
-    </div>
-  </main>
+      <p v-if="submitError" class="status is-alert" role="alert" data-testid="onboarding-error">
+        {{ submitError }}
+      </p>
+    </form>
+  </AuthCover>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import InputText from 'primevue/inputtext'
 
+import AuthCover from '../components/auth/AuthCover.vue'
 import FeedbackStylePicker from '../components/FeedbackStylePicker.vue'
-import Logo from '../components/Logo.vue'
 import { friendlyError } from '@/lib/errors.js'
 import { useUserStore } from '../stores/user.js'
 
@@ -98,13 +86,11 @@ const feedbackOptions = [
 ]
 const feedback = ref(userStore.interactionPreferences?.feedback || 'hints')
 
-const canSubmit = computed(() => Boolean(feedback.value))
-
 const submitting = ref(false)
 const submitError = ref(null)
 
 async function submit() {
-  if (!canSubmit.value || submitting.value) return
+  if (submitting.value) return
   submitting.value = true
   submitError.value = null
   try {
@@ -124,116 +110,11 @@ async function submit() {
 </script>
 
 <style scoped>
-/* One white card centred on the desk ground, matching the auth covers. */
-.cover {
-  min-height: 100dvh;
-  box-sizing: border-box;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1.75rem 1rem 3.5rem;
-  background: var(--desk);
-}
-
-.sheet {
-  width: 100%;
-  max-width: 26rem;
-  background: var(--card);
-  border: 1px solid var(--card-edge);
-  border-radius: var(--radius-card);
-  box-shadow:
-    0 1px 0 var(--card-drop),
-    var(--shadow-lift);
-  padding: clamp(1.5rem, 4vw, 2.5rem);
-}
-
-.cover-head {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-
-.cover-title {
-  margin: 0.875rem 0 0;
-  font-family: var(--font-display);
-  font-size: var(--fs-h1);
-  font-weight: 600;
-  letter-spacing: var(--tracking-display);
-  line-height: var(--lh-display);
-  color: var(--ink);
-}
-
-.cover-lede {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-size: var(--fs-caption);
-  line-height: var(--lh-body);
-  color: var(--pencil);
-}
-
-.form {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-  padding-top: 1.5rem;
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-}
-
+/* The picker's own label sits as a paragraph rather than a <label>, so it
+   needs the block box the cover's <label> elements already have. */
 .field-label {
   display: block;
   padding: 0;
-  font-family: var(--font-sans);
-  font-size: var(--fs-label);
-  line-height: 1.75rem;
-  color: var(--pencil);
-}
-
-.field-line {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  align-items: end;
-  gap: 0.5rem;
-  border-bottom: 1px solid var(--card-edge);
-  transition: border-color var(--motion-fast) ease;
-}
-
-.field-line:focus-within {
-  border-bottom-color: var(--ink-learner);
-}
-
-.field-input :deep(input),
-.field-input.p-inputtext {
-  width: 100%;
-  height: 1.75rem;
-  padding: 0;
-  margin: 0;
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-  outline: 0;
-  font-family: var(--font-sans);
-  font-size: var(--fs-body);
-  line-height: 1.75rem;
-  color: var(--ink-learner);
-  caret-color: var(--ink-learner);
-}
-
-.field-input :deep(input):focus,
-.field-input.p-inputtext:focus {
-  box-shadow: none;
-  outline: 0;
-  border: 0;
-}
-
-.field-input :deep(input)::placeholder,
-.field-input.p-inputtext::placeholder {
-  color: var(--pencil);
-  opacity: 1;
 }
 
 /* The lettered lines come from the shared FeedbackStylePicker, so the
@@ -252,74 +133,6 @@ async function submit() {
   font-size: var(--fs-caption);
   line-height: var(--lh-body);
   color: var(--pencil);
-}
-
-/* Written, not stamped: the cover's action is a line of blue text with a
-   drawn arrow after the word. Filled blue stays in dialog footers. */
-.actions {
-  display: flex;
-}
-
-.cta {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--ink-learner);
-  font-family: var(--font-sans);
-  font-size: var(--fs-caption);
-  font-weight: 700;
-  line-height: 1.75rem;
-  cursor: pointer;
-  transition: color var(--motion-fast) ease;
-}
-
-.cta > span {
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.cta:not(:disabled):hover {
-  color: var(--color-accent-hover);
-}
-
-.cta:focus-visible {
-  outline: 2px solid var(--color-accent-ring);
-  outline-offset: 2px;
-}
-
-.cta:disabled {
-  color: var(--pencil);
-  cursor: default;
-}
-
-.cta:disabled > span {
-  text-decoration: none;
-}
-
-.cta-arrow {
-  flex: 0 0 auto;
-}
-
-.status {
-  margin: 0;
-  background: var(--card);
-  border: 1px solid var(--card-edge);
-  border-top: 3px solid var(--color-accent);
-  border-radius: 0 0 var(--radius-card) var(--radius-card);
-  padding: 0.4rem 0.75rem;
-  font-family: var(--font-sans);
-  font-size: var(--fs-caption);
-  line-height: var(--lh-body);
-  color: var(--ink);
-}
-
-.status.is-alert {
-  border-top-color: var(--tab-focus);
-  color: var(--ink-marker-text);
 }
 
 /* Ink appears: the sheet fills in line by line, nothing moves. */

@@ -7,13 +7,36 @@
   </main>
 </template>
 
-<script setup>
+<script>
 import { renderMarkdown } from '@/lib/markdownRenderer.js'
 
-import BackButton from '../components/BackButton.vue'
-import source from '../legal/terms-of-service.md?raw'
+import privacySource from '../legal/privacy-policy.md?raw'
+import tosSource from '../legal/terms-of-service.md?raw'
 
-const html = renderMarkdown(source)
+// The sources are build-time constants, so the markdown is rendered once per
+// app load. This has to live in a normal <script> block: `<script setup>`
+// bodies run inside setup(), which would re-render both documents on every
+// mount and put HTML_BY_DOC out of reach of defineProps.
+const HTML_BY_DOC = {
+  tos: renderMarkdown(tosSource),
+  privacy: renderMarkdown(privacySource),
+}
+</script>
+
+<script setup>
+import { computed } from 'vue'
+
+import BackButton from '../components/BackButton.vue'
+
+const props = defineProps({
+  doc: {
+    type: String,
+    required: true,
+    validator: (v) => Object.hasOwn(HTML_BY_DOC, v),
+  },
+})
+
+const html = computed(() => HTML_BY_DOC[props.doc])
 </script>
 
 <style scoped>

@@ -1,17 +1,15 @@
 <script setup>
 import { computed } from 'vue'
 import MarkdownContent from './MarkdownContent.vue'
+import { formatTime } from '../../utils/formatDate.js'
 
 const props = defineProps({
   content: { type: String, default: '' },
   createdAt: { type: String, default: null },
 })
 
-const TIME_FMT = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' })
 // The head line carries the time only when the server sent one; never invent it.
-const timeLabel = computed(() =>
-  props.createdAt ? TIME_FMT.format(new Date(props.createdAt)) : '',
-)
+const timeLabel = computed(() => formatTime(props.createdAt))
 </script>
 
 <template>

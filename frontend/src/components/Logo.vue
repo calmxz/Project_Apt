@@ -5,7 +5,7 @@ defineProps({
   size: {
     type: String,
     default: 'md',
-    validator: (v) => ['sm', 'md', 'lg'].includes(v),
+    validator: (v) => ['sm', 'md'].includes(v),
   },
   variant: {
     type: String,
@@ -59,10 +59,6 @@ defineProps({
 .logo[data-size='md'] {
   font-size: 1.1875rem;
 }
-.logo[data-size='lg'] {
-  font-size: 2rem;
-  gap: 0.875rem;
-}
 
 .logo-mark {
   flex-shrink: 0;
@@ -76,9 +72,5 @@ defineProps({
 .logo[data-size='md'] .logo-mark {
   width: 28px;
   height: 28px;
-}
-.logo[data-size='lg'] .logo-mark {
-  width: 56px;
-  height: 56px;
 }
 </style>

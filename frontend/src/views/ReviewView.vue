@@ -113,9 +113,8 @@ async function load(limit = 3, { silent } = {}) {
   try {
     // Only the mount call passes silent:true; the user-initiated "View all"
     // refetch keeps the toast on a real failure.
-    queue.value = silent
-      ? await getReviewQueue({ limit, offset: 0 }, { silent: true })
-      : await getReviewQueue({ limit, offset: 0 })
+    const opts = silent ? [{ silent: true }] : []
+    queue.value = await getReviewQueue({ limit, offset: 0 }, ...opts)
   } catch {
     // The review page must never block; show the empty state on failure.
     queue.value = { items: [], total: 0 }
@@ -336,7 +335,6 @@ async function expand() {
   border: 0;
   background: transparent;
   box-shadow: none;
-  text-align: left;
 }
 
 .review-cover:hover {

@@ -7,12 +7,11 @@ import LoginView from '../views/LoginView.vue'
 import RegisterView from '../views/RegisterView.vue'
 import ForgotPasswordView from '../views/ForgotPasswordView.vue'
 import ResetPasswordView from '../views/ResetPasswordView.vue'
-import TosView from '../views/TosView.vue'
-import PrivacyView from '../views/PrivacyView.vue'
+import LegalView from '../views/LegalView.vue'
 import NotFoundView from '../views/NotFoundView.vue'
 
-// A3: LoginView, RegisterView, ForgotPasswordView, ResetPasswordView, TosView,
-// PrivacyView and NotFoundView all render outside App.vue's shell (their
+// A3: LoginView, RegisterView, ForgotPasswordView, ResetPasswordView, LegalView
+// (the /tos and /privacy routes) and NotFoundView all render outside App.vue's shell (their
 // routes carry `meta: { sidebar: false }`), so App.vue's own <main> never
 // wraps them. Each view's root element must itself be a <main> landmark.
 
@@ -35,11 +34,11 @@ function makeRouter() {
   })
 }
 
-async function mountWithRouter(component) {
+async function mountWithRouter(component, props) {
   const router = makeRouter()
   await router.push('/')
   await router.isReady()
-  return mount(component, { global: { plugins: [router], stubs } })
+  return mount(component, { props, global: { plugins: [router], stubs } })
 }
 
 describe('cover and legal-page views render a main landmark (A3)', () => {
@@ -67,13 +66,13 @@ describe('cover and legal-page views render a main landmark (A3)', () => {
     expect(wrapper.element.tagName).toBe('MAIN')
   })
 
-  it('TosView root is <main>', async () => {
-    const wrapper = await mountWithRouter(TosView)
+  it('LegalView (tos) root is <main>', async () => {
+    const wrapper = await mountWithRouter(LegalView, { doc: 'tos' })
     expect(wrapper.element.tagName).toBe('MAIN')
   })
 
-  it('PrivacyView root is <main>', async () => {
-    const wrapper = await mountWithRouter(PrivacyView)
+  it('LegalView (privacy) root is <main>', async () => {
+    const wrapper = await mountWithRouter(LegalView, { doc: 'privacy' })
     expect(wrapper.element.tagName).toBe('MAIN')
   })
 

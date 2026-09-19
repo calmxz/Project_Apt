@@ -141,144 +141,85 @@
         </ul>
       </section>
 
-      <section class="divider divider--gaps" data-testid="sprof-gaps">
-        <h2 class="divider-tab divider-tab--gaps">Gaps</h2>
-        <div class="divider-body">
-          <p v-if="!data.profile.confirmed_gaps?.length" class="cue-none">None.</p>
-          <ul v-else class="cue-list">
-            <li v-for="g in data.profile.confirmed_gaps" :key="`g-${g.name}`" class="chip">
-              <svg
-                class="cue-mark cue-mark--gap"
-                viewBox="0 0 12 12"
-                width="12"
-                height="12"
-                aria-hidden="true"
-                focusable="false"
-              >
-                <circle cx="6" cy="6" r="4" />
-              </svg>
-              <span class="cue-word">{{ g.name }}</span>
-              <span v-if="g.evidence_type" class="chip-badge" data-testid="evidence-badge">
-                {{ g.evidence_type }}
-              </span>
-              <button
-                type="button"
-                class="icon-btn hit-44"
-                data-testid="chip-remove"
-                :aria-label="`Remove ${g.name}`"
-                @click="removeItem('confirmed_gaps', g.name)"
-              >
-                <svg
-                  class="icon-mark"
-                  viewBox="0 0 16 16"
-                  width="16"
-                  height="16"
-                  aria-hidden="true"
-                  focusable="false"
-                >
-                  <path d="M4 4 L12 12 M12 4 L4 12" />
-                </svg>
-              </button>
-            </li>
-          </ul>
-          <div class="add-row">
-            <input
-              v-model="newGap"
-              data-testid="add-gap"
-              class="add-input"
-              placeholder="Add a gap"
-              aria-label="Add a gap"
-              maxlength="200"
-              @keydown.enter="addGap"
-            />
-            <button
-              type="button"
-              data-testid="add-gap-submit"
-              class="text-btn"
-              aria-label="Add gap"
-              @click="addGap"
-            >
-              Add
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <section class="divider divider--mastered" data-testid="sprof-mastered">
-        <h2 class="divider-tab divider-tab--mastered">Mastered</h2>
-        <div class="divider-body">
-          <p v-if="!data.profile.mastered_concepts?.length" class="cue-none">
-            Nothing recorded yet.
-          </p>
-          <ul v-else class="cue-list">
-            <li v-for="c in data.profile.mastered_concepts" :key="`m-${c.name}`" class="chip">
-              <svg
-                class="cue-mark cue-mark--tick"
-                viewBox="0 0 12 12"
-                width="12"
-                height="12"
-                aria-hidden="true"
-                focusable="false"
-              >
-                <path d="M2 6.5 L4.8 9.2 L10 3.2" />
-              </svg>
-              <span class="cue-word">{{ c.name }}</span>
-              <span v-if="c.evidence_type" class="chip-badge" data-testid="evidence-badge">
-                {{ c.evidence_type }}
-              </span>
-              <button
-                type="button"
-                class="icon-btn hit-44"
-                data-testid="chip-remove"
-                :aria-label="`Remove ${c.name}`"
-                @click="removeItem('mastered_concepts', c.name)"
-              >
-                <svg
-                  class="icon-mark"
-                  viewBox="0 0 16 16"
-                  width="16"
-                  height="16"
-                  aria-hidden="true"
-                  focusable="false"
-                >
-                  <path d="M4 4 L12 12 M12 4 L4 12" />
-                </svg>
-              </button>
-            </li>
-          </ul>
-          <div class="add-row">
-            <input
-              v-model="newMastered"
-              data-testid="add-mastered"
-              class="add-input"
-              placeholder="Add a concept"
-              aria-label="Add a mastered concept"
-              maxlength="200"
-              @keydown.enter="addMastered"
-            />
-            <button
-              type="button"
-              data-testid="add-mastered-submit"
-              class="text-btn"
-              aria-label="Add concept"
-              @click="addMastered"
-            >
-              Add
-            </button>
-          </div>
-        </div>
-      </section>
-
       <section
-        v-if="data.profile.last_session_summary"
-        class="sec sec--ruled"
-        data-testid="sprof-summary"
+        v-for="sec in CUE_SECTIONS"
+        :key="sec.key"
+        :class="sec.sectionClass"
+        :data-testid="sec.testid"
       >
+        <h2 :class="sec.tabClass">{{ sec.label }}</h2>
+        <div class="divider-body">
+          <p v-if="!data.profile[sec.key]?.length" class="cue-none">{{ sec.empty }}</p>
+          <ul v-else class="cue-list">
+            <li
+              v-for="it in data.profile[sec.key]"
+              :key="`${sec.keyPrefix}-${it.name}`"
+              class="chip"
+            >
+              <svg
+                :class="sec.markClass"
+                viewBox="0 0 12 12"
+                width="12"
+                height="12"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <path v-if="sec.markPath" :d="sec.markPath" />
+                <circle v-else cx="6" cy="6" r="4" />
+              </svg>
+              <span class="cue-word">{{ it.name }}</span>
+              <span v-if="it.evidence_type" class="chip-badge" data-testid="evidence-badge">
+                {{ it.evidence_type }}
+              </span>
+              <button
+                type="button"
+                class="icon-btn hit-44"
+                data-testid="chip-remove"
+                :aria-label="`Remove ${it.name}`"
+                @click="removeItem(sec.key, it.name)"
+              >
+                <svg
+                  class="icon-mark"
+                  viewBox="0 0 16 16"
+                  width="16"
+                  height="16"
+                  aria-hidden="true"
+                  focusable="false"
+                >
+                  <path d="M4 4 L12 12 M12 4 L4 12" />
+                </svg>
+              </button>
+            </li>
+          </ul>
+          <div class="add-row">
+            <input
+              v-model="drafts[sec.key]"
+              :data-testid="sec.inputTestid"
+              class="add-input"
+              :placeholder="sec.placeholder"
+              :aria-label="sec.inputLabel"
+              maxlength="200"
+              @keydown.enter="addItem(sec)"
+            />
+            <button
+              type="button"
+              :data-testid="sec.submitTestid"
+              class="text-btn"
+              :aria-label="sec.submitLabel"
+              @click="addItem(sec)"
+            >
+              Add
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section v-if="data.profile.last_session_summary" class="sec" data-testid="sprof-summary">
         <h2 class="sec-title">Session summary</h2>
         <p class="summary-text">{{ stripAutoPrefix(data.profile.last_session_summary) }}</p>
       </section>
 
-      <section class="sec sec--ruled" data-testid="sprof-events">
+      <section class="sec" data-testid="sprof-events">
         <h2 class="sec-title">Recent check-questions</h2>
         <p v-if="!data.recent_learning_events.length" class="cue-none">
           No learning events logged yet.
@@ -315,7 +256,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 import BackButton from '../components/BackButton.vue'
@@ -331,19 +272,56 @@ const props = defineProps({ id: { type: String, required: true } })
 
 const LEVELS = ['beginner', 'intermediate', 'advanced']
 
+// The two cue cards are identical apart from these values; the template renders
+// one body for both. `key` doubles as the profile list name and the draft key.
+const CUE_SECTIONS = [
+  {
+    key: 'confirmed_gaps',
+    label: 'Gaps',
+    sectionClass: 'divider divider--gaps',
+    tabClass: 'divider-tab divider-tab--gaps',
+    testid: 'sprof-gaps',
+    keyPrefix: 'g',
+    empty: 'None.',
+    markClass: 'cue-mark cue-mark--gap',
+    markPath: '',
+    patchKey: 'add_gap',
+    inputTestid: 'add-gap',
+    placeholder: 'Add a gap',
+    inputLabel: 'Add a gap',
+    submitTestid: 'add-gap-submit',
+    submitLabel: 'Add gap',
+  },
+  {
+    key: 'mastered_concepts',
+    label: 'Mastered',
+    sectionClass: 'divider divider--mastered',
+    tabClass: 'divider-tab divider-tab--mastered',
+    testid: 'sprof-mastered',
+    keyPrefix: 'm',
+    empty: 'Nothing recorded yet.',
+    markClass: 'cue-mark cue-mark--tick',
+    markPath: 'M2 6.5 L4.8 9.2 L10 3.2',
+    patchKey: 'add_mastered',
+    inputTestid: 'add-mastered',
+    placeholder: 'Add a concept',
+    inputLabel: 'Add a mastered concept',
+    submitTestid: 'add-mastered-submit',
+    submitLabel: 'Add concept',
+  },
+]
+
 const router = useRouter()
 const store = useSessionStore()
 const data = ref(null)
 const loading = ref(false)
 const error = ref('')
-const etag = ref('')
 const conflict = ref(false)
 // F-05: write failures get their own ref. Reusing the load-path `error`
 // would swap the whole loaded profile for an error paragraph (the template
 // chain is loading -> error -> data) with no control left to retry.
 const writeError = ref('')
-const newMastered = ref('')
-const newGap = ref('')
+const drafts = reactive({ confirmed_gaps: '', mastered_concepts: '' })
 const gapPickerOpen = ref(false)
 
 const topicLabel = computed(() => {
@@ -360,7 +338,6 @@ async function load() {
   error.value = ''
   try {
     data.value = await getSessionProfile(props.id)
-    etag.value = data.value.etag
   } catch (e) {
     error.value = friendlyError(e)
   } finally {
@@ -373,8 +350,9 @@ async function _applyWrite(fn) {
   writeError.value = ''
   try {
     const res = await fn()
-    data.value = { ...data.value, profile: res.profile }
-    etag.value = res.etag
+    // One source of truth for the etag: keeping a separate ref alongside
+    // data.etag let the spread re-seed the stale value on the next write.
+    data.value = { ...data.value, profile: res.profile, etag: res.etag }
   } catch (e) {
     if (e?.status === 412) {
       conflict.value = true
@@ -385,36 +363,29 @@ async function _applyWrite(fn) {
   }
 }
 
-function addMastered() {
-  const v = newMastered.value.trim()
+function addItem(sec) {
+  const v = drafts[sec.key].trim()
   if (!v) return
-  newMastered.value = ''
-  return _applyWrite(() => patchProfile(props.id, { add_mastered: v }, etag.value))
-}
-
-function addGap() {
-  const v = newGap.value.trim()
-  if (!v) return
-  newGap.value = ''
-  return _applyWrite(() => patchProfile(props.id, { add_gap: v }, etag.value))
+  drafts[sec.key] = ''
+  return _applyWrite(() => patchProfile(props.id, { [sec.patchKey]: v }, data.value.etag))
 }
 
 function setLevel(level) {
-  return _applyWrite(() => patchProfile(props.id, { knowledge_level: level }, etag.value))
+  return _applyWrite(() => patchProfile(props.id, { knowledge_level: level }, data.value.etag))
 }
 
 function removeItem(listName, item) {
-  return _applyWrite(() => deleteProfileItem(props.id, listName, item, etag.value))
+  return _applyWrite(() => deleteProfileItem(props.id, listName, item, data.value.etag))
 }
 
 function setSubtopicLevel(name, level) {
   return _applyWrite(() =>
-    patchProfile(props.id, { subtopic: name, subtopic_level: level }, etag.value),
+    patchProfile(props.id, { subtopic: name, subtopic_level: level }, data.value.etag),
   )
 }
 
 function removeSubtopic(name) {
-  return _applyWrite(() => deleteProfileItem(props.id, 'subtopic_levels', name, etag.value))
+  return _applyWrite(() => deleteProfileItem(props.id, 'subtopic_levels', name, data.value.etag))
 }
 
 function startReview() {
@@ -498,10 +469,6 @@ onMounted(load)
   border: 1px solid var(--card-edge);
   border-radius: var(--radius-card);
   box-shadow: 0 1px 0 var(--card-drop);
-}
-
-.sec--ruled {
-  margin-top: 0;
 }
 
 .sec-title {
@@ -904,17 +871,5 @@ onMounted(load)
 
 .skel-short {
   width: 55%;
-}
-
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
 }
 </style>

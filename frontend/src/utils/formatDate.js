@@ -16,6 +16,15 @@ const SHORT_FMT = new Intl.DateTimeFormat(undefined, {
 
 export const formatShortDateTime = (iso) => (iso ? SHORT_FMT.format(new Date(iso)) : '')
 
+// Cap banners and cap toasts both say "Resets at <x>." and both fall back to
+// the UTC rollover when the server sent no timestamp.
+export const formatResetTime = (iso) => formatShortDateTime(iso) || 'midnight UTC'
+
+const TIME_FMT = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' })
+
+// A turn's head line carries the time only when the server sent one.
+export const formatTime = (iso) => (iso ? TIME_FMT.format(new Date(iso)) : '')
+
 const RTF = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
 
 const STEPS = [

@@ -9,7 +9,7 @@
     <strong>Daily limit reached.</strong>
     <span v-if="store.dailyCapInfo">
       {{ store.dailyCapInfo.used }}/{{ store.dailyCapInfo.cap }} requests today. Resets at
-      {{ formatShortDateTime(store.dailyCapInfo.resets_at) || 'midnight UTC' }}.
+      {{ formatResetTime(store.dailyCapInfo.resets_at) }}.
     </span>
   </div>
 
@@ -26,14 +26,14 @@
       <template v-if="store.costCapInfo.scope !== 'global'">
         ${{ store.costCapInfo.used_usd }} of ${{ store.costCapInfo.hard_cap_usd }} spent today.
       </template>
-      Resets at {{ formatShortDateTime(store.costCapInfo.resets_at) || 'midnight UTC' }}.
+      Resets at {{ formatResetTime(store.costCapInfo.resets_at) }}.
     </span>
   </div>
 </template>
 
 <script setup>
 import { useSessionStore } from '../../stores/session.js'
-import { formatShortDateTime } from '../../utils/formatDate.js'
+import { formatResetTime } from '../../utils/formatDate.js'
 
 const store = useSessionStore()
 </script>
