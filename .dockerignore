@@ -8,7 +8,6 @@ __pycache__/
 .env.*.local
 data/
 .git/
-spike/
 frontend/dist/
 frontend/node_modules/
 backend/.venv/

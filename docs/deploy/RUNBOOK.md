@@ -48,6 +48,9 @@ correlated with uploads):
    the single most important value, NOT sqlite), `SUPABASE_URL`,
    `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`.
    Leave `CORS_ORIGINS` blank for now (set in step 6).
+   Also set `GLOBAL_DAILY_COST_CAP_USD` (fleet-wide kill switch, `config.py`),
+   and confirm `SUPABASE_JWKS_URL_OVERRIDE` is ABSENT from the prod env,
+   not merely empty (gate W-15 from the 2026-08-06 QA audit).
 5. Deploy. Wait for the build + first boot (entrypoint runs `alembic upgrade
    head`, then uvicorn on `$PORT`).
 6. Verify: open `https://<api>.onrender.com/health` → expect an ok response.
@@ -95,6 +98,22 @@ auth-only usage but would need `wss://*.supabase.co` if realtime is ever added).
 If the CSP blocks a needed origin, widen the relevant directive in
 `frontend/cspPlugin.js` and rebuild/redeploy (the policy is generated at
 build time into `dist/index.html`, not read from `vercel.json`).
+
+Deploy-time gates carried from the 2026-08-06 QA audit checklist (archived
+2026-09-19, see `docs/decisions.md`). Each was blocked on the deploy itself:
+
+- W-03: curl the live Vercel URL and confirm the CSP header carries the real
+  Render host, not the `CRUX_API_HOST` placeholder.
+- W-04: from the Vercel origin, confirm `X-Cost-Warning` is readable
+  cross-origin (`Access-Control-Expose-Headers` over the wire).
+- W-05: observe live time-to-first-token and the DB pool ceiling (computed
+  ceiling is 10 concurrent DB-holding requests on one uvicorn worker).
+- W-08: once `chunk_embeddings` has meaningful volume, re-run
+  `EXPLAIN ANALYZE ... ORDER BY embedding <=> ...` and confirm the HNSW index
+  is used (at 8 rows the planner correctly seq-scans, so earlier runs proved
+  nothing).
+- W-13: owed paid smokes from PRs #103, #104, #108, #110, #111, #114, #179.
+  Run each PR body's smoke steps against the live stack.
 
 ## Step 8 — Uploads caveat
 

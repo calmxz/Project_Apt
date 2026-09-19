@@ -1,7 +1,7 @@
 # CI Security Inventory — Crux
 
 **Audience:** future maintainers ("why is this CI job here?")
-**Companion to:** [`SECURITY_REVIEW.md`](SECURITY_REVIEW.md) and `.github/workflows/ci.yml`.
+**Companion to:** `.github/workflows/ci.yml`. The 2026-05-23 security review it was written against is archived in git history (see `docs/decisions.md`).
 **Phase introduced:** Phase 6 (`phase/6-ci-security-tests`, 2026-05-23).
 
 Every job below blocks PR merge once branch protection is enabled on `dev`
@@ -50,7 +50,7 @@ Every job below blocks PR merge once branch protection is enabled on `dev`
 
 ## Regression tests added in Phase 6
 
-These tests lock the resolutions from `SECURITY_REVIEW.md` so a future
+These tests lock the resolutions from the 2026-05-23 security review so a future
 refactor reintroducing the finding will fail CI deterministically.
 
 | Finding | Test | Location |

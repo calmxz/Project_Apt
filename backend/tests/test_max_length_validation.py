@@ -1,8 +1,9 @@
 """H-3 regression: every Pydantic request/tool model must reject strings
 exceeding its `max_length` cap. One parametrized case per field+cap.
 
-Locks the caps documented in `docs/security/SECURITY_REVIEW.md` (H-3) so a
-future schema regeneration that drops a cap will fail CI.
+Locks the request-size caps introduced by security finding H-3 (2026-05-23,
+see `docs/decisions.md`) so a future schema regeneration that drops a cap
+will fail CI.
 """
 
 import pytest

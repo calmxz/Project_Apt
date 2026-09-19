@@ -20,7 +20,7 @@ Build plan for Claude Code. Sequential phases with verifiable checkpoints. Read 
 
 ## Phase 0 — Validation Spike (COMPLETE — Knowledge-dominant pass)
 
-> **Status (2026-05-04):** Spike executed. Decision: knowledge-level differentiation confirmed at turn 1 and turn 8 (clear pass). Guidance + engagement differentiation present but delayed (weak pass on gemini-2.5-flash-lite; re-validate on Claude in Phase 3). `interaction_preferences` retained in spec provisionally. See `spike/decision.md` for full analysis.
+> **Status (2026-05-04):** Spike executed. Decision: knowledge-level differentiation confirmed at turn 1 and turn 8 (clear pass). Guidance + engagement differentiation present but delayed (weak pass on gemini-2.5-flash-lite; re-validate on Claude in Phase 3). `interaction_preferences` retained in spec provisionally. See `docs/decisions.md` (2026-05-04 entry) for the verdict; full transcripts in git history (`spike/`, removed 2026-09-19).
 
 **Goal:** Determine whether two manually-crafted profiles produce structurally different tutor responses on the same topic, AND whether the differences hold across a longer conversation.
 
