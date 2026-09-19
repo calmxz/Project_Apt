@@ -1,13 +1,40 @@
 import json
+import re
 from pathlib import Path
 
 import yaml
+
+from config import Settings
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 RENDER = REPO_ROOT / "render.yaml"
 VERCEL = REPO_ROOT / "frontend" / "vercel.json"
 COMPOSE_FILES = (REPO_ROOT / "docker-compose.yml", REPO_ROOT / "docker-compose.prod.yml")
 BACKUP_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "backup.yml"
+ENV_EXAMPLE = REPO_ROOT / ".env.example"
+
+# G-12: names that may appear in .env.example without being a Settings field.
+# Empty on purpose -- a template var the app never reads is dead config.
+ENV_TEMPLATE_ONLY = set()
+
+_NAME_RE = re.compile(r"^[A-Z][A-Z0-9_]*$")
+
+
+def _env_example_names() -> set:
+    """Every NAME mentioned as `NAME=` in .env.example, commented or not."""
+    names = set()
+    for raw in ENV_EXAMPLE.read_text(encoding="utf-8").splitlines():
+        line = raw.strip().lstrip("#").strip()
+        if "=" not in line:
+            continue
+        name = line.split("=", 1)[0].strip()
+        if _NAME_RE.match(name):
+            names.add(name)
+    return names
+
+
+def _settings_env_names() -> set:
+    return {f.upper() for f in Settings.model_fields}
 
 
 def _load(path):
@@ -85,6 +112,28 @@ def test_compose_files_do_not_define_worker_service():
     for path in ("docker-compose.yml", "docker-compose.prod.yml"):
         cfg = _load(path)
         assert "worker" not in cfg["services"]
+
+
+def test_env_example_documents_every_setting():
+    """G-12: a Settings field absent from .env.example is invisible to whoever
+    configures a deploy -- they get the default and never know it existed."""
+    missing = sorted(_settings_env_names() - _env_example_names())
+    assert not missing, f".env.example is missing: {missing}"
+
+
+def test_env_example_has_no_dead_vars():
+    """The other direction: a template var no Settings field reads is config
+    the app silently ignores."""
+    extra = sorted(_env_example_names() - _settings_env_names() - ENV_TEMPLATE_ONLY)
+    assert not extra, f".env.example documents unknown vars: {extra}"
+
+
+def test_render_env_vars_are_known_settings():
+    data = yaml.safe_load(RENDER.read_text(encoding="utf-8"))
+    known = _settings_env_names()
+    for svc in data["services"]:
+        unknown = sorted({e["key"] for e in svc.get("envVars", [])} - known)
+        assert not unknown, f"{svc['name']} sets unknown vars: {unknown}"
 
 
 def test_backup_job_is_bounded():
