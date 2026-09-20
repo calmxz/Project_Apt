@@ -282,7 +282,7 @@ def upload_file(
     try:
         store = object_store.get_store()
         store.put(object_store.key_for(doc.id, doc.filename), data)
-    except Exception:
+    except Exception as e:
         log.error(
             "upload storage write failed",
             extra={"doc_id": doc.id},
@@ -307,7 +307,7 @@ def upload_file(
         raise HTTPException(
             status_code=507,
             detail={"code": "STORAGE_WRITE_FAILED"},
-        )
+        ) from e
 
     db.commit()
     db.refresh(doc)

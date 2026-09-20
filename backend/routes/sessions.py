@@ -232,7 +232,7 @@ def _create_session_finish(
     db.add(new_session)
     try:
         db.commit()
-    except IntegrityError:
+    except IntegrityError as e:
         # B-05: concurrent create raced past the pre-check; the partial
         # unique index is authoritative. Map to the same 409 payload.
         db.rollback()
@@ -240,7 +240,7 @@ def _create_session_finish(
         raise HTTPException(
             status_code=409,
             detail={"code": "duplicate_topic", "session_id": existing},
-        )
+        ) from e
     db.refresh(new_session)
     return _to_response(db, new_session)
 
@@ -609,7 +609,7 @@ def reopen_session(
         row.ended_at = None
         try:
             db.commit()
-        except IntegrityError:
+        except IntegrityError as e:
             db.rollback()
             existing = _active_session_on_topic(
                 db, user_id, row.topic, exclude_id=row.id
@@ -617,7 +617,7 @@ def reopen_session(
             raise HTTPException(
                 status_code=409,
                 detail={"code": "duplicate_topic", "session_id": existing},
-            )
+            ) from e
         db.refresh(row)
     return _to_response(db, row)
 
@@ -680,7 +680,7 @@ def update_session(
         row.pinned = req.pinned
     try:
         db.commit()
-    except IntegrityError:
+    except IntegrityError as e:
         # B-05: concurrent rename raced past the pre-check; the partial
         # unique index is authoritative. Map to the same 409 payload.
         # NOTE: use req.topic, not row.topic -- db.rollback() expires the
@@ -693,7 +693,7 @@ def update_session(
         raise HTTPException(
             status_code=409,
             detail={"code": "duplicate_topic", "session_id": existing},
-        )
+        ) from e
     db.refresh(row)
     return _to_response(db, row)
 
@@ -713,7 +713,9 @@ def skip_check(
     try:
         prog = check_question_service.skip(db, session_id, req.index)
     except check_question_service.CheckStateError as e:
-        raise HTTPException(status_code=409, detail={"code": "check_conflict", "message": str(e)})
+        raise HTTPException(
+            status_code=409, detail={"code": "check_conflict", "message": str(e)}
+        ) from e
     check_question_service.write_check_batch(
         db, check_question_service.get_pending_check(db, session_id)
     )
@@ -739,7 +741,9 @@ def answer_check(
     try:
         result = check_question_service.answer(db, session_id, req.index, req.selected_index)
     except check_question_service.CheckStateError as e:
-        raise HTTPException(status_code=409, detail={"code": "check_conflict", "message": str(e)})
+        raise HTTPException(
+            status_code=409, detail={"code": "check_conflict", "message": str(e)}
+        ) from e
     check_question_service.write_check_batch(
         db, check_question_service.get_pending_check(db, session_id)
     )

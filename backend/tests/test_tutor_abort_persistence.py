@@ -59,7 +59,7 @@ class _FakeStream:
         try:
             return next(self._i)
         except StopIteration:
-            raise StopAsyncIteration
+            raise StopAsyncIteration from None
 
 
 def test_max_iters_persists_partial(db_session, monkeypatch):

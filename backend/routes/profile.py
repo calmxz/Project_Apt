@@ -110,7 +110,7 @@ def patch_profile(
             subtopic_level=body.subtopic_level,
         )
     except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(status_code=422, detail=str(e)) from e
     return ProfileMutationResponse(profile=profile, etag=profile_service.profile_etag(profile))
 
 
@@ -122,7 +122,7 @@ def _delete_item(db, session_id, user_id, list_name, item, if_match):
     try:
         profile = profile_service.remove_profile_item(db, session_id, list_name, item)
     except KeyError:
-        raise HTTPException(status_code=404, detail="item not found")
+        raise HTTPException(status_code=404, detail="item not found") from None
     return ProfileMutationResponse(profile=profile, etag=profile_service.profile_etag(profile))
 
 
@@ -166,7 +166,7 @@ def delete_subtopic_level(
     try:
         profile = profile_service.remove_subtopic(db, session_id, item)
     except KeyError:
-        raise HTTPException(status_code=404, detail="item not found")
+        raise HTTPException(status_code=404, detail="item not found") from None
     return ProfileMutationResponse(
         profile=profile, etag=profile_service.profile_etag(profile)
     )

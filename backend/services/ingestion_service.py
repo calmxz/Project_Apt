@@ -186,7 +186,7 @@ def _embed_and_store(db, doc, chunks, *, user_id: str | None) -> int:
         db.commit()  # release the connection before the network call
         try:
             resp = llm_retry.retry_sync(
-                lambda: litellm.embedding(
+                lambda batch=batch: litellm.embedding(
                     model=settings.embedding_model,
                     input=[c.text for c in batch],
                     dimensions=settings.embedding_dim,
@@ -202,7 +202,7 @@ def _embed_and_store(db, doc, chunks, *, user_id: str | None) -> int:
                 c.text,
                 item["embedding"] if isinstance(item, dict) else item.embedding,
             )
-            for c, item in zip(batch, resp.data)
+            for c, item in zip(batch, resp.data, strict=True)
         ]
         stored += pgvector_store.insert_chunks(
             db, session_id=doc.session_id, document_id=doc.id, rows=rows
