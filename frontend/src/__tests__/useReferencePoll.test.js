@@ -119,6 +119,68 @@ describe('useReferencePoll', () => {
     poll.stop()
   })
 
+  // A 404 means the session is unknown or not ours: it will 404 forever, so
+  // retrying forever at the 15s cap only keeps "References unavailable" on a
+  // page that has no references.
+  it('stops the loop on a 4xx and leaves failed false', async () => {
+    getSessionIngestion.mockRejectedValue(Object.assign(new Error('nope'), { status: 404 }))
+    const poll = useReferencePoll('s1')
+    await flushPromises()
+    expect(getSessionIngestion).toHaveBeenCalledTimes(1)
+    expect(poll.failed.value).toBe(false)
+    expect(poll.status.value).toBe(null)
+    await tick(60000)
+    expect(getSessionIngestion).toHaveBeenCalledTimes(1)
+    poll.stop()
+  })
+
+  it('settles a pending watcher as unavailable on a 4xx', async () => {
+    const err = Object.assign(new Error('gone'), { status: 403 })
+    getSessionIngestion.mockResolvedValueOnce(pending())
+    const poll = useReferencePoll('s1')
+    await flushPromises()
+    getSessionIngestion.mockRejectedValue(err)
+    const outcome = poll.watch(1, 'a.pdf')
+    await flushPromises()
+    await expect(outcome).resolves.toEqual({ unavailable: true, error: err })
+    expect(poll.failed.value).toBe(false)
+    poll.stop()
+  })
+
+  it('keeps retrying with backoff on a 5xx', async () => {
+    getSessionIngestion.mockRejectedValue(Object.assign(new Error('boom'), { status: 503 }))
+    const poll = useReferencePoll('s1')
+    await flushPromises()
+    expect(poll.failed.value).toBe(true)
+    await tick(2000)
+    expect(getSessionIngestion).toHaveBeenCalledTimes(2)
+    await tick(4000)
+    expect(getSessionIngestion).toHaveBeenCalledTimes(3)
+    poll.stop()
+  })
+
+  it('keeps retrying when the error carries no status (network failure)', async () => {
+    getSessionIngestion.mockRejectedValue(new TypeError('Failed to fetch'))
+    const poll = useReferencePoll('s1')
+    await flushPromises()
+    expect(poll.failed.value).toBe(true)
+    await tick(2000)
+    expect(getSessionIngestion).toHaveBeenCalledTimes(2)
+    await tick(4000)
+    expect(getSessionIngestion).toHaveBeenCalledTimes(3)
+    poll.stop()
+  })
+
+  it('keeps retrying on an explicit status 0', async () => {
+    getSessionIngestion.mockRejectedValue(Object.assign(new Error('offline'), { status: 0 }))
+    const poll = useReferencePoll('s1')
+    await flushPromises()
+    expect(poll.failed.value).toBe(true)
+    await tick(2000)
+    expect(getSessionIngestion).toHaveBeenCalledTimes(2)
+    poll.stop()
+  })
+
   it('keeps the last known document list when a poll throws', async () => {
     getSessionIngestion.mockResolvedValueOnce(pending())
     getSessionIngestion.mockRejectedValue(new Error('offline'))

@@ -24,6 +24,12 @@ const FIXTURES = {
   fenceWithBlankLine:
     'Intro.\n\n```python\ndef a():\n    pass\n\n\ndef b():\n    pass\n```\n\nAfter.\n',
   twoFences: '```js\nlet a = 1\n```\n\nmiddle\n\n```sql\nselect 1\n```\n\nend\n',
+  // A 3-backtick line inside a 4-backtick fence is content, not a close. A
+  // scanner that toggles on any 3+ run flips out of the block here and turns
+  // the following blank line into a cut candidate inside the code.
+  fenceInLongerFence: 'Intro.\n\n````\n```\n\nstill inside\n````\n\nAfter.\n',
+  // Same trap across fence characters: ``` cannot close a ~~~ fence.
+  backtickInsideTildeFence: 'Intro.\n\n~~~\n```\n\nstill inside\n~~~\n\nAfter.\n',
   table: 'Before.\n\n| a | b |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |\n\nAfter.\n',
   twoTables: '| a |\n|---|\n| 1 |\n\n| b |\n|---|\n| 2 |\n\nend\n',
   inlineMath: 'Cost is $O(n)$ here.\n\nAnd $x^2 + y^2$ there.\n\nDone.\n',
@@ -82,6 +88,25 @@ function parityMismatches(full, size) {
   return bad
 }
 
+/**
+ * Same as `parityMismatches` but without `splitSafePrefixIncremental` in front.
+ * The splitter only knows 3-backtick fences, so it hides the longer-fence and
+ * tilde-fence cases from the incremental renderer; parity is the renderer's own
+ * contract on any prefix, so these fixtures are checked raw too.
+ */
+function rawParityMismatches(full, size) {
+  const cache = createRenderCache()
+  const bad = []
+  for (let end = size; ; end = Math.min(end + size, full.length)) {
+    const text = full.slice(0, end)
+    const incremental = renderMarkdownIncremental(text, cache)
+    const expected = renderMarkdown(text)
+    if (incremental !== expected) bad.push({ end, text, incremental, expected })
+    if (end >= full.length) break
+  }
+  return bad
+}
+
 beforeAll(async () => {
   // KaTeX and highlight.js are lazy; warm them so output is stable across
   // frames and the version-invalidation branch is not what we are measuring.
@@ -100,6 +125,33 @@ describe('renderMarkdownIncremental parity', () => {
       expect(parityMismatches(text, 40)).toEqual([])
     })
   }
+
+  for (const name of ['fenceInLongerFence', 'backtickInsideTildeFence']) {
+    it(`${name}: byte-identical without the stream splitter at 7-char chunks`, () => {
+      expect(rawParityMismatches(FIXTURES[name], 7)).toEqual([])
+    })
+    it(`${name}: byte-identical without the stream splitter at 40-char chunks`, () => {
+      expect(rawParityMismatches(FIXTURES[name], 40)).toEqual([])
+    })
+  }
+
+  // The boundary may take the paragraph close after "Intro."; what it must not
+  // do is advance onto the blank line that sits INSIDE the fence.
+  it('does not cut on a blank line inside a longer or differently-charred fence', () => {
+    const longer = createRenderCache()
+    renderMarkdownIncremental('Intro.\n\n````\n```\n\nstill inside', longer)
+    expect(longer.prefixText).toBe('Intro.\n\n')
+
+    const tilde = createRenderCache()
+    renderMarkdownIncremental('Intro.\n\n~~~\n```\n\nstill inside', tilde)
+    expect(tilde.prefixText).toBe('Intro.\n\n')
+  })
+
+  it('stops the boundary before an unclosed fence, blank line inside and all', () => {
+    const cache = createRenderCache()
+    renderMarkdownIncremental('Intro.\n\n```js\nlet a = 1\n\nlet b = 2', cache)
+    expect(cache.prefixText).toBe('Intro.\n\n')
+  })
 
   it('long prose: byte-identical at 40-char chunks', () => {
     expect(parityMismatches(longProse(), 40)).toEqual([])

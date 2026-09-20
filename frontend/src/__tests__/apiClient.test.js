@@ -7,6 +7,7 @@ import {
   apiDelete,
   setUnauthorizedHandler,
   _resetApiCache,
+  invalidateGetCache,
   GET_RETRY_ATTEMPTS,
   GET_RETRY_DELAYS_MS,
   GET_CACHE_TTL_MS,
@@ -121,17 +122,16 @@ describe('apiClient', () => {
     expect(init.signal).toBeInstanceOf(AbortSignal)
   })
 
-  it('maps a timeout abort to a friendly ApiError', async () => {
-    // A TimeoutError is retryable (F-18), so every attempt must reject before
-    // the friendly ApiError surfaces. Collapse the backoff so this stays fast.
-    const realSetTimeout = globalThis.setTimeout
-    vi.spyOn(globalThis, 'setTimeout').mockImplementation((fn) => realSetTimeout(fn, 0))
+  it('maps a timeout abort to a friendly ApiError without retrying', async () => {
+    // A TimeoutError is deliberately NOT retryable: each attempt mints a fresh
+    // 30s AbortSignal.timeout, so retrying a hung (not down) backend would push
+    // the error out to ~91s instead of 30s.
     fetchMock.mockRejectedValue(new DOMException('signal timed out', 'TimeoutError'))
     await expect(apiGet('/slow', undefined, { silent: true })).rejects.toMatchObject({
       status: 0,
       body: { detail: 'request timed out' },
     })
-    expect(fetchMock).toHaveBeenCalledTimes(GET_RETRY_ATTEMPTS)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
   it('retries once with a refreshed token on 401 (F-09)', async () => {
@@ -262,6 +262,17 @@ describe('apiClient', () => {
     it('does not retry other statuses', async () => {
       fetchMock.mockReturnValue(jsonResp(500, { detail: 'boom' }))
       await expect(apiGet('/x', null, { silent: true })).rejects.toMatchObject({ status: 500 })
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not retry a TimeoutError', async () => {
+      // Every attempt gets a fresh 30s AbortSignal.timeout, so 3 attempts on a
+      // hung backend would take ~91s to surface. Fail on the first one.
+      fetchMock.mockRejectedValue(new DOMException('signal timed out', 'TimeoutError'))
+      await expect(apiGet('/x', null, { silent: true })).rejects.toMatchObject({
+        status: 0,
+        body: { detail: 'request timed out' },
+      })
       expect(fetchMock).toHaveBeenCalledTimes(1)
     })
 
@@ -434,6 +445,38 @@ describe('apiClient', () => {
       await _onAuthExpired()
       fetchMock.mockReturnValueOnce(jsonResp(200, { n: 2 }))
       await expect(apiGet('/x')).resolves.toEqual({ n: 2 })
+    })
+
+    it('invalidateGetCache drops a matching cached GET for raw-fetch writers', async () => {
+      fetchMock.mockReturnValueOnce(jsonResp(200, { n: 1 }))
+      await apiGet('/sessions/abc')
+      invalidateGetCache('/sessions/abc')
+      fetchMock.mockReturnValueOnce(jsonResp(200, { n: 2 }))
+      await expect(apiGet('/sessions/abc')).resolves.toEqual({ n: 2 })
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    })
+
+    // A GET already in flight when an invalidation lands must not write its
+    // now-stale body into the cache on settle.
+    it('does not cache a GET whose response lost a race with an invalidation', async () => {
+      let release
+      fetchMock.mockReturnValueOnce(
+        new Promise((resolve) => {
+          release = () => resolve(jsonResp(200, { n: 1 }))
+        }),
+      )
+      const inFlight = apiGet('/sessions/abc')
+      // getFreshAccessToken() is async, so wait until fetch has actually been
+      // called -- otherwise the epoch would be captured after the bump below
+      // and this test would pass without the fix.
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+      invalidateGetCache('/sessions/abc')
+      release()
+      await expect(inFlight).resolves.toEqual({ n: 1 })
+
+      fetchMock.mockReturnValueOnce(jsonResp(200, { n: 2 }))
+      await expect(apiGet('/sessions/abc')).resolves.toEqual({ n: 2 })
+      expect(fetchMock).toHaveBeenCalledTimes(2)
     })
 
     it('invalidates even when the write fails, since it may still have landed', async () => {

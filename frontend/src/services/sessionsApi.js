@@ -37,7 +37,11 @@ const normalizeSessionLibraryPage = (res) => ({
 export const getSessionLibrary = (params, opts) =>
   apiGet('/sessions/library', params, opts).then(normalizeSessionLibraryPage)
 
-export const getSession = (sessionId) => apiGet(`/sessions/${sessionId}`)
+// fresh: the session body carries ingestion_status, pending_check and the
+// topic profile, all of which change server-side during a turn or an upload
+// (raw-fetch writers). Never serve it from the short GET cache.
+export const getSession = (sessionId) =>
+  apiGet(`/sessions/${sessionId}`, undefined, { fresh: true })
 
 // P3: SessionView shows its own inline error/loading for the "load earlier"
 // button; silent stops the errorBus double-toast (same opt-out pattern as

@@ -1,5 +1,11 @@
 import { parseSSEStream } from '@/lib/sseParser.js'
-import { ApiError, _onAuthExpired, _refreshAccessToken, getFreshAccessToken } from './apiClient.js'
+import {
+  ApiError,
+  _onAuthExpired,
+  _refreshAccessToken,
+  getFreshAccessToken,
+  invalidateGetCache,
+} from './apiClient.js'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
 
@@ -124,13 +130,23 @@ export async function streamChat({
   const payload = { session_id: sessionId, message, review_gaps: reviewGaps }
   if (reviewGap) payload.review_gap = reviewGap
   if (diagnosticAccepted) payload.diagnostic_accepted = true
-  await _fetchSse(`${BASE_URL}/chat/stream`, payload, { onEvent, signal, path: '/chat/stream' })
+  try {
+    await _fetchSse(`${BASE_URL}/chat/stream`, payload, { onEvent, signal, path: '/chat/stream' })
+  } finally {
+    // Raw fetch bypasses request(), so the session tree (messages, profile,
+    // pending check) must be dropped from the GET cache here, success or not.
+    invalidateGetCache(`/sessions/${sessionId}`)
+  }
 }
 
 export async function streamCheckComplete({ sessionId, onEvent, signal }) {
-  await _fetchSse(
-    `${BASE_URL}/sessions/${sessionId}/check/complete`,
-    {},
-    { onEvent, signal, path: '/check/complete' },
-  )
+  try {
+    await _fetchSse(
+      `${BASE_URL}/sessions/${sessionId}/check/complete`,
+      {},
+      { onEvent, signal, path: '/check/complete' },
+    )
+  } finally {
+    invalidateGetCache(`/sessions/${sessionId}`)
+  }
 }

@@ -5,6 +5,7 @@ import {
   getFreshAccessToken,
   _refreshAccessToken,
   _onAuthExpired,
+  invalidateGetCache,
 } from './apiClient.js'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
@@ -74,9 +75,13 @@ export async function uploadDocument({ sessionId, file }) {
       resp = await _postUpload(fd, token ? { authorization: `Bearer ${token}` } : {})
     }
   } catch (e) {
+    invalidateGetCache(`/sessions/${sessionId}`)
     const detail = e?.name === 'TimeoutError' ? 'upload timed out' : e.message
     throw new ApiError(0, { detail }, '/upload')
   }
+  // Raw multipart fetch bypasses request(): drop the session tree (ingestion
+  // status lives on the session body) from the GET cache whatever the status.
+  invalidateGetCache(`/sessions/${sessionId}`)
 
   const text = await resp.text()
   let parsed = null

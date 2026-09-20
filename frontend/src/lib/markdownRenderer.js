@@ -247,7 +247,10 @@ export function renderMarkdown(text) {
 
 // Top-level link reference definition, e.g. "[foo]: /url".
 const REFDEF_RE = /^ {0,3}\[[^\]\n]+\]:/m
-const FENCE_LINE_RE = /^ {0,3}(?:`{3,}|~{3,})/
+// Capture the run of fence characters plus whatever trails it, so the scanner
+// can apply the CommonMark closing rule (same char, at least as long, nothing
+// but whitespace after) instead of treating any 3+ run as a toggle.
+const FENCE_LINE_RE = /^ {0,3}(`{3,}|~{3,})(.*)$/
 const BLANK_LINE_RE = /^[ \t]*$/
 
 // Last top-level token types that must not sit immediately before a cut.
@@ -280,12 +283,20 @@ function _lineEnd(text, i) {
 }
 
 /**
- * Offsets in `text` (all > `from`) that sit immediately after a blank-line run
- * at top level, with real content following. Ascending.
+ * Single line scan of `text` from `from`. Returns the candidate cut offsets
+ * (immediately after a blank-line run at top level, with real content
+ * following, ascending) and whether the scan ended inside a fenced block.
+ *
+ * Fences follow the CommonMark rule: an opening run of 3+ backticks or tildes
+ * is closed only by a run of the SAME character, at least as long, with nothing
+ * but whitespace after it. A plain 3+ toggle would let an inner ``` line inside
+ * a ```` or ~~~ fence flip the scanner out of the block, and the next blank
+ * line would then become a cut candidate inside code.
  */
-function topLevelBlankBoundaries(text, from) {
+function scanBlocks(text, from) {
   const out = []
-  let inFence = false
+  let fenceChar = null
+  let fenceLen = 0
   let inMath = false
   let sawContent = false
   let i = from
@@ -294,7 +305,7 @@ function topLevelBlankBoundaries(text, from) {
     const line = text.slice(i, eol)
     const next = eol === text.length ? text.length : eol + 1
     if (BLANK_LINE_RE.test(line)) {
-      if (!inFence && !inMath && sawContent) {
+      if (!fenceChar && !inMath && sawContent) {
         // Swallow the whole blank run; the boundary is the first content line.
         let j = next
         while (j < text.length) {
@@ -308,10 +319,23 @@ function topLevelBlankBoundaries(text, from) {
       }
     } else {
       sawContent = true
-      if (inFence) {
-        if (FENCE_LINE_RE.test(line)) inFence = false
-      } else if (FENCE_LINE_RE.test(line)) {
-        inFence = true
+      const fence = FENCE_LINE_RE.exec(line)
+      if (fenceChar) {
+        // CommonMark: a closing fence uses the same character, is at least as
+        // long as the opener, and carries nothing but whitespace after it. A
+        // shorter or differently-charred run inside the block is content.
+        if (
+          fence &&
+          fence[1][0] === fenceChar &&
+          fence[1].length >= fenceLen &&
+          fence[2].trim() === ''
+        ) {
+          fenceChar = null
+          fenceLen = 0
+        }
+      } else if (fence) {
+        fenceChar = fence[1][0]
+        fenceLen = fence[1].length
       } else if ((line.match(/\$\$/g) || []).length % 2 === 1) {
         // An odd number of $$ on a line opens or closes a display block. A
         // false positive (a $$ inside inline code) only suppresses caching.
@@ -320,7 +344,15 @@ function topLevelBlankBoundaries(text, from) {
     }
     i = next
   }
-  return out
+  return { boundaries: out, inFence: fenceChar !== null }
+}
+
+/**
+ * Offsets in `text` (all > `from`) that sit immediately after a blank-line run
+ * at top level, with real content following. Ascending.
+ */
+function topLevelBlankBoundaries(text, from) {
+  return scanBlocks(text, from).boundaries
 }
 
 /** True when `segment` ends on a block that cannot absorb what follows it. */
@@ -333,7 +365,12 @@ function segmentClosesSafely(segment) {
   }
   let last = null
   for (const t of tokens) if (t.level === 0) last = t
-  return Boolean(last) && !UNSAFE_CLOSE.has(last.type)
+  if (!last || UNSAFE_CLOSE.has(last.type)) return false
+  // markdown-it renders an unterminated fence as a complete <pre>, so the head
+  // would look closed while the tail got parsed as markdown rather than code.
+  // `fence` is safe only once its closing run has actually arrived.
+  if (last.type === 'fence' && scanBlocks(segment, 0).inFence) return false
+  return true
 }
 
 /**

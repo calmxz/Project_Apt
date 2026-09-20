@@ -28,10 +28,15 @@ const RETRYABLE_STATUS = new Set([502, 503, 504])
 export const GET_CACHE_TTL_MS = 5000
 // url -> { at, value }
 const _getCache = new Map()
+// Bumped by every invalidation/reset. A GET captures it before its fetch and
+// skips the cache write if it moved meanwhile -- otherwise a GET that was
+// already in flight when a write landed would store its stale body on settle.
+let _cacheEpoch = 0
 
 // Test hook: the Map is module state and would leak between cases.
 export function _resetApiCache() {
   _getCache.clear()
+  _cacheEpoch += 1
 }
 
 function _pathOfUrl(url) {
@@ -48,7 +53,14 @@ function _isSegmentPrefix(prefix, path) {
 // Any write drops cached GETs on the same resource, in both directions:
 // POST /sessions invalidates GET /sessions?cursor=..., and DELETE
 // /sessions/abc/end invalidates GET /sessions/abc.
-function _invalidateGetCache(path) {
+//
+// Exported because not every write goes through request(): chatStreamService
+// (SSE POST) and uploadApi.uploadDocument (multipart POST) use raw fetch and
+// must invalidate the session tree themselves once their call settles.
+export function invalidateGetCache(path) {
+  // Unconditional, even when nothing matched: a GET that is still in flight is
+  // not in the Map yet, and the epoch is what stops it writing a stale body.
+  _cacheEpoch += 1
   const target = path.split('?')[0]
   for (const url of _getCache.keys()) {
     const cached = _pathOfUrl(url)
@@ -63,9 +75,12 @@ function _jittered(ms) {
 }
 
 function _isRetryableError(e) {
-  // TypeError is what fetch throws for a dropped/blocked connection;
-  // TimeoutError is AbortSignal.timeout firing.
-  return e instanceof TypeError || e?.name === 'TypeError' || e?.name === 'TimeoutError'
+  // TypeError is what fetch throws for a dropped/blocked connection -- cheap to
+  // re-try and usually transient. A TimeoutError is deliberately NOT retryable:
+  // every attempt mints a fresh REQUEST_TIMEOUT_MS AbortSignal, so a hung (as
+  // opposed to down) backend would take 30 + 0.3 + 30 + 0.9 + 30 = ~91s to
+  // surface instead of 30s.
+  return e instanceof TypeError || e?.name === 'TypeError'
 }
 
 // buildInit is called per attempt so each gets its own AbortSignal.timeout --
@@ -233,11 +248,15 @@ async function request(
     return init
   }
 
+  // Captured before the first attempt: any invalidation from here on means this
+  // response is already potentially stale and must not be cached.
+  const epochAtFetch = _cacheEpoch
+
   let resp
   try {
     resp = await _fetchWithRetry(url, buildInit, isGet)
   } catch (e) {
-    if (!isGet) _invalidateGetCache(path)
+    if (!isGet) invalidateGetCache(path)
     const detail = e?.name === 'TimeoutError' ? 'request timed out' : e.message
     const err = new ApiError(0, { detail }, path)
     if (!silent) reportApiError(err)
@@ -246,7 +265,7 @@ async function request(
 
   // Before the status checks: a write that 409s may still have changed state,
   // and a stale cached GET is worse than a re-fetch.
-  if (!isGet) _invalidateGetCache(path)
+  if (!isGet) invalidateGetCache(path)
 
   if (resp.status === 401 && !_retried) {
     // F-09: silent first 401 -- refresh and retry once before surfacing.
@@ -268,7 +287,11 @@ async function request(
 
   // Written even for fresh: true -- the response is current either way, and a
   // poller's fresh read is exactly what a following cached read should see.
-  if (isGet) _getCache.set(url, { at: Date.now(), value: parsed, token })
+  // Skipped when an invalidation landed while this GET was in flight: the body
+  // may predate the write, and a stale hit for a full TTL is worse than a miss.
+  if (isGet && epochAtFetch === _cacheEpoch) {
+    _getCache.set(url, { at: Date.now(), value: parsed, token })
+  }
 
   return parsed
 }

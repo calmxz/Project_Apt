@@ -291,4 +291,42 @@ describe('chatStreamService', () => {
     expect(globalThis.__supabaseAuthStub.signOut).toHaveBeenCalled()
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
+
+  // F-18 review finding: the SSE POST is a raw fetch, so it must drop the
+  // session tree from the short GET cache itself or a re-open within the TTL
+  // would show the pre-turn transcript.
+  it('invalidates the cached session GET once the stream settles', async () => {
+    const { apiGet, _resetApiCache } = await import('@/services/apiClient.js')
+    _resetApiCache()
+    const json = (body) =>
+      new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    fetchMock.mockResolvedValueOnce(json({ n: 1 }))
+    await apiGet('/sessions/s1/messages')
+    fetchMock.mockResolvedValueOnce(mockResponse('event: done\ndata: {}\n\n'))
+    await streamChat({ sessionId: 's1', message: 'hi', onEvent: () => {} })
+    fetchMock.mockResolvedValueOnce(json({ n: 2 }))
+    await expect(apiGet('/sessions/s1/messages')).resolves.toEqual({ n: 2 })
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
+  it('invalidates the cached session GET even when the stream fails', async () => {
+    const { apiGet, _resetApiCache } = await import('@/services/apiClient.js')
+    _resetApiCache()
+    const json = (body) =>
+      new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    fetchMock.mockResolvedValueOnce(json({ n: 1 }))
+    await apiGet('/sessions/s1')
+    fetchMock.mockRejectedValueOnce(new TypeError('network error'))
+    await expect(
+      streamChat({ sessionId: 's1', message: 'hi', onEvent: () => {} }),
+    ).rejects.toMatchObject({ status: 0 })
+    fetchMock.mockResolvedValueOnce(json({ n: 2 }))
+    await expect(apiGet('/sessions/s1')).resolves.toEqual({ n: 2 })
+  })
 })

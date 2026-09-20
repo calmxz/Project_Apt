@@ -120,6 +120,16 @@ export function useReferencePoll(sessionIdSource) {
       settleFromDocuments()
     } catch (e) {
       if (stopped || gen !== generation) return
+      // A 4xx is a verdict, not an outage: an unknown or foreign session id
+      // 404s forever, so retrying it just loops at the 15s cap while the
+      // banner claims "References unavailable" on a page that has none. Leave
+      // `failed` false and `status` null so the banner stays hidden and
+      // schedule() finds nothing to keep the loop alive.
+      if (e?.status >= 400 && e.status < 500) {
+        failed.value = false
+        settleAll({ unavailable: true, error: e })
+        return
+      }
       // Keep the last known document list so per-file delete stays reachable.
       failed.value = true
       // The chip must not wait out the ceiling for an outage: the old poller
