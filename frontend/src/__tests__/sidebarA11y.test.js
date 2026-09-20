@@ -16,6 +16,11 @@ vi.mock('primevue/toast', () => ({
 vi.mock('@/composables/useToast.js', () => ({
   useToast: () => ({ showError: vi.fn(), showWarn: vi.fn(), showSuccess: vi.fn() }),
 }))
+// E-12: SidebarSessionRow asks PrimeVue's confirm service before ending a
+// session, and the service is not installed on a bare mount.
+vi.mock('primevue/useconfirm', () => ({
+  useConfirm: () => ({ require: (cfg) => cfg.accept?.() }),
+}))
 const apiReviewQueue = vi.fn()
 vi.mock('@/services/reviewApi.js', () => ({
   getReviewQueue: (...args) => apiReviewQueue(...args),

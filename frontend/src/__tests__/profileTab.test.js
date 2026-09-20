@@ -166,6 +166,61 @@ describe('ProfileTab', () => {
     expect(wrapper.find('[data-testid="profile-summary-line"]').exists()).toBe(false)
   })
 
+  // E-10: a failed read is recoverable in place, and it also has to recover
+  // when the learner leaves the tab and comes back (SettingsView KeepAlive).
+  it('offers Retry on a failed read and refetches on click', async () => {
+    seedUser()
+    const spy = vi
+      .spyOn(sessionsApi, 'listSessions')
+      .mockRejectedValueOnce(new Error('boom'))
+      .mockResolvedValueOnce(sessionList())
+
+    const wrapper = mount(ProfileTab, { global: { stubs } })
+    await flushPromises()
+
+    const retry = wrapper.find('[data-testid="agg-retry"]')
+    expect(retry.exists()).toBe(true)
+
+    await retry.trigger('click')
+    await flushPromises()
+
+    expect(spy).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('[data-testid="agg-error"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="profile-summary-line"]').exists()).toBe(true)
+  })
+
+  it('refetches on reactivation only when the previous read failed', async () => {
+    seedUser()
+    const spy = vi
+      .spyOn(sessionsApi, 'listSessions')
+      .mockRejectedValueOnce(new Error('boom'))
+      .mockResolvedValue(sessionList())
+
+    const Host = {
+      components: { ProfileTab },
+      data: () => ({ show: true }),
+      template: '<KeepAlive><ProfileTab v-if="show" /></KeepAlive>',
+    }
+    const wrapper = mount(Host, { global: { stubs } })
+    await flushPromises()
+    expect(spy).toHaveBeenCalledTimes(1)
+
+    // Away and back with an error standing: one more read.
+    wrapper.vm.show = false
+    await flushPromises()
+    wrapper.vm.show = true
+    await flushPromises()
+    expect(spy).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('[data-testid="agg-error"]').exists()).toBe(false)
+
+    // Away and back with the read healthy: no extra request.
+    wrapper.vm.show = false
+    await flushPromises()
+    wrapper.vm.show = true
+    await flushPromises()
+    expect(spy).toHaveBeenCalledTimes(2)
+  })
+
   it('renders empty state when zero sessions', async () => {
     seedUser()
     vi.spyOn(sessionsApi, 'listSessions').mockResolvedValue([])
