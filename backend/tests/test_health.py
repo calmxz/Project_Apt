@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import pytest
 
 from config import settings
@@ -35,20 +37,48 @@ def test_ready_unavailable_when_db_raises(client, monkeypatch):
     assert response.json() == {"status": "unavailable"}
 
 
-def test_ready_unavailable_when_probe_exceeds_timeout(client, monkeypatch):
-    """A hung pool must fail the probe on a budget rather than holding the
-    health check open until Render's own timeout."""
-    import time
+class _FakeSession:
+    """Records the SQL the probe issues, and which dialect it thinks it is on."""
 
-    def slow(_db):
-        time.sleep(1.0)
+    def __init__(self, dialect_name):
+        self._bind = SimpleNamespace(dialect=SimpleNamespace(name=dialect_name))
+        self.statements = []
 
-    monkeypatch.setattr(health_route, "_probe", slow)
-    monkeypatch.setattr(settings, "readiness_timeout_s", 0.05)
+    def get_bind(self):
+        return self._bind
 
-    response = client.get("/ready")
-    assert response.status_code == 503
-    assert response.json() == {"status": "unavailable"}
+    def execute(self, stmt):
+        self.statements.append(str(stmt))
+        return SimpleNamespace(scalar_one=lambda: 1)
+
+
+def test_probe_bounds_the_statement_on_postgresql(monkeypatch):
+    """G-07: the probe is bounded at the driver, not by abandoning the thread.
+
+    asyncio.wait_for used to time the awaiter out while the worker thread kept
+    running _probe on a Session that get_db was about to close -- and each
+    abandoned thread held an anyio limiter token plus a pool slot. The bound
+    now lives in the transaction: SET LOCAL statement_timeout, issued before
+    the SELECT and in the same transaction.
+    """
+    monkeypatch.setattr(settings, "readiness_timeout_s", 2.0)
+    db = _FakeSession("postgresql")
+
+    health_route._probe(db)
+
+    assert db.statements[0] == "SET LOCAL statement_timeout = 2000"
+    assert "SELECT 1" in db.statements[1]
+
+
+def test_probe_does_not_set_statement_timeout_on_sqlite(monkeypatch):
+    """SET LOCAL is Postgres-only syntax; sqlite (dev/CI) just round-trips."""
+    monkeypatch.setattr(settings, "readiness_timeout_s", 2.0)
+    db = _FakeSession("sqlite")
+
+    health_route._probe(db)
+
+    assert not any("statement_timeout" in s for s in db.statements)
+    assert len(db.statements) == 1
 
 
 @pytest.mark.parametrize("path", ["/health", "/healthz"])

@@ -45,6 +45,8 @@ class Settings(BaseSettings):
     # SQLAlchemy's default is 30s, which turns pool exhaustion into a pile-up
     # of hung requests instead of fast, visible load shedding.
     db_pool_timeout_s: float = 5.0
+    # G-07 follow-up: seconds psycopg waits for the TCP connect before failing.
+    db_connect_timeout_s: float = 5.0
     llm_stub: bool = False
     debug_timing: bool = False
     # The web process drains the ingestion queue itself by default. Set false

@@ -1,9 +1,8 @@
-import asyncio
 import logging
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
@@ -32,7 +31,19 @@ def healthz():
 
 def _probe(db: Session) -> None:
     """G-07: the cheapest round trip that proves the pool can hand out a
-    working connection."""
+    working connection.
+
+    Bounded at the driver, not by abandoning the awaiter. An asyncio.wait_for
+    around this call only timed out the coroutine: the worker thread kept
+    running against a Session that get_db was about to close, and every
+    abandoned thread held an anyio limiter token plus a pool slot. Now the
+    connect is capped by psycopg's connect_timeout (db/database.py) and the
+    query by SET LOCAL statement_timeout, issued in the same transaction.
+    """
+    if db.get_bind().dialect.name == "postgresql":
+        # SET LOCAL takes no bind parameters, hence the interpolated int.
+        timeout_ms = int(settings.readiness_timeout_s * 1000)
+        db.execute(text(f"SET LOCAL statement_timeout = {timeout_ms}"))
     db.execute(select(1)).scalar_one()
 
 
@@ -47,9 +58,7 @@ async def ready(db: Session = Depends(get_db)):
     merely waiting on an upstream.
     """
     try:
-        await asyncio.wait_for(
-            run_in_threadpool(_probe, db), timeout=settings.readiness_timeout_s
-        )
+        await run_in_threadpool(_probe, db)
     except Exception as e:
         log.warning("readiness probe failed error=%s", e)
         return JSONResponse(status_code=503, content={"status": "unavailable"})
