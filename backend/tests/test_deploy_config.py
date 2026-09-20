@@ -154,8 +154,13 @@ def test_backup_workflow_alerts_on_failure():
     one until a restore is needed."""
     data = yaml.safe_load(BACKUP_WORKFLOW.read_text(encoding="utf-8"))
     steps = data["jobs"]["backup"]["steps"]
-    failure_steps = [s for s in steps if str(s.get("if", "")).strip() == "failure()"]
-    assert failure_steps, "no `if: failure()` alert step in the backup job"
+    # A timeout-minutes kill marks the job cancelled, not failed, so the
+    # alert condition must cover both or the hang case never alerts.
+    failure_steps = [
+        s for s in steps
+        if "failure()" in str(s.get("if", "")) and "cancelled()" in str(s.get("if", ""))
+    ]
+    assert failure_steps, "no `if: failure() || cancelled()` alert step in the backup job"
     assert any("gh issue" in str(s.get("run", "")) for s in failure_steps)
 
 

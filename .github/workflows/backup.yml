@@ -57,8 +57,10 @@ jobs:
       # G-10: a scheduled workflow that fails silently is indistinguishable
       # from a working one until a restore is needed. Uses the preinstalled
       # gh CLI -- no third-party action to SHA-pin.
+      # cancelled() too: a job killed by timeout-minutes is marked cancelled,
+      # not failed, and that hang is exactly the case the timeout guards.
       - name: Alert on failure
-        if: failure()
+        if: failure() || cancelled()
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
