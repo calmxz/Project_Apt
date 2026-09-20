@@ -128,11 +128,18 @@ onBeforeUnmount(() => {
       </main>
     </div>
   </div>
-  <RouterView v-else v-slot="{ Component }">
-    <transition name="fade">
-      <component :is="Component" />
-    </transition>
-  </RouterView>
+  <!-- D-15: chrome-less routes (login, legal, 404, onboarding) get the same
+       focus target as the shell so the router's afterEach has something stable
+       to move focus to. The id lives on this wrapper rather than on each view
+       root: afterEach runs before Vue swaps the rendered view, so a per-view id
+       would resolve to the outgoing root and lose focus when it unmounts. -->
+  <div v-else id="main-content" tabindex="-1">
+    <RouterView v-slot="{ Component }">
+      <transition name="fade">
+        <component :is="Component" />
+      </transition>
+    </RouterView>
+  </div>
   <Toast position="top-right" />
   <ConfirmDialog />
 </template>

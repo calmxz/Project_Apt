@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useConfirm } from 'primevue/useconfirm'
 import { useSidebar } from '@/composables/useSidebar.js'
 import { useSessionStore } from '@/stores/session.js'
 import { useToast } from '@/composables/useToast.js'
@@ -17,6 +18,7 @@ const router = useRouter()
 const store = useSessionStore()
 const { mode, closeDrawer } = useSidebar()
 const { showSuccess, showError } = useToast()
+const confirm = useConfirm()
 
 const busy = ref(false)
 
@@ -50,7 +52,26 @@ function openSession() {
   router.push({ name: 'session', params: { id: props.session.id } })
 }
 
-async function onEnd() {
+// E-12: ending a session is one-way from the row's point of view -- there is no
+// undo on the row and the learner may be several screens from the transcript --
+// so it asks first. Same dialog contract as the file delete in
+// ReferenceStatusBanner: no icon, neutral cancel, strong destructive accept.
+function onEnd() {
+  if (busy.value) return
+  confirm.require({
+    header: 'End session',
+    message: `End "${props.session.topic || 'Untitled'}"? You can still read it, but you cannot continue the conversation.`,
+    rejectLabel: 'Cancel',
+    acceptLabel: 'End session',
+    rejectClass: 'p-button-text p-button-secondary',
+    acceptClass: 'p-button-danger confirm-delete-strong',
+    accept: endNow,
+  })
+}
+
+// busy is raised here rather than in onEnd: a cancelled dialog must leave the
+// row usable, and it also guards a second accept arriving mid-request.
+async function endNow() {
   if (busy.value) return
   busy.value = true
   try {
@@ -168,7 +189,7 @@ function commitRenameFromKey() {
   >
     <button
       type="button"
-      class="sb-row-button"
+      class="sb-row-button hit-44"
       :aria-current="isCurrent ? 'page' : undefined"
       :aria-label="rowLabel"
       :title="isCollapsed ? tooltip : ''"

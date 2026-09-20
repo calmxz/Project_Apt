@@ -102,7 +102,11 @@ async function _fetchSse(url, payload, { onEvent, signal, path }, _retried = fal
       const reason = ctrl.signal.reason
       throw reason?.name === 'AbortError' ? reason : new DOMException('aborted', 'AbortError')
     }
-    throw e
+    // E-02: a connection that dies mid-body rejects the read with a bare
+    // TypeError ("network error"). Normalize it the same way the header phase
+    // does (see :61) so callers get the status-0 ApiError contract instead of
+    // a raw TypeError that friendlyError can only render as its own message.
+    throw e instanceof TypeError ? new ApiError(0, { detail: e.message }, path) : e
   } finally {
     clearTimeout(idleTimer)
   }

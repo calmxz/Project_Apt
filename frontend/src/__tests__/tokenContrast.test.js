@@ -84,6 +84,21 @@ describe('base.css tokens', () => {
       })
     })
 
+    // D-20 (WCAG 1.4.11 Non-text Contrast): the resting edge of a text control
+    // is a UI component boundary and needs 3:1, which --card-edge (card chrome)
+    // does not reach. --control-edge is the token controls use instead.
+    it(`${themeName}: --control-edge is >= 3:1 on --card in every block`, () => {
+      const cards = hex('--card', block)
+      const edges = hex('--control-edge', block)
+      expect(edges.length).toBe(cards.length)
+      edges.forEach((edge, i) => {
+        expect(
+          ratio(edge, cards[i]),
+          `--control-edge on --card (${themeName})`,
+        ).toBeGreaterThanOrEqual(3)
+      })
+    })
+
     it(`${themeName}: --tab-ink is >= 4.5:1 on every --tab-* fill`, () => {
       const inks = hex('--tab-ink', block)
       for (const tabToken of ['--tab-focus', '--tab-gaps', '--tab-mastered', '--tab-level']) {

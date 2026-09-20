@@ -178,6 +178,14 @@ function retryLoad() {
   loadMore()
 }
 
+// E-06: the first-load failure needs its own retry. retryLoad() above resumes
+// an append, and loadMore() bails while items.length >= total (0 >= 0), so it
+// would never re-issue the first page.
+function retryFirstLoad() {
+  offset.value = 0
+  load()
+}
+
 const sentinelEl = ref(null)
 let observer = null
 
@@ -276,9 +284,17 @@ onUnmounted(() => {
     </div>
 
     <LibrarySkeletonGrid v-if="loading && !items.length" :count="6" />
-    <p v-else-if="error && !items.length" class="error" data-testid="library-error">
-      {{ error }}
-    </p>
+    <template v-else-if="error && !items.length">
+      <p class="error" data-testid="library-error">{{ error }}</p>
+      <button
+        type="button"
+        class="library-pg-btn"
+        data-testid="library-error-retry"
+        @click="retryFirstLoad"
+      >
+        Retry
+      </button>
+    </template>
 
     <EmptyState
       v-else-if="!items.length"

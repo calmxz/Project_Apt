@@ -65,7 +65,7 @@
         :disabled="disabled"
         :maxlength="MAX_DRAFT_LEN"
         aria-label="Message the tutor"
-        :aria-describedby="describedby || undefined"
+        :aria-describedby="describedbyIds"
         @input="onInput"
         @keydown="onKeydown"
       />
@@ -154,10 +154,23 @@
       >
         {{ uploading ? 'Uploading file' : 'Sending message' }}
       </span>
-      <span v-if="modelValue.length" class="composer-count" aria-live="polite" data-tabular>
+      <!-- D-09: the counter itself is silent. It changes on every keystroke, so
+           announcing it would talk over the typing. The length rule is a static
+           description on the textarea instead, and only the last stretch before
+           the cap is announced, from the live region below. -->
+      <span v-if="modelValue.length" class="composer-count" data-tabular>
         {{ modelValue.length.toLocaleString() }} / {{ MAX_DRAFT_LEN.toLocaleString() }}
       </span>
     </div>
+
+    <span :id="LIMIT_HINT_ID" class="sr-only">
+      Up to {{ MAX_DRAFT_LEN.toLocaleString() }} characters.
+    </span>
+    <!-- Always in the DOM: a live region has to exist before its text changes
+         or the change is not announced. Empty until the draft is near the cap. -->
+    <span class="sr-only" role="status" aria-live="polite" data-testid="composer-limit-live">
+      {{ limitAnnouncement }}
+    </span>
   </div>
 </template>
 
@@ -189,6 +202,22 @@ const MAX_DRAFT_LEN = 4000
 const COMPOSER_MAX_HEIGHT_PX = 168
 
 const nearCharLimit = computed(() => props.modelValue.length >= MAX_DRAFT_LEN * 0.9)
+
+// D-09: static description of the cap, announced once on focus.
+const LIMIT_HINT_ID = 'composer-char-limit'
+
+// The parent may point the composer at a cap banner too; both descriptions are
+// wanted, so the ids are merged rather than overwritten.
+const describedbyIds = computed(() => [props.describedby, LIMIT_HINT_ID].filter(Boolean).join(' '))
+
+// Silent until the draft is within 10% of the cap, then one short line per
+// change; at the cap the wording says so outright.
+const limitAnnouncement = computed(() => {
+  const left = MAX_DRAFT_LEN - props.modelValue.length
+  if (left <= 0) return 'Character limit reached'
+  if (!nearCharLimit.value) return ''
+  return `${left.toLocaleString()} character${left === 1 ? '' : 's'} left`
+})
 
 // A draft worth sending arms the send control: the drawn arrow sits on a
 // filled blue square instead of on the page.
@@ -272,7 +301,9 @@ defineExpose({ focus })
   gap: 0.5rem;
   padding: 0.55rem 0.9rem;
   background: var(--card);
-  border: 1px solid var(--card-edge);
+  /* D-20: this is the resting edge of a text control, not card chrome, so it
+     takes the 3:1 token (base.css) rather than --card-edge. */
+  border: 1px solid var(--control-edge);
   border-radius: var(--radius-card);
   box-shadow: 0 1px 0 var(--card-drop);
   transition: border-color var(--motion-fast) ease;
@@ -282,6 +313,8 @@ defineExpose({ focus })
   border-color: var(--ink-learner);
 }
 
+/* A disabled control is exempt from 1.4.11, and the faint card edge is what
+   says it is out of play -- so this deliberately stays on --card-edge. */
 .composer.is-disabled {
   border-color: var(--card-edge);
 }

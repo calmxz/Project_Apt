@@ -646,7 +646,7 @@ async function onSignOut() {
     <footer class="sb-rail" :class="{ 'sb-rail--column': !isExpanded }">
       <RouterLink
         to="/settings"
-        class="sb-icon"
+        class="sb-icon hit-44 coarse-2x"
         :class="{ 'sb-icon--row': isExpanded }"
         aria-label="Settings"
         title="Settings"
@@ -676,7 +676,7 @@ async function onSignOut() {
       <button
         v-if="isAuthenticated"
         type="button"
-        class="sb-icon sb-icon-btn"
+        class="sb-icon sb-icon-btn hit-44 coarse-2x"
         :class="{ 'sb-icon--row': isExpanded }"
         aria-label="Sign out"
         title="Sign out"
@@ -711,6 +711,10 @@ async function onSignOut() {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  /* D-18: mobile browser chrome eats into 100vh, so the drawer's own footer
+     sits under it. 100dvh tracks the visible viewport; 100vh stays as the
+     fallback for engines without dvh (matches SessionView). */
+  height: 100dvh;
   position: sticky;
   top: 0;
   background: var(--desk-deep);

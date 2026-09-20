@@ -5,6 +5,9 @@
 .crux-dialog .p-dialog,
 .p-dialog.crux-dialog,
 .p-confirmdialog {
+  /* D-12: a dialog given a fixed width in rem overflows a 320px viewport.
+     One gutter each side is the floor, whatever width the dialog asks for. */
+  max-width: calc(100vw - 2rem);
   border-radius: var(--radius-card);
   border: 1px solid var(--card-edge);
   background: var(--card);

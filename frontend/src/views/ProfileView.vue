@@ -51,6 +51,7 @@
               type="button"
               class="level-opt"
               :class="{ active: data.profile.knowledge_level === lvl }"
+              :disabled="writing"
               @click="setLevel(lvl)"
             >
               <svg
@@ -104,6 +105,7 @@
                 type="button"
                 class="level-opt"
                 :class="{ active: lvl === l }"
+                :disabled="writing"
                 @click="setSubtopicLevel(name, l)"
               >
                 <svg
@@ -124,6 +126,7 @@
               class="icon-btn hit-44"
               data-testid="subtopic-remove"
               :aria-label="`Remove ${name}`"
+              :disabled="writing"
               @click="removeSubtopic(name)"
             >
               <svg
@@ -176,6 +179,7 @@
                 class="icon-btn hit-44"
                 data-testid="chip-remove"
                 :aria-label="`Remove ${it.name}`"
+                :disabled="writing"
                 @click="removeItem(sec.key, it.name)"
               >
                 <svg
@@ -206,6 +210,7 @@
               :data-testid="sec.submitTestid"
               class="text-btn"
               :aria-label="sec.submitLabel"
+              :disabled="writing"
               @click="addItem(sec)"
             >
               Add
@@ -230,7 +235,10 @@
             :key="ev.id"
             :class="['event-row', ev.correct ? 'evt-ok' : 'evt-bad']"
           >
-            <span class="event-mark" :aria-label="ev.correct ? 'correct' : 'missed'">
+            <span class="event-mark">
+              <!-- D-07: the mark is a <span>, which takes no accessible name
+                   from aria-label; the word is written out for SRs instead. -->
+              <span class="sr-only">{{ ev.correct ? 'correct' : 'missed' }}</span>
               <svg
                 class="event-mark-draw"
                 viewBox="0 0 16 16"
@@ -258,6 +266,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useConfirm } from 'primevue/useconfirm'
 
 import BackButton from '../components/BackButton.vue'
 import GapPickerDialog from '../components/GapPickerDialog.vue'
@@ -312,6 +321,7 @@ const CUE_SECTIONS = [
 ]
 
 const router = useRouter()
+const confirm = useConfirm()
 const store = useSessionStore()
 const data = ref(null)
 const loading = ref(false)
@@ -321,6 +331,10 @@ const conflict = ref(false)
 // would swap the whole loaded profile for an error paragraph (the template
 // chain is loading -> error -> data) with no control left to retry.
 const writeError = ref('')
+// E-08: true while any profile write is in flight. Every mutating control is
+// disabled for the duration, so a second write can never be issued against the
+// etag the first one is about to replace.
+const writing = ref(false)
 const drafts = reactive({ confirmed_gaps: '', mastered_concepts: '' })
 const gapPickerOpen = ref(false)
 
@@ -345,7 +359,26 @@ async function load() {
   }
 }
 
-async function _applyWrite(fn) {
+// E-08: every mutating call goes through one serial queue. Writes are
+// etag-guarded, so two in flight at once means the second carries a stale etag
+// and loses to a 412. `fn` reads data.value.etag when it runs -- not when it is
+// queued -- so each write sees the etag the previous one produced.
+// Re-entrancy is handled by serialising rather than by dropping: the mutating
+// controls are disabled for the duration, and anything that still gets through
+// (an Enter on the still-enabled text field) runs after the write ahead of it
+// instead of racing it.
+let _writeQueue = Promise.resolve()
+let _pendingWrites = 0
+
+function _applyWrite(fn) {
+  _pendingWrites += 1
+  writing.value = true
+  const run = _writeQueue.then(() => _doWrite(fn))
+  _writeQueue = run.catch(() => {})
+  return run
+}
+
+async function _doWrite(fn) {
   conflict.value = false
   writeError.value = ''
   try {
@@ -360,6 +393,9 @@ async function _applyWrite(fn) {
     } else {
       writeError.value = friendlyError(e)
     }
+  } finally {
+    _pendingWrites -= 1
+    if (_pendingWrites === 0) writing.value = false
   }
 }
 
@@ -374,8 +410,25 @@ function setLevel(level) {
   return _applyWrite(() => patchProfile(props.id, { knowledge_level: level }, data.value.etag))
 }
 
+// E-08: removing a concept is destructive and unlabelled by anything else on
+// the page, so it asks first. Same dialog contract as the file-delete confirm.
+function confirmRemove(name, accept) {
+  confirm.require({
+    message: `Remove "${name}" from this profile?`,
+    header: 'Remove concept',
+    // No glyph icon font in this world -- the dialog carries no mark.
+    rejectLabel: 'Cancel',
+    acceptLabel: 'Remove',
+    rejectClass: 'p-button-text p-button-secondary',
+    acceptClass: 'p-button-danger confirm-delete-strong',
+    accept,
+  })
+}
+
 function removeItem(listName, item) {
-  return _applyWrite(() => deleteProfileItem(props.id, listName, item, data.value.etag))
+  confirmRemove(item, () =>
+    _applyWrite(() => deleteProfileItem(props.id, listName, item, data.value.etag)),
+  )
 }
 
 function setSubtopicLevel(name, level) {
@@ -385,7 +438,9 @@ function setSubtopicLevel(name, level) {
 }
 
 function removeSubtopic(name) {
-  return _applyWrite(() => deleteProfileItem(props.id, 'subtopic_levels', name, data.value.etag))
+  confirmRemove(name, () =>
+    _applyWrite(() => deleteProfileItem(props.id, 'subtopic_levels', name, data.value.etag)),
+  )
 }
 
 function startReview() {
@@ -644,6 +699,23 @@ onMounted(load)
 .icon-btn:focus-visible {
   outline: 2px solid var(--color-accent-ring);
   outline-offset: 2px;
+}
+
+/* Disabled while a write is in flight: the control drops to pencil and stops
+   inviting a second click. */
+.text-btn:disabled,
+.icon-btn:disabled,
+.level-opt:disabled {
+  color: var(--pencil);
+  cursor: default;
+}
+
+.text-btn:disabled {
+  text-decoration: none;
+}
+
+.level-opt:disabled:hover {
+  text-decoration: none;
 }
 
 .icon-mark {
