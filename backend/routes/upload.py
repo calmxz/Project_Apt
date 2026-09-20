@@ -1,3 +1,4 @@
+import hashlib
 import io
 import logging
 import re
@@ -16,6 +17,8 @@ from fastapi import (
 )
 from pptx import Presentation
 from pypdf import PdfReader
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from config import settings
@@ -66,6 +69,24 @@ def _page_count(ext: str, data: bytes) -> int | None:
     except Exception:
         log.info("page-count probe failed for %s upload; skipping the gate", ext)
     return None
+
+
+def _find_existing_document(db: Session, session_id: str, sha: str) -> Document | None:
+    """C-08: the live row (if any) holding these exact bytes for this session.
+
+    Mirrors the partial unique index `uq_documents_session_sha`: failed rows
+    are excluded so a retry after a failed ingest always creates a fresh row.
+    """
+    return db.execute(
+        select(Document)
+        .where(
+            Document.session_id == session_id,
+            Document.content_sha256 == sha,
+            Document.status != "failed",
+        )
+        .order_by(Document.id)
+        .limit(1)
+    ).scalar_one_or_none()
 
 
 def _read_bounded(fh, max_bytes: int) -> bytes:
@@ -132,6 +153,29 @@ def upload_file(
     if sess.ended_at is not None:
         raise HTTPException(status_code=409, detail={"code": "session_ended"})
 
+    raw_name = Path(file.filename or "upload.pdf").name
+    safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", raw_name)
+    if not safe_name or safe_name in {".", ".."}:
+        raise HTTPException(status_code=400, detail={"code": "INVALID_FILENAME"})
+
+    data = _read_bounded(file.file, MAX_UPLOAD_BYTES)
+
+    # C-08: the dedupe lookup runs before the cost gate and the rate limiter so
+    # a re-upload of bytes we already hold burns neither. It is a pure SELECT:
+    # nothing is committed on this path.
+    sha = hashlib.sha256(data).hexdigest()
+    existing = _find_existing_document(db, session_id, sha)
+    if existing is not None:
+        warn = cost_meter.cost_warning_header(db, user_id)
+        if warn:
+            response.headers["X-Cost-Warning"] = warn
+        return UploadResponse(
+            document_id=existing.id,
+            session_id=session_id,
+            filename=existing.filename,
+            status=existing.status,
+        )
+
     # B-01: cost caps gate before the rate-limit slot is consumed, mirroring
     # the chat turn's guard order (routes/chat.py:141-153) - a capped account
     # must not be able to burn a daily upload slot on a rejected request.
@@ -161,13 +205,6 @@ def upload_file(
                 "resets_at": rate_limit.midnight_utc_iso(),
             },
         )
-
-    raw_name = Path(file.filename or "upload.pdf").name
-    safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", raw_name)
-    if not safe_name or safe_name in {".", ".."}:
-        raise HTTPException(status_code=400, detail={"code": "INVALID_FILENAME"})
-
-    data = _read_bounded(file.file, MAX_UPLOAD_BYTES)
 
     if ext in _PLAINTEXT_EXTENSIONS:
         estimated_chunks = len(data) / _CHARS_PER_TOKEN / _CHUNK_STRIDE_TOKENS
@@ -210,9 +247,32 @@ def upload_file(
     # completes. flush() assigns the PK for the storage key without opening
     # the row up to a concurrent claim; only commit once the blob write has
     # actually succeeded.
-    doc = Document(session_id=session_id, filename=safe_name, status="pending")
+    doc = Document(
+        session_id=session_id,
+        filename=safe_name,
+        status="pending",
+        content_sha256=sha,
+    )
     db.add(doc)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        # C-08 race: a concurrent request for the same bytes committed its row
+        # between our lookup and this flush. Adopt the winner instead of 500ing.
+        db.rollback()
+        winner = _find_existing_document(db, session_id, sha)
+        if winner is None:
+            raise
+        log.info("upload deduped after insert race", extra={"doc_id": winner.id})
+        warn = cost_meter.cost_warning_header(db, user_id)
+        if warn:
+            response.headers["X-Cost-Warning"] = warn
+        return UploadResponse(
+            document_id=winner.id,
+            session_id=session_id,
+            filename=winner.filename,
+            status=winner.status,
+        )
 
     # F-29: a failed blob write must not strand a permanent "pending" row.
     # Mark the row failed (visible in the UI banner) and report 507.
