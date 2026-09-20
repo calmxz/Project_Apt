@@ -65,9 +65,11 @@ function tickAt(i) {
         <span class="role-tag">tutor</span>
       </div>
       <div class="msg-body">
-        <p class="content typing-dots" aria-label="Tutor is thinking">
-          <span></span><span></span><span></span>
-        </p>
+        <!-- D-07: aria-label on a <p> is not a supported name source. The dots
+             are decoration; the text lives in a visually-hidden sibling so
+             `.typing-dots span` cannot style it as a fourth dot. -->
+        <span class="sr-only">Tutor is thinking</span>
+        <p class="content typing-dots"><span></span><span></span><span></span></p>
       </div>
     </article>
     <AssistantBubble v-if="streamingMessage" :message="streamingMessage" :streaming="true" />

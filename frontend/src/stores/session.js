@@ -4,7 +4,13 @@ import { defineStore } from 'pinia'
 import * as sessionsApi from '../services/sessionsApi.js'
 import { streamChat, streamCheckComplete } from '../services/chatStreamService.js'
 import { reportCostWarning } from '../services/costBus.js'
-import { friendlyError, StreamAbortedError } from '../lib/errors.js'
+import {
+  friendlyError,
+  sseErrorCopy,
+  SESSION_ENDED_COPY,
+  StreamAbortedError,
+} from '../lib/errors.js'
+import { ERR_SESSION_ENDED } from '../lib/errorCodes.js'
 import { mapCapError } from '../lib/capErrors.js'
 import { createDeltaBatcher } from '../lib/deltaBatcher.js'
 
@@ -88,7 +94,6 @@ export const useSessionStore = defineStore('session', () => {
 
   // Library-scoped state — never touches sidebar sessions/loading/error
   const libraryLoading = ref(false)
-  const libraryError = ref(null)
 
   // In-flight-promise guard. Holds ONLY pending promises (deleted on settle),
   // never resolved results — so a reused promise is as fresh as a new request
@@ -100,14 +105,14 @@ export const useSessionStore = defineStore('session', () => {
   // session the user is actually viewing. Module-scoped (not reactive).
   let _latestRequestedId = null
 
+  // E-06: silent because the library page owns the failure copy (and its retry
+  // control) for its own first load. A raw store-held message was rendered
+  // nowhere, and a toast on top of the page's own empty/error state duplicates
+  // it. Rethrows, so the caller still sees the failure.
   async function fetchLibrary(params) {
     libraryLoading.value = true
-    libraryError.value = null
     try {
-      return await sessionsApi.getSessionLibrary(params)
-    } catch (e) {
-      libraryError.value = e?.message || 'Failed to load sessions'
-      throw e
+      return await sessionsApi.getSessionLibrary(params, { silent: true })
     } finally {
       libraryLoading.value = false
     }
@@ -143,10 +148,13 @@ export const useSessionStore = defineStore('session', () => {
 
   // Route a backend cap envelope (HTTP 429 detail or SSE error payload)
   // into the cap-banner refs. Unknown codes are a no-op.
+  // Returns true when the envelope WAS a cap code, so an SSE caller knows the
+  // cap banner already renders this failure and must not also write `error`.
   function _applyCapError(detail) {
     const { kind, info } = mapCapError(detail)
     if (kind === 'daily') dailyCapInfo.value = info
     else if (kind === 'cost') costCapInfo.value = info
+    return kind !== null
   }
 
   function _setError(e) {
@@ -296,9 +304,44 @@ export const useSessionStore = defineStore('session', () => {
     return p
   }
 
+  // F-16: an unbounded transcript grows for the life of the page - a long
+  // session streams hundreds of turns into one reactive array that MessageList
+  // renders in full. Cap what we RETAIN, on live append only (new user turn,
+  // finalize, cancel, mid-turn error). The manual loadEarlierMessages prepend
+  // below is deliberately exempt: the user just asked for that history, and
+  // evicting it would fight the request.
+  const MAX_RETAINED_MESSAGES = 200
+
+  // A real server-assigned id, usable as the load-earlier `before:` cursor.
+  // Live-appended user bubbles carry none (the I-10 pop below relies on that),
+  // a retained partial carries none, and a cancelled bubble carries the
+  // literal 'pending'.
+  function _hasServerId(m) {
+    return m?.message_id != null && m.message_id !== 'pending'
+  }
+
+  function _appendMessage(m) {
+    messages.value.push(m)
+    if (messages.value.length <= MAX_RETAINED_MESSAGES) return
+    let keep = messages.value.slice(messages.value.length - MAX_RETAINED_MESSAGES)
+    // The oldest retained message doubles as the pagination cursor, so trim a
+    // few extra off the top until it carries a server id; the next id-bearing
+    // message's `before:` page then returns exactly the turns we dropped, with
+    // no gap and no duplicates. If nothing retained has an id there is no
+    // cursor to protect, so keep the plain window.
+    let i = 0
+    while (i < keep.length && !_hasServerId(keep[i])) i += 1
+    if (i < keep.length) keep = keep.slice(i)
+    messages.value = keep
+    hasMoreMessages.value = true
+  }
+
   async function loadEarlierMessages() {
     if (loadingEarlier.value || !hasMoreMessages.value) return
-    const oldest = messages.value[0]?.message_id
+    // Oldest retained SERVER id, not simply messages[0]: after an eviction (or
+    // an in-flight turn at the head of the window) the first entry can be a
+    // local-only bubble, and `before: undefined` would silently page nothing.
+    const oldest = messages.value.find(_hasServerId)?.message_id
     const sid = currentSessionId.value
     if (oldest == null || !sid) return
     loadingEarlier.value = true
@@ -638,9 +681,7 @@ export const useSessionStore = defineStore('session', () => {
               break
             case 'error':
               sawTerminal = true
-              _applyCapError(data)
-              if (!_streamSuperseded()) error.value = data.message || data.code
-              handleAbortError(data.code)
+              _onSseError(data)
               break
           }
         },
@@ -739,7 +780,7 @@ export const useSessionStore = defineStore('session', () => {
       return
     }
     if (!streamingMessage.value) return
-    messages.value.push({ ...streamingMessage.value, message_id, status: 'complete' })
+    _appendMessage({ ...streamingMessage.value, message_id, status: 'complete' })
     streamingMessage.value = null
     streamState.value = 'idle'
     abortController.value = null
@@ -751,7 +792,7 @@ export const useSessionStore = defineStore('session', () => {
       return
     }
     if (!streamingMessage.value) return
-    messages.value.push({
+    _appendMessage({
       ...streamingMessage.value,
       message_id,
       status: 'cancelled',
@@ -770,19 +811,35 @@ export const useSessionStore = defineStore('session', () => {
   // instead of discarding the text the learner already watched stream.
   const PARTIAL_ABORT_CODES = new Set(['daily_cost_cap_reached', 'max_iters_reached'])
 
+  // E-03: the single "retain whatever already streamed, then clear" step.
+  // Shared by the SSE `error` event (which carries a code) and the generic
+  // transport catch in sendMessageStreaming (which does not, so the retained
+  // bubble lands on 'error'). One helper so the two cannot drift: before this,
+  // a mid-stream network drop discarded text the learner had already watched
+  // stream, while the same text survived an SSE-reported failure.
+  function _settleWithError(code) {
+    if (streamingMessage.value?.content) {
+      const status = PARTIAL_ABORT_CODES.has(code) ? 'partial' : 'error'
+      _appendMessage({ ...streamingMessage.value, status })
+    }
+    _clearStreamState()
+  }
+
   function handleAbortError(code) {
     if (_streamSuperseded()) {
       _clearStreamState()
       return
     }
-    if (!streamingMessage.value) return
-    if (streamingMessage.value.content) {
-      const status = PARTIAL_ABORT_CODES.has(code) ? 'partial' : 'error'
-      messages.value.push({ ...streamingMessage.value, status })
-    }
-    streamingMessage.value = null
-    streamState.value = 'idle'
-    abortController.value = null
+    _settleWithError(code)
+  }
+
+  // E-04: the one handler for an SSE `error` event, shared by both stream
+  // loops. A cap code is already rendered by CapBanners, so claiming it here
+  // suppresses a second sentence saying the same thing.
+  function _onSseError(data) {
+    const claimedByCapBanner = _applyCapError(data)
+    if (!claimedByCapBanner && !_streamSuperseded()) error.value = sseErrorCopy(data)
+    handleAbortError(data?.code)
   }
 
   function stopStream() {
@@ -804,7 +861,7 @@ export const useSessionStore = defineStore('session', () => {
     // F-04 (defensive): same single-live-stream invariant as completeCheck.
     if (streamState.value !== 'idle') return null
     followupNotice.value = null
-    messages.value.push({ role: 'user', content: trimmed })
+    _appendMessage({ role: 'user', content: trimmed })
     streamingMessage.value = { role: 'assistant', content: '', tool_calls: [], citations: [] }
     streamState.value = 'streaming'
     _streamSid = currentSessionId.value
@@ -854,9 +911,7 @@ export const useSessionStore = defineStore('session', () => {
               break
             case 'error':
               sawTerminal = true
-              _applyCapError(data)
-              if (!_streamSuperseded()) error.value = data.message || data.code
-              handleAbortError(data.code)
+              _onSseError(data)
               break
           }
         },
@@ -896,8 +951,8 @@ export const useSessionStore = defineStore('session', () => {
         _clearStreamState()
         throw new StreamAbortedError('auth_expired', e)
       }
-      if (e?.status === 409 && e?.body?.detail?.code === 'session_ended') {
-        error.value = 'This session was ended elsewhere. Reopen it to continue.'
+      if (e?.status === 409 && e?.body?.detail?.code === ERR_SESSION_ENDED) {
+        error.value = SESSION_ENDED_COPY
         if (currentSession.value) currentSession.value.ended_at = new Date().toISOString()
         _clearStreamState()
         // E-11: rethrow so the view restores the draft instead of running
@@ -905,7 +960,9 @@ export const useSessionStore = defineStore('session', () => {
         throw new StreamAbortedError('session_ended', e)
       }
       if (e?.status === 429) _applyCapError(e?.body?.detail)
-      _clearStreamState()
+      // E-03: a transport failure mid-stream keeps the text already streamed
+      // (as status 'error'), matching what a reload of this session shows.
+      _settleWithError()
       _setError(e)
     }
   }
@@ -990,7 +1047,6 @@ export const useSessionStore = defineStore('session', () => {
     sendMessageStreaming,
     reset,
     libraryLoading,
-    libraryError,
     fetchLibrary,
   }
 })

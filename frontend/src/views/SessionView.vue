@@ -149,7 +149,12 @@
                 </router-link>
               </div>
 
-              <ReferenceStatusBanner ref="referenceBannerRef" :session-id="props.id" />
+              <ReferenceStatusBanner
+                :status="refStatus"
+                :documents="refDocuments"
+                :failed="refFailed"
+                @refresh="refreshReferences"
+              />
 
               <UploadStatus v-if="topCaption === 'upload'" :upload="uploadStatus" />
 
@@ -259,7 +264,8 @@ import { usePanel } from '../composables/usePanel.js'
 import { useToast } from '../composables/useToast.js'
 import { costBus } from '../services/costBus.js'
 import { getSessionProfile, patchProfile } from '../services/profileApi.js'
-import { getUploadStatus, uploadDocument, validateFile } from '../services/uploadApi.js'
+import { uploadDocument, validateFile } from '../services/uploadApi.js'
+import { useReferencePoll } from '../composables/useReferencePoll.js'
 import { NARROW_QUERY, useMediaQuery } from '../composables/useMediaQuery.js'
 import { entryNames } from '../utils/conceptEntry.js'
 import { formatResetTime } from '../utils/formatDate.js'
@@ -294,13 +300,24 @@ const messagesEl = ref(null)
 const composerRef = ref(null)
 const uploading = ref(false)
 const uploadStatus = ref(null)
-// Same generation-counter idiom as ReferenceStatusBanner: /session/:id reuses
+// Same generation-counter idiom as useReferencePoll: /session/:id reuses
 // this component instance across sidebar switches, so an in-flight upload poll
 // from the previous session must not write uploadStatus/uploading after the id
 // changes. Bumped by the props.id watcher; every write after an await checks it.
 let uploadGen = 0
 const lastError = ref(null)
-const referenceBannerRef = ref(null)
+
+// F-12 / E-07: one poller for this session, shared by the reference banner and
+// the upload chip. Destructured at top level so the template auto-unwraps the
+// refs (a nested `refPoll.documents` would hand the child the ComputedRef).
+// It follows props.id itself and settles any watcher on a session switch.
+const {
+  documents: refDocuments,
+  status: refStatus,
+  failed: refFailed,
+  refresh: refreshReferences,
+  watch: watchReference,
+} = useReferencePoll(() => props.id)
 
 // Diagnostic consent card (spec 2026-07-25-diagnostic-consent-design.md).
 // diagProfile holds the latest GET /profile/:id payload ({ profile, etag });
@@ -858,10 +875,12 @@ async function onAttachFile(file) {
   try {
     const resp = await uploadDocument({ sessionId: props.id, file })
     if (gen !== uploadGen) return
-    referenceBannerRef.value?.refresh?.()
-    await pollUploadStatus(resp.document_id, file.name, gen)
+    // The shared poller both drives the banner (so the new doc appears) and
+    // resolves once this document reaches a terminal state, replacing the old
+    // fixed-1s / 90-attempt pollUploadStatus loop.
+    const outcome = await watchReference(resp.document_id, file.name)
     if (gen !== uploadGen) return
-    referenceBannerRef.value?.refresh?.()
+    applyUploadOutcome(outcome, file.name)
   } catch (e) {
     if (gen !== uploadGen) return
     // I-09: the 415 (and friends) carry an actionable server message -
@@ -878,33 +897,30 @@ async function onAttachFile(file) {
   }
 }
 
-async function pollUploadStatus(documentId, filename, gen) {
-  for (let i = 0; i < 90; i += 1) {
-    let s
-    try {
-      s = await getUploadStatus(documentId)
-    } catch (e) {
-      if (gen !== uploadGen) return
-      uploadStatus.value = {
-        kind: 'failed',
-        text: `Upload status unavailable: ${friendlyError(e)}`,
-      }
-      return
+// Maps a useReferencePoll watch outcome onto the chip. Copy is unchanged from
+// the old pollUploadStatus; only the attempt ceiling became a ~90s wall-clock
+// ceiling (timedOut), because attempt counts mean nothing under backoff.
+function applyUploadOutcome(outcome, filename) {
+  // Session switched or the poller stopped: the id watcher already cleared the
+  // chip, so writing anything here would paint a stale session's status.
+  if (!outcome || outcome.cancelled) return
+  if (outcome.status === 'ready') {
+    uploadStatus.value = { kind: 'ready', text: `${filename} is ready. Ask a question about it.` }
+    return
+  }
+  if (outcome.status === 'failed') {
+    uploadStatus.value = {
+      kind: 'failed',
+      text: `Upload failed: ${outcome.error || 'ingestion error'}`,
     }
-    if (gen !== uploadGen) return
-    if (s.status === 'ready') {
-      uploadStatus.value = { kind: 'ready', text: `${filename} is ready. Ask a question about it.` }
-      return
+    return
+  }
+  if (outcome.unavailable) {
+    uploadStatus.value = {
+      kind: 'failed',
+      text: `Upload status unavailable: ${friendlyError(outcome.error)}`,
     }
-    if (s.status === 'failed') {
-      uploadStatus.value = {
-        kind: 'failed',
-        text: `Upload failed: ${s.error || 'ingestion error'}`,
-      }
-      return
-    }
-    await new Promise((r) => setTimeout(r, 1000))
-    if (gen !== uploadGen) return
+    return
   }
   uploadStatus.value = {
     kind: 'pending',

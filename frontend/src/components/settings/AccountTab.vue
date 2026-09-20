@@ -128,6 +128,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 
+import { authErrorCopy } from '@/lib/authErrors.js'
 import { friendlyError } from '@/lib/errors.js'
 import { useUserStore } from '../../stores/user.js'
 import { useAuthStore } from '../../stores/auth.js'
@@ -200,7 +201,8 @@ async function changePassword() {
     pwSuccess.value = true
     showSuccess('Password updated.')
   } catch (e) {
-    pwError.value = e?.message || 'Could not update password. Try again.'
+    // E-13: code-keyed copy, never SDK prose (see lib/authErrors.js).
+    pwError.value = authErrorCopy(e, 'Could not update password. Try again.')
   } finally {
     pwSubmitting.value = false
   }

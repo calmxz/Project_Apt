@@ -5,6 +5,8 @@
     </header>
 
     <div class="layout">
+      <!-- D-16: only the active panel is mounted, so aria-controls is bound on
+           the selected tab alone; on the others it would dangle. -->
       <nav
         class="rail"
         role="tablist"
@@ -17,7 +19,7 @@
           :ref="(el) => (tabRefs[i] = el)"
           role="tab"
           :id="`tab-${t.slug}`"
-          :aria-controls="`panel-${t.slug}`"
+          :aria-controls="t.slug === tab ? `panel-${t.slug}` : undefined"
           :aria-selected="t.slug === tab ? 'true' : 'false'"
           :tabindex="t.slug === tab ? 0 : -1"
           :class="['rail-tab', 'coarse-2x', { 'rail-tab--active': t.slug === tab }]"

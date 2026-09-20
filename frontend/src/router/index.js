@@ -189,7 +189,17 @@ router.afterEach((to, from, failure) => {
   // don't steal focus from the address bar / skip-link).
   if (failure || !from.name) return
   if (typeof document === 'undefined') return
-  document.getElementById('main-content')?.focus()
+  const el = document.getElementById('main-content')
+  // D-15: a missing target used to fail silently, which is how the chrome-less
+  // routes went unnoticed. App.vue now gives both branches the id; say so in
+  // dev if a new layout ever drops it again.
+  if (!el) {
+    if (import.meta.env.DEV) {
+      console.warn('[router] focus target #main-content not found for', to.path)
+    }
+    return
+  }
+  el.focus()
 })
 
 router.afterEach(() => {

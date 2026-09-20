@@ -3,6 +3,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 import AccountTab from '@/components/settings/AccountTab.vue'
+import { AUTH_CODE_COPY } from '@/lib/authErrors.js'
 import { useUserStore } from '@/stores/user.js'
 import { useAuthStore } from '@/stores/auth.js'
 
@@ -179,5 +180,28 @@ describe('AccountTab', () => {
     expect(w.find('[data-testid="settings-pw-success"]').exists()).toBe(true)
     expect(w.find('[data-testid="settings-pw-success"]').attributes('role')).toBe('status')
     expect(showSuccess).toHaveBeenCalled()
+  })
+
+  // E-13: our copy for the SDK code, never the SDK's prose.
+  it('maps an updatePassword AuthError code to our own copy', async () => {
+    const auth = useAuthStore()
+    auth.session = { user: { id: 'u-1', email: 'a@b.c' }, access_token: 't' }
+    vi.spyOn(auth, 'signIn').mockResolvedValue()
+    vi.spyOn(auth, 'updatePassword').mockRejectedValue(
+      Object.assign(new Error('New password should be different from the old password.'), {
+        code: 'same_password',
+        status: 422,
+      }),
+    )
+    const w = mount(AccountTab, { global: { stubs } })
+    await flushPromises()
+    await w.get('[data-testid="settings-pw-current"]').setValue('oldpass12')
+    await w.get('[data-testid="settings-pw-new"]').setValue('oldpass12x')
+    await w.get('[data-testid="settings-pw-confirm"]').setValue('oldpass12x')
+    await w.get('form.pw-form').trigger('submit')
+    await flushPromises()
+    const text = w.get('[data-testid="settings-pw-error"]').text()
+    expect(text).toBe(AUTH_CODE_COPY.same_password)
+    expect(text).not.toContain('should be different')
   })
 })

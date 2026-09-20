@@ -15,6 +15,19 @@ const showWarn = vi.fn()
 vi.mock('@/composables/useToast.js', () => ({
   useToast: () => ({ showError, showWarn, showSuccess }),
 }))
+// E-12: the row's End action goes through PrimeVue's confirm service, which is
+// not installed on a bare mount. The stub captures the config and accepts
+// straight away so the existing End assertions keep reading the same way; the
+// cancel path is covered in sidebarSessionRow.test.js.
+let lastConfirm = null
+vi.mock('primevue/useconfirm', () => ({
+  useConfirm: () => ({
+    require: (cfg) => {
+      lastConfirm = cfg
+      cfg.accept?.()
+    },
+  }),
+}))
 const apiReviewQueue = vi.fn()
 vi.mock('@/services/reviewApi.js', () => ({
   getReviewQueue: (...args) => apiReviewQueue(...args),
@@ -710,18 +723,20 @@ describe('Sidebar.vue — row interactions', () => {
     ).toBeUndefined()
   })
 
-  it('End session menu item calls store.endSession with row id', async () => {
+  it('End session menu item confirms first, then calls store.endSession with row id', async () => {
     const store = useSessionStore()
     store.sessions = [
       { id: 'a1', topic: 'Big-O', created_at: '2026-05-20T10:00:00Z', ended_at: null },
     ]
     const endSpy = vi.spyOn(store, 'endSession').mockResolvedValue({})
+    lastConfirm = null
     wrapper = mount(Sidebar, { attachTo: document.body })
     await flushPromises()
     await wrapper
       .find('[data-session-id="a1"] [data-testid="sidebar-row-menu-trigger"]')
       .trigger('click')
     await wrapper.find('[data-testid="sidebar-row-menu-end"]').trigger('click')
+    expect(lastConfirm).toMatchObject({ header: 'End session' })
     expect(endSpy).toHaveBeenCalledWith('a1')
   })
 

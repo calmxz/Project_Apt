@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useUserStore } from '@/stores/user.js'
+import { _resetApiCache } from '@/services/apiClient.js'
 
 const key = (uid) => `crux:user:v1:${uid}`
 
@@ -23,6 +24,9 @@ describe('user store', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     localStorage.clear()
+    // F-18: apiClient's GET cache is module state; without this a later case
+    // gets an earlier case's /me body.
+    _resetApiCache()
     fetchMock = vi.fn().mockReturnValue(ok({}))
     globalThis.fetch = fetchMock
   })

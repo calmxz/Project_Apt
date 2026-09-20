@@ -10,6 +10,112 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api
 // legitimate JSON call (end-session runs a 20s-capped summary LLM call).
 export const REQUEST_TIMEOUT_MS = 30000
 
+// F-18: a flaky link or a load balancer cycling a pod turns one GET into a red
+// banner. GETs are idempotent, so retry them a bounded number of times; nothing
+// else is retried (a POST could have landed before the connection dropped).
+export const GET_RETRY_ATTEMPTS = 3
+// Delay before attempt 2 and attempt 3. Jittered +/-20% so a backend restart
+// does not get every open tab back in lockstep.
+export const GET_RETRY_DELAYS_MS = [300, 900]
+const RETRY_JITTER = 0.2
+// Only transient upstream failures. 500 is a real bug and 429 has its own copy;
+// retrying either just delays the error the user needs to see.
+const RETRYABLE_STATUS = new Set([502, 503, 504])
+
+// F-18: a short read-through cache for GETs. Several views mount at once and
+// ask for the same session/profile; 5s is long enough to collapse that burst
+// and short enough that no mutation of ours is invisible for a whole beat.
+export const GET_CACHE_TTL_MS = 5000
+// url -> { at, value }
+const _getCache = new Map()
+// Bumped by every invalidation/reset. A GET captures it before its fetch and
+// skips the cache write if it moved meanwhile -- otherwise a GET that was
+// already in flight when a write landed would store its stale body on settle.
+let _cacheEpoch = 0
+
+// Test hook: the Map is module state and would leak between cases.
+export function _resetApiCache() {
+  _getCache.clear()
+  _cacheEpoch += 1
+}
+
+function _pathOfUrl(url) {
+  return (url.startsWith(BASE_URL) ? url.slice(BASE_URL.length) : url).split('?')[0]
+}
+
+// Segment prefix, so `/sessions/abc` matches `/sessions/abc/end` but never
+// `/sessions/abcdef`.
+function _isSegmentPrefix(prefix, path) {
+  if (!prefix || prefix === '/') return true
+  return path === prefix || path.startsWith(prefix.endsWith('/') ? prefix : `${prefix}/`)
+}
+
+// Any write drops cached GETs on the same resource, in both directions:
+// POST /sessions invalidates GET /sessions?cursor=..., and DELETE
+// /sessions/abc/end invalidates GET /sessions/abc.
+//
+// Exported because not every write goes through request(): chatStreamService
+// (SSE POST) and uploadApi.uploadDocument (multipart POST) use raw fetch and
+// must invalidate the session tree themselves once their call settles.
+export function invalidateGetCache(path) {
+  // Unconditional, even when nothing matched: a GET that is still in flight is
+  // not in the Map yet, and the epoch is what stops it writing a stale body.
+  _cacheEpoch += 1
+  const target = path.split('?')[0]
+  // Sibling lists: POST /sessions/abc/end changes what GET /sessions/library
+  // and GET /sessions return, and neither is a prefix of the other. Any write
+  // under a resource root therefore also drops every cached GET under that
+  // root. Coarse, but a 5 s cache gains nothing from being clever here.
+  const root = `/${target.split('/').filter(Boolean)[0] ?? ''}`
+  for (const url of _getCache.keys()) {
+    const cached = _pathOfUrl(url)
+    if (
+      _isSegmentPrefix(cached, target) ||
+      _isSegmentPrefix(target, cached) ||
+      _isSegmentPrefix(root, cached)
+    ) {
+      _getCache.delete(url)
+    }
+  }
+}
+
+function _jittered(ms) {
+  return Math.round(ms * (1 + (Math.random() * 2 - 1) * RETRY_JITTER))
+}
+
+function _isRetryableError(e) {
+  // TypeError is what fetch throws for a dropped/blocked connection -- cheap to
+  // re-try and usually transient. A TimeoutError is deliberately NOT retryable:
+  // every attempt mints a fresh REQUEST_TIMEOUT_MS AbortSignal, so a hung (as
+  // opposed to down) backend would take 30 + 0.3 + 30 + 0.9 + 30 = ~91s to
+  // surface instead of 30s.
+  return e instanceof TypeError || e?.name === 'TypeError'
+}
+
+// buildInit is called per attempt so each gets its own AbortSignal.timeout --
+// a shared signal would already be spent when attempt 2 starts.
+async function _fetchWithRetry(url, buildInit, retryable) {
+  const attempts = retryable ? GET_RETRY_ATTEMPTS : 1
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (attempt > 0) {
+      const delay = _jittered(GET_RETRY_DELAYS_MS[attempt - 1])
+      await new Promise((r) => setTimeout(r, delay))
+    }
+    const last = attempt === attempts - 1
+    try {
+      const resp = await fetch(url, buildInit())
+      if (!last && RETRYABLE_STATUS.has(resp.status)) continue
+      return resp
+    } catch (e) {
+      // reportApiError stays in request(), so it fires once after the final
+      // failure rather than once per attempt.
+      if (last || !_isRetryableError(e)) throw e
+    }
+  }
+  /* c8 ignore next -- the loop either returns or throws on the last attempt */
+  throw new Error('unreachable')
+}
+
 export class ApiError extends Error {
   constructor(status, body, path) {
     super(`API ${status} ${path}: ${typeof body === 'string' ? body : JSON.stringify(body)}`)
@@ -91,6 +197,9 @@ export function setUnauthorizedHandler(fn) {
 }
 
 export async function _onAuthExpired() {
+  // Belt to the per-entry token check in request(): nothing cached under the
+  // dead session should outlive it.
+  _resetApiCache()
   try {
     const store = useAuthStore()
     try {
@@ -111,7 +220,7 @@ export async function _onAuthExpired() {
 async function request(
   method,
   path,
-  { body, params, silent = false, headers } = {},
+  { body, params, silent = false, headers, fresh = false } = {},
   _retried = false,
 ) {
   let url = `${BASE_URL}${path}`
@@ -122,32 +231,54 @@ async function request(
     if (qs) url += `?${qs}`
   }
 
-  const init = { method, headers: { ...headers } }
-  if (body !== undefined) {
-    init.headers['content-type'] = 'application/json'
-    init.body = JSON.stringify(body)
-  }
+  const isGet = method === 'GET'
 
-  if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
-    init.signal = AbortSignal.timeout(REQUEST_TIMEOUT_MS)
-  }
+  const baseHeaders = { ...headers }
+  if (body !== undefined) baseHeaders['content-type'] = 'application/json'
 
   const token = _retried ? await _refreshAccessToken() : await getFreshAccessToken()
-  if (token) init.headers['authorization'] = `Bearer ${token}`
+  if (token) baseHeaders['authorization'] = `Bearer ${token}`
+
+  // Read the cache only after the token is known: the url alone is not a
+  // sufficient key. Sign out and straight back in as someone else inside the
+  // TTL and a url-keyed hit would render the previous account's data.
+  if (isGet && !fresh) {
+    const hit = _getCache.get(url)
+    if (hit && hit.token === token && Date.now() - hit.at < GET_CACHE_TTL_MS) return hit.value
+    if (hit) _getCache.delete(url)
+  }
+
+  const buildInit = () => {
+    const init = { method, headers: { ...baseHeaders } }
+    if (body !== undefined) init.body = JSON.stringify(body)
+    if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+      init.signal = AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+    }
+    return init
+  }
+
+  // Captured before the first attempt: any invalidation from here on means this
+  // response is already potentially stale and must not be cached.
+  const epochAtFetch = _cacheEpoch
 
   let resp
   try {
-    resp = await fetch(url, init)
+    resp = await _fetchWithRetry(url, buildInit, isGet)
   } catch (e) {
+    if (!isGet) invalidateGetCache(path)
     const detail = e?.name === 'TimeoutError' ? 'request timed out' : e.message
     const err = new ApiError(0, { detail }, path)
     if (!silent) reportApiError(err)
     throw err
   }
 
+  // Before the status checks: a write that 409s may still have changed state,
+  // and a stale cached GET is worse than a re-fetch.
+  if (!isGet) invalidateGetCache(path)
+
   if (resp.status === 401 && !_retried) {
     // F-09: silent first 401 -- refresh and retry once before surfacing.
-    return request(method, path, { body, params, silent, headers }, true)
+    return request(method, path, { body, params, silent, headers, fresh }, true)
   }
 
   const text = await resp.text()
@@ -162,6 +293,14 @@ async function request(
 
   const warn = resp.headers?.get?.('x-cost-warning')
   if (warn) reportCostWarning({ header: warn, path })
+
+  // Written even for fresh: true -- the response is current either way, and a
+  // poller's fresh read is exactly what a following cached read should see.
+  // Skipped when an invalidation landed while this GET was in flight: the body
+  // may predate the write, and a stale hit for a full TTL is worse than a miss.
+  if (isGet && epochAtFetch === _cacheEpoch) {
+    _getCache.set(url, { at: Date.now(), value: parsed, token })
+  }
 
   return parsed
 }

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { nextTick } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
@@ -60,11 +61,52 @@ describe('ReviewView', () => {
     expect(wrapper.find('[data-testid="review-item"]').exists()).toBe(false)
   })
 
-  it('shows the empty state when the fetch fails (never blocks)', async () => {
+  // D-11: a failed fetch is not an empty queue. The page never blocks, but it
+  // says which of the three states it is in and offers a retry.
+  it('shows an error row with a retry when the fetch fails (never blocks)', async () => {
     apiReviewQueue.mockRejectedValue(new Error('boom'))
     const wrapper = mountView()
     await flushPromises()
+    expect(wrapper.find('[data-testid="review-empty"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="review-error"]').text()).toContain(
+      'Could not load your review queue.',
+    )
+    expect(wrapper.find('[data-testid="review-retry"]').exists()).toBe(true)
+  })
+
+  it('shows a skeleton while the first load is in flight and drops it after', async () => {
+    let resolveQueue
+    apiReviewQueue.mockImplementation(
+      () =>
+        new Promise((res) => {
+          resolveQueue = res
+        }),
+    )
+    const wrapper = mountView()
+    await nextTick()
+    expect(wrapper.find('[data-testid="review-loading"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="review-empty"]').exists()).toBe(false)
+    resolveQueue({ items: [], total: 0, limit: 3, offset: 0 })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="review-loading"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="review-empty"]').exists()).toBe(true)
+  })
+
+  it('Retry refetches silently and renders the queue on success', async () => {
+    apiReviewQueue.mockRejectedValueOnce(new Error('boom'))
+    const wrapper = mountView()
+    await flushPromises()
+    apiReviewQueue.mockResolvedValue({
+      items: [makeReviewItem('mitosis')],
+      total: 1,
+      limit: 3,
+      offset: 0,
+    })
+    await wrapper.get('[data-testid="review-retry"]').trigger('click')
+    await flushPromises()
+    expect(apiReviewQueue).toHaveBeenLastCalledWith({ limit: 3, offset: 0 }, { silent: true })
+    expect(wrapper.find('[data-testid="review-error"]').exists()).toBe(false)
+    expect(wrapper.findAll('[data-testid="review-item"]')).toHaveLength(1)
   })
 
   it('renders count and items when concepts are due', async () => {

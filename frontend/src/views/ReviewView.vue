@@ -11,7 +11,21 @@
       {{ queue.total }} concept{{ queue.total === 1 ? '' : 's' }} ready.
     </p>
 
-    <ul v-if="queue.items.length" class="review-list">
+    <div v-if="showSkeleton" class="skel" data-testid="review-loading" aria-hidden="true">
+      <span class="skel-block" />
+      <span class="skel-block" />
+      <span class="skel-block skel-short" />
+    </div>
+    <span v-if="showSkeleton" class="sr-only" role="status">Loading</span>
+
+    <template v-else-if="error">
+      <p class="error" data-testid="review-error">Could not load your review queue.</p>
+      <button type="button" class="review-more" data-testid="review-retry" @click="retry">
+        Retry
+      </button>
+    </template>
+
+    <ul v-else-if="queue.items.length" class="review-list">
       <li
         v-for="(item, i) in queue.items"
         :key="item.concept"
@@ -71,7 +85,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import BackButton from '../components/BackButton.vue'
 import { useSessionStore } from '../stores/session.js'
@@ -84,6 +98,14 @@ const queue = ref({ items: [], total: 0 })
 const loaded = ref(false)
 const expanded = ref(false)
 const startBusy = ref(false)
+// D-11: a failed fetch is not an empty queue. `loading` and `error` are held
+// apart from emptiness so the page can say which of the three it is.
+const loading = ref(false)
+const error = ref(false)
+
+// Only the first load blanks the page; a "View all" refetch keeps the rows it
+// already has on screen (same guard the library grid uses).
+const showSkeleton = computed(() => loading.value && !queue.value.items.length)
 
 // Cornell recitation: the cue stays readable, what sits beside it is covered
 // until the learner lifts that one cover. Keyed by concept (the queue's own
@@ -110,17 +132,28 @@ onMounted(() => {
 })
 
 async function load(limit = 3, { silent } = {}) {
+  loading.value = true
+  error.value = false
   try {
     // Only the mount call passes silent:true; the user-initiated "View all"
     // refetch keeps the toast on a real failure.
     const opts = silent ? [{ silent: true }] : []
     queue.value = await getReviewQueue({ limit, offset: 0 }, ...opts)
   } catch {
-    // The review page must never block; show the empty state on failure.
+    // The review page must never block; it says it could not load and offers
+    // a retry instead of pretending nothing is due.
     queue.value = { items: [], total: 0 }
+    error.value = true
   } finally {
+    loading.value = false
     loaded.value = true
   }
+}
+
+// The inline error row is the surface, so the retry stays silent: a toast on
+// top of it would say the same thing twice.
+function retry() {
+  return load(expanded.value ? 100 : 3, { silent: true })
 }
 
 async function startReview(item) {
@@ -346,6 +379,32 @@ async function expand() {
 .review-cover:focus-visible {
   outline: 2px solid var(--color-accent-ring);
   outline-offset: 2px;
+}
+
+/* Skeleton: pencil-weight rules on the pitch, no shimmer (same as the session
+   profile's). */
+.skel {
+  display: flex;
+  flex-direction: column;
+}
+
+.skel-block {
+  display: block;
+  height: 1.75rem;
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+.skel-short {
+  width: 55%;
+}
+
+.error {
+  margin: 0;
+  max-width: 42rem;
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--ink-marker-text);
 }
 
 .empty {

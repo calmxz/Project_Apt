@@ -5,6 +5,7 @@ import {
   getFreshAccessToken,
   _refreshAccessToken,
   _onAuthExpired,
+  invalidateGetCache,
 } from './apiClient.js'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
@@ -74,9 +75,13 @@ export async function uploadDocument({ sessionId, file }) {
       resp = await _postUpload(fd, token ? { authorization: `Bearer ${token}` } : {})
     }
   } catch (e) {
+    invalidateGetCache(`/sessions/${sessionId}`)
     const detail = e?.name === 'TimeoutError' ? 'upload timed out' : e.message
     throw new ApiError(0, { detail }, '/upload')
   }
+  // Raw multipart fetch bypasses request(): drop the session tree (ingestion
+  // status lives on the session body) from the GET cache whatever the status.
+  invalidateGetCache(`/sessions/${sessionId}`)
 
   const text = await resp.text()
   let parsed = null
@@ -100,7 +105,12 @@ export const uploadPdf = uploadDocument
 
 export const getUploadStatus = (documentId) => apiGet(`/upload/${documentId}`)
 
-export const getSessionIngestion = (sessionId) => apiGet(`/sessions/${sessionId}/ingestion`)
+// opts is forwarded to request(): useReferencePoll passes { silent: true } (the
+// banner's "References unavailable" row is the sole error surface, so errorBus
+// must not also toast every failed poll) and { fresh: true } to bypass the
+// F-18 GET cache, which would otherwise hand a poll its own last response back.
+export const getSessionIngestion = (sessionId, opts = {}) =>
+  apiGet(`/sessions/${sessionId}/ingestion`, undefined, opts)
 
 // silent: true — the banner's delete handler is the sole error surface. Without
 // it, request()/errorBus would auto-toast non-404 failures AND the component's

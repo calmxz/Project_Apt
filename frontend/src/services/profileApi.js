@@ -2,7 +2,13 @@ import { apiDelete, apiGet, apiPatch } from './apiClient.js'
 
 // Paths are relative to VITE_API_BASE_URL which already includes the /api
 // prefix. user_id is resolved from the Authorization header server-side.
-export const getSessionProfile = (sessionId) => apiGet(`/profile/${sessionId}`)
+// fresh: true -- the response carries the etag that patchProfile/
+// deleteProfileItem send back as If-Match. Our own writes invalidate the F-18
+// GET cache by path prefix, but the tutor agent writes this profile server-side
+// during a turn (update_topic_profile); a cached read taken within the 5s TTL
+// of a pre-turn read would hand the next write a stale etag and 412 it.
+export const getSessionProfile = (sessionId) =>
+  apiGet(`/profile/${sessionId}`, undefined, { fresh: true })
 
 export const getUsageSummary = () => apiGet('/usage/summary')
 

@@ -39,7 +39,10 @@
       <span class="skel-block" />
     </div>
     <span v-if="loading" class="sr-only" role="status">Loading</span>
-    <p v-else-if="error" class="error" data-testid="agg-error">{{ error }}</p>
+    <div v-else-if="error" class="error">
+      <p class="error-text" data-testid="agg-error">{{ error }}</p>
+      <button type="button" class="retry" data-testid="agg-retry" @click="load">Retry</button>
+    </div>
 
     <template v-else>
       <section class="sec" data-testid="profile-summary">
@@ -68,7 +71,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onActivated, onMounted, ref, watch } from 'vue'
 
 import EmptyState from '../EmptyState.vue'
 import FeedbackStylePicker from '../FeedbackStylePicker.vue'
@@ -121,6 +124,15 @@ async function load() {
 
 onMounted(load)
 
+// E-10: SettingsView keeps the tab alive, so a failed read would otherwise
+// stay failed for the rest of the visit. Coming back to the tab retries.
+// The guard matters: onActivated also fires on the first mount, right after
+// onMounted, and load() clears error synchronously before awaiting, so the
+// first activation never doubles the fetch.
+onActivated(() => {
+  if (error.value) load()
+})
+
 const feedbackOptions = [
   { value: 'hints', label: 'Hints', sub: 'Nudge me toward the answer.' },
   { value: 'direct_answers', label: 'Direct answers', sub: 'Explain outright when I ask.' },
@@ -171,16 +183,44 @@ async function saveFeedback() {
   gap: var(--line-pitch);
 }
 
+/* A failed read keeps this tab's card shell -- it sits where the Topics card
+   would -- with the retry written beside the line, as in UsageTab. */
 .error {
+  display: flex;
+  align-items: baseline;
+  gap: 0.625rem;
+  background: var(--desk-deep);
+  border: 1px solid var(--card-edge);
+  border-radius: var(--radius-card);
+  padding: 1rem 1.25rem;
+}
+
+.error-text {
   margin: 0;
   font-family: var(--font-sans);
   font-size: var(--fs-body);
   line-height: var(--line-pitch);
   color: var(--ink-marker-text);
-  background: var(--desk-deep);
-  border: 1px solid var(--card-edge);
-  border-radius: var(--radius-card);
-  padding: 1rem 1.25rem;
+}
+
+.retry {
+  flex: 0 0 auto;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  line-height: var(--line-pitch);
+  color: var(--ink-learner);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.retry:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
 }
 
 /* Card shell, .sec-title, .saved-flash, .tick and .skel-block come from

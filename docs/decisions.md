@@ -3,6 +3,43 @@
 Durable "why": decisions, findings, tradeoffs. Newest first. Technical
 how-it-works lookup belongs in `docs/reference.md` instead.
 
+## 2026-09-20 - QA re-triage Wave 3 (issue #325): deviations from the recommended fixes
+
+- **F-18 split: frontend half only.** The retriage asked for HTTP `ETag` /
+  `If-None-Match` on hot GETs plus client retry and cache. The wave is
+  frontend-only, so `apiClient.js` got the bounded GET retry (network errors and
+  502/503/504 only, never for writes) and a 5 s in-memory GET cache; the server
+  `ETag` is issue #331. The cache key is url **plus access token** and is cleared
+  on auth expiry, because a sign-out/sign-in inside the TTL would otherwise serve
+  account A's `/sessions` to account B. `getSessionProfile` bypasses the cache:
+  the tutor writes the profile server-side mid-turn, which path-prefix
+  invalidation cannot see, and a stale body ETag would 412 the next write.
+- **F-16: cap on live append only.** `MAX_RETAINED_MESSAGES = 200` evicts from
+  the top when a new message is appended and re-arms `hasMoreMessages`; a manual
+  "load earlier" prepend is exempt, since dropping "the oldest page" there would
+  evict what the user just asked for. The load-earlier cursor is the oldest
+  retained server id, so eviction and paging line up.
+- **D-16: `aria-controls` only on the selected tab**, not all four panels
+  rendered hidden. Rendering every panel would defeat the `<KeepAlive>` that E-10
+  relies on for refetch-on-reactivate.
+- **E-08: writes serialised, not rejected.** The plan said both "ignore
+  re-entrant calls" and "chain onto the previous ETag"; the profile view queues
+  writes and threads each response's ETag into the next. Buttons are disabled
+  while writing; the add-concept input stays enabled so Enter can queue several.
+- **F-17 nginx: `map` + server-block `add_header`**, not `expires` inside
+  `location /assets/`. An `add_header` in a location block drops every
+  server-level header (CSP, HSTS, X-Frame-Options) for that location, which is
+  an nginx inheritance trap; the map keeps one `Cache-Control` and all security
+  headers. Same value as `vercel.json`: `public, max-age=31536000, immutable`.
+- **F-15: list and indented-code closes are never a cache boundary.** markdown-it
+  re-opens a list across a cut, so a cached head ending on
+  `bullet_list_close` / `ordered_list_close` / `code_block` falls back to a full
+  render. Parity with the full render is byte-identical across the fixture set
+  and asserted in `markdownIncremental.test.js`.
+- **E-12 / E-08 confirm dialogs reuse the file-delete contract**
+  (`ReferenceStatusBanner.vue`): neutral text cancel, `confirm-delete-strong`
+  accept, no icon.
+
 ## 2026-09-20 - QA re-triage Wave 2 (issue #324): deviations from the recommended fixes
 
 - **F-10: no `chunk_embeddings.doc_ready` column.** The recommended

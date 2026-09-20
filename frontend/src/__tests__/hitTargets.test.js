@@ -6,6 +6,13 @@ import { resolve } from 'node:path'
 
 /* global process */
 
+// Several of the components mounted here now guard destructive actions with
+// PrimeVue's confirm service (ProfileView removes, session-row end). These
+// mounts have no PrimeVue app plugin, so stub the service.
+vi.mock('primevue/useconfirm', () => ({
+  useConfirm: () => ({ require: vi.fn() }),
+}))
+
 // R1 (WCAG 2.5.5): drawn boxes stay on the 28/32px pitch; the hit area grows
 // to >= 44px on coarse pointers via a shared .hit-44 utility. This file
 // asserts the utility exists in base.css and that every listed control
@@ -104,6 +111,8 @@ describe('Sidebar — collapse toggle touch target', () => {
     })
     setActivePinia(createPinia())
     ;({ __test__: sidebarTest } = await import('@/composables/useSidebar.js'))
+    const { useAuthStore } = await import('@/stores/auth.js')
+    useAuthStore().session = { user: { id: 'u-1' }, access_token: 't' }
     Sidebar = (await import('@/components/sidebar/Sidebar.vue')).default
     Object.defineProperty(window, 'innerWidth', {
       configurable: true,
@@ -125,6 +134,19 @@ describe('Sidebar — collapse toggle touch target', () => {
     const w = mount(Sidebar)
     expect(w.get('[data-testid="sidebar-collapse-toggle"]').classes()).toContain('hit-44')
   })
+
+  // D-17: the drawer footer is the one place the rail's 28px pitch leaves a
+  // control well under 44px, so both footer controls take the utility plus
+  // coarse-2x (the row layout has the width to spare).
+  it('the footer Settings link and Sign out button carry hit-44 and coarse-2x', () => {
+    const w = mount(Sidebar)
+    const settings = w.get('[data-testid="sidebar-settings"]')
+    expect(settings.classes()).toContain('hit-44')
+    expect(settings.classes()).toContain('coarse-2x')
+    const signOut = w.get('[data-testid="sidebar-sign-out"]')
+    expect(signOut.classes()).toContain('hit-44')
+    expect(signOut.classes()).toContain('coarse-2x')
+  })
 })
 
 describe('SidebarRowMenu — trigger touch target (via SidebarSessionRow)', () => {
@@ -139,6 +161,8 @@ describe('SidebarRowMenu — trigger touch target (via SidebarSessionRow)', () =
     vi.doMock('@/composables/useToast.js', () => ({
       useToast: () => ({ showSuccess: vi.fn(), showError: vi.fn(), showWarn: vi.fn() }),
     }))
+    // E-12: the row asks PrimeVue's confirm service before ending a session.
+    // The file-level vi.mock above stands in for it.
     setActivePinia(createPinia())
     SidebarSessionRow = (await import('@/components/sidebar/SidebarSessionRow.vue')).default
   })
@@ -148,14 +172,23 @@ describe('SidebarRowMenu — trigger touch target (via SidebarSessionRow)', () =
     vi.doUnmock('@/composables/useToast.js')
   })
 
-  it('the row-menu trigger carries hit-44', () => {
-    const w = mount(SidebarSessionRow, {
+  function mountRow() {
+    return mount(SidebarSessionRow, {
       props: {
         session: { id: 's1', topic: 'Glycolysis', ended_at: null, pinned: false, progress: null },
         state: 'active',
       },
     })
-    expect(w.get('[data-testid="sidebar-row-menu-trigger"]').classes()).toContain('hit-44')
+  }
+
+  it('the row-menu trigger carries hit-44', () => {
+    expect(mountRow().get('[data-testid="sidebar-row-menu-trigger"]').classes()).toContain('hit-44')
+  })
+
+  // D-17: the row itself is a 28px ruled line by design; the open control
+  // grows its hit area rather than the drawn box.
+  it('the row open button carries hit-44', () => {
+    expect(mountRow().get('[data-testid="sidebar-row-open"]').classes()).toContain('hit-44')
   })
 })
 
@@ -201,6 +234,11 @@ describe('ProfileView — remove-button touch targets', () => {
     vi.doMock('vue-router', () => ({
       useRouter: () => ({ push: vi.fn() }),
     }))
+    // The file-level vi.mock does not survive the resetModules/doUnmock cycle
+    // the sidebar describes above run, so register it again for this graph.
+    vi.doMock('primevue/useconfirm', () => ({
+      useConfirm: () => ({ require: vi.fn() }),
+    }))
     setActivePinia(createPinia())
     profileApi = await import('@/services/profileApi.js')
     ProfileView = (await import('@/views/ProfileView.vue')).default
@@ -208,6 +246,7 @@ describe('ProfileView — remove-button touch targets', () => {
 
   afterEach(() => {
     vi.doUnmock('vue-router')
+    vi.doUnmock('primevue/useconfirm')
     vi.restoreAllMocks()
   })
 

@@ -56,9 +56,12 @@ test.describe.skip('resume carries profile', () => {
     // session A never persists as ended and the Ended-library assertions
     // below flake (see backend/routes/sessions.py POST /sessions/{id}/end).
     const endResponse = page.waitForResponse(
-      (r) => r.url().includes(`/sessions/${sessionId}/end`) && r.ok()
+      (r) => r.url().includes(`/sessions/${sessionId}/end`) && r.ok(),
     )
     await page.getByTestId('sidebar-row-menu-end').click()
+    // E-12: End now sits behind a PrimeVue confirm dialog (same contract as
+    // file delete); the request only fires on the destructive accept.
+    await page.locator('.p-confirmdialog button.confirm-delete-strong').click()
     await endResponse
 
     // Continue topic from the Sessions library, Ended filter.

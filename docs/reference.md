@@ -120,6 +120,103 @@ value from `ingestion_service.INGEST_ERROR_MESSAGES` (or upload.py's fixed
 
 ## Frontend
 
+### `--control-edge` token (D-20)
+
+The resting border of a text control. WCAG 1.4.11 needs 3:1 for the boundary of
+a component the user has to find; `--card-edge` is card chrome at 1.50:1 light /
+1.19:1 dark on `--card`. `--control-edge` is `#767c86` light (4.20:1 on
+`#ffffff`) and `#6e7584` dark (3.32:1 on `#22252b`), declared in all three token
+blocks of `frontend/src/assets/base.css`. Use it on inputs and textareas at rest
+(the composer shell today); leave card, rail and row chrome and disabled controls
+on `--card-edge`. `frontend/src/__tests__/tokenContrast.test.js` asserts >= 3:1
+in every block.
+
+### Reference polling (F-12 / E-07)
+
+`composables/useReferencePoll.js` is the only ingestion poller. `SessionView`
+owns one instance per session id and passes `status` / `documents` / `failed`
+into `ReferenceStatusBanner.vue` (now presentational, emits `refresh`).
+Backoff `POLL_DELAYS_MS = [2000, 4000, 8000, 15000]`, capped at 15 s while any
+document is pending, reset on success. A thrown poll with no status, status 0 or
+a 5xx (including the first, when `status` is still null) sets `failed`, keeps the
+last-known list so delete buttons stay reachable, and keeps retrying on the same
+schedule. A **4xx** is terminal instead: an unknown or foreign session id 404s
+forever, so the loop stops, `failed` stays false and `status` stays null (banner
+hidden) and any pending watcher settles `{ unavailable: true }`. The upload
+chip is driven by `watch(documentId, filename)` outcomes; `WATCH_CEILING_MS =
+90000` and `schedule()` clamps the next delay to the earliest watcher deadline
+so "still processing" fires at exactly 90 s. Polls use `{ fresh: true, silent:
+true }`.
+
+### apiClient GET retry and cache (F-18, frontend half)
+
+`request()` retries **GET only**: 3 attempts, 300 ms / 900 ms with +/-20%
+jitter, on `TypeError` (network failure) and 502/503/504. A `TimeoutError` is
+deliberately **not** retried: each attempt carries its own 30 s
+`AbortSignal.timeout`, so retrying a hung server would take ~91 s to surface.
+`reportApiError` fires once after the last failure; the 401 refresh-once path
+is separate and unchanged. `chatStreamService` uses raw `fetch` and is not
+retried.
+
+GET cache: 5 s TTL, in-memory `Map`, key = url **+ access token** (a token
+mismatch is a miss; `_onAuthExpired()` clears the map). `{ fresh: true }`
+bypasses the read but still writes. Failures and non-GETs never populate it.
+Invalidation after any non-GET settles (success or failure): every cached GET
+under the write's **resource root** (first path segment, query stripped) is
+dropped, so `POST /sessions/abc/end` drops `GET /sessions/abc` and also the
+sibling lists `GET /sessions/library` and `GET /sessions?..`, which the
+bidirectional prefix rule alone would have missed. A write under `/sessions`
+leaves `/me` or `/documents` entries alone. Coarse on purpose: a 5 s cache
+gains nothing from finer rules and a stale list is a visible bug.
+Two writers bypass `request()` and call the exported `invalidateGetCache(path)`
+themselves once they settle, success or failure: `chatStreamService`
+(`streamChat`, `streamCheckComplete`) and `uploadApi.uploadDocument`, both on
+`/sessions/:id`. Every invalidation also bumps an epoch; a GET that was already
+in flight when the epoch moved does not write its (possibly pre-write) body
+into the cache. `getSession` and `getSessionProfile` always pass `fresh: true`
+(server-side tutor writes are invisible to path invalidation, the session body
+carries ingestion and pending-check state, and the profile body carries the
+`If-Match` ETag).
+`_resetApiCache()` is the test hook; call it in `beforeEach` of any test that
+mocks `fetch` for GETs.
+
+### Auth error copy (E-13)
+
+`lib/authErrors.js` maps Supabase `AuthError` to owned copy: `code` first
+(`invalid_credentials`, `email_not_confirmed`, `user_already_exists`,
+`email_exists`, `weak_password`, `same_password`, `otp_expired`,
+`over_email_send_rate_limit`, `over_request_rate_limit`,
+`email_address_invalid`, `session_expired`), then `status` (429 throttled, >=500
+generic), then the caller's fallback. SDK prose is never rendered.
+`isEmailNotConfirmed(e)` drives the resend-confirmation affordance. Do not route
+auth errors through `friendlyError()`: it keys on HTTP status and would clobber
+this copy.
+
+### Streaming markdown render cache (F-15)
+
+`renderMarkdownIncremental(text, cache)` in `lib/markdownRenderer.js` keeps the
+rendered HTML of a stable head and renders only the tail. A head is only
+reusable when its last block close is safe; `UNSAFE_CLOSE` =
+`bullet_list_close`, `ordered_list_close`, `code_block`, because markdown-it
+would re-open a list or indented code across the cut. A trailing **unclosed**
+`fence` is unsafe too: markdown-it renders it as a complete `<pre>`, so the head
+would look closed while the tail got parsed as markdown. `scanBlocks()` applies
+the CommonMark fence rule (a run of 3+ backticks or tildes closes only on the
+same character, at least as long, nothing but whitespace after), so an inner
+` ``` ` line inside a ` ```` ` or `~~~` fence no longer flips the scanner out of
+the block and turns the next blank line into a cut candidate inside code.
+`MarkdownContent.vue`
+holds one `createRenderCache()` per instance and resets it when `streaming`
+flips false (final full render) or the lazy asset version changes. ~4 kB
+streamed in 40-char chunks goes from ~214 k chars through markdown-it to ~15 k.
+
+### Message window (F-16)
+
+`stores/session.js` `MAX_RETAINED_MESSAGES = 200`, enforced in `_appendMessage`
+only. Eviction drops from the top until the head carries a server id and sets
+`hasMoreMessages = true`; `loadEarlierMessages` uses the oldest retained server
+id as its `before` cursor. Manual prepends are not capped.
+
 ### Favicon generation
 
 `frontend/scripts/gen-favicon.py` regenerates `frontend/public/favicon.ico` from the
