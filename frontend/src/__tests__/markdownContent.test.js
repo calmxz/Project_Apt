@@ -124,45 +124,51 @@ describe('MarkdownContent', () => {
       return ends
     })()
 
-    it('is byte-identical to a fresh render at every frame and once settled', async () => {
-      const w = mount(MarkdownContent, { props: { text: '', streaming: true } })
-      const mismatches = []
-      let coldMismatches = 0
-      let compared = 0
-      for (const end of FRAME_ENDS) {
-        const text = FULL.slice(0, end)
-        // `await` per frame: Vue batches prop writes, and the cache has to see
-        // every frame the way a real stream delivers them.
-        await w.setProps({ text })
-        // A frame with nothing held back renders the whole buffer, so the
-        // streamed HTML must equal the non-streaming render of the same text.
-        if (!w.find('.deferred').exists()) {
-          const plain = mount(MarkdownContent, { props: { text, streaming: false } })
-          if (w.find('.md-rendered').html() !== plain.find('.md-rendered').html()) {
-            mismatches.push(end)
+    // ~100 frames x 3 mounts each: comfortably under 5 s locally, but the CI
+    // runner with v8 coverage on has tripped the default. Budget, not a hint.
+    it(
+      'is byte-identical to a fresh render at every frame and once settled',
+      { timeout: 30_000 },
+      async () => {
+        const w = mount(MarkdownContent, { props: { text: '', streaming: true } })
+        const mismatches = []
+        let coldMismatches = 0
+        let compared = 0
+        for (const end of FRAME_ENDS) {
+          const text = FULL.slice(0, end)
+          // `await` per frame: Vue batches prop writes, and the cache has to see
+          // every frame the way a real stream delivers them.
+          await w.setProps({ text })
+          // A frame with nothing held back renders the whole buffer, so the
+          // streamed HTML must equal the non-streaming render of the same text.
+          if (!w.find('.deferred').exists()) {
+            const plain = mount(MarkdownContent, { props: { text, streaming: false } })
+            if (w.find('.md-rendered').html() !== plain.find('.md-rendered').html()) {
+              mismatches.push(end)
+            }
+            plain.unmount()
+            compared += 1
           }
-          plain.unmount()
-          compared += 1
+          // And a long-lived cache must not drift from a cold one.
+          const fresh = mount(MarkdownContent, { props: { text, streaming: true } })
+          if (w.find('.md-rendered').html() !== fresh.find('.md-rendered').html()) {
+            coldMismatches += 1
+          }
+          fresh.unmount()
         }
-        // And a long-lived cache must not drift from a cold one.
-        const fresh = mount(MarkdownContent, { props: { text, streaming: true } })
-        if (w.find('.md-rendered').html() !== fresh.find('.md-rendered').html()) {
-          coldMismatches += 1
-        }
-        fresh.unmount()
-      }
-      expect(mismatches).toEqual([])
-      expect(coldMismatches).toBe(0)
-      // Guard against the splitter deferring on nearly every frame and making
-      // the comparison above vacuous.
-      expect(compared).toBeGreaterThan(90)
+        expect(mismatches).toEqual([])
+        expect(coldMismatches).toBe(0)
+        // Guard against the splitter deferring on nearly every frame and making
+        // the comparison above vacuous.
+        expect(compared).toBeGreaterThan(90)
 
-      await w.setProps({ streaming: false })
-      const settled = mount(MarkdownContent, { props: { text: FULL, streaming: false } })
-      expect(w.find('.md-rendered').html()).toBe(settled.find('.md-rendered').html())
-      settled.unmount()
-      w.unmount()
-    })
+        await w.setProps({ streaming: false })
+        const settled = mount(MarkdownContent, { props: { text: FULL, streaming: false } })
+        expect(w.find('.md-rendered').html()).toBe(settled.find('.md-rendered').html())
+        settled.unmount()
+        w.unmount()
+      },
+    )
 
     it('hands the renderer far fewer characters than a whole-prefix re-render', async () => {
       const md = getRenderer()
