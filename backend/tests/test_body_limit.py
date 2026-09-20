@@ -75,6 +75,25 @@ def test_oversized_json_body_is_rejected_before_the_route_runs(
     assert db_session.query(ChatMessage).count() == 0
 
 
+def test_413_carries_cors_headers_for_a_browser_client(client, seeded_session):
+    """C-03: the limit must sit INSIDE CORSMiddleware. Rejected from outside
+    it, the 413 carries no access-control-allow-origin, so a cross-origin
+    browser client (Vercel -> Render) sees an opaque CORS error instead of
+    the body_too_large payload."""
+    body = _json_body_of_size(MAX + 1)
+    resp = client.post(
+        "/api/chat/stream",
+        content=body,
+        headers={
+            "content-type": "application/json",
+            "Origin": "http://localhost:5173",
+            "Authorization": f"Bearer test-{USER_ID}",
+        },
+    )
+    assert resp.status_code == 413
+    assert resp.headers.get("access-control-allow-origin") == "http://localhost:5173"
+
+
 def test_body_of_exactly_the_limit_is_not_rejected(client, seeded_session):
     """The boundary is inclusive: max_bytes passes, max_bytes + 1 does not."""
     body = _json_body_of_size(MAX)
