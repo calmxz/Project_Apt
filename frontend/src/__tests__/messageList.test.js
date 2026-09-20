@@ -95,6 +95,21 @@ describe('MessageList', () => {
     expect(w.find('[data-testid="msg-typing"]').exists()).toBe(true)
   })
 
+  // D-07: aria-label is not a supported name source on a <p>, so the text is a
+  // visually-hidden sibling of the dots instead.
+  it('typing indicator names itself with visually-hidden text, not aria-label', () => {
+    const w = mount(MessageList, {
+      props: { messages: [userMsg], awaiting: true },
+    })
+    const typing = w.find('[data-testid="msg-typing"]')
+    expect(typing.find('.sr-only').text()).toBe('Tutor is thinking')
+    expect(typing.find('p.typing-dots').attributes('aria-label')).toBeUndefined()
+    // The sr-only span must not sit inside the dot row: `.typing-dots span`
+    // would style it as a fourth dot.
+    expect(typing.findAll('p.typing-dots .sr-only')).toHaveLength(0)
+    expect(typing.findAll('p.typing-dots > span')).toHaveLength(3)
+  })
+
   it('typing indicator NOT shown when awaiting=false', () => {
     const w = mount(MessageList, {
       props: { messages: [userMsg], awaiting: false },

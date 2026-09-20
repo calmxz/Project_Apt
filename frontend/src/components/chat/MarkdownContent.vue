@@ -1,6 +1,12 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { markdownAssetsVersion, renderMarkdown } from '@/lib/markdownRenderer.js'
+import {
+  createRenderCache,
+  markdownAssetsVersion,
+  renderMarkdown,
+  renderMarkdownIncremental,
+  resetRenderCache,
+} from '@/lib/markdownRenderer.js'
 import { splitSafePrefixIncremental, createSplitState } from '@/lib/markdownStreamBuffer.js'
 
 const props = defineProps({
@@ -12,17 +18,33 @@ const props = defineProps({
 // never read by the template).
 const splitState = createSplitState()
 
+// F-15: per-instance cache of the rendered HTML of the settled head of this
+// bubble's stream. Streaming-only; the settled turn is always a plain full
+// render.
+const renderCache = createRenderCache()
+
 const parts = computed(() => {
   // P1: KaTeX and highlight.js arrive after the first render that needs them.
   // Reading the version here (before either branch) subscribes this computed,
   // so the same text is re-rendered with the plugin once it lands.
+  // renderMarkdownIncremental compares the same version against its cache, so a
+  // plugin landing mid-stream invalidates the cached head too.
   void markdownAssetsVersion.value
   if (!props.streaming) {
     return { safeHtml: renderMarkdown(props.text), deferred: '' }
   }
   const { safe, deferred } = splitSafePrefixIncremental(props.text, splitState)
-  return { safeHtml: renderMarkdown(safe), deferred }
+  return { safeHtml: renderMarkdownIncremental(safe, renderCache), deferred }
 })
+
+// Free the cached head when the turn settles: the non-streaming branch above is
+// a full render, and a bubble that streams again starts from a clean cache.
+watch(
+  () => props.streaming,
+  (now) => {
+    if (!now) resetRenderCache(renderCache)
+  },
+)
 
 // Blocks whose height is intrinsic (display math with fractions, images) cannot
 // be snapped to the 28px pitch by CSS alone, so their bottom margin is topped up
@@ -172,6 +194,10 @@ async function onRootClick(e) {
      the top-up the snapper writes on display math or a table -- counts inside
      this box instead of collapsing out of it and off the pitch. */
   display: flow-root;
+  /* D-13: a long URL or an unbroken token in a tutor turn must wrap rather than
+     widen the notes column. */
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .md-rendered :deep(p) {
   margin: 0 0 var(--line-pitch);
@@ -277,6 +303,25 @@ async function onRootClick(e) {
   padding-bottom: calc(var(--line-pitch) / 2 - 1px + var(--snap-pad, 0px));
   box-shadow: inset 0 -1px 0 var(--rule-strong);
   transition: none;
+}
+/* D-13: a table wider than the column scrolls inside this wrapper instead of
+   widening the bubble. Cells opt out of the break-word above: a table is
+   already free to lay its columns out, and breaking mid-word there makes the
+   grid unreadable. */
+.md-rendered :deep(.md-table-wrap) {
+  overflow-x: auto;
+  max-width: 100%;
+}
+.md-rendered :deep(.md-table-wrap th),
+.md-rendered :deep(.md-table-wrap td) {
+  overflow-wrap: normal;
+  word-break: normal;
+}
+/* overflow-x makes the wrapper a formatting context, so a trailing table's
+   bottom margin no longer collapses out of it and the bubble would gain a whole
+   dead pitch. The snapper's top-up still has to land, so keep that part. */
+.md-rendered :deep(.md-table-wrap:last-child > table) {
+  margin-bottom: var(--snap-pad, 0px);
 }
 .md-rendered :deep(table) {
   border-collapse: collapse;

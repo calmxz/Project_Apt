@@ -251,7 +251,12 @@ const FENCE_LINE_RE = /^ {0,3}(?:`{3,}|~{3,})/
 const BLANK_LINE_RE = /^[ \t]*$/
 
 // Last top-level token types that must not sit immediately before a cut.
-const UNSAFE_CLOSE = new Set([])
+//
+//   * a bullet or ordered list swallows the next block after a blank line
+//     ("- a\n\n- b" is one loose list, and cutting it would also restart the
+//     ordered-list counter with a spurious start= on the tail);
+//   * an indented code block does the same ("    a\n\n    b" is one <pre>).
+const UNSAFE_CLOSE = new Set(['bullet_list_close', 'ordered_list_close', 'code_block'])
 
 // Per frame at most this many candidate boundaries are parse-checked, so a
 // pathological buffer (a long blank-separated list) cannot make the boundary
