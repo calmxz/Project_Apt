@@ -7,7 +7,12 @@ from sqlalchemy import event as _sa_event
 
 from contracts import TopicProfile  # noqa: F401  (ensures schema exists)
 from db.database import Base
-from db.models import ChatMessage, LearningEvent, Session as SessionModel, User  # noqa: F401  (registers models on Base.metadata)
+from db.models import (  # noqa: F401  (registers models on Base.metadata)
+    ChatMessage,
+    LearningEvent,
+    User,
+)
+from db.models import Session as SessionModel
 
 
 @contextmanager

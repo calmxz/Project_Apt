@@ -15,9 +15,9 @@ from sqlalchemy import select
 
 from agent.types import ToolContext
 from contracts import RetrieveChunksArgs, TopicProfile
-from db.models import Document, LlmCallLog, Session as SessionModel, User
+from db.models import Document, LlmCallLog, User
+from db.models import Session as SessionModel
 from services import cost_meter, pgvector_store, retrieval_service
-
 
 SESSION_ID = "sess_ret"
 USER_ID = "u_ret"

@@ -4,9 +4,9 @@ import logging
 import time
 import uuid
 from datetime import datetime, timezone
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
-from typing import Literal
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
@@ -41,7 +41,8 @@ from contracts import (
     TopicProfile,
 )
 from db.database import get_db
-from db.models import ChatMessage, Session as SessionModel
+from db.models import ChatMessage
+from db.models import Session as SessionModel
 from services import (
     check_question_service,
     cost_meter,
@@ -54,7 +55,8 @@ from services import (
     velocity_limit,
 )
 from services.auth import accepted_terms_from_request, current_user_id
-from services.session_enrichment import aware_utc as _aware_utc, compute_enrichment
+from services.session_enrichment import aware_utc as _aware_utc
+from services.session_enrichment import compute_enrichment
 from services.user_service import ensure_user
 
 NO_EXCHANGES_TEXT = (
@@ -132,6 +134,15 @@ async def create_session(
     user_id: str = Depends(current_user_id),
     db: Session = Depends(get_db),
 ):
+    # C-09: minLength=1 in the contract only rejects "". A whitespace-only
+    # topic passes validation and used to be stored as "" after the
+    # downstream .strip(). Normalise and reject here, before any side effect
+    # (ensure_user, duplicate-topic lookup, prior claim-end, rate limit).
+    topic = req.topic.strip()
+    if not topic:
+        raise HTTPException(status_code=422, detail={"code": "empty_topic"})
+    req.topic = topic
+
     if req.seed_mode == "resume" and req.prior_session_id is None:
         raise HTTPException(
             status_code=400, detail="prior_session_id required when seed_mode=resume"
@@ -221,7 +232,7 @@ def _create_session_finish(
     db.add(new_session)
     try:
         db.commit()
-    except IntegrityError:
+    except IntegrityError as e:
         # B-05: concurrent create raced past the pre-check; the partial
         # unique index is authoritative. Map to the same 409 payload.
         db.rollback()
@@ -229,7 +240,7 @@ def _create_session_finish(
         raise HTTPException(
             status_code=409,
             detail={"code": "duplicate_topic", "session_id": existing},
-        )
+        ) from e
     db.refresh(new_session)
     return _to_response(db, new_session)
 
@@ -598,7 +609,7 @@ def reopen_session(
         row.ended_at = None
         try:
             db.commit()
-        except IntegrityError:
+        except IntegrityError as e:
             db.rollback()
             existing = _active_session_on_topic(
                 db, user_id, row.topic, exclude_id=row.id
@@ -606,7 +617,7 @@ def reopen_session(
             raise HTTPException(
                 status_code=409,
                 detail={"code": "duplicate_topic", "session_id": existing},
-            )
+            ) from e
         db.refresh(row)
     return _to_response(db, row)
 
@@ -639,6 +650,13 @@ def update_session(
 ):
     if req.topic is None and req.pinned is None:
         raise HTTPException(status_code=400, detail="at least one field required")
+    if req.topic is not None:
+        # C-09: whitespace-only rename would blank the topic. Reject before
+        # the row lookup and any mutation.
+        topic = req.topic.strip()
+        if not topic:
+            raise HTTPException(status_code=422, detail={"code": "empty_topic"})
+        req.topic = topic
     row = db.get(SessionModel, session_id)
     if row is None or row.user_id != user_id:
         raise HTTPException(status_code=404, detail="session not found")
@@ -662,7 +680,7 @@ def update_session(
         row.pinned = req.pinned
     try:
         db.commit()
-    except IntegrityError:
+    except IntegrityError as e:
         # B-05: concurrent rename raced past the pre-check; the partial
         # unique index is authoritative. Map to the same 409 payload.
         # NOTE: use req.topic, not row.topic -- db.rollback() expires the
@@ -675,7 +693,7 @@ def update_session(
         raise HTTPException(
             status_code=409,
             detail={"code": "duplicate_topic", "session_id": existing},
-        )
+        ) from e
     db.refresh(row)
     return _to_response(db, row)
 
@@ -695,7 +713,9 @@ def skip_check(
     try:
         prog = check_question_service.skip(db, session_id, req.index)
     except check_question_service.CheckStateError as e:
-        raise HTTPException(status_code=409, detail={"code": "check_conflict", "message": str(e)})
+        raise HTTPException(
+            status_code=409, detail={"code": "check_conflict", "message": str(e)}
+        ) from e
     check_question_service.write_check_batch(
         db, check_question_service.get_pending_check(db, session_id)
     )
@@ -721,7 +741,9 @@ def answer_check(
     try:
         result = check_question_service.answer(db, session_id, req.index, req.selected_index)
     except check_question_service.CheckStateError as e:
-        raise HTTPException(status_code=409, detail={"code": "check_conflict", "message": str(e)})
+        raise HTTPException(
+            status_code=409, detail={"code": "check_conflict", "message": str(e)}
+        ) from e
     check_question_service.write_check_batch(
         db, check_question_service.get_pending_check(db, session_id)
     )

@@ -41,6 +41,7 @@ dev = [
     "datamodel-code-generator>=0.74.0,<0.75",
     "openapi-spec-validator>=0.9.0",
     "pyyaml>=6.0.3",
+    "ruff>=0.14,<1.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -53,3 +54,17 @@ addopts = "--cov=services --cov=lib --cov=worker --cov=routes --cov=agent --cov=
 
 [tool.coverage.run]
 omit = ["tests/*", "scripts/*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["contracts/models.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "B", "I"]
+ignore = ["B008", "E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"db/alembic/env.py" = ["E402"]
+"db/alembic/versions/*.py" = ["E402"]
+"tests/*" = ["E402"]

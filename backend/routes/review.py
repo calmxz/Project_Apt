@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session
 
 from contracts import ReviewQueueItem, ReviewQueuePage
 from db.database import get_db
-from db.models import LearningEvent, Session as SessionModel
+from db.models import LearningEvent
+from db.models import Session as SessionModel
 from services import profile_service
 from services.auth import current_user_id
 from services.review_queue_service import (

@@ -16,11 +16,11 @@ from datetime import datetime, timezone
 
 import pytest
 
-from contracts import AskCheckQuestionsArgs, TopicProfile
 from agent.types import ToolContext
-from db.models import ChatMessage, Session as SessionModel, User
+from contracts import AskCheckQuestionsArgs, TopicProfile
+from db.models import ChatMessage, User
+from db.models import Session as SessionModel
 from services import check_question_service, pending_check_store
-
 
 USER_ID = "u_abandon_1"
 

@@ -10,7 +10,6 @@ from itertools import islice
 
 import tiktoken
 
-
 _ENCODING = tiktoken.get_encoding("cl100k_base")
 
 

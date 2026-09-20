@@ -11,7 +11,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from contracts import DailySpend, SessionSpend, UsageSummaryResponse
-from db.models import DailyCostLedger, LlmCallLog, Session as SessionModel
+from db.models import DailyCostLedger, LlmCallLog
+from db.models import Session as SessionModel
 from services.cost_meter import check_cap_from_spend
 
 WINDOW_DAYS = 14

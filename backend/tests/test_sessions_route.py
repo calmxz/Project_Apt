@@ -7,10 +7,10 @@ import pytest
 from agent.types import ToolContext
 from config import settings
 from contracts import AskCheckQuestionsArgs, TopicProfile
-from db.models import ChatMessage, Document, Session as SessionModel, UsageCounter, User
+from db.models import ChatMessage, Document, UsageCounter, User
+from db.models import Session as SessionModel
 from lib.error_codes import TOO_MANY_REQUESTS
 from services import check_question_service, summary_service, velocity_limit
-
 
 USER_ID = "u1"
 
@@ -910,3 +910,61 @@ def test_post_fresh_without_declared_level_unchanged(client, seeded_user):
     assert r.status_code == 201, r.text
     profile = TopicProfile.model_validate(r.json()["topic_profile"])
     assert profile.knowledge_level is None
+
+
+# --- C-09: whitespace-only topics ---
+
+
+def test_post_sessions_whitespace_topic_is_422(client, seeded_user, db_session):
+    from db.models import Session as SessionModel
+
+    r = client.post(
+        "/api/sessions",
+        json={"user_id": USER_ID, "topic": "   ", "seed_mode": "fresh"},
+    )
+    assert r.status_code == 422, r.text
+    assert r.json()["detail"] == {"code": "empty_topic"}
+    assert db_session.query(SessionModel).count() == 0
+
+
+def test_post_sessions_empty_topic_is_422(client, seeded_user):
+    r = client.post(
+        "/api/sessions",
+        json={"user_id": USER_ID, "topic": "", "seed_mode": "fresh"},
+    )
+    assert r.status_code == 422, r.text
+
+
+def test_patch_session_whitespace_topic_is_422(client, seeded_user, db_session):
+    from db.models import Session as SessionModel
+
+    db_session.add(
+        SessionModel(
+            id="s-ws",
+            user_id=USER_ID,
+            topic="sql joins",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.commit()
+    r = client.patch("/api/sessions/s-ws", json={"topic": "  "})
+    assert r.status_code == 422, r.text
+    assert r.json()["detail"] == {"code": "empty_topic"}
+    db_session.expire_all()
+    assert db_session.get(SessionModel, "s-ws").topic == "sql joins"
+
+
+def test_patch_session_empty_topic_is_422(client, seeded_user, db_session):
+    from db.models import Session as SessionModel
+
+    db_session.add(
+        SessionModel(
+            id="s-ws2",
+            user_id=USER_ID,
+            topic="sql joins",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.commit()
+    r = client.patch("/api/sessions/s-ws2", json={"topic": ""})
+    assert r.status_code == 422, r.text

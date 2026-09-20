@@ -9,6 +9,8 @@ ToolResult(ok=False) so the agent loop can surface it back to the LLM.
 import logging
 from typing import Any
 
+from pydantic import ValidationError
+
 from agent.types import ToolContext
 from contracts import (
     AskCheckQuestionsArgs,
@@ -16,6 +18,7 @@ from contracts import (
     ToolResult,
     UpdateTopicProfileArgs,
 )
+from lib import error_codes
 from services import check_question_service, profile_service, retrieval_service
 
 log = logging.getLogger(__name__)
@@ -107,6 +110,13 @@ def dispatch(name: str, args: dict[str, Any], ctx: ToolContext) -> ToolResult:
                 ctx.db, ctx, AskCheckQuestionsArgs.model_validate(args)
             )
         return ToolResult(ok=False, status="failed", error=f"unknown tool: {name}")
-    except Exception as e:
+    except ValidationError as e:
+        # The model authored these args and needs the field-level detail to
+        # repair the call, so this message is deliberately not coarsened.
         log.warning("tool dispatch failed name=%s error=%s", name, e)
         return ToolResult(ok=False, status="failed", error=str(e))
+    except Exception as e:
+        # G-04: internal exception text (session ids, SQL, file paths) is
+        # operator detail, not model input. Log it; hand back a coarse code.
+        log.warning("tool dispatch failed name=%s error=%s", name, e)
+        return ToolResult(ok=False, status="failed", error=error_codes.TOOL_FAILED)

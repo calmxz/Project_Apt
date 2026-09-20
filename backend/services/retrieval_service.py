@@ -17,10 +17,10 @@ from starlette.concurrency import run_in_threadpool
 from agent.types import ToolContext
 from config import settings
 from contracts import RetrieveChunksArgs, ToolResult
-from db.models import ChunkEmbedding, Session as SessionModel
+from db.models import ChunkEmbedding
+from db.models import Session as SessionModel
 from lib import llm_retry
 from services import cost_meter, documents_service, pgvector_store
-
 
 log = logging.getLogger(__name__)
 
@@ -160,7 +160,7 @@ def _session_centroid(db: Session, session_id: str) -> list[float] | None:
 
 
 def _cosine_similarity(a: list[float], b: list[float]) -> float:
-    dot = sum(x * y for x, y in zip(a, b))
+    dot = sum(x * y for x, y in zip(a, b, strict=True))
     norm_a = math.sqrt(sum(x * x for x in a))
     norm_b = math.sqrt(sum(y * y for y in b))
     if norm_a == 0.0 or norm_b == 0.0:

@@ -9,7 +9,8 @@ from agent.stream_events import StreamEvent
 from agent.types import ToolContext
 from config import settings
 from contracts import AskCheckQuestionsArgs, TopicProfile
-from db.models import ChatMessage, Session as SessionModel, UsageCounter, User
+from db.models import ChatMessage, UsageCounter, User
+from db.models import Session as SessionModel
 from services import check_question_service, rate_limit
 
 USER_ID = "u_cap_1"

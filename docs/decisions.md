@@ -3,6 +3,41 @@
 Durable "why": decisions, findings, tradeoffs. Newest first. Technical
 how-it-works lookup belongs in `docs/reference.md` instead.
 
+## 2026-09-20 - QA re-triage Wave 2 (issue #324): deviations from the recommended fixes
+
+- **F-10: no `chunk_embeddings.doc_ready` column.** The recommended
+  denormalisation buys little: the join to `documents` stays for `filename`, and
+  the status predicate is a PK-joined filter per candidate. pgvector 0.8.0 (live
+  on Supabase) fixes the filtered-HNSW under-fetch directly with
+  `hnsw.iterative_scan`, so the fix is `SET LOCAL hnsw.ef_search` +
+  `iterative_scan = strict_order` on the search transaction. Partitioning stays a
+  note in `docs/reference.md`. Owed: live EXPLAIN smoke.
+- **F-09: no `learning_events (created_at, id)` composite.** Wave 1's 0025 added
+  `(created_at)`; the review query filters `created_at >= window` over
+  `session_id IN (...)` and the composite would not change the plan. Only the
+  `chat_messages (session_id, id DESC)` index was added (0027).
+- **C-11: enumerated human-readable strings, not codes.** `documents.error` is
+  rendered verbatim by `ReferenceStatusBanner.vue` and `SessionView.vue`, so the
+  value stays readable but is drawn from a fixed frozenset; only the raw
+  exception text was removed. No contract or frontend change.
+- **B-05: reservation instead of a row lock.** A `SELECT .. FOR UPDATE` in the
+  gate releases at the gate's own commit, before the LLM call, so it cannot close
+  the burst window. A provisional per-turn charge (`LLM_TURN_RESERVE_USD`, 0.02)
+  added atomically at the gate and released at turn end does. Cost: the ledger
+  reads 0.02 high during a turn; a crash mid-turn leaves it until midnight.
+- **G-07: Render health check repointed to `/ready`.** A Supabase outage now
+  fails the instance health check (Render restarts the instance) instead of
+  serving 500s while "healthy". Takes effect at the next deploy.
+- **F-19: `PyJWKClient(cache_jwk_set=True, lifespan=3600)` pinned** rather than
+  inheriting PyJWT's 300 s default, which refetched JWKS 12x per hour behind the
+  app's own 1 h cache.
+- **Q-03: ruff backlog folded into the wave PR**, not a dedicated PR as the
+  retriage suggested: import sorting after the fact would conflict with every
+  file the wave touched. Ruleset `E,F,B,I`, ignore `B008` (FastAPI `Depends`
+  defaults) and `E501`.
+- **Q-05 stays open for the repo owner**: branch protection is a GitHub UI
+  action (`docs/deploy/enable-branch-protection.sh`), not code.
+
 ## 2026-09-19 — Archived finished reviews, audits, and the Phase 0 spike
 
 Removed from the working tree. Everything is recoverable with

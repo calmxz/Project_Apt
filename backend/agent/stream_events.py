@@ -4,9 +4,9 @@ A StreamEvent is the unit yielded by tutor.run_streaming. The stream route
 (Task 13) serializes each via to_sse() onto a text/event-stream response.
 """
 
+import json
 from dataclasses import dataclass
 from typing import Any
-import json
 
 
 @dataclass

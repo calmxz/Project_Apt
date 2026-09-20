@@ -328,7 +328,7 @@ class ChatRequest(BaseModel):
         extra="forbid",
     )
     session_id: constr(max_length=64)
-    message: constr(max_length=4000)
+    message: constr(min_length=1, max_length=4000)
     review_gaps: bool | None = False
     review_gap: constr(max_length=200) | None = None
     diagnostic_accepted: bool | None = False
@@ -338,7 +338,7 @@ class SessionCreateRequest(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    topic: constr(max_length=200)
+    topic: constr(min_length=1, max_length=200)
     seed_mode: Literal["fresh", "resume"]
     prior_session_id: constr(max_length=64) | None = None
     declared_level: Literal["beginner", "intermediate", "advanced"] | None = None
@@ -348,7 +348,7 @@ class SessionUpdateRequest(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
     )
-    topic: constr(max_length=200) | None = None
+    topic: constr(min_length=1, max_length=200) | None = None
     pinned: bool | None = None
 
 

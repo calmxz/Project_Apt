@@ -7,10 +7,10 @@ import pytest
 
 from agent.types import ToolContext
 from contracts import ConceptEntry, TopicProfile, UpdateTopicProfileArgs
-from db.models import LearningEvent, Session as SessionModel, User
+from db.models import LearningEvent, User
+from db.models import Session as SessionModel
 from services import profile_service
 from services.profile_service import concept_names
-
 
 SESSION_ID = "sess_1"
 USER_ID = "u1"
@@ -549,6 +549,7 @@ def test_lock_session_row_emits_for_update_on_postgres():
     # SQLite ignores FOR UPDATE, so prove intent at the SQL layer instead.
     from sqlalchemy import select
     from sqlalchemy.dialects import postgresql
+
     from db.models import Session as SessionModel
     stmt = select(SessionModel).where(SessionModel.id == "x").with_for_update()
     assert "FOR UPDATE" in str(stmt.compile(dialect=postgresql.dialect()))

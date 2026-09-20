@@ -7,10 +7,10 @@ import pytest
 from agent import tools
 from agent.types import ToolContext
 from contracts import TopicProfile
-from db.models import Session as SessionModel, User
+from db.models import Session as SessionModel
+from db.models import User
 from services import check_question_service as cq
 from services import pending_check_store as pcs
-
 
 SESSION_ID = "sess_acq"
 USER_ID = "u_acq"

@@ -19,9 +19,9 @@ import starlette.concurrency as _sc
 from agent.stream_events import StreamEvent
 from agent.types import ToolContext
 from contracts import AskCheckQuestionsArgs, TopicProfile
-from db.models import ChatMessage, Session as SessionModel, User
+from db.models import ChatMessage, User
+from db.models import Session as SessionModel
 from services import check_question_service
-
 
 USER_ID = "u_tp_1"
 SESSION_ID = "s_tp_1"

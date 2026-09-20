@@ -42,7 +42,7 @@ def _reference_chunk_text(text_by_page, chunk_tokens=500, overlap_tokens=50):
     The streaming rewrite must be output-identical to this for every input;
     keeping the old code here pins that rather than pasting a frozen literal.
     """
-    from lib.chunking import Chunk, _ENCODING
+    from lib.chunking import _ENCODING, Chunk
 
     tokens = []
     page_of_token = []

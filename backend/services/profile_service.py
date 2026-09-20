@@ -35,9 +35,9 @@ from contracts import (
     UpdateTopicProfileArgs,
     WeeklyMasteryPoint,
 )
-from db.models import LearningEvent, Session as SessionModel
+from db.models import LearningEvent
+from db.models import Session as SessionModel
 from services.session_enrichment import aware_utc, compute_enrichment
-
 
 log = logging.getLogger(__name__)
 

@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import assert_prod_database, settings
 from db.database import create_tables
+from lib.body_limit import BodySizeLimitMiddleware
 from lib.logging_config import configure_logging
 from lib.request_id import RequestIdMiddleware
 from routes import chat, documents, health, me, profile, review, sessions, upload, usage
@@ -53,6 +54,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Crux", lifespan=lifespan)
 
+# C-03: registered FIRST, so it ends up INSIDE the layers below (FastAPI's
+# add_middleware is last-registered = outermost). An oversized body is still
+# rejected before any route handler runs, but the 413 now passes back out
+# through CORSMiddleware -- rejected from outside it, a cross-origin browser
+# client sees an opaque CORS error instead of the body_too_large payload.
+app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.max_json_body_bytes)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
@@ -62,6 +70,9 @@ app.add_middleware(
     expose_headers=["X-Cost-Warning", "X-Request-Id"],
 )
 
+# Added last, so RequestIdMiddleware is the outermost layer and every
+# response -- including the 413 from BodySizeLimitMiddleware below it --
+# carries X-Request-Id.
 app.add_middleware(RequestIdMiddleware)
 
 app.include_router(health.router)

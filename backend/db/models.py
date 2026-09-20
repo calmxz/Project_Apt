@@ -3,7 +3,19 @@ from decimal import Decimal
 from uuid import uuid4
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, UniqueConstraint, text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from config import settings
@@ -87,6 +99,10 @@ class ChatMessage(Base):
             name="chat_messages_status_check",
         ),
         Index("ix_chat_messages_session_created", "session_id", "created_at"),
+        # F-09: history loads order by id DESC within a session
+        # (routes/sessions.py), which the (session_id, created_at) index
+        # cannot serve without a sort.
+        Index("ix_chat_messages_sid_id_desc", "session_id", text("id DESC")),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -144,6 +160,17 @@ class Document(Base):
     __tablename__ = "documents"
     __table_args__ = (
         Index("ix_documents_status_id", "status", "id"),
+        # C-08: re-uploading identical bytes into the same session must return
+        # the existing row instead of creating a duplicate. Partial so legacy
+        # NULL hashes never collide and a failed row never blocks a retry.
+        Index(
+            "uq_documents_session_sha",
+            "session_id",
+            "content_sha256",
+            unique=True,
+            postgresql_where=text("content_sha256 IS NOT NULL AND status <> 'failed'"),
+            sqlite_where=text("content_sha256 IS NOT NULL AND status <> 'failed'"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -154,6 +181,8 @@ class Document(Base):
     status: Mapped[str] = mapped_column(String, default="pending")
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # C-08: sha256 of the uploaded bytes. NULL on rows created before 0026.
+    content_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     claimed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

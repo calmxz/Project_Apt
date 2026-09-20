@@ -1,3 +1,4 @@
+from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
@@ -5,10 +6,10 @@ from sqlalchemy import select
 
 from config import settings
 from contracts import TopicProfile
-from db.models import ChatMessage, Session as SessionModel, User
+from db.models import ChatMessage, User
+from db.models import Session as SessionModel
 from lib.error_codes import DAILY_CAP_REACHED
 from routes.chat import _build_prompt_state
-
 
 SESSION_ID = "s1"
 USER_ID = "u1"
@@ -136,7 +137,7 @@ def test_prepare_turn_failure_rerecords_embedding_spend(client, db_session, monk
     assert cost_meter.current_spend(db_session, USER_ID) == Decimal("0.5")
 
 
-def test_chat_stream_429_on_cap(client, monkeypatch):
+def test_chat_stream_429_on_cap(client, db_session, monkeypatch):
     monkeypatch.setattr(settings, "llm_stub", True)
 
     for _ in range(settings.daily_cap):
@@ -154,6 +155,107 @@ def test_chat_stream_429_on_cap(client, monkeypatch):
     assert detail["cap"] == settings.daily_cap
     assert detail["used"] == settings.daily_cap
     assert "resets_at" in detail
+    # B-05: every admitted turn released its reserve, and the rate-limit
+    # reject arm (which runs after check_and_increment's commit published the
+    # reserve) released its own. No residue.
+    from services import cost_meter
+
+    assert cost_meter.current_spend(db_session, USER_ID) == Decimal("0.0000")
+
+
+def test_reserved_spend_blocks_the_next_turn_before_any_real_cost(
+    db_session, monkeypatch
+):
+    """B-05: a turn that has reserved but not yet spent must already count
+    against the cap, so a second concurrent turn at cap-minus-epsilon is
+    rejected instead of both running an LLM call."""
+    import asyncio
+
+    from fastapi import HTTPException
+
+    from contracts import ChatRequest
+    from lib.error_codes import DAILY_COST_CAP_REACHED
+    from routes.chat import _prepare_turn
+    from services import cost_meter
+
+    monkeypatch.setattr(settings, "llm_hard_cap_usd", 3.00)
+    cost_meter.record_cost(db_session, USER_ID, Decimal("2.99"))
+    db_session.commit()
+
+    req = ChatRequest(session_id=SESSION_ID, message="first")
+    asyncio.run(_prepare_turn(req, USER_ID, db_session))
+    # No real LLM cost recorded yet -- only the reservation.
+    assert cost_meter.current_spend(db_session, USER_ID) == Decimal("3.0100")
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(
+            _prepare_turn(ChatRequest(session_id=SESSION_ID, message="second"), USER_ID, db_session)
+        )
+    assert exc.value.status_code == 429
+    assert exc.value.detail["code"] == DAILY_COST_CAP_REACHED
+
+
+def test_completed_turn_leaves_no_reserve_residue(client, db_session, monkeypatch):
+    """B-05: the per-turn reservation is handed back when the stream ends, so
+    the ledger carries only real recorded cost."""
+    monkeypatch.setattr(settings, "llm_stub", True)
+
+    from services import cost_meter
+
+    status, _body = _post_stream(client, message="hi")
+    assert status == 200
+    # The stub records no vendor cost, so the ledger must be back at zero.
+    assert cost_meter.current_spend(db_session, USER_ID) == Decimal("0.0000")
+
+
+def test_prepare_turn_failure_releases_the_reserve(client, db_session, monkeypatch):
+    """B-05: a crash after the guards (where the reserve is already committed)
+    must still hand the reservation back."""
+    monkeypatch.setattr(settings, "llm_stub", True)
+
+    from services import cost_meter
+
+    def _boom(prompt_state):
+        raise RuntimeError("prompt build exploded")
+
+    monkeypatch.setattr("routes.chat.prompts.build_system_prompt", _boom)
+
+    with pytest.raises(RuntimeError, match="prompt build exploded"):
+        _post_stream(client, message="save me")
+
+    assert cost_meter.current_spend(db_session, USER_ID) == Decimal("0.0000")
+
+
+def test_whitespace_only_message_rejected_with_422(client, db_session, monkeypatch):
+    """C-10: minLength=1 in the contract stops "" but not "   ". The route
+    rejects whitespace-only input before any guard side effect."""
+    monkeypatch.setattr(settings, "llm_stub", True)
+
+    r = client.post(
+        "/api/chat/stream",
+        json={"session_id": SESSION_ID, "message": "   "},
+        headers=AUTH_HEADERS,
+    )
+    assert r.status_code == 422
+    assert r.json()["detail"]["code"] == "empty_message"
+
+    msgs = db_session.execute(
+        select(ChatMessage).where(ChatMessage.session_id == SESSION_ID)
+    ).scalars().all()
+    assert msgs == []
+
+
+def test_empty_message_rejected_by_contract(client, db_session):
+    r = client.post(
+        "/api/chat/stream",
+        json={"session_id": SESSION_ID, "message": ""},
+        headers=AUTH_HEADERS,
+    )
+    assert r.status_code == 422
+    msgs = db_session.execute(
+        select(ChatMessage).where(ChatMessage.session_id == SESSION_ID)
+    ).scalars().all()
+    assert msgs == []
 
 
 def _fake_session(topic="sql"):

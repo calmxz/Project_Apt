@@ -10,9 +10,9 @@ from types import SimpleNamespace
 import pytest
 
 from contracts import TopicProfile
-from db.models import Document, Session as SessionModel, User
+from db.models import Document, User
+from db.models import Session as SessionModel
 from lib import chunking
-
 
 SESSION_ID = "sess_ing"
 USER_ID = "u_ing"
@@ -150,6 +150,7 @@ def test_embed_and_store_retries_once_on_transient_provider_error(
     """A single APIConnectionError from the provider must not fail the batch;
     the retry helper re-issues the call and the chunks are stored."""
     import litellm
+
     from config import settings
     from services import ingestion_service
 
@@ -223,7 +224,9 @@ def test_pypdf_failure_marks_failed(
     db_session.expire_all()
     doc = db_session.get(Document, setup_doc)
     assert doc.status == "failed"
-    assert "corrupt" in (doc.error or "")
+    # C-11: the exception text stays in the log; the persisted string is a
+    # fixed, enumerated, user-facing message.
+    assert doc.error == ingestion_service.ERR_EXTRACTION_FAILED
     assert insert_capture == []
 
 
@@ -242,7 +245,7 @@ def test_embedding_failure_marks_failed(
     db_session.expire_all()
     doc = db_session.get(Document, setup_doc)
     assert doc.status == "failed"
-    assert "embedding" in (doc.error or "")
+    assert doc.error == ingestion_service.ERR_EMBEDDING_FAILED
     assert insert_capture == []
 
 
@@ -261,7 +264,8 @@ def test_pgvector_insert_failure_marks_failed(
     db_session.expire_all()
     doc = db_session.get(Document, setup_doc)
     assert doc.status == "failed"
-    assert "pgvector" in (doc.error or "")
+    # The insert happens inside _embed_and_store, so it is the embed stage.
+    assert doc.error == ingestion_service.ERR_EMBEDDING_FAILED
 
 
 def test_run_fails_over_chunk_cap_before_embedding(db_session, monkeypatch, tmp_path):
@@ -381,7 +385,7 @@ def test_merge_failure_keeps_already_committed_chunks(db_session, monkeypatch, t
     db_session.expire_all()
     doc = db_session.get(Document, doc.id)
     assert doc.status == "failed"
-    assert "kw merge exploded" in doc.error
+    assert doc.error == ingestion_service.ERR_INGESTION_FAILED
     assert db_session.query(ChunkEmbedding).filter_by(document_id=doc.id).count() > 0
 
 
@@ -473,6 +477,7 @@ def test_merge_failure_still_records_embedding_spend_after_rollback(
     each batch's own commit -- not via a post-rollback re-record -- even
     though the doc ends up 'failed' from a later merge_into_session error."""
     from decimal import Decimal
+
     from sqlalchemy.orm import sessionmaker
 
     from config import settings
@@ -717,9 +722,9 @@ def test_run_fails_over_cost_cap_and_keeps_prior_spend(db_session, monkeypatch, 
     (Finding 1 pattern -- the cost-cap branch also re-records
     embed_cost_holder like the broad except arm does)."""
     from decimal import Decimal
+
     from sqlalchemy.orm import sessionmaker
 
-    from config import settings
     from services import cost_meter as cm
     from services import ingestion_service
 
@@ -829,9 +834,11 @@ def test_legacy_bare_filename_fallback(db_session, insert_capture, mock_embed, m
 
 
 def test_run_txt_success(db_session, insert_capture, mock_embed, monkeypatch, tmp_path):
-    from contracts import TopicProfile
-    from db.models import Document, Session as SessionModel, User
     from sqlalchemy.orm import sessionmaker
+
+    from contracts import TopicProfile
+    from db.models import Document, User
+    from db.models import Session as SessionModel
     from services import ingestion_service
 
     db_session.add(User(id="u_txt"))
@@ -876,9 +883,11 @@ def test_run_logs_carry_document_and_session_ids(
     logging any message/document content (PII rule, logging_config.py)."""
     import logging
 
-    from contracts import TopicProfile
-    from db.models import Document, Session as SessionModel, User
     from sqlalchemy.orm import sessionmaker
+
+    from contracts import TopicProfile
+    from db.models import Document, User
+    from db.models import Session as SessionModel
     from services import ingestion_service
 
     db_session.add(User(id="u_log"))
@@ -1125,7 +1134,7 @@ def test_run_marks_failed_when_extract_raises_outside_session(
     db_session.expire_all()
     refreshed = db_session.get(Document, doc.id)
     assert refreshed.status == "failed"
-    assert "exploded" in (refreshed.error or "")
+    assert refreshed.error == ingestion_service.ERR_EXTRACTION_FAILED
 
 
 def test_run_invalidates_session_chunk_centroid(
@@ -1273,3 +1282,100 @@ def test_partial_ingest_failure_still_invalidates_centroid(
     assert calls["n"] > 1
     assert db_session.get(Document, doc.id).status == "failed"
     assert db_session.get(SessionModel, "s_cinv2").chunk_centroid is None
+
+
+# --- C-11: documents.error is an enumerated, leak-free string -------------
+
+
+def test_extraction_failure_hides_exception_text_but_logs_it(
+    setup_doc, insert_capture, mock_embed, db_session, monkeypatch, tmp_path, caplog
+):
+    """C-11: documents.error is rendered verbatim by the frontend, so a raw
+    exception message would leak server paths to the browser. The persisted
+    string must be one of the enumerated constants; the original text must
+    still reach the log for operators."""
+    import logging
+
+    _write_blob_stub(monkeypatch, tmp_path, setup_doc, "x.pdf")
+
+    def boom(_blob, _filename):
+        raise RuntimeError("/srv/secret/path: boom")
+
+    monkeypatch.setattr("services.ingestion_service._extract", boom)
+    from services import ingestion_service
+
+    with caplog.at_level(logging.ERROR, logger="services.ingestion_service"):
+        ingestion_service.run(setup_doc)
+
+    db_session.expire_all()
+    doc = db_session.get(Document, setup_doc)
+    assert doc.status == "failed"
+    assert doc.error == ingestion_service.ERR_EXTRACTION_FAILED
+    assert "secret" not in doc.error
+    assert "/srv/secret/path: boom" in " ".join(
+        r.getMessage() for r in caplog.records
+    )
+
+
+def test_generic_stage_failure_uses_the_catch_all_message(
+    setup_doc, insert_capture, mock_pdf, mock_embed, db_session, monkeypatch, tmp_path
+):
+    """A failure outside extract/embed (here: the keyword merge) maps to the
+    generic constant, never to str(e)."""
+    _write_blob_stub(monkeypatch, tmp_path, setup_doc, "x.pdf")
+
+    def boom(db, session_id, stems):
+        raise RuntimeError("kw merge exploded")
+
+    monkeypatch.setattr(
+        "services.ingestion_service.keyword_index.merge_into_session", boom
+    )
+    from services import ingestion_service
+
+    ingestion_service.run(setup_doc)
+    db_session.expire_all()
+    doc = db_session.get(Document, setup_doc)
+    assert doc.status == "failed"
+    assert doc.error == ingestion_service.ERR_INGESTION_FAILED
+
+
+def test_every_assigned_document_error_is_enumerated():
+    """C-11 guard rail: no future edit may assign a free-form string (or an
+    f-string / str(e)) to doc.error in this module."""
+    import inspect
+    import re
+
+    from services import ingestion_service
+
+    src = inspect.getsource(ingestion_service)
+    assigned = re.findall(r"\.error\s*=\s*(.+)", src)
+    assert assigned, "expected at least one doc.error assignment"
+    namespace = vars(ingestion_service)
+    for expr in assigned:
+        expr = expr.split("#")[0].strip()
+        if expr == "None":
+            continue
+        assert "str(" not in expr and not expr.startswith(("f'", 'f"')), (
+            f"doc.error must not carry exception text, got {expr!r}"
+        )
+        # Every remaining form must resolve into the enumerated set, for
+        # every stage the generic arm can classify. eval() is safe here: the
+        # expression comes from this repo's own module source read via
+        # inspect.getsource, never from user input or a network payload.
+        for stage in ingestion_service._STAGE_ERRORS:
+            value = eval(expr, dict(namespace), {"stage": stage})
+            assert value in ingestion_service.INGEST_ERROR_MESSAGES, (
+                f"{expr!r} -> {value!r} is not an enumerated message"
+            )
+
+
+def test_ingest_error_messages_covers_the_upload_route_string():
+    """upload.py writes its own failure string onto the same column; the
+    frozenset is the single inventory of everything the frontend can render."""
+    from services import ingestion_service
+
+    assert (
+        ingestion_service.ERR_STORAGE_WRITE
+        in ingestion_service.INGEST_ERROR_MESSAGES
+    )
+    assert len(ingestion_service.INGEST_ERROR_MESSAGES) == 6

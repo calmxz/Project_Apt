@@ -10,9 +10,9 @@ import pytest
 from agent.types import ToolContext
 from config import settings
 from contracts import AskCheckQuestionsArgs, TopicProfile
-from db.models import ChatMessage, LlmCallLog, Session as SessionModel, User
+from db.models import ChatMessage, LlmCallLog, User
+from db.models import Session as SessionModel
 from services import check_question_service, cost_meter, profile_service, summary_service
-
 
 USER_ID = "u1"
 SESSION_ID = "s1"

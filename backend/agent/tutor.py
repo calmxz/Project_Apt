@@ -20,8 +20,8 @@ from agent.types import ToolContext
 from config import settings
 from contracts import Citation, ToolCallRecord, ToolResult
 from db.models import ChatMessage
+from lib.citations import chunks_to_citations
 from services import check_question_service, cost_meter
-
 
 log = logging.getLogger(__name__)
 
@@ -434,15 +434,10 @@ async def run_streaming(
 
                 if name == "retrieve_chunks" and result.ok:
                     raw_chunks = (result.data or {}).get("chunks", [])
-                    new_cites = [
-                        Citation(
-                            doc_id=str(ch.get("doc_id", "")),
-                            text=ch.get("text", ""),
-                            page=ch.get("page"),
-                            doc_name=ch.get("doc_name"),
-                        )
-                        for ch in raw_chunks
-                    ]
+                    # G-11: the similarity floor applies to what the user is
+                    # shown as a source; raw_chunks itself (what the model
+                    # sees) is deliberately unfiltered.
+                    new_cites = chunks_to_citations(raw_chunks)
                     # F-56: dedup against citations already present (a server
                     # prefetch, or an earlier retrieve_chunks call this turn)
                     # by (doc_id, text) identity, so overlapping chunks don't

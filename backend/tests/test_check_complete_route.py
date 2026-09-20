@@ -7,11 +7,11 @@ import pytest
 from sqlalchemy import select
 
 from agent.stream_events import StreamEvent
-from contracts import AskCheckQuestionsArgs, TopicProfile
 from agent.types import ToolContext
-from db.models import ChatMessage, Session as SessionModel, User
+from contracts import AskCheckQuestionsArgs, TopicProfile
+from db.models import ChatMessage, User
+from db.models import Session as SessionModel
 from services import check_question_service, profile_service
-
 
 USER_ID = "u_done_1"
 

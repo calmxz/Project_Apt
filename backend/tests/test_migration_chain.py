@@ -3,7 +3,8 @@
 import importlib.util
 from pathlib import Path
 
-from db.models import Session as SessionModel, User
+from db.models import Session as SessionModel
+from db.models import User
 
 
 def _load_migration():
@@ -63,6 +64,41 @@ def test_learning_events_created_at_index_declared_on_model():
 
     names = {ix.name for ix in LearningEvent.__table__.indexes}
     assert "ix_learning_events_created_at" in names
+
+
+def test_documents_content_sha_index_declared_on_model():
+    """C-08: the partial unique index that makes an identical re-upload a
+    no-op must exist on the model, not only in the migration."""
+    from db.models import Document
+
+    names = {ix.name for ix in Document.__table__.indexes}
+    assert "uq_documents_session_sha" in names
+    assert "content_sha256" in Document.__table__.c
+
+
+def test_chat_messages_sid_id_desc_index_declared_on_model():
+    """F-09: session history is ordered by id DESC, which the existing
+    (session_id, created_at) index cannot serve without a sort."""
+    from db.models import ChatMessage
+
+    names = {ix.name for ix in ChatMessage.__table__.indexes}
+    assert "ix_chat_messages_sid_id_desc" in names
+
+
+def test_0027_chains_onto_0026():
+    mod = _load_versions_module(
+        "0027_chat_messages_sid_id_desc.py", "migration_0027"
+    )
+    assert mod.revision == "0027_chat_messages_sid_id_desc"
+    assert mod.down_revision == "0026_documents_content_sha256"
+
+
+def test_0026_chains_onto_0025():
+    mod = _load_versions_module(
+        "0026_documents_content_sha256.py", "migration_0026"
+    )
+    assert mod.revision == "0026_documents_content_sha256"
+    assert mod.down_revision == "0025_learning_events_created_at"
 
 
 def test_0025_chains_onto_0024():

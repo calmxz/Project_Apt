@@ -1,15 +1,16 @@
 """Persistence of resolved check batches onto the asking ChatMessage."""
 
 import json as _json
-import pytest
 from datetime import datetime, timezone
 
-from contracts import AskCheckQuestionsArgs, TopicProfile
-from db.models import ChatMessage, LearningEvent, Session as SessionModel, User
+import pytest
+
 from agent import tutor
 from agent.types import ToolContext
+from contracts import AskCheckQuestionsArgs, TopicProfile
+from db.models import ChatMessage, LearningEvent, User
+from db.models import Session as SessionModel
 from services import check_question_service
-
 
 USER_ID = "u_batch_1"
 SID = "s_batch_1"

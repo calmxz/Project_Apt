@@ -4,8 +4,9 @@ Validates that the OpenAPI spec contains the vendor-extension SSE contract
 reference block and that every event has a data schema dict.
 """
 
-import yaml
 from pathlib import Path
+
+import yaml
 
 SPEC_PATH = Path(__file__).parent.parent.parent / "docs" / "api" / "openapi.yaml"
 

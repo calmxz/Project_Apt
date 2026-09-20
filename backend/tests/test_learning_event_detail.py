@@ -10,7 +10,8 @@ import pytest
 
 from agent.types import ToolContext
 from contracts import AskCheckQuestionsArgs, TopicProfile
-from db.models import LearningEvent, Session as SessionModel, User
+from db.models import LearningEvent, User
+from db.models import Session as SessionModel
 from services import check_question_service, learning_event_service
 
 USER_ID = "u_detail_1"

@@ -1,7 +1,8 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from db.models import DailyCostLedger, LlmCallLog, Session as SessionModel, User
+from db.models import DailyCostLedger, LlmCallLog, User
+from db.models import Session as SessionModel
 from services.usage_service import usage_summary
 
 NOW = datetime(2026, 7, 10, 8, 0, 0, tzinfo=timezone.utc)  # today = 2026-07-10
