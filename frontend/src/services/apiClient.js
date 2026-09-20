@@ -62,9 +62,18 @@ export function invalidateGetCache(path) {
   // not in the Map yet, and the epoch is what stops it writing a stale body.
   _cacheEpoch += 1
   const target = path.split('?')[0]
+  // Sibling lists: POST /sessions/abc/end changes what GET /sessions/library
+  // and GET /sessions return, and neither is a prefix of the other. Any write
+  // under a resource root therefore also drops every cached GET under that
+  // root. Coarse, but a 5 s cache gains nothing from being clever here.
+  const root = `/${target.split('/').filter(Boolean)[0] ?? ''}`
   for (const url of _getCache.keys()) {
     const cached = _pathOfUrl(url)
-    if (_isSegmentPrefix(cached, target) || _isSegmentPrefix(target, cached)) {
+    if (
+      _isSegmentPrefix(cached, target) ||
+      _isSegmentPrefix(target, cached) ||
+      _isSegmentPrefix(root, cached)
+    ) {
       _getCache.delete(url)
     }
   }

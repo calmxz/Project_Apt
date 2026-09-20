@@ -4,6 +4,7 @@ import {
   ApiError,
   apiGet,
   apiPost,
+  apiPatch,
   apiDelete,
   setUnauthorizedHandler,
   _resetApiCache,
@@ -412,13 +413,17 @@ describe('apiClient', () => {
       expect(fetchMock).toHaveBeenCalledTimes(2)
     })
 
-    it('does not treat a sibling id as a path prefix', async () => {
+    // Root-scoped on purpose: a write to any session changes the sibling lists
+    // (/sessions, /sessions/library), so everything under /sessions is dropped,
+    // sibling ids included. Cross-root entries survive (next describe).
+    it('a write to a sibling id still drops the whole resource root', async () => {
       fetchMock.mockReturnValueOnce(jsonResp(200, { n: 1 }))
       await apiGet('/sessions/abc')
       fetchMock.mockReturnValueOnce(jsonResp(200, {}))
       await apiPost('/sessions/abcdef/end', {})
-      await expect(apiGet('/sessions/abc')).resolves.toEqual({ n: 1 })
-      expect(fetchMock).toHaveBeenCalledTimes(2)
+      fetchMock.mockReturnValueOnce(jsonResp(200, { n: 2 }))
+      await expect(apiGet('/sessions/abc')).resolves.toEqual({ n: 2 })
+      expect(fetchMock).toHaveBeenCalledTimes(3)
     })
 
     // Sign out and back in as someone else inside the TTL: a url-only key would
@@ -487,6 +492,30 @@ describe('apiClient', () => {
         status: 409,
       })
       await expect(apiGet('/sessions/abc')).resolves.toEqual({ n: 2 })
+    })
+
+    it('a write under a resource root drops sibling list GETs (library, sidebar)', async () => {
+      fetchMock.mockReturnValueOnce(jsonResp(200, { items: [1] }))
+      await apiGet('/sessions/library', { limit: 20 })
+      fetchMock.mockReturnValueOnce(jsonResp(200, { items: [1] }))
+      await apiGet('/sessions', { limit: 15 })
+      fetchMock.mockReturnValueOnce(jsonResp(200, {}))
+      await apiPatch('/sessions/abc', { pinned: true })
+      fetchMock
+        .mockReturnValueOnce(jsonResp(200, { items: [2] }))
+        .mockReturnValueOnce(jsonResp(200, { items: [3] }))
+      await expect(apiGet('/sessions/library', { limit: 20 })).resolves.toEqual({ items: [2] })
+      await expect(apiGet('/sessions', { limit: 15 })).resolves.toEqual({ items: [3] })
+      expect(fetchMock).toHaveBeenCalledTimes(5)
+    })
+
+    it('a write under one root leaves another root cached', async () => {
+      fetchMock.mockReturnValueOnce(jsonResp(200, { me: 1 }))
+      await apiGet('/me')
+      fetchMock.mockReturnValueOnce(jsonResp(200, {}))
+      await apiPost('/sessions/abc/end', {})
+      await expect(apiGet('/me')).resolves.toEqual({ me: 1 })
+      expect(fetchMock).toHaveBeenCalledTimes(2)
     })
   })
 })

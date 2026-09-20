@@ -161,10 +161,13 @@ retried.
 GET cache: 5 s TTL, in-memory `Map`, key = url **+ access token** (a token
 mismatch is a miss; `_onAuthExpired()` clears the map). `{ fresh: true }`
 bypasses the read but still writes. Failures and non-GETs never populate it.
-Invalidation after any non-GET settles (success or failure): bidirectional
-segment-prefix match on the path with the query stripped, so `POST
-/sessions/abc/end` drops `GET /sessions/abc`, `POST /sessions` drops `GET
-/sessions?cursor=..`, and `/sessions/abcdef` never matches `/sessions/abc`.
+Invalidation after any non-GET settles (success or failure): every cached GET
+under the write's **resource root** (first path segment, query stripped) is
+dropped, so `POST /sessions/abc/end` drops `GET /sessions/abc` and also the
+sibling lists `GET /sessions/library` and `GET /sessions?..`, which the
+bidirectional prefix rule alone would have missed. A write under `/sessions`
+leaves `/me` or `/documents` entries alone. Coarse on purpose: a 5 s cache
+gains nothing from finer rules and a stale list is a visible bug.
 Two writers bypass `request()` and call the exported `invalidateGetCache(path)`
 themselves once they settle, success or failure: `chatStreamService`
 (`streamChat`, `streamCheckComplete`) and `uploadApi.uploadDocument`, both on
