@@ -9,6 +9,7 @@ import SessionEndedBanner from '@/components/SessionEndedBanner.vue'
 import CheckQuestion from '@/components/chat/CheckQuestion.vue'
 import Composer from '@/components/chat/Composer.vue'
 import { StreamAbortedError } from '@/lib/errors.js'
+import { WATCH_CEILING_MS } from '@/composables/useReferencePoll.js'
 import { useSessionStore } from '@/stores/session.js'
 import { getSessionProfile, patchProfile } from '@/services/profileApi.js'
 
@@ -33,12 +34,14 @@ vi.mock('@/composables/useToast.js', () => ({
 
 const uploadDocument = vi.fn()
 const validateFile = vi.fn()
-const getUploadStatus = vi.fn()
-const bannerRefresh = vi.fn()
+// F-12: the upload chip is driven by useReferencePoll's per-document
+// transitions now, so the view polls /sessions/:id/ingestion (once per session
+// at setup, then with backoff) instead of /upload/:documentId.
+const getSessionIngestion = vi.fn()
 vi.mock('@/services/uploadApi.js', () => ({
   uploadDocument: (...args) => uploadDocument(...args),
   validateFile: (...args) => validateFile(...args),
-  getUploadStatus: (...args) => getUploadStatus(...args),
+  getSessionIngestion: (...args) => getSessionIngestion(...args),
   MAX_UPLOAD_BYTES: 25 * 1024 * 1024,
 }))
 
@@ -47,9 +50,15 @@ vi.mock('@/services/profileApi.js', () => ({
   patchProfile: vi.fn(),
 }))
 
+const ReferenceStatusBannerStub = {
+  name: 'ReferenceStatusBanner',
+  props: ['status', 'documents', 'failed'],
+  template: '<div />',
+}
+
 const stubs = {
   BackButton: { template: '<button data-testid="back" />' },
-  ReferenceStatusBanner: { methods: { refresh: bannerRefresh }, template: '<div />' },
+  ReferenceStatusBanner: ReferenceStatusBannerStub,
   SessionEndedBanner: {
     props: ['endedAt', 'loading', 'hasGaps'],
     emits: ['resume', 'resume-gaps'],
@@ -109,9 +118,9 @@ describe('SessionView', () => {
     route.query = {}
     showError.mockClear()
     uploadDocument.mockReset()
-    bannerRefresh.mockReset()
     validateFile.mockReset()
-    getUploadStatus.mockReset()
+    getSessionIngestion.mockReset()
+    getSessionIngestion.mockResolvedValue({ status: null, documents: [] })
     getSessionProfile.mockReset()
     patchProfile.mockReset()
     sessionStorage.clear()
@@ -794,14 +803,17 @@ describe('SessionView', () => {
     expect(showError).toHaveBeenCalled()
   })
 
-  it('upload triggers uploadDocument and polls status', async () => {
+  it('upload triggers uploadDocument and drives the chip from the shared poller', async () => {
     const store = useSessionStore()
     vi.spyOn(store, 'loadSession').mockImplementation(async () => {
       setupSession()
     })
     validateFile.mockReturnValue({ ok: true })
     uploadDocument.mockResolvedValue({ document_id: 'doc-1' })
-    getUploadStatus.mockResolvedValue({ status: 'ready' })
+    getSessionIngestion.mockResolvedValue({
+      status: 'ready',
+      documents: [{ id: 'doc-1', filename: 'notes.pdf', status: 'ready' }],
+    })
     const wrapper = mountView()
     await flushPromises()
     const file = new File(['pdf-bytes'], 'notes.pdf', { type: 'application/pdf' })
@@ -811,10 +823,69 @@ describe('SessionView', () => {
     await flushPromises()
     await flushPromises()
     expect(uploadDocument).toHaveBeenCalledWith({ sessionId: 's1', file })
-    expect(getUploadStatus).toHaveBeenCalledWith('doc-1')
+    expect(getSessionIngestion).toHaveBeenCalledWith('s1', { fresh: true, silent: true })
     expect(wrapper.find('[data-testid="upload-status-ready"]').exists()).toBe(true)
-    // Banner is refreshed so the newly uploaded doc's ingestion status appears.
-    expect(bannerRefresh).toHaveBeenCalled()
+    // Same poll feeds the banner, so the newly uploaded doc appears there too.
+    expect(wrapper.findComponent(ReferenceStatusBannerStub).props('status')).toBe('ready')
+  })
+
+  // E-07: the first poll after an upload can throw with status still null. The
+  // chip must say so rather than wait out the 90s ceiling.
+  it('surfaces an unavailable chip when the ingestion poll throws', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession()
+    })
+    validateFile.mockReturnValue({ ok: true })
+    uploadDocument.mockResolvedValue({ document_id: 'doc-1' })
+    getSessionIngestion.mockRejectedValue(Object.assign(new Error('boom'), { status: 0 }))
+    const wrapper = mountView()
+    await flushPromises()
+    const file = new File(['pdf-bytes'], 'notes.pdf', { type: 'application/pdf' })
+    const input = wrapper.get('[data-testid="session-upload-input"]')
+    Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
+    await input.trigger('change')
+    await flushPromises()
+    await flushPromises()
+    const failed = wrapper.find('[data-testid="upload-status-failed"]')
+    expect(failed.exists()).toBe(true)
+    expect(failed.text()).toContain('Upload status unavailable')
+    // And the banner gets the failed flag so it can offer Retry.
+    expect(wrapper.findComponent(ReferenceStatusBannerStub).props('failed')).toBe(true)
+  })
+
+  // E-07: the attempt ceiling became a wall-clock one. Still pending at 90s ->
+  // the same "still processing" copy the 90-attempt loop used to print.
+  it('falls back to the still-processing chip at the poll ceiling', async () => {
+    vi.useFakeTimers()
+    try {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      validateFile.mockReturnValue({ ok: true })
+      uploadDocument.mockResolvedValue({ document_id: 'doc-1' })
+      getSessionIngestion.mockResolvedValue({
+        status: 'pending',
+        documents: [{ id: 'doc-1', filename: 'notes.pdf', status: 'pending' }],
+      })
+      const wrapper = mountView()
+      await flushPromises()
+      const file = new File(['pdf-bytes'], 'notes.pdf', { type: 'application/pdf' })
+      const input = wrapper.get('[data-testid="session-upload-input"]')
+      Object.defineProperty(input.element, 'files', { value: [file], configurable: true })
+      await input.trigger('change')
+      await flushPromises()
+      expect(wrapper.find('[data-testid="upload-status-pending"]').text()).toContain('Uploading')
+
+      await vi.advanceTimersByTimeAsync(WATCH_CEILING_MS)
+      await flushPromises()
+      expect(wrapper.find('[data-testid="upload-status-pending"]').text()).toContain(
+        'still processing',
+      )
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   // A poll started in session A must not paint A's status into session B after
@@ -828,7 +899,7 @@ describe('SessionView', () => {
     validateFile.mockReturnValue({ ok: true })
     uploadDocument.mockResolvedValue({ document_id: 'doc-1' })
     let resolveStatus
-    getUploadStatus.mockImplementation(
+    getSessionIngestion.mockImplementation(
       () =>
         new Promise((res) => {
           resolveStatus = res
@@ -848,7 +919,8 @@ describe('SessionView', () => {
     // B must not inherit A's upload lock while the stale poll is still pending.
     expect(wrapper.findComponent(Composer).props('uploading')).toBe(false)
 
-    resolveStatus({ status: 'ready' }) // the superseded poll resolves late
+    // the superseded poll resolves late
+    resolveStatus({ status: 'ready', documents: [{ id: 'doc-1', status: 'ready' }] })
     await flushPromises()
 
     // The stale result must not paint A's status banner into B.

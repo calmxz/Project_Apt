@@ -1,6 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { ApiError, apiGet, apiPost, setUnauthorizedHandler } from '../services/apiClient.js'
+import {
+  ApiError,
+  apiGet,
+  apiPost,
+  apiDelete,
+  setUnauthorizedHandler,
+  _resetApiCache,
+  GET_RETRY_ATTEMPTS,
+  GET_RETRY_DELAYS_MS,
+  GET_CACHE_TTL_MS,
+} from '../services/apiClient.js'
 import { errorBus } from '../services/errorBus.js'
 import { useAuthStore } from '../stores/auth.js'
 
@@ -10,6 +20,8 @@ describe('apiClient', () => {
   let unauthorizedHandler
   beforeEach(() => {
     setActivePinia(createPinia())
+    // F-18: the GET cache is module state and would leak between cases.
+    _resetApiCache()
     listener = vi.fn()
     errorBus.addEventListener('api-error', listener)
     fetchMock = vi.fn()
@@ -110,11 +122,16 @@ describe('apiClient', () => {
   })
 
   it('maps a timeout abort to a friendly ApiError', async () => {
-    fetchMock.mockRejectedValueOnce(new DOMException('signal timed out', 'TimeoutError'))
+    // A TimeoutError is retryable (F-18), so every attempt must reject before
+    // the friendly ApiError surfaces. Collapse the backoff so this stays fast.
+    const realSetTimeout = globalThis.setTimeout
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation((fn) => realSetTimeout(fn, 0))
+    fetchMock.mockRejectedValue(new DOMException('signal timed out', 'TimeoutError'))
     await expect(apiGet('/slow', undefined, { silent: true })).rejects.toMatchObject({
       status: 0,
       body: { detail: 'request timed out' },
     })
+    expect(fetchMock).toHaveBeenCalledTimes(GET_RETRY_ATTEMPTS)
   })
 
   it('retries once with a refreshed token on 401 (F-09)', async () => {
@@ -215,5 +232,218 @@ describe('apiClient', () => {
     setUnauthorizedHandler(null)
     const { _onAuthExpired } = await import('../services/apiClient.js')
     await expect(_onAuthExpired()).resolves.toBeUndefined()
+  })
+
+  // F-18: bounded GET retry. Non-GETs are never retried -- a POST may have
+  // landed before the connection dropped.
+  describe('GET retry (F-18)', () => {
+    beforeEach(() => {
+      // Pin the jitter to the midpoint so the delays are exactly 300/900.
+      vi.spyOn(Math, 'random').mockReturnValue(0.5)
+    })
+
+    it('retries a GET on a network TypeError and returns the eventual success', async () => {
+      fetchMock
+        .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+        .mockReturnValueOnce(jsonResp(200, { ok: true }))
+      await expect(apiGet('/x')).resolves.toEqual({ ok: true })
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+      expect(listener).not.toHaveBeenCalled()
+    })
+
+    it.each([502, 503, 504])('retries a GET on %i', async (status) => {
+      fetchMock
+        .mockReturnValueOnce(jsonResp(status, {}))
+        .mockReturnValueOnce(jsonResp(200, { n: 1 }))
+      await expect(apiGet('/x')).resolves.toEqual({ n: 1 })
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not retry other statuses', async () => {
+      fetchMock.mockReturnValue(jsonResp(500, { detail: 'boom' }))
+      await expect(apiGet('/x', null, { silent: true })).rejects.toMatchObject({ status: 500 })
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not retry a non-retryable network error', async () => {
+      fetchMock.mockRejectedValue(new Error('offline'))
+      await expect(apiGet('/x', null, { silent: true })).rejects.toMatchObject({ status: 0 })
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('never retries a non-GET', async () => {
+      fetchMock.mockRejectedValue(new TypeError('Failed to fetch'))
+      await expect(apiPost('/x', {}, { silent: true })).rejects.toMatchObject({ status: 0 })
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('gives up after 3 attempts and reports the error exactly once', async () => {
+      fetchMock.mockReturnValue(jsonResp(503, {}))
+      await expect(apiGet('/x')).rejects.toMatchObject({ status: 503 })
+      expect(fetchMock).toHaveBeenCalledTimes(GET_RETRY_ATTEMPTS)
+      expect(listener).toHaveBeenCalledTimes(1)
+    })
+
+    it('waits the jittered 300ms/900ms backoff between attempts', async () => {
+      const delays = []
+      const realSetTimeout = globalThis.setTimeout
+      vi.spyOn(globalThis, 'setTimeout').mockImplementation((fn, ms) => {
+        delays.push(ms)
+        return realSetTimeout(fn, 0)
+      })
+      fetchMock.mockReturnValue(jsonResp(503, {}))
+      await expect(apiGet('/x', null, { silent: true })).rejects.toMatchObject({ status: 503 })
+      expect(delays).toEqual(GET_RETRY_DELAYS_MS)
+    })
+
+    it('builds a fresh AbortSignal for every attempt', async () => {
+      fetchMock
+        .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+        .mockReturnValueOnce(jsonResp(200, {}))
+      await apiGet('/x')
+      const [first, second] = fetchMock.mock.calls.map(([, init]) => init.signal)
+      expect(first).toBeInstanceOf(AbortSignal)
+      expect(second).toBeInstanceOf(AbortSignal)
+      expect(second).not.toBe(first)
+    })
+
+    it('does not interfere with the 401 refresh-once path', async () => {
+      globalThis.__supabaseAuthStub.getSession
+        .mockResolvedValueOnce({ data: { session: null } })
+        .mockResolvedValueOnce({
+          data: { session: { access_token: 'fresh-token', user: { id: 'u1' } } },
+        })
+      fetchMock
+        .mockResolvedValueOnce(new Response('{"detail":"invalid_token"}', { status: 401 }))
+        .mockResolvedValueOnce(new Response('{"ok":true}', { status: 200 }))
+      await expect(apiGet('/whatever')).resolves.toEqual({ ok: true })
+      // One 401 + one refreshed retry: the F-18 loop must not add attempts.
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  // F-18: short TTL GET cache.
+  describe('GET cache (F-18)', () => {
+    it('serves a second identical GET from cache within the TTL', async () => {
+      fetchMock.mockReturnValueOnce(jsonResp(200, { n: 1 }))
+      await expect(apiGet('/x')).resolves.toEqual({ n: 1 })
+      await expect(apiGet('/x')).resolves.toEqual({ n: 1 })
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('keys the cache on the full url including params', async () => {
+      fetchMock
+        .mockReturnValueOnce(jsonResp(200, { n: 1 }))
+        .mockReturnValueOnce(jsonResp(200, { n: 2 }))
+      await expect(apiGet('/x', { a: 1 })).resolves.toEqual({ n: 1 })
+      await expect(apiGet('/x', { a: 2 })).resolves.toEqual({ n: 2 })
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    })
+
+    it('re-fetches once the TTL has elapsed', async () => {
+      const now = Date.now()
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(now)
+      fetchMock
+        .mockReturnValueOnce(jsonResp(200, { n: 1 }))
+        .mockReturnValueOnce(jsonResp(200, { n: 2 }))
+      await expect(apiGet('/x')).resolves.toEqual({ n: 1 })
+      clock.mockReturnValue(now + GET_CACHE_TTL_MS + 1)
+      await expect(apiGet('/x')).resolves.toEqual({ n: 2 })
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    })
+
+    it('bypasses the cache with { fresh: true }', async () => {
+      fetchMock
+        .mockReturnValueOnce(jsonResp(200, { n: 1 }))
+        .mockReturnValueOnce(jsonResp(200, { n: 2 }))
+      await expect(apiGet('/x')).resolves.toEqual({ n: 1 })
+      await expect(apiGet('/x', null, { fresh: true })).resolves.toEqual({ n: 2 })
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    })
+
+    it('never caches a failed GET', async () => {
+      fetchMock.mockReturnValueOnce(jsonResp(500, {})).mockReturnValueOnce(jsonResp(200, { n: 1 }))
+      await expect(apiGet('/x', null, { silent: true })).rejects.toMatchObject({ status: 500 })
+      await expect(apiGet('/x')).resolves.toEqual({ n: 1 })
+    })
+
+    it('does not cache non-GET responses', async () => {
+      fetchMock
+        .mockReturnValueOnce(jsonResp(200, { n: 1 }))
+        .mockReturnValueOnce(jsonResp(200, { n: 2 }))
+      await expect(apiPost('/x', {})).resolves.toEqual({ n: 1 })
+      await expect(apiPost('/x', {})).resolves.toEqual({ n: 2 })
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    })
+
+    it('invalidates a cached GET when a write hits a deeper path', async () => {
+      fetchMock.mockReturnValueOnce(jsonResp(200, { n: 1 }))
+      await apiGet('/sessions/abc')
+      fetchMock.mockReturnValueOnce(jsonResp(200, {})).mockReturnValueOnce(jsonResp(200, { n: 2 }))
+      await apiPost('/sessions/abc/end', {})
+      await expect(apiGet('/sessions/abc')).resolves.toEqual({ n: 2 })
+    })
+
+    it('invalidates a cached list GET when a write hits its parent path', async () => {
+      fetchMock.mockReturnValueOnce(jsonResp(200, { n: 1 }))
+      await apiGet('/sessions', { cursor: 'c1' })
+      fetchMock.mockReturnValueOnce(jsonResp(201, {})).mockReturnValueOnce(jsonResp(200, { n: 2 }))
+      await apiPost('/sessions', {})
+      await expect(apiGet('/sessions', { cursor: 'c1' })).resolves.toEqual({ n: 2 })
+    })
+
+    it('leaves an unrelated cached GET alone', async () => {
+      fetchMock.mockReturnValueOnce(jsonResp(200, { n: 1 }))
+      await apiGet('/profile/abc')
+      fetchMock.mockReturnValueOnce(jsonResp(200, {}))
+      await apiDelete('/documents/7')
+      await expect(apiGet('/profile/abc')).resolves.toEqual({ n: 1 })
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not treat a sibling id as a path prefix', async () => {
+      fetchMock.mockReturnValueOnce(jsonResp(200, { n: 1 }))
+      await apiGet('/sessions/abc')
+      fetchMock.mockReturnValueOnce(jsonResp(200, {}))
+      await apiPost('/sessions/abcdef/end', {})
+      await expect(apiGet('/sessions/abc')).resolves.toEqual({ n: 1 })
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    })
+
+    // Sign out and back in as someone else inside the TTL: a url-only key would
+    // hand the second account the first one's body.
+    it('never serves a cached GET to a different access token', async () => {
+      globalThis.__supabaseAuthStub.getSession
+        .mockResolvedValueOnce({
+          data: { session: { access_token: 'tok-a', user: { id: 'a' } } },
+        })
+        .mockResolvedValueOnce({
+          data: { session: { access_token: 'tok-b', user: { id: 'b' } } },
+        })
+      fetchMock.mockReturnValueOnce(jsonResp(200, { who: 'a' }))
+      await expect(apiGet('/sessions')).resolves.toEqual({ who: 'a' })
+      fetchMock.mockReturnValueOnce(jsonResp(200, { who: 'b' }))
+      await expect(apiGet('/sessions')).resolves.toEqual({ who: 'b' })
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    })
+
+    it('_onAuthExpired clears the cache', async () => {
+      const { _onAuthExpired } = await import('../services/apiClient.js')
+      fetchMock.mockReturnValueOnce(jsonResp(200, { n: 1 }))
+      await apiGet('/x')
+      await _onAuthExpired()
+      fetchMock.mockReturnValueOnce(jsonResp(200, { n: 2 }))
+      await expect(apiGet('/x')).resolves.toEqual({ n: 2 })
+    })
+
+    it('invalidates even when the write fails, since it may still have landed', async () => {
+      fetchMock.mockReturnValueOnce(jsonResp(200, { n: 1 }))
+      await apiGet('/sessions/abc')
+      fetchMock.mockReturnValueOnce(jsonResp(409, {})).mockReturnValueOnce(jsonResp(200, { n: 2 }))
+      await expect(apiPost('/sessions/abc/end', {}, { silent: true })).rejects.toMatchObject({
+        status: 409,
+      })
+      await expect(apiGet('/sessions/abc')).resolves.toEqual({ n: 2 })
+    })
   })
 })

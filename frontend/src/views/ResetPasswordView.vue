@@ -99,6 +99,7 @@ import { useRouter } from 'vue-router'
 import InputText from 'primevue/inputtext'
 
 import AuthCover from '../components/auth/AuthCover.vue'
+import { authErrorCopy } from '../lib/authErrors.js'
 import { useAuthStore } from '../stores/auth.js'
 import { isValidPassword, passwordsMismatch } from '../utils/validation.js'
 
@@ -132,9 +133,9 @@ async function submit() {
     router.push('/login?reset=1')
   } catch (e) {
     // Supabase AuthErrors carry an HTTP status, so friendlyError() would swap
-    // their specific copy ("Auth session missing!") for a generic status
-    // message. Surface the SDK message instead.
-    error.value = e?.message || 'Could not update password. The link may have expired.'
+    // their specific copy for a generic status message (commit 1d0f4aa).
+    // E-13: lib/authErrors.js keys on AuthError.code instead of SDK prose.
+    error.value = authErrorCopy(e, 'Could not update password. The link may have expired.')
   } finally {
     submitting.value = false
   }

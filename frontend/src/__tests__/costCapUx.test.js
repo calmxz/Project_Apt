@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { mount, flushPromises } from '@vue/test-utils'
 
-import { apiGet } from '@/services/apiClient.js'
+import { apiGet, _resetApiCache } from '@/services/apiClient.js'
 import { costBus } from '@/services/costBus.js'
 import { useSessionStore } from '@/stores/session.js'
 import { ERR_DAILY_COST_CAP_REACHED } from '@/lib/errorCodes.js'
@@ -18,6 +18,9 @@ describe('apiClient cost-warning bus', () => {
   let listener
   beforeEach(() => {
     setActivePinia(createPinia())
+    // F-18: apiClient's GET cache is module state -- without this the second
+    // GET /x is served from cache and never sees the new header.
+    _resetApiCache()
     fetchMock = vi.fn()
     globalThis.fetch = fetchMock
     listener = vi.fn()
@@ -156,6 +159,8 @@ vi.mock('@/services/uploadApi.js', () => ({
   uploadDocument: vi.fn().mockResolvedValue({ document_id: 1 }),
   validateFile: vi.fn(() => ({ ok: true })),
   getUploadStatus: vi.fn().mockResolvedValue({ id: 1, status: 'ready', error: null }),
+  // useReferencePoll (owned by SessionView) calls this at setup.
+  getSessionIngestion: vi.fn().mockResolvedValue({ status: null, documents: [] }),
   MAX_UPLOAD_BYTES: 25 * 1024 * 1024,
 }))
 

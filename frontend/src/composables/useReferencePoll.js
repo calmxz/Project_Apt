@@ -13,7 +13,9 @@ export const POLL_DELAYS_MS = [2000, 4000, 8000, 15000]
 
 // E-07: the old chip gave up after 90 fixed-1s attempts. Under backoff an
 // attempt count means nothing, so the ceiling is wall-clock. The cumulative
-// schedule (2, 6, 14, 29, 44, 59, 74, 89s) reaches it on the eighth poll.
+// schedule is 2, 6, 14, 29, 44, 59, 74, 89s; schedule() clamps the next delay
+// to a watcher's remaining time so the ceiling lands on 90s exactly instead of
+// overshooting to the next backoff step (104s).
 export const WATCH_CEILING_MS = 90000
 
 /**
@@ -63,14 +65,16 @@ export function useReferencePoll(sessionIdSource) {
     entry.resolve(outcome)
   }
 
+  // Map iteration tolerates deleting the entry currently being visited, so
+  // these loops read the live Map rather than a snapshot copy.
   function settleAll(outcome) {
-    for (const key of [...watched.keys()]) settle(key, outcome)
+    for (const key of watched.keys()) settle(key, outcome)
   }
 
   // Resolve every watcher whose document has reached a terminal state, or
   // whose wall-clock ceiling has passed with the document still pending.
   function settleFromDocuments() {
-    for (const [key, entry] of [...watched.entries()]) {
+    for (const [key, entry] of watched.entries()) {
       const doc = documents.value.find((d) => String(d?.id) === key)
       if (doc?.status === 'ready') settle(key, { status: 'ready' })
       else if (doc?.status === 'failed') settle(key, { status: 'failed', error: doc.error })
@@ -84,8 +88,14 @@ export function useReferencePoll(sessionIdSource) {
     // not settled, or while the last poll threw (transient outage -- the banner
     // shows "References unavailable" and this loop is what clears it).
     if (!(status.value === 'pending' || failed.value || watched.size > 0)) return
-    const delay = POLL_DELAYS_MS[Math.min(delayIndex, POLL_DELAYS_MS.length - 1)]
+    let delay = POLL_DELAYS_MS[Math.min(delayIndex, POLL_DELAYS_MS.length - 1)]
     delayIndex += 1
+    // Never sleep past a watcher's wall-clock ceiling: at the 15s cap the next
+    // step after 89s would be 104s, so the chip would sit on "Uploading..."
+    // 14s beyond the advertised 90s. Wake exactly on the earliest deadline.
+    for (const entry of watched.values()) {
+      delay = Math.min(delay, Math.max(0, entry.deadline - Date.now()))
+    }
     timer = setTimeout(() => {
       timer = null
       poll()
@@ -98,8 +108,9 @@ export function useReferencePoll(sessionIdSource) {
     const id = sessionId
     try {
       // fresh: true -- apiClient's 5s GET cache (F-18) would otherwise hand
-      // this poll its own previous response back.
-      const res = await getSessionIngestion(id, { fresh: true })
+      // this poll its own previous response back. silent: true -- the banner's
+      // failed row is the error surface, not a toast per failed attempt.
+      const res = await getSessionIngestion(id, { fresh: true, silent: true })
       if (stopped || gen !== generation) return
       status.value = res?.status ?? null
       documents.value = res?.documents ?? []
