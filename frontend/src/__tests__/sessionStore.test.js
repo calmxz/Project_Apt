@@ -370,22 +370,29 @@ describe('session store', () => {
     sessionsApi.getSessionLibrary.mockResolvedValueOnce(page)
     const s = useSessionStore()
     const out = await s.fetchLibrary({ status: 'all', limit: 20, offset: 0 })
-    expect(sessionsApi.getSessionLibrary).toHaveBeenCalledWith({
-      status: 'all',
-      limit: 20,
-      offset: 0,
-    })
+    // E-06: silent, because the library page owns its own failure copy and
+    // retry control. A toast on top of that would say the same thing twice.
+    expect(sessionsApi.getSessionLibrary).toHaveBeenCalledWith(
+      {
+        status: 'all',
+        limit: 20,
+        offset: 0,
+      },
+      { silent: true },
+    )
     expect(out).toEqual(page)
     expect(s.libraryLoading).toBe(false)
-    expect(s.libraryError).toBeNull()
   })
 
-  it('fetchLibrary records error and rethrows', async () => {
+  // E-06: the store no longer holds a libraryError ref -- it was rendered
+  // nowhere. The failure reaches the page by rethrow only.
+  it('fetchLibrary rethrows without recording any store error', async () => {
     sessionsApi.getSessionLibrary.mockRejectedValueOnce(new Error('boom'))
     const s = useSessionStore()
     await expect(s.fetchLibrary({})).rejects.toThrow('boom')
-    expect(s.libraryError).toBeTruthy()
     expect(s.libraryLoading).toBe(false)
+    expect(s.error).toBeNull()
+    expect('libraryError' in s).toBe(false)
   })
 
   // F-07: renameSession/setPinned are background sidebar actions -- a failure
@@ -579,6 +586,99 @@ describe('session store — streaming', () => {
     expect(s.streamingMessage).toBeNull()
     expect(s.streamState).toBe('idle')
     expect(s.messages.at(-1)).toMatchObject({ status: 'partial', content: 'draft' })
+  })
+
+  // F-16: an unbounded transcript grows for the life of the page. The cap is
+  // enforced on live append only, and the eviction must leave the
+  // load-earlier cursor (oldest retained SERVER id) intact.
+  describe('F-16 retained-history cap', () => {
+    const server = (n) => ({
+      role: n % 2 ? 'user' : 'assistant',
+      content: `m${n}`,
+      message_id: `m${n}`,
+      citations: [],
+      tool_calls: [],
+    })
+
+    it('evicts from the top and flags hasMoreMessages once past 200', () => {
+      const s = useSessionStore()
+      s.messages = Array.from({ length: 200 }, (_, i) => server(i + 1))
+      s.hasMoreMessages = false
+      s.streamingMessage = { role: 'assistant', content: 'new', tool_calls: [], citations: [] }
+      s.streamState = 'streaming'
+      s.finalizeMessage('m201')
+      expect(s.messages).toHaveLength(200)
+      expect(s.messages[0].message_id).toBe('m2')
+      expect(s.messages.at(-1)).toMatchObject({ message_id: 'm201', content: 'new' })
+      expect(s.hasMoreMessages).toBe(true)
+    })
+
+    it('does not evict at exactly 200', () => {
+      const s = useSessionStore()
+      s.messages = Array.from({ length: 199 }, (_, i) => server(i + 1))
+      s.hasMoreMessages = false
+      s.streamingMessage = { role: 'assistant', content: 'new', tool_calls: [], citations: [] }
+      s.finalizeMessage('m200')
+      expect(s.messages).toHaveLength(200)
+      expect(s.messages[0].message_id).toBe('m1')
+      expect(s.hasMoreMessages).toBe(false)
+    })
+
+    it('trims extra off the top so the oldest retained message carries a server id', () => {
+      const s = useSessionStore()
+      const seeded = Array.from({ length: 200 }, (_, i) => server(i + 1))
+      // A live-appended user bubble (no server id yet) sitting where the
+      // plain 200-wide window would start.
+      delete seeded[1].message_id
+      s.messages = seeded
+      s.streamingMessage = { role: 'assistant', content: 'new', tool_calls: [], citations: [] }
+      s.finalizeMessage('m201')
+      expect(s.messages).toHaveLength(199)
+      expect(s.messages[0].message_id).toBe('m3')
+      expect(s.hasMoreMessages).toBe(true)
+    })
+
+    it('pages back from the oldest retained id after an eviction, and the prepend is exempt', async () => {
+      const s = useSessionStore()
+      s.messages = Array.from({ length: 200 }, (_, i) => server(i + 1))
+      s.streamingMessage = { role: 'assistant', content: 'new', tool_calls: [], citations: [] }
+      s.finalizeMessage('m201')
+      expect(s.messages[0].message_id).toBe('m2')
+      s.currentSessionId = 's1'
+
+      sessionsApi.getSessionMessages.mockResolvedValueOnce({
+        items: Array.from({ length: 50 }, (_, i) => ({
+          id: `old${i}`,
+          role: 'user',
+          content: 'old',
+          citations: [],
+          created_at: '2026-01-01',
+        })),
+        has_more: true,
+      })
+      await s.loadEarlierMessages()
+      // The cursor is the oldest RETAINED server id, so the page the server
+      // returns is exactly the turns that were evicted -- no gap, no dupes.
+      expect(sessionsApi.getSessionMessages).toHaveBeenCalledWith('s1', { before: 'm2' })
+      // The manual prepend is deliberately not capped: the user just asked
+      // for that history.
+      expect(s.messages).toHaveLength(250)
+      expect(s.messages[0].message_id).toBe('old0')
+    })
+
+    it('uses the oldest retained SERVER id, not messages[0], as the cursor', async () => {
+      const s = useSessionStore()
+      s.currentSessionId = 's1'
+      s.hasMoreMessages = true
+      s.messages = [
+        { role: 'assistant', content: 'retained partial', status: 'error' },
+        { role: 'user', content: 'local', message_id: 'pending' },
+        server(7),
+      ]
+      sessionsApi.getSessionMessages.mockResolvedValueOnce({ items: [], has_more: false })
+      await s.loadEarlierMessages()
+      expect(sessionsApi.getSessionMessages).toHaveBeenCalledWith('s1', { before: 'm7' })
+    })
   })
 
   it('handleAbortError pushes streamed text as status=partial for max_iters_reached', () => {
@@ -866,6 +966,85 @@ describe('session store — streaming', () => {
     // F-14 follow-up: the streamed text must survive onto the transcript,
     // not just clear the cap banner state.
     expect(s.messages.at(-1)).toMatchObject({ status: 'partial', content: 'partial' })
+    // E-04: CapBanners already renders this failure, so the generic error
+    // banner must stay quiet rather than say the same thing twice.
+    expect(s.error).toBeNull()
+  })
+
+  // E-04: the non-cap arm of the same handler. Both stream loops route their
+  // SSE `error` event through it, so a bare code can no longer reach the
+  // banner verbatim (it used to render `data.message || data.code`).
+  it('sendMessageStreaming renders coded copy for a non-cap SSE error event', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 's1'
+    vi.spyOn(streamSvc, 'streamChat').mockImplementation(async ({ onEvent }) => {
+      onEvent({ event: 'assistant_delta', data: { text: 'half a thought' } })
+      onEvent({ event: 'error', data: { code: 'tool_failed' } })
+    })
+    await s.sendMessageStreaming({ text: 'x' })
+    expect(s.error).toMatch(/could not finish that step/i)
+    expect(s.error).not.toMatch(/tool_failed/)
+    expect(s.dailyCapInfo).toBeNull()
+    expect(s.costCapInfo).toBeNull()
+    expect(s.streamState).toBe('idle')
+    expect(s.streamingMessage).toBeNull()
+    // Not a PARTIAL_ABORT_CODE, so the retained text lands on 'error'.
+    expect(s.messages.at(-1)).toMatchObject({ status: 'error', content: 'half a thought' })
+  })
+
+  // E-04: the check-complete loop shares the same handler; asserting it here
+  // is what stops the two `case 'error'` blocks from drifting apart again.
+  it('completeCheck renders coded copy for a non-cap SSE error event', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 's1'
+    s.pendingCheck = { gap: 'g', total: 1, currentIndex: 1, viewIndex: 0, items: [] }
+    vi.spyOn(streamSvc, 'streamCheckComplete').mockImplementation(async ({ onEvent }) => {
+      onEvent({ event: 'assistant_delta', data: { text: 'half a thought' } })
+      onEvent({ event: 'error', data: { code: 'tool_failed' } })
+    })
+    await s.completeCheck()
+    expect(s.error).toMatch(/could not finish that step/i)
+    expect(s.streamState).toBe('idle')
+    expect(s.messages.at(-1)).toMatchObject({ status: 'error', content: 'half a thought' })
+  })
+
+  // E-03: a transport failure mid-stream used to discard text the learner had
+  // already watched stream, while the same text survived an SSE-reported
+  // failure. Both now go through _settleWithError.
+  it('sendMessageStreaming retains the streamed partial on a transport failure', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 's1'
+    vi.spyOn(streamSvc, 'streamChat').mockImplementation(async ({ onEvent }) => {
+      onEvent({ event: 'assistant_delta', data: { text: 'half a thought' } })
+      throw Object.assign(new Error('boom'), { status: 500 })
+    })
+    await expect(s.sendMessageStreaming({ text: 'q' })).rejects.toMatchObject({ status: 500 })
+    expect(s.messages.at(-1)).toMatchObject({ status: 'error', content: 'half a thought' })
+    expect(s.error).toBeTruthy()
+    expect(s.streamingMessage).toBeNull()
+    expect(s.streamState).toBe('idle')
+  })
+
+  it('sendMessageStreaming retains the streamed partial on a status-0 network drop', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 's1'
+    vi.spyOn(streamSvc, 'streamChat').mockImplementation(async ({ onEvent }) => {
+      onEvent({ event: 'assistant_delta', data: { text: 'half a thought' } })
+      throw new ApiErrorLike(0, { detail: 'network error' })
+    })
+    await expect(s.sendMessageStreaming({ text: 'q' })).rejects.toMatchObject({ status: 0 })
+    expect(s.messages.at(-1)).toMatchObject({ status: 'error', content: 'half a thought' })
+    expect(s.error).toMatch(/can't reach the server/i)
+  })
+
+  it('sendMessageStreaming appends nothing when the transport dies before any delta', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 's1'
+    vi.spyOn(streamSvc, 'streamChat').mockImplementation(async () => {
+      throw new ApiErrorLike(0, { detail: 'network error' })
+    })
+    await expect(s.sendMessageStreaming({ text: 'q' })).rejects.toMatchObject({ status: 0 })
+    expect(s.messages.some((m) => m.role === 'assistant')).toBe(false)
   })
 
   it('resets stream state when the stream ends without a terminal event', async () => {
