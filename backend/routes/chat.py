@@ -516,21 +516,31 @@ async def chat_stream(
                 if event.type in ("done", "error", "cancelled"):
                     break
         finally:
-            if not task.done():
-                task.cancel()
-                try:
-                    await task
-                except (asyncio.CancelledError, Exception):
-                    # Producer cancelled or errored during disconnect cleanup; suppress.
-                    pass
-            # B-05: hand back the per-turn reservation exactly once, AFTER the
-            # tutor task has finished or been cancelled -- it shares ctx.db, so
-            # the two must never touch the session concurrently. Shielded
-            # because on a real client disconnect the surrounding cancel scope
-            # re-raises CancelledError at every await (including the checkpoint
-            # inside run_in_threadpool), which would skip the release entirely
-            # and strand the reserve on the ledger until UTC midnight.
+            # B-05: drain the producer, then hand back the per-turn reservation
+            # exactly once -- both inside ONE shield.
+            #
+            # The shield is what makes the ordering real. On a client
+            # disconnect the surrounding cancel scope is cancelled
+            # level-triggered, so every await here raises CancelledError
+            # immediately: an unshielded `await task` returns at once (its
+            # CancelledError swallowed below) while the tutor's cancel arm is
+            # still mid-unwind -- it has suspension points around
+            # _persist_assistant_message / ctx.db.commit(). _release_reserve
+            # would then run db.rollback() + upsert + commit on that same
+            # Session concurrently, discarding the pending "cancelled"
+            # assistant message or raising on two-thread Session use and
+            # stranding the reserve. Shielding the release alone also keeps it
+            # from being skipped entirely (reserve stranded until UTC
+            # midnight), which is why it was shielded to begin with.
             with anyio.CancelScope(shield=True):
+                if not task.done():
+                    task.cancel()
+                    try:
+                        await task
+                    except (asyncio.CancelledError, Exception):
+                        # Producer cancelled or errored during disconnect
+                        # cleanup; suppress.
+                        pass
                 await run_in_threadpool(_release_reserve, db, user_id)
 
     return StreamingResponse(
