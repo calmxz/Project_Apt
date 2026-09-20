@@ -13,8 +13,11 @@ vi.mock('vue-router', () => ({
   RouterLink: { template: '<a><slot /></a>', props: ['to'] },
   RouterView: { template: '<div />' },
   useRouter: () => ({ push: routerPush }),
-  useRoute: () => ({ fullPath: '/', params: {} }),
+  useRoute: () => ({ fullPath: '/', params: {}, meta: routeMeta }),
 }))
+// D-15: showShell reads route.meta.sidebar, so the chrome-less branch needs a
+// mutable meta. An empty object keeps the shell branch (sidebar !== false).
+let routeMeta = {}
 vi.mock('primevue/toast', () => ({
   default: { template: '<div data-testid="toast" />' },
 }))
@@ -193,5 +196,43 @@ describe('P2: sidebar collapse is not a layout animation', () => {
     const rm = sidebarSrc.slice(sidebarSrc.lastIndexOf('@media (prefers-reduced-motion: reduce)'))
     expect(rm).toMatch(/sb-mode-fade|sidebar--expanded|sidebar--collapsed/)
     expect(rm).toMatch(/animation:\s*none/)
+  })
+})
+
+// D-15: the router's afterEach moves focus to #main-content. Both App branches
+// must carry that target, or chrome-less routes (login, legal, 404) silently
+// keep focus wherever the previous page left it.
+describe('D-15: both App branches carry a focusable #main-content', () => {
+  let wrapper
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    routeMeta = {}
+  })
+  afterEach(() => {
+    wrapper?.unmount()
+    wrapper = null
+    routeMeta = {}
+  })
+
+  it('the shell branch focus target is the main landmark', async () => {
+    wrapper = mount(App, { attachTo: document.body })
+    const el = document.getElementById('main-content')
+    expect(el).not.toBeNull()
+    expect(el.tagName).toBe('MAIN')
+    expect(el.getAttribute('tabindex')).toBe('-1')
+    el.focus()
+    expect(document.activeElement).toBe(el)
+  })
+
+  it('the chrome-less branch root is focusable too', async () => {
+    routeMeta = { sidebar: false }
+    wrapper = mount(App, { attachTo: document.body })
+    expect(wrapper.find('.shell').exists()).toBe(false)
+    const el = document.getElementById('main-content')
+    expect(el).not.toBeNull()
+    expect(el.getAttribute('tabindex')).toBe('-1')
+    el.focus()
+    expect(document.activeElement).toBe(el)
   })
 })

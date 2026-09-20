@@ -203,4 +203,24 @@ describe('router', () => {
     expect(document.activeElement).toBe(main)
     main.remove()
   })
+
+  // D-15: a missing focus target used to fail silently, which is how the
+  // chrome-less routes went unnoticed. Navigation must still succeed.
+  it('warns in dev and does not throw when #main-content is missing', async () => {
+    setAuth(true)
+    const user = useUserStore()
+    user.onboardingComplete = true
+    document.getElementById('main-content')?.remove()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    await router.push('/') // establish an initial route first
+    await expect(
+      router.push({ name: 'settings', params: { tab: 'profile' } }),
+    ).resolves.toBeUndefined()
+    expect(router.currentRoute.value.name).toBe('settings')
+    expect(warn).toHaveBeenCalledWith(
+      '[router] focus target #main-content not found for',
+      '/settings/profile',
+    )
+    warn.mockRestore()
+  })
 })

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { nextTick } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
@@ -8,6 +9,18 @@ import * as profileApi from '@/services/profileApi.js'
 const routerPushMock = vi.fn()
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: routerPushMock }),
+}))
+
+// E-08: the remove controls now ask first. Capture the confirm config so a
+// test can drive accept/reject deterministically instead of rendering the
+// PrimeVue dialog.
+let lastConfirm = null
+vi.mock('primevue/useconfirm', () => ({
+  useConfirm: () => ({
+    require: (cfg) => {
+      lastConfirm = cfg
+    },
+  }),
 }))
 
 const stubs = {
@@ -26,6 +39,7 @@ describe('SessionProfileView (per-session)', () => {
     setActivePinia(createPinia())
     vi.restoreAllMocks()
     routerPushMock.mockClear()
+    lastConfirm = null
   })
 
   it('renders mastered, gaps, focus, and learning events', async () => {
@@ -200,7 +214,37 @@ describe('SessionProfileView (per-session)', () => {
     })
     await wrapper.get('[data-testid="chip-remove"]').trigger('click')
     await flushPromises()
+    // E-08: the click only opens the confirm; nothing is deleted until accept.
+    expect(deleteProfileItem).not.toHaveBeenCalled()
+    expect(lastConfirm).toMatchObject({
+      header: 'Remove concept',
+      rejectLabel: 'Cancel',
+      acceptLabel: 'Remove',
+      rejectClass: 'p-button-text p-button-secondary',
+      acceptClass: 'p-button-danger confirm-delete-strong',
+    })
+    expect(lastConfirm.icon).toBeUndefined()
+    lastConfirm.accept()
+    await flushPromises()
     expect(deleteProfileItem).toHaveBeenCalledWith('s1', 'mastered_concepts', 'loops', 'e0')
+  })
+
+  it('a rejected remove confirm leaves the profile alone', async () => {
+    const deleteProfileItem = vi.spyOn(profileApi, 'deleteProfileItem').mockResolvedValue({
+      profile: { mastered_concepts: [], confirmed_gaps: [] },
+      etag: 'e1',
+    })
+    const wrapper = await mountProfile({
+      profile: {
+        mastered_concepts: [{ name: 'loops', evidence_type: 'tested', last_event_at: null }],
+        confirmed_gaps: [],
+      },
+      etag: 'e0',
+    })
+    await wrapper.get('[data-testid="chip-remove"]').trigger('click')
+    await flushPromises()
+    expect(deleteProfileItem).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="chip-remove"]').exists()).toBe(true)
   })
 
   it('sets the knowledge level and threads the etag', async () => {
@@ -216,6 +260,72 @@ describe('SessionProfileView (per-session)', () => {
     await advancedBtn.trigger('click')
     await flushPromises()
     expect(patchProfile).toHaveBeenCalledWith('s1', { knowledge_level: 'advanced' }, 'e0')
+  })
+
+  // E-08: a second write issued against the etag the first one is about to
+  // replace would lose to a 412. Mutating controls go disabled for the
+  // duration, so the re-entrant click never reaches the handler.
+  it('ignores a re-entrant write while one is in flight (E-08)', async () => {
+    let resolveFirst
+    const patchProfile = vi.spyOn(profileApi, 'patchProfile').mockImplementation(
+      () =>
+        new Promise((res) => {
+          resolveFirst = res
+        }),
+    )
+    const wrapper = await mountProfile({ etag: 'e0' })
+    const buttons = wrapper.get('[data-testid="level-select"]').findAll('button')
+    const advanced = buttons.find((b) => b.text() === 'advanced')
+    const intermediate = buttons.find((b) => b.text() === 'intermediate')
+
+    await advanced.trigger('click')
+    await flushPromises()
+    expect(patchProfile).toHaveBeenCalledTimes(1)
+    expect(intermediate.attributes('disabled')).toBeDefined()
+
+    await intermediate.trigger('click')
+    await nextTick()
+    expect(patchProfile).toHaveBeenCalledTimes(1)
+
+    resolveFirst({
+      profile: { mastered_concepts: [], confirmed_gaps: [], knowledge_level: 'advanced' },
+      etag: 'e1',
+    })
+    await flushPromises()
+    expect(advanced.attributes('disabled')).toBeUndefined()
+  })
+
+  // E-08: the add-item text field stays enabled (Enter is the fast path for
+  // typing several concepts), so writes are serialised rather than dropped --
+  // the queued write reads the etag the previous response produced.
+  it('threads the previous response etag into a queued write (E-08)', async () => {
+    const resolvers = []
+    const patchProfile = vi
+      .spyOn(profileApi, 'patchProfile')
+      .mockImplementation(() => new Promise((res) => resolvers.push(res)))
+    const wrapper = await mountProfile({ etag: 'e0' })
+    const input = wrapper.get('[data-testid="add-gap"]')
+
+    await input.setValue('alpha')
+    await input.trigger('keydown.enter')
+    await flushPromises()
+    expect(patchProfile).toHaveBeenCalledTimes(1)
+    expect(patchProfile).toHaveBeenNthCalledWith(1, 's1', { add_gap: 'alpha' }, 'e0')
+
+    await input.setValue('beta')
+    await input.trigger('keydown.enter')
+    await flushPromises()
+    // Still one call: the second write is queued behind the first.
+    expect(patchProfile).toHaveBeenCalledTimes(1)
+
+    resolvers[0]({ profile: { mastered_concepts: [], confirmed_gaps: [] }, etag: 'e1' })
+    await flushPromises()
+    expect(patchProfile).toHaveBeenCalledTimes(2)
+    expect(patchProfile).toHaveBeenNthCalledWith(2, 's1', { add_gap: 'beta' }, 'e1')
+
+    resolvers[1]({ profile: { mastered_concepts: [], confirmed_gaps: [] }, etag: 'e2' })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sprof-write-error"]').exists()).toBe(false)
   })
 
   it('on 412 refetches and shows a notice', async () => {
@@ -359,6 +469,10 @@ describe('SessionProfileView (per-session)', () => {
     )
 
     await wrapper.get('[data-testid="subtopic-remove"]').trigger('click')
+    await flushPromises()
+    expect(deleteProfileItem).not.toHaveBeenCalled()
+    expect(lastConfirm.header).toBe('Remove concept')
+    lastConfirm.accept()
     await flushPromises()
     expect(deleteProfileItem).toHaveBeenCalledWith('s1', 'subtopic_levels', 'chain rule', 'e1')
   })
