@@ -23,9 +23,15 @@ def _pg_bind(db_session, monkeypatch):
         "get_bind",
         lambda *a, **k: SimpleNamespace(dialect=SimpleNamespace(name="postgresql")),
     )
-    # SAVEPOINT wrapping is exercised against a real bind in integration; here
-    # the spy replaces execute entirely, so a no-op context is equivalent.
-    monkeypatch.setattr(db_session, "begin_nested", lambda *a, **k: nullcontext())
+    # The SETs run inside a Core-level SAVEPOINT (not Session.begin_nested,
+    # which would force an ORM flush). The spy replaces execute entirely, so
+    # a no-op context is equivalent here; the real savepoint is exercised
+    # against live Postgres.
+    monkeypatch.setattr(
+        db_session,
+        "connection",
+        lambda *a, **k: SimpleNamespace(begin_nested=lambda: nullcontext()),
+    )
 
 
 def _spy_execute(db_session, monkeypatch):

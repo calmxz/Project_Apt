@@ -105,13 +105,20 @@ def _apply_hnsw_tuning(db: Session) -> None:
     validation. The pair runs inside a SAVEPOINT: on a pgvector < 0.8 server
     `iterative_scan` is an unknown GUC and raises, which would otherwise abort
     the whole transaction and take the search down with it.
+
+    The savepoint is taken at Core level (`db.connection().begin_nested()`)
+    rather than via `Session.begin_nested()`, which unconditionally flushes
+    pending ORM state regardless of autoflush. This session runs with
+    autoflush=False by design, and retrieval is invoked mid-turn with
+    profile/event rows potentially pending; forcing a flush here would
+    surface an unrelated write error as a retrieval failure.
     """
     global _hnsw_tuning_warned
     if db.get_bind().dialect.name != "postgresql":
         return
     ef_search = int(settings.hnsw_ef_search)
     try:
-        with db.begin_nested():
+        with db.connection().begin_nested():
             db.execute(text(f"SET LOCAL hnsw.ef_search = {ef_search}"))
             db.execute(text("SET LOCAL hnsw.iterative_scan = strict_order"))
     except ProgrammingError:
