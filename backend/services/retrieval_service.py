@@ -17,10 +17,10 @@ from starlette.concurrency import run_in_threadpool
 from agent.types import ToolContext
 from config import settings
 from contracts import RetrieveChunksArgs, ToolResult
-from db.models import ChunkEmbedding, Session as SessionModel
+from db.models import ChunkEmbedding
+from db.models import Session as SessionModel
 from lib import llm_retry
 from services import cost_meter, documents_service, pgvector_store
-
 
 log = logging.getLogger(__name__)
 

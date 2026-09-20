@@ -17,7 +17,6 @@ actually read.
 
 import json
 
-
 _BODY_TOO_LARGE_CODE = "body_too_large"
 
 

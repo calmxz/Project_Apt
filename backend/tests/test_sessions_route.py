@@ -7,10 +7,10 @@ import pytest
 from agent.types import ToolContext
 from config import settings
 from contracts import AskCheckQuestionsArgs, TopicProfile
-from db.models import ChatMessage, Document, Session as SessionModel, UsageCounter, User
+from db.models import ChatMessage, Document, UsageCounter, User
+from db.models import Session as SessionModel
 from lib.error_codes import TOO_MANY_REQUESTS
 from services import check_question_service, summary_service, velocity_limit
-
 
 USER_ID = "u1"
 

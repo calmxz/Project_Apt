@@ -30,7 +30,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from contracts import AskCheckQuestionsArgs, ToolResult
-from db.models import ChatMessage, LearningEvent, Session as SessionModel
+from db.models import ChatMessage, LearningEvent
+from db.models import Session as SessionModel
 
 # Low-level pending_check state accessors live in a leaf module so
 # learning_event_service can use them without importing this module (which

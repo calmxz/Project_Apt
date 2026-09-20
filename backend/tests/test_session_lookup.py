@@ -3,7 +3,8 @@
 from datetime import datetime
 
 from contracts import ConceptEntry, TopicProfile
-from db.models import Session as SessionModel, User
+from db.models import Session as SessionModel
+from db.models import User
 
 USER_ID = "u1"
 OTHER_ID = "u2"

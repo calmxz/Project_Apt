@@ -14,7 +14,6 @@ import json
 from agent.excerpt import wrap_untrusted
 from contracts import TopicProfile
 
-
 _SUMMARY_TAG = "untrusted_summary"
 
 IMMUTABLE_RULES = """You are Crux's tutor AI.

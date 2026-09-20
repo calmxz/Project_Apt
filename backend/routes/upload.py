@@ -24,11 +24,11 @@ from sqlalchemy.orm import Session
 from config import settings
 from contracts import UploadResponse, UploadStatus
 from db.database import get_db
-from db.models import Document, Session as SessionModel
+from db.models import Document
+from db.models import Session as SessionModel
 from lib.error_codes import CHUNK_LIMIT_EXCEEDED, DAILY_CAP_REACHED, PAGE_LIMIT_EXCEEDED
 from services import cost_meter, object_store, rate_limit, velocity_limit
 from services.auth import current_user_id
-
 
 router = APIRouter(prefix="/api")
 

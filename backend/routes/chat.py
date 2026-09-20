@@ -19,7 +19,8 @@ from agent.types import ToolContext
 from config import settings
 from contracts import ChatRequest
 from db.database import SessionLocal, get_db
-from db.models import ChatMessage, Document, Session as SessionModel, User
+from db.models import ChatMessage, Document, User
+from db.models import Session as SessionModel
 from lib import keyword_index
 from lib.citations import chunks_to_citations
 from lib.error_codes import DAILY_CAP_REACHED, DAILY_COST_CAP_REACHED, GLOBAL_COST_CAP_REACHED
@@ -37,7 +38,6 @@ from services import (
 )
 from services.auth import accepted_terms_from_request, current_user_id
 from services.user_service import ensure_user
-
 
 router = APIRouter(prefix="/api")
 log = logging.getLogger(__name__)

@@ -5,9 +5,10 @@ from datetime import datetime, timezone
 
 import pytest
 
-from contracts import AskCheckQuestionsArgs, TopicProfile
 from agent.types import ToolContext
-from db.models import ChatMessage, LearningEvent, Session as SessionModel, User
+from contracts import AskCheckQuestionsArgs, TopicProfile
+from db.models import ChatMessage, LearningEvent, User
+from db.models import Session as SessionModel
 from services import check_question_service
 
 USER_ID = "u_detail_1"

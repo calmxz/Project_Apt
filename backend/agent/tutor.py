@@ -23,7 +23,6 @@ from db.models import ChatMessage
 from lib.citations import chunks_to_citations
 from services import check_question_service, cost_meter
 
-
 log = logging.getLogger(__name__)
 
 MAX_ITERS = 8

@@ -4,7 +4,8 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from db.database import Base
-from db.models import Session as SessionModel, User
+from db.models import Session as SessionModel
+from db.models import User
 
 
 def _make_session():

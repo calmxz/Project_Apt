@@ -10,9 +10,9 @@ from types import SimpleNamespace
 import pytest
 
 from contracts import TopicProfile
-from db.models import Document, Session as SessionModel, User
+from db.models import Document, User
+from db.models import Session as SessionModel
 from lib import chunking
-
 
 SESSION_ID = "sess_ing"
 USER_ID = "u_ing"
@@ -150,6 +150,7 @@ def test_embed_and_store_retries_once_on_transient_provider_error(
     """A single APIConnectionError from the provider must not fail the batch;
     the retry helper re-issues the call and the chunks are stored."""
     import litellm
+
     from config import settings
     from services import ingestion_service
 
@@ -476,6 +477,7 @@ def test_merge_failure_still_records_embedding_spend_after_rollback(
     each batch's own commit -- not via a post-rollback re-record -- even
     though the doc ends up 'failed' from a later merge_into_session error."""
     from decimal import Decimal
+
     from sqlalchemy.orm import sessionmaker
 
     from config import settings
@@ -720,9 +722,9 @@ def test_run_fails_over_cost_cap_and_keeps_prior_spend(db_session, monkeypatch, 
     (Finding 1 pattern -- the cost-cap branch also re-records
     embed_cost_holder like the broad except arm does)."""
     from decimal import Decimal
+
     from sqlalchemy.orm import sessionmaker
 
-    from config import settings
     from services import cost_meter as cm
     from services import ingestion_service
 
@@ -832,9 +834,11 @@ def test_legacy_bare_filename_fallback(db_session, insert_capture, mock_embed, m
 
 
 def test_run_txt_success(db_session, insert_capture, mock_embed, monkeypatch, tmp_path):
-    from contracts import TopicProfile
-    from db.models import Document, Session as SessionModel, User
     from sqlalchemy.orm import sessionmaker
+
+    from contracts import TopicProfile
+    from db.models import Document, User
+    from db.models import Session as SessionModel
     from services import ingestion_service
 
     db_session.add(User(id="u_txt"))
@@ -879,9 +883,11 @@ def test_run_logs_carry_document_and_session_ids(
     logging any message/document content (PII rule, logging_config.py)."""
     import logging
 
-    from contracts import TopicProfile
-    from db.models import Document, Session as SessionModel, User
     from sqlalchemy.orm import sessionmaker
+
+    from contracts import TopicProfile
+    from db.models import Document, User
+    from db.models import Session as SessionModel
     from services import ingestion_service
 
     db_session.add(User(id="u_log"))

@@ -14,8 +14,8 @@ from typing import Literal
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from config import settings
-from db.models import Document, Session as SessionModel
+from db.models import Document
+from db.models import Session as SessionModel
 from services import object_store, pgvector_store
 
 logger = logging.getLogger(__name__)

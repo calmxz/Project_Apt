@@ -8,8 +8,8 @@ import pytest
 from agent import tools
 from agent.types import ToolContext
 from contracts import TopicProfile
-from db.models import Session as SessionModel, User
-
+from db.models import Session as SessionModel
+from db.models import User
 
 SESSION_ID = "sess_dispatch_log"
 USER_ID = "u_dispatch_log"

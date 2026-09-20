@@ -6,11 +6,11 @@ import pytest
 
 from agent.types import ToolContext
 from contracts import AskCheckQuestionsArgs, ConceptEntry, TopicProfile
-from db.models import Session as SessionModel, User
+from db.models import Session as SessionModel
+from db.models import User
 from services import check_question_service as cq
 from services import learning_event_service, profile_service
 from services.profile_service import concept_names
-
 
 SESSION_ID = "sess_1"
 USER_ID = "u1"
@@ -138,10 +138,11 @@ def test_record_from_answer_incorrect_non_mastered_is_noop_on_profile(session_ro
 
 
 def test_record_from_answer_clear_pending_false_keeps_pending(session_row, db_session):
-    from services import check_question_service as cq
-    from contracts import AskCheckQuestionsArgs
-    from agent.types import ToolContext
     from datetime import datetime, timezone
+
+    from agent.types import ToolContext
+    from contracts import AskCheckQuestionsArgs
+    from services import check_question_service as cq
 
     ctx = ToolContext(db=db_session, session_id=session_row.id,
                       user_id=session_row.user_id,
@@ -158,10 +159,11 @@ def test_record_from_answer_clear_pending_false_keeps_pending(session_row, db_se
 
 
 def test_record_from_answer_defaults_still_clear(session_row, db_session):
-    from services import check_question_service as cq
-    from contracts import AskCheckQuestionsArgs
-    from agent.types import ToolContext
     from datetime import datetime, timezone
+
+    from agent.types import ToolContext
+    from contracts import AskCheckQuestionsArgs
+    from services import check_question_service as cq
 
     ctx = ToolContext(db=db_session, session_id=session_row.id,
                       user_id=session_row.user_id,
@@ -191,7 +193,8 @@ def session_id(session_row):
 
 
 def test_record_from_answer_skips_mastery_when_disabled(db, session_id):
-    from services import learning_event_service as les, profile_service
+    from services import learning_event_service as les
+    from services import profile_service
     les.record_from_answer(db, session_id, gap="warmup", question="q",
                            correct=True, clear_pending=False,
                            apply_profile_effects=False)
@@ -200,7 +203,8 @@ def test_record_from_answer_skips_mastery_when_disabled(db, session_id):
 
 
 def test_record_from_answer_applies_mastery_by_default(db, session_id):
-    from services import learning_event_service as les, profile_service
+    from services import learning_event_service as les
+    from services import profile_service
     les.record_from_answer(db, session_id, gap="loops", question="q",
                            correct=True, clear_pending=False)
     prof = profile_service.load_profile(db, session_id)

@@ -14,14 +14,14 @@ from dataclasses import dataclass
 from typing import Sequence
 from uuid import uuid4
 
-from sqlalchemy import delete as _delete, select, text
+from sqlalchemy import delete as _delete
+from sqlalchemy import select, text
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
 from config import settings
 from db.models import ChunkEmbedding, Document
 from services.sql_dialect import dialect_insert
-
 
 log = logging.getLogger(__name__)
 

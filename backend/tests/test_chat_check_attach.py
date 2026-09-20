@@ -23,11 +23,11 @@ from agent import tutor
 from agent.stream_events import StreamEvent
 from agent.types import ToolContext
 from config import settings
-from contracts import AskCheckQuestionsArgs, TopicProfile, ToolCallRecord
-from db.models import ChatMessage, Session as SessionModel, User
+from contracts import AskCheckQuestionsArgs, ToolCallRecord, TopicProfile
+from db.models import ChatMessage, User
+from db.models import Session as SessionModel
 from services import check_question_service
 from services.cost_meter import CapStatus
-
 
 # ---------------------------------------------------------------------------
 # Shared constants

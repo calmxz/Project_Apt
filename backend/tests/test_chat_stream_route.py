@@ -33,12 +33,12 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy import delete, func, select
 
-from contracts import ChatRequest, TopicProfile
-from db.models import Session as SessionModel, UsageCounter, User
 from agent.stream_events import StreamEvent
+from contracts import ChatRequest, TopicProfile
+from db.models import Session as SessionModel
+from db.models import UsageCounter, User
 from routes.chat import _prepare_turn
 from services import rate_limit, summary_service
-
 
 SESSION_ID = "stream-s1"
 USER_ID = "stream-u1"

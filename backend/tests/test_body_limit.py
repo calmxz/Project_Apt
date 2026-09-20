@@ -18,9 +18,9 @@ import pytest
 
 from config import settings
 from contracts import TopicProfile
-from db.models import ChatMessage, Session as SessionModel, User
+from db.models import ChatMessage, User
+from db.models import Session as SessionModel
 from lib.body_limit import BodySizeLimitMiddleware
-
 
 MAX = settings.max_json_body_bytes
 

@@ -4,9 +4,9 @@ import logging
 import time
 import uuid
 from datetime import datetime, timezone
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
-from typing import Literal
 from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
@@ -41,7 +41,8 @@ from contracts import (
     TopicProfile,
 )
 from db.database import get_db
-from db.models import ChatMessage, Session as SessionModel
+from db.models import ChatMessage
+from db.models import Session as SessionModel
 from services import (
     check_question_service,
     cost_meter,
@@ -54,7 +55,8 @@ from services import (
     velocity_limit,
 )
 from services.auth import accepted_terms_from_request, current_user_id
-from services.session_enrichment import aware_utc as _aware_utc, compute_enrichment
+from services.session_enrichment import aware_utc as _aware_utc
+from services.session_enrichment import compute_enrichment
 from services.user_service import ensure_user
 
 NO_EXCHANGES_TEXT = (

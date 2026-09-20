@@ -7,8 +7,8 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import event as _sa_event
 
 from contracts import TopicProfile
-from db.models import ChatMessage, LearningEvent, Session as SessionModel, User
-
+from db.models import ChatMessage, LearningEvent, User
+from db.models import Session as SessionModel
 
 USER_ID = "u_agg"
 

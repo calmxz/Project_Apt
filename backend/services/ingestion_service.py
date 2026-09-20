@@ -67,7 +67,6 @@ from db.models import Session as SessionModel
 from lib import chunking, keyword_index, llm_retry
 from services import cost_meter, object_store, pgvector_store
 
-
 log = logging.getLogger(__name__)
 
 EMBED_BATCH = 100

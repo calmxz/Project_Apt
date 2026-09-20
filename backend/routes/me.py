@@ -10,7 +10,6 @@ from db.models import User
 from services.auth import accepted_terms_from_request, current_user_id
 from services.user_service import ensure_user
 
-
 router = APIRouter(prefix="/api")
 
 

@@ -3,7 +3,8 @@
 import importlib.util
 from pathlib import Path
 
-from db.models import Session as SessionModel, User
+from db.models import Session as SessionModel
+from db.models import User
 
 
 def _load_migration():

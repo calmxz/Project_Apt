@@ -20,7 +20,8 @@ import pytest
 from sqlalchemy import event as _sa_event
 
 from contracts import ChatRequest, TopicProfile
-from db.models import LearningEvent, Session as SessionModel, User
+from db.models import LearningEvent, User
+from db.models import Session as SessionModel
 from routes.chat import _prepare_turn
 
 # Captured at module-import time (before the autouse fixture below ever runs)

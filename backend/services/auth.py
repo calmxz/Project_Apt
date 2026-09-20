@@ -14,11 +14,10 @@ import time
 from typing import Any
 
 import jwt
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import HTTPException, Request, status
 from jwt import PyJWKClient
 
 from config import settings
-
 
 _JWKS_CACHE: dict[str, Any] = {"client": None, "fetched_at": 0.0}
 _JWKS_TTL_SECONDS = 60 * 60  # refresh hourly

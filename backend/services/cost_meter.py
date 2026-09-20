@@ -22,7 +22,6 @@ from db.models import DailyCostLedger, LlmCallLog
 from lib.error_codes import DAILY_COST_CAP_REACHED, GLOBAL_COST_CAP_REACHED
 from services.sql_dialect import dialect_insert
 
-
 log = logging.getLogger(__name__)
 
 _ZERO = Decimal("0.0000")

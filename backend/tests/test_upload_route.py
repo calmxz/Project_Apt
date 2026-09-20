@@ -9,10 +9,10 @@ from fastapi import HTTPException
 
 from config import settings
 from contracts import TopicProfile
-from db.models import Document, Session as SessionModel, User, UsageCounter
+from db.models import Document, UsageCounter, User
+from db.models import Session as SessionModel
 from routes.upload import _read_bounded
 from services import cost_meter
-
 
 SESSION_ID = "sess_up"
 USER_ID = "u_up"

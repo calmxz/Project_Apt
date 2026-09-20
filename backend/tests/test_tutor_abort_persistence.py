@@ -7,7 +7,8 @@ from sqlalchemy import select
 
 from agent import tutor
 from agent.types import ToolContext
-from db.models import ChatMessage, Session as SessionModel
+from db.models import ChatMessage
+from db.models import Session as SessionModel
 
 
 def _mk_session(db):

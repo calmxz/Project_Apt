@@ -6,10 +6,10 @@ from sqlalchemy import select
 
 from config import settings
 from contracts import TopicProfile
-from db.models import ChatMessage, Session as SessionModel, User
+from db.models import ChatMessage, User
+from db.models import Session as SessionModel
 from lib.error_codes import DAILY_CAP_REACHED
 from routes.chat import _build_prompt_state
-
 
 SESSION_ID = "s1"
 USER_ID = "u1"

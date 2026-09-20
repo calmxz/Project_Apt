@@ -6,10 +6,10 @@ import pytest
 
 from agent.types import ToolContext
 from contracts import AskCheckQuestionsArgs, TopicProfile
-from db.models import Session as SessionModel, User
+from db.models import Session as SessionModel
+from db.models import User
 from services import check_question_service, diagnostic_service, profile_service
 from services.diagnostic_service import level_for_score
-
 
 # Default auth identity from conftest's _fake_current_user_id when no
 # Authorization header (and no user_id in the request body) is sent.

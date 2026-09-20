@@ -15,7 +15,6 @@ import logging
 from config import settings
 from contracts import Citation
 
-
 log = logging.getLogger(__name__)
 
 

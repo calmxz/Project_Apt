@@ -3,11 +3,11 @@ from pydantic import ValidationError
 
 from contracts import (
     AskCheckQuestionsArgs,
+    ChatRequest,
     CheckAnswerRequest,
     CheckAnswerResponse,
     CheckSkipRequest,
     CheckSkipResponse,
-    ChatRequest,
     Citation,
     HealthResponse,
     PendingCheck,
@@ -334,6 +334,7 @@ def test_concept_entry_defaults():
 def test_concept_entry_rejects_inferred():
     import pytest
     from pydantic import ValidationError
+
     from contracts import ConceptEntry
 
     with pytest.raises(ValidationError):
