@@ -42,7 +42,9 @@ def _spy_execute(db_session, monkeypatch):
             return []
 
     def spy(stmt, *args, **kwargs):
-        calls.append(stmt)
+        # Statements executed with bind parameters are recorded as a
+        # (stmt, params) pair so tests can assert the value never became SQL.
+        calls.append((stmt, args[0]) if args else stmt)
         return EmptyResult()
 
     monkeypatch.setattr(db_session, "execute", spy)
@@ -135,9 +137,9 @@ def test_query_chunks_sets_hnsw_params_before_select_on_postgres(
     pgvector_store.query_chunks(db_session, "s1", [0.0] * 3, k=5)
 
     assert len(calls) == 3
-    assert str(calls[0]) == (
-        f"SET LOCAL hnsw.ef_search = {int(settings.hnsw_ef_search)}"
-    )
+    stmt, params = calls[0]
+    assert str(stmt) == "SELECT set_config('hnsw.ef_search', :v, true)"
+    assert params == {"v": str(int(settings.hnsw_ef_search))}
     assert str(calls[1]) == "SET LOCAL hnsw.iterative_scan = strict_order"
     assert isinstance(calls[2], Select)
 
@@ -153,9 +155,9 @@ def test_query_chunks_issues_no_set_on_sqlite(db_session, monkeypatch):
 
 
 def test_query_chunks_rejects_non_int_ef_search(db_session, monkeypatch):
-    """SET cannot take bind parameters, so ef_search is interpolated. It must
-    go through int() so a mis-set value raises rather than reaching the
-    server as SQL text."""
+    """ef_search is passed as a set_config bind parameter, never as SQL text,
+    but it must still go through int() so a mis-set value raises here rather
+    than reaching the server as a bad GUC value."""
     _pg_bind(db_session, monkeypatch)
     _spy_execute(db_session, monkeypatch)
     monkeypatch.setattr(

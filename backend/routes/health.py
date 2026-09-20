@@ -38,12 +38,17 @@ def _probe(db: Session) -> None:
     running against a Session that get_db was about to close, and every
     abandoned thread held an anyio limiter token plus a pool slot. Now the
     connect is capped by psycopg's connect_timeout (db/database.py) and the
-    query by SET LOCAL statement_timeout, issued in the same transaction.
+    query by a transaction-local statement_timeout, issued in the same
+    transaction.
     """
     if db.get_bind().dialect.name == "postgresql":
-        # SET LOCAL takes no bind parameters, hence the interpolated int.
+        # set_config(name, value, is_local=true) is SET LOCAL with bind
+        # parameters: no SQL text is ever built from a value.
         timeout_ms = int(settings.readiness_timeout_s * 1000)
-        db.execute(text(f"SET LOCAL statement_timeout = {timeout_ms}"))
+        db.execute(
+            text("SELECT set_config('statement_timeout', :v, true)"),
+            {"v": str(timeout_ms)},
+        )
     db.execute(select(1)).scalar_one()
 
 

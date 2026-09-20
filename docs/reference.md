@@ -56,8 +56,10 @@ LOCAL hnsw.iterative_scan = strict_order` (pgvector 0.8+): the scan re-enters th
 graph until k rows survive the filter, preserving exact distance order
 (`relaxed_order` would return rows slightly out of order and nothing downstream
 tolerates that). Both are transaction-scoped, so they run immediately before the
-select in the same transaction; `ef_search` is interpolated as a validated int
-because SET cannot take bind parameters. The pair runs inside a Core-level
+select in the same transaction; because SET cannot take bind parameters, the
+`ef_search` value goes through `set_config(name, value, is_local=true)` (bind-safe
+SET LOCAL) after int() validation. Semgrep's `avoid-sqlalchemy-text` rule blocks any
+f-string inside `text()`, so use `set_config` for every value-bearing GUC. The pair runs inside a Core-level
 SAVEPOINT so an older pgvector that rejects the GUC does not abort the search.
 
 `chunk_embeddings.doc_ready` was deliberately NOT denormalised: the join to

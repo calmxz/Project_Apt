@@ -47,8 +47,9 @@ class _FakeSession:
     def get_bind(self):
         return self._bind
 
-    def execute(self, stmt):
+    def execute(self, stmt, params=None):
         self.statements.append(str(stmt))
+        self.params = getattr(self, "params", []) + [params]
         return SimpleNamespace(scalar_one=lambda: 1)
 
 
@@ -66,7 +67,10 @@ def test_probe_bounds_the_statement_on_postgresql(monkeypatch):
 
     health_route._probe(db)
 
-    assert db.statements[0] == "SET LOCAL statement_timeout = 2000"
+    # set_config(..., true) is SET LOCAL with bind parameters (semgrep
+    # avoid-sqlalchemy-text): the value never becomes SQL text.
+    assert db.statements[0] == "SELECT set_config('statement_timeout', :v, true)"
+    assert db.params[0] == {"v": "2000"}
     assert "SELECT 1" in db.statements[1]
 
 

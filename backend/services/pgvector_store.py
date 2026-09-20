@@ -100,8 +100,9 @@ def _apply_hnsw_tuning(db: Session) -> None:
     return rows slightly out of order).
 
     Both are `SET LOCAL`, i.e. transaction-scoped, so they must be issued in
-    the same transaction as the search, immediately before it. `ef_search` is
-    interpolated because SET does not accept bind parameters; int() is the
+    the same transaction as the search, immediately before it. SET cannot take
+    bind parameters, so `ef_search` goes through `set_config(name, value,
+    is_local=true)` (the bind-safe equivalent of SET LOCAL); int() is the
     validation. The pair runs inside a SAVEPOINT: on a pgvector < 0.8 server
     `iterative_scan` is an unknown GUC and raises, which would otherwise abort
     the whole transaction and take the search down with it.
@@ -119,7 +120,10 @@ def _apply_hnsw_tuning(db: Session) -> None:
     ef_search = int(settings.hnsw_ef_search)
     try:
         with db.connection().begin_nested():
-            db.execute(text(f"SET LOCAL hnsw.ef_search = {ef_search}"))
+            db.execute(
+                text("SELECT set_config('hnsw.ef_search', :v, true)"),
+                {"v": str(ef_search)},
+            )
             db.execute(text("SET LOCAL hnsw.iterative_scan = strict_order"))
     except ProgrammingError:
         if not _hnsw_tuning_warned:
