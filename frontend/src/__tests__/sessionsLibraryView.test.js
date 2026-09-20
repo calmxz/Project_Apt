@@ -141,6 +141,24 @@ describe('SessionsLibraryView', () => {
     expect(wrapper.get('[data-testid="library-error"]').exists()).toBe(true)
   })
 
+  it('E-06: a first-load failure offers Retry, which refetches from offset 0', async () => {
+    sessionsApi.getSessionLibrary
+      .mockRejectedValueOnce(new Error('nope'))
+      .mockResolvedValueOnce(page([item('a')]))
+    const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="library-error"]').exists()).toBe(true)
+    await wrapper.get('[data-testid="library-error-retry"]').trigger('click')
+    await flushPromises()
+    expect(sessionsApi.getSessionLibrary).toHaveBeenCalledTimes(2)
+    expect(sessionsApi.getSessionLibrary).toHaveBeenLastCalledWith(
+      expect.objectContaining({ offset: 0 }),
+      { silent: true },
+    )
+    expect(wrapper.find('[data-testid="library-error"]').exists()).toBe(false)
+    expect(wrapper.findAll('[data-testid^="library-card-"]')).toHaveLength(1)
+  })
+
   it('the card links to the session route', async () => {
     sessionsApi.getSessionLibrary.mockResolvedValue(page([item('a')]))
     const wrapper = mount(SessionsLibraryView, { global: { stubs } })
