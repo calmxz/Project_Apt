@@ -14,6 +14,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    func,
     text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -30,7 +31,13 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    # C-16: server_default so a row inserted outside the ORM (raw SQL, a
+    # restore, a future bulk import) still gets a timestamp, and NOT NULL so
+    # "when was this created" is never unanswerable. The Python-side default
+    # stays: it is what writes a tz-aware UTC value on every ORM insert.
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), default=_utcnow
+    )
     accepted_terms_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, default=None
     )
@@ -71,7 +78,10 @@ class Session(Base):
     kw_index_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
     pending_check_json: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     quiz_cooldown_json: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    # C-16: see User.created_at.
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), default=_utcnow
+    )
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     pinned: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false", default=False
@@ -98,6 +108,14 @@ class ChatMessage(Base):
             "status IN ('complete', 'cancelled', 'error', 'partial')",
             name="chat_messages_status_check",
         ),
+        # C-15: the only writers are routes/chat.py (role='user') and
+        # agent/tutor.py (role='assistant', including the partial-on-abort
+        # path). System and tool messages are assembled in memory for the LLM
+        # call and never persisted, so anything else in this column is a bug.
+        CheckConstraint(
+            "role IN ('user', 'assistant')",
+            name="chat_messages_role_check",
+        ),
         Index("ix_chat_messages_session_created", "session_id", "created_at"),
         # F-09: history loads order by id DESC within a session
         # (routes/sessions.py), which the (session_id, created_at) index
@@ -111,7 +129,10 @@ class ChatMessage(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     tool_calls_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     citations_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    # C-16: see User.created_at.
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), default=_utcnow
+    )
     status: Mapped[str] = mapped_column(String(16), nullable=False, server_default="complete")
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     check_batch_json: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
@@ -147,7 +168,10 @@ class LearningEvent(Base):
     gap_tested: Mapped[str] = mapped_column(String, nullable=False)
     question: Mapped[str] = mapped_column(Text, nullable=False)
     correct: Mapped[bool] = mapped_column(nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    # C-16: see User.created_at.
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), default=_utcnow
+    )
     selected_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
     correct_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
     options_json: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -159,6 +183,14 @@ class LearningEvent(Base):
 class Document(Base):
     __tablename__ = "documents"
     __table_args__ = (
+        # C-15: the ingestion state machine is pending -> processing ->
+        # ready|failed (worker.py, services/ingestion_service.py,
+        # routes/upload.py), and the DocumentStatus contract declares exactly
+        # these four. Legacy rows may still hold NULL, which a CHECK admits.
+        CheckConstraint(
+            "status IN ('pending', 'processing', 'ready', 'failed')",
+            name="documents_status_check",
+        ),
         Index("ix_documents_status_id", "status", "id"),
         # C-08: re-uploading identical bytes into the same session must return
         # the existing row instead of creating a duplicate. Partial so legacy
@@ -186,7 +218,10 @@ class Document(Base):
     claimed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+    # C-16: see User.created_at.
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), default=_utcnow
+    )
 
     session: Mapped["Session"] = relationship("Session", back_populates="documents")
 
