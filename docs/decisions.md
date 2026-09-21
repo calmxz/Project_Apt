@@ -3,6 +3,45 @@
 Durable "why": decisions, findings, tradeoffs. Newest first. Technical
 how-it-works lookup belongs in `docs/reference.md` instead.
 
+## 2026-09-21 - Issue #331: backend ETag (F-18 backend half)
+
+- **Middleware, not per-route logic.** One allowlist of path prefixes
+  (`/api/sessions`, `/api/profile`, `/api/review/queue`, `/api/usage/summary`)
+  covers every hot GET with zero route churn -- no decorator, no response-model
+  change, nothing for a new sibling route under those prefixes to remember. It
+  also makes the SSE exemption structural rather than a convention: the layer
+  filters on GET/HEAD, so the streaming POSTs (`/api/chat/stream`,
+  `/api/sessions/{id}/check/complete`) are forwarded message-by-message and
+  cannot be buffered even by mistake.
+- **Pure ASGI, not `BaseHTTPMiddleware`.** Same reason as `lib/request_id.py`,
+  `lib/body_limit.py` and `lib/error_handlers.py`: `BaseHTTPMiddleware` wraps
+  every response in an anyio stream and would break SSE for the whole app.
+- **Strong sha256 of the body, not `updated_at`.** Several hot GETs aggregate
+  rows the caller never names -- session detail folds in the profile, the
+  message page, the pending check and ingestion status; the usage summary folds
+  14 days of ledger plus top sessions. A max-`updated_at` tag would need
+  per-model plumbing on every one of them and would still miss a derived field.
+  Hashing the serialised body is exact by construction and costs one sha256
+  over an already-materialised payload. The tag is strong (no `W/`) because it
+  is byte-exact; comparison on the request side is weak, per RFC 9110.
+- **`cache-control: no-cache` on every tagged 200.** "Revalidate before reuse",
+  not "do not store". Without a freshness header the browser heuristically
+  reuses an ETag-bearing body without asking, and the `If-None-Match` this
+  whole layer exists to answer never gets sent. A route that already set its
+  own `Cache-Control` is left alone.
+- **Registered between `BodySizeLimit` and `UnhandledError`.** That slot puts
+  it inside `UnhandledErrorMiddleware` (a bug in the new layer surfaces as a
+  coded 500, not a bare crash) and inside `CORSMiddleware` (a 304 carries
+  `access-control-allow-origin`, so the browser can read it). `If-None-Match`
+  and `ETag` had to be added to `allow_headers` / `expose_headers` -- neither
+  is CORS-safelisted.
+- **Not the body `etag` on the profile.** `profile_service.profile_etag` stays
+  a body field used for `If-Match` optimistic concurrency on profile writes.
+  Deliberately not unified with the HTTP header: they have different lifetimes
+  (the body tag covers the profile only, the header covers the whole response)
+  and conflating them would make a profile write's 412 depend on unrelated
+  fields like `recent_learning_events`.
+
 ## 2026-09-21 - QA re-triage Wave 4 (issue #326): triage and deviations
 
 - **A-01**: access tokens are stateless JWTs with no revocation primitive

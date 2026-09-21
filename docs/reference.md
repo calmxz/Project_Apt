@@ -185,7 +185,7 @@ chip is driven by `watch(documentId, filename)` outcomes; `WATCH_CEILING_MS =
 so "still processing" fires at exactly 90 s. Polls use `{ fresh: true, silent:
 true }`.
 
-### apiClient GET retry and cache (F-18, frontend half)
+### apiClient GET retry and cache (F-18, client side -- server half below)
 
 `request()` retries **GET only**: 3 attempts, 300 ms / 900 ms with +/-20%
 jitter, on `TypeError` (network failure) and 502/503/504. A `TimeoutError` is
@@ -216,6 +216,44 @@ carries ingestion and pending-check state, and the profile body carries the
 `If-Match` ETag).
 `_resetApiCache()` is the test hook; call it in `beforeEach` of any test that
 mocks `fetch` for GETs.
+
+Cache entries also keep the response `ETag` (`{ at, value, token, etag }`). A
+read against an expired entry -- or any read with `fresh: true`, even inside
+the TTL -- under the same token sends `If-None-Match` when an `etag` was
+stored, instead of dropping the entry outright. A `304` response returns the
+cached body and refreshes the TTL, unless an invalidation landed while the
+revalidation was in flight, in which case the cached body is still returned
+but the TTL is left alone (the entry was already dropped by the
+invalidation). Writes still drop the entry on any non-GET, so the next GET is
+always unconditional. Entries under a different token are never used for
+conditional requests -- they are dropped on sight, same as before.
+
+### HTTP ETag on hot GETs (F-18, backend half, #331)
+
+`backend/lib/etag.py` -- `ETagMiddleware`, pure ASGI (never
+`BaseHTTPMiddleware`, which would buffer SSE). It acts only on **GET/HEAD**
+under four segment-wise prefixes: `/api/sessions`, `/api/profile`,
+`/api/review/queue`, `/api/usage/summary` (`/api/sessionsx` does not match).
+Everything else -- every POST, including the two SSE routes under
+`/api/sessions` -- gets `send` handed through untouched.
+A matching 200 is buffered, hashed, and stamped `ETag: "<sha256 hex>"` (strong,
+quoted) plus `cache-control: no-cache`, which means "revalidate", not "do not
+store": without it a body carrying an ETag and no freshness headers is reused
+heuristically and the client never sends the conditional request. A route that
+set its own `Cache-Control` keeps it. `If-None-Match` is parsed per RFC 9110:
+repeated headers and comma-separated lists both work, a `W/` prefix is stripped
+before comparing, `*` matches anything. On a hit the reply is **304** with the
+same `etag`/`cache-control` and no `content-length`/`content-type`; non-200
+responses (404s included) are forwarded untagged.
+CORS: `If-None-Match` is in `allow_headers` and `ETag` in `expose_headers` --
+neither is safelisted, so the cross-origin dev setup (5173 -> 8000) would
+otherwise never see the header.
+Registered between `BodySizeLimitMiddleware` and `UnhandledErrorMiddleware`, so
+it sits **inside** both `UnhandledErrorMiddleware` (a bug here answers a coded
+500) and `CORSMiddleware` (a 304 carries `access-control-allow-origin`).
+Not the same thing as the `etag` field in the **body** of `GET
+/api/profile/{id}` (`profile_service.profile_etag`): that is an `If-Match`
+optimistic-concurrency token for profile writes.
 
 ### Auth error copy (E-13)
 
