@@ -14,7 +14,7 @@
         type="button"
         class="composer-attach hit-44"
         data-testid="session-upload-btn"
-        :disabled="disabled || uploading || locked"
+        :disabled="disabled || uploading"
         :aria-label="uploading ? 'Uploading file' : 'Attach a reference file'"
         :title="uploading ? 'Uploading...' : 'Attach a reference file (PDF, PPTX, TXT, MD)'"
         @click="openFilePicker"
@@ -61,7 +61,7 @@
         data-testid="session-input"
         class="composer-input"
         rows="1"
-        :placeholder="placeholder"
+        placeholder="Ask anything."
         :disabled="disabled"
         :maxlength="MAX_DRAFT_LEN"
         aria-label="Message the tutor"
@@ -127,17 +127,6 @@
           <rect x="5" y="5" width="10" height="10" />
         </svg>
       </button>
-
-      <button
-        v-if="locked"
-        type="button"
-        class="composer-skip"
-        data-testid="composer-skip"
-        aria-label="Skip this question"
-        @click="emit('skip')"
-      >
-        Skip
-      </button>
     </div>
 
     <div class="composer-hints" :class="{ 'is-near-limit': nearCharLimit }">
@@ -186,12 +175,9 @@ const props = defineProps({
   // id(s) of an element explaining why the composer is disabled (e.g. the active
   // cap banner). Wired to aria-describedby so SR users hear the reason on focus.
   describedby: { type: String, default: null },
-  // When true, a check-question is active: show answer placeholder + Skip button,
-  // disable attach.
-  locked: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['update:modelValue', 'send', 'stop', 'attach', 'skip'])
+const emit = defineEmits(['update:modelValue', 'send', 'stop', 'attach'])
 
 const composerEl = ref(null)
 const fileInputEl = ref(null)
@@ -222,10 +208,6 @@ const limitAnnouncement = computed(() => {
 // A draft worth sending arms the send control: the drawn arrow sits on a
 // filled blue square instead of on the page.
 const sendArmed = computed(() => !props.disabled && Boolean(props.modelValue.trim()))
-
-const placeholder = computed(() =>
-  props.locked ? 'Pick an answer above, or Skip...' : 'Ask anything.',
-)
 
 function autoResize() {
   const inner = composerEl.value
@@ -480,27 +462,6 @@ defineExpose({ focus })
 .composer-hints.is-near-limit .composer-count {
   color: var(--ink-marker-text);
   font-weight: 700;
-}
-
-.composer-skip {
-  grid-column: 3;
-  align-self: end;
-  background: transparent;
-  border: 0;
-  padding: 0 0.5rem;
-  height: 28px;
-  font-family: var(--font-sans);
-  font-size: var(--fs-caption);
-  font-weight: 700;
-  color: var(--ink-learner);
-  cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.composer-skip:focus-visible {
-  outline: 2px solid var(--color-accent-ring);
-  outline-offset: 2px;
 }
 
 /* .spin (base.css) does the rotation; the arc is a whole <svg> so it turns

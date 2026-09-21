@@ -241,3 +241,28 @@ describe('CheckQuestion accessibility (D-01)', () => {
     expect(wrapper.emitted('answer')).toBeUndefined()
   })
 })
+
+// E-17: `answered` only flips once the POST returns, so the in-flight window
+// accepted a second click that the store then dropped in silence.
+describe('CheckQuestion answering window (E-17)', () => {
+  it('marks the options aria-disabled and the group aria-busy while answering', () => {
+    const w = mount(CheckQuestion, { props: { check: batch(), answering: true } })
+    expect(w.find('.check-options').attributes('aria-busy')).toBe('true')
+    const opt = w.find('[data-testid="check-option"]')
+    expect(opt.attributes('aria-disabled')).toBe('true')
+    // D-01 stands: still a real, focusable button.
+    expect(opt.attributes('disabled')).toBeUndefined()
+  })
+
+  it('does not emit answer from a second click while answering', async () => {
+    const w = mount(CheckQuestion, { props: { check: batch(), answering: true } })
+    await w.findAll('[data-testid="check-option"]')[1].trigger('click')
+    expect(w.emitted('answer')).toBeUndefined()
+  })
+
+  it('leaves the group idle and the options live when not answering', () => {
+    const w = mount(CheckQuestion, { props: { check: batch() } })
+    expect(w.find('.check-options').attributes('aria-busy')).toBeUndefined()
+    expect(w.find('[data-testid="check-option"]').attributes('aria-disabled')).toBeUndefined()
+  })
+})

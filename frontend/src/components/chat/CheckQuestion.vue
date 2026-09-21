@@ -8,6 +8,11 @@ const props = defineProps({
   // F-04: true while a stream is live; Skip/Next/Done are disabled so the
   // follow-up stream cannot be started on top of an active one.
   busy: { type: Boolean, default: false },
+  // E-17: true while this item's answer POST is in flight. `answered` only
+  // flips once that POST returns, so without this the options stayed live in
+  // between and a second click was swallowed by the store's silent guard.
+  // Distinct from `busy`, which is about the follow-up stream.
+  answering: { type: Boolean, default: false },
 })
 const emit = defineEmits(['answer', 'skip', 'next', 'done'])
 
@@ -66,15 +71,15 @@ watch(answered, async (is) => {
         </template>
       </div>
 
-      <ul class="check-options">
+      <ul class="check-options" :aria-busy="answering ? 'true' : undefined">
         <li v-for="(opt, i) in item.options" :key="i">
           <button
             type="button"
             class="check-option"
             :class="optionClass(i)"
             data-testid="check-option"
-            :aria-disabled="answered ? 'true' : undefined"
-            @click="answered ? undefined : emit('answer', i)"
+            :aria-disabled="answered || answering ? 'true' : undefined"
+            @click="answered || answering ? undefined : emit('answer', i)"
           >
             <span class="check-letter" aria-hidden="true">{{ LETTERS[i] ?? i + 1 }}.</span>
             <span class="check-option-text">{{ opt }}</span>

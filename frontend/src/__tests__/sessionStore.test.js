@@ -856,6 +856,62 @@ describe('session store — streaming', () => {
     expect(s.messages.filter((m) => m.role === 'user' && m.content === 'hi')).toHaveLength(0)
   })
 
+  // F-21: the optimistic row carried no id at all, so MessageList keyed it on
+  // its array index - two sends in a row shared a key until the server ids
+  // landed, and the failure pop matched "the last row with no message_id".
+  describe('optimistic user row client_id (F-21)', () => {
+    it('gives every optimistic user row a distinct client_id and no message_id', async () => {
+      const s = useSessionStore()
+      s.currentSessionId = 's1'
+      vi.spyOn(streamSvc, 'streamChat').mockImplementation(async ({ onEvent }) => {
+        onEvent({ event: 'done', data: { message_id: 'a1' } })
+      })
+      await s.sendMessageStreaming({ text: 'one' })
+      await s.sendMessageStreaming({ text: 'two' })
+      const users = s.messages.filter((m) => m.role === 'user')
+      expect(users).toHaveLength(2)
+      expect(users[0].client_id).toBeTruthy()
+      expect(users[1].client_id).toBeTruthy()
+      expect(users[0].client_id).not.toBe(users[1].client_id)
+      // The cursor guard (_hasServerId) reads message_id, so a client value
+      // must never be written there.
+      expect(users[0].message_id).toBeUndefined()
+      expect(users[1].message_id).toBeUndefined()
+    })
+
+    // The discriminating case: the old "last user row with no message_id" rule
+    // pops whatever happens to be last, which is not necessarily this send's
+    // row once anything else has landed behind it.
+    it('pops this send row, not the last id-less row', async () => {
+      const s = useSessionStore()
+      s.currentSessionId = 's1'
+      vi.spyOn(streamSvc, 'streamChat').mockImplementationOnce(async () => {
+        s.messages.push({ role: 'user', content: 'other' })
+        throw new ApiErrorLike(422, { detail: 'too long' })
+      })
+      await s.sendMessageStreaming({ text: 'dropped' }).catch(() => {})
+      expect(s.messages.filter((m) => m.role === 'user').map((m) => m.content)).toEqual(['other'])
+    })
+
+    it('pops the failed row by client_id and leaves earlier rows alone', async () => {
+      const s = useSessionStore()
+      s.currentSessionId = 's1'
+      vi.spyOn(streamSvc, 'streamChat').mockImplementationOnce(async ({ onEvent }) => {
+        onEvent({ event: 'done', data: { message_id: 'a1' } })
+      })
+      await s.sendMessageStreaming({ text: 'kept' })
+      const keptId = s.messages.find((m) => m.role === 'user').client_id
+      vi.spyOn(streamSvc, 'streamChat').mockRejectedValueOnce(
+        new ApiErrorLike(422, { detail: 'too long' }),
+      )
+      await s.sendMessageStreaming({ text: 'dropped' }).catch(() => {})
+      const users = s.messages.filter((m) => m.role === 'user')
+      expect(users).toHaveLength(1)
+      expect(users[0].content).toBe('kept')
+      expect(users[0].client_id).toBe(keptId)
+    })
+  })
+
   it('maps a session_ended 409 to a friendly error and marks the session ended', async () => {
     const s = useSessionStore()
     s.currentSessionId = 's1'

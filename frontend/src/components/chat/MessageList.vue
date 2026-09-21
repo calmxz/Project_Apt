@@ -47,7 +47,12 @@ function tickAt(i) {
 <template>
   <div class="message-list">
     <TransitionGroup name="msg-fade" tag="div" class="msg-list">
-      <template v-for="(m, i) in visibleMessages" :key="m.message_id || `m-${i}`">
+      <!-- F-21: an optimistic user row has no server id until the turn is
+           reloaded, so two of them in a row both fell back to the index and
+           shared a key. client_id is the local stand-in; message_id still
+           wins wherever it exists (it is also the pagination cursor, so a
+           client value must never be written into it). -->
+      <template v-for="(m, i) in visibleMessages" :key="m.message_id ?? m.client_id ?? `m-${i}`">
         <UserBubble
           v-if="m.role === 'user'"
           :content="m.content || ''"

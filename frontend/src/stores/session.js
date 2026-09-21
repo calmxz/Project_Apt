@@ -312,10 +312,23 @@ export const useSessionStore = defineStore('session', () => {
   // evicting it would fight the request.
   const MAX_RETAINED_MESSAGES = 200
 
+  // F-21: a local key for the optimistic user row. It is deliberately NOT
+  // written into message_id: _hasServerId below treats any non-null,
+  // non-'pending' message_id as a real server id and the oldest such id is the
+  // load-earlier cursor, so a client value there would page nothing. The SSE
+  // never emits the persisted user message id (only the assistant's, on
+  // `done`), so this stays the row's key for the life of the live transcript;
+  // a reload replaces it with the real row.
+  function _newClientId() {
+    const uuid = globalThis.crypto?.randomUUID?.()
+    if (uuid) return `c-${uuid}`
+    return `c-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  }
+
   // A real server-assigned id, usable as the load-earlier `before:` cursor.
-  // Live-appended user bubbles carry none (the I-10 pop below relies on that),
-  // a retained partial carries none, and a cancelled bubble carries the
-  // literal 'pending'.
+  // Live-appended user bubbles carry none (the I-10 pop below matches them by
+  // client_id instead), a retained partial carries none, and a cancelled
+  // bubble carries the literal 'pending'.
   function _hasServerId(m) {
     return m?.message_id != null && m.message_id !== 'pending'
   }
@@ -533,9 +546,9 @@ export const useSessionStore = defineStore('session', () => {
   // Batch shape: { gap, total, currentIndex, viewIndex, items: [
   //   { question, options, status, selectedIndex, correctIndex, correct, explanation } ] }
   const pendingCheck = ref(null)
-  // Typing mid-batch is allowed (spec section 3), so the composer never locks on
-  // an open check. Kept as a computed for the SessionView/Composer binding.
-  const checkLocked = computed(() => false)
+  // E-17: true while an answer/skip POST for the open batch is in flight. The
+  // card reads it so the options stop accepting clicks in that window instead
+  // of having the second click swallowed by the guard in answerCheck.
   const checkAnswering = ref(false)
   const checkCompleting = ref(false)
 
@@ -861,7 +874,8 @@ export const useSessionStore = defineStore('session', () => {
     // F-04 (defensive): same single-live-stream invariant as completeCheck.
     if (streamState.value !== 'idle') return null
     followupNotice.value = null
-    _appendMessage({ role: 'user', content: trimmed })
+    const clientId = _newClientId()
+    _appendMessage({ role: 'user', content: trimmed, client_id: clientId })
     streamingMessage.value = { role: 'assistant', content: '', tool_calls: [], citations: [] }
     streamState.value = 'streaming'
     _streamSid = currentSessionId.value
@@ -942,8 +956,11 @@ export const useSessionStore = defineStore('session', () => {
         // optimistic bubble instead of stranding it in the transcript.
         // Runs before the session_ended arm too: that 409 is itself a
         // pre-stream failure and must not strand the bubble either.
-        const last = messages.value[messages.value.length - 1]
-        if (last?.role === 'user' && last.message_id === undefined) messages.value.pop()
+        // F-21: matched by client_id rather than "the last id-less user row",
+        // so it always removes THIS send's row even if the array moved under
+        // it (an _appendMessage eviction reassigns messages.value).
+        const at = messages.value.findIndex((m) => m.client_id === clientId)
+        if (at !== -1) messages.value.splice(at, 1)
       }
       if (authExpired) {
         // E-05: the view must get a chance to stash the draft before the
@@ -1012,7 +1029,7 @@ export const useSessionStore = defineStore('session', () => {
     duplicateReopen,
     consumePendingSummary,
     pendingCheck,
-    checkLocked,
+    checkAnswering,
     streamingMessage,
     streamState,
     abortController,

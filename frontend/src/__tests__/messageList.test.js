@@ -136,6 +136,53 @@ describe('MessageList', () => {
     expect(w.find('[data-testid="msg-streaming"]').exists()).toBe(false)
   })
 
+  // F-21: an optimistic user row has no message_id, so two of them in a row
+  // both fell back to the array index and shared a key. client_id is the
+  // stand-in until (and only until) a real server id exists.
+  describe('keying (F-21)', () => {
+    // The rendered key is not reachable from the component tree (TransitionGroup
+    // consumes it), so this asserts what the key buys: a row keeps its own
+    // component instance when the list shifts underneath it.
+    it('keeps an id-less row on its own instance when older messages are prepended', async () => {
+      const rows = [
+        { message_id: 'u9', role: 'user', content: 'one' },
+        { role: 'user', content: 'two', client_id: 'c-2' },
+      ]
+      const w = mount(MessageList, { props: { messages: rows } })
+      const firstUid = w.findAllComponents(UserBubble)[0].vm.$.uid
+      await w.setProps({
+        messages: [{ message_id: 'u8', role: 'user', content: 'older' }, ...rows],
+      })
+      const after = w.findAllComponents(UserBubble)
+      expect(after.map((b) => b.props('content'))).toEqual(['older', 'one', 'two'])
+      // Index keys re-point the first instance at 'older'; a stable id keeps
+      // 'one' on the instance that already rendered it.
+      expect(after[1].vm.$.uid).toBe(firstUid)
+    })
+
+    it('keeps an optimistic row on its own instance too', async () => {
+      const rows = [
+        { role: 'user', content: 'one', client_id: 'c-1' },
+        { role: 'user', content: 'two', client_id: 'c-2' },
+      ]
+      const w = mount(MessageList, { props: { messages: rows } })
+      const firstUid = w.findAllComponents(UserBubble)[0].vm.$.uid
+      await w.setProps({
+        messages: [{ role: 'user', content: 'older', client_id: 'c-0' }, ...rows],
+      })
+      const after = w.findAllComponents(UserBubble)
+      expect(after.map((b) => b.props('content'))).toEqual(['older', 'one', 'two'])
+      expect(after[1].vm.$.uid).toBe(firstUid)
+    })
+
+    it('still renders rows that carry neither id', () => {
+      const w = mount(MessageList, {
+        props: { messages: [{ role: 'user', content: 'q' }] },
+      })
+      expect(w.findAllComponents(UserBubble)).toHaveLength(1)
+    })
+  })
+
   // F-18: the transcript is no longer a live region — it spammed screen
   // readers with every token mutation while streaming. Discrete
   // announcements live in SessionView instead (see sessionView.test.js).
