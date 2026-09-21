@@ -412,8 +412,12 @@ async function _doWrite(fn) {
       // flag must be set after the recovery reload finishes, not before --
       // otherwise load() would immediately wipe the notice it is meant to
       // introduce.
+      const idAtConflict = props.id
       await load()
-      conflict.value = true
+      // Guard the same way load() does: if the user left for another session
+      // while the recovery reload was in flight, the notice belongs to the
+      // session they left.
+      if (props.id === idAtConflict) conflict.value = true
     } else {
       writeError.value = friendlyError(e)
     }

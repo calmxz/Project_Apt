@@ -26,6 +26,12 @@ how-it-works lookup belongs in `docs/reference.md` instead.
   local/dev defaults (2.00 / 3.00) are unchanged and remain the source of
   truth outside the Render deploy target. See "Cost cap tiers" in
   `docs/reference.md`. These are blueprint values, not confirmed deployed.
+- **C-14 deviation**: the recommended fix mapped service-layer `ValueError`
+  to 409/422. Shipped 422 only, and only for the exact `ValueError` type;
+  subclasses (pydantic `ValidationError`, `json.JSONDecodeError`) fall through
+  to the coded 500 because an escaped one is almost always corrupt stored
+  data, not a rejected input. 409 stays route-owned (If-Match / conflict paths
+  already raise it explicitly).
 - **G-13 wontfix**: `run_streaming` is a ~494-line generator with metering,
   partial-persist and tool dispatch interleaved across `yield` points.
   Extracting three seams is a behaviour-neutral refactor with a large
@@ -33,8 +39,8 @@ how-it-works lookup belongs in `docs/reference.md` instead.
   guard at `tutor.py:591-600`) and only a readability payoff. Revisit when a
   feature next touches `run_streaming`; do it then under that feature's
   tests.
-- **Triage** (19 items from `docs/planning/2026-09-19-qa-retriage.md`, 18 fix
-  landed in this PR, 1 wontfix): A-01 fix, docs only (above). B-08 fix, docs
+- **Triage** (19 items from `docs/planning/2026-09-19-qa-retriage.md`, 17 fixed
+  in this PR, 1 already fixed by Wave 1, 1 wontfix): A-01 fix, docs only (above). B-08 fix, docs
   + blueprint soft cap (above). C-14 fix, global exception handlers with
   `X-Request-Id` (Task A). C-15 fix, `documents.status` / `chat_messages.role`
   CHECK constraints (Task B). C-16 fix, `created_at` NOT NULL + server
