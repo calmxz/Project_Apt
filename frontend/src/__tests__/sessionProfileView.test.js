@@ -490,4 +490,56 @@ describe('SessionProfileView (per-session)', () => {
     )
     expect(wrapper.get('[data-testid="add-gap"]').attributes('aria-label')).toBe('Add a gap')
   })
+
+  // E-18: navigating from one session's profile straight to another's (no
+  // remount, same route component) must reload for the new id.
+  it('reloads the profile when props.id changes', async () => {
+    const getSessionProfile = vi.spyOn(profileApi, 'getSessionProfile').mockResolvedValue({
+      profile: { knowledge_level: 'beginner', confirmed_gaps: [], mastered_concepts: [] },
+      etag: 'e0',
+      recent_learning_events: [],
+    })
+    const wrapper = mount(ProfileView, { props: { id: 's1' }, global: { stubs } })
+    await flushPromises()
+    expect(getSessionProfile).toHaveBeenNthCalledWith(1, 's1')
+
+    await wrapper.setProps({ id: 's2' })
+    await flushPromises()
+    expect(getSessionProfile).toHaveBeenNthCalledWith(2, 's2')
+  })
+
+  // E-18: a slow response for the id navigated away from must not overwrite
+  // the newer id's data once it arrives later.
+  it('discards a stale load that resolves after a newer one', async () => {
+    const pending = {}
+    vi.spyOn(profileApi, 'getSessionProfile').mockImplementation(
+      (id) =>
+        new Promise((resolve) => {
+          pending[id] = resolve
+        }),
+    )
+    const wrapper = mount(ProfileView, { props: { id: 's1' }, global: { stubs } })
+    await flushPromises()
+
+    await wrapper.setProps({ id: 's2' })
+    await flushPromises()
+
+    pending.s2({
+      profile: { knowledge_level: 'advanced', confirmed_gaps: [], mastered_concepts: [] },
+      etag: 'e-s2',
+      recent_learning_events: [],
+    })
+    await flushPromises()
+
+    pending.s1({
+      profile: { knowledge_level: 'beginner', confirmed_gaps: [], mastered_concepts: [] },
+      etag: 'e-s1',
+      recent_learning_events: [],
+    })
+    await flushPromises()
+
+    const active = wrapper.get('[data-testid="level-select"]').find('.level-opt.active')
+    expect(active.text()).toBe('advanced')
+    expect(wrapper.find('[data-testid="sprof-loading"]').exists()).toBe(false)
+  })
 })

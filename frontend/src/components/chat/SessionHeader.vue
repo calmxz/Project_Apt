@@ -83,7 +83,9 @@ const stroke = computed(() => levelStroke(props.level))
 }
 
 .session-topic-link {
-  text-decoration: none;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  text-decoration-color: var(--pencil);
   cursor: pointer;
 }
 

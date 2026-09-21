@@ -264,7 +264,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useConfirm } from 'primevue/useconfirm'
 
@@ -347,15 +347,25 @@ const gapNames = computed(() => (data.value?.profile?.confirmed_gaps ?? []).map(
 
 const subtopicEntries = computed(() => Object.entries(data.value?.profile?.subtopic_levels ?? {}))
 
+// E-18: the route component is reused across session->session navigation
+// (same idiom as SessionView.vue), so a slow earlier load must not overwrite
+// a newer one once it finally resolves. `loadSeq` marks each call; only the
+// most recent one is allowed to write state.
+let loadSeq = 0
+
 async function load() {
+  const seq = ++loadSeq
   loading.value = true
   error.value = ''
   try {
-    data.value = await getSessionProfile(props.id)
+    const res = await getSessionProfile(props.id)
+    if (seq !== loadSeq) return
+    data.value = res
   } catch (e) {
+    if (seq !== loadSeq) return
     error.value = friendlyError(e)
   } finally {
-    loading.value = false
+    if (seq === loadSeq) loading.value = false
   }
 }
 
@@ -453,6 +463,7 @@ function goReview(gap) {
 }
 
 onMounted(load)
+watch(() => props.id, load)
 </script>
 
 <style scoped>
