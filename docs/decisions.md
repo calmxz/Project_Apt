@@ -44,8 +44,9 @@ how-it-works lookup belongs in `docs/reference.md` instead.
   underline on the topic link (Task D). D-25 fix, composer Skip button
   removed (Task C, with E-20). E-15 fix, stuck "still processing" chip
   cleared on timeout (Task C). E-17 fix, check-question double-submit guard
-  (Task C). E-18 fix, `ProfileView` reloads on id change (Task D). E-19 fix,
-  quick-start rejection caught (Task D). E-20 fix, dead `checkLocked`
+  (Task C). E-18 fix, `ProfileView` reloads on id change (Task D). E-19 already
+  fixed by Wave 1 E-01 (919d3a0: `startQuick` awaits inside try/catch and
+  shows the error inline), no change. E-20 fix, dead `checkLocked`
   computed removed (Task C). F-20 fix, `useTheme` media-query listener leak
   (Task D). F-21 fix, optimistic chat row keyed by `client_id` (Task C).
   G-13 wontfix (above). G-14 fix, `profile_insights` split out of
