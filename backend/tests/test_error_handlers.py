@@ -89,6 +89,20 @@ def test_unhandled_500_request_id_matches_the_header(unhandled_response):
     assert unhandled_response.json()["detail"]["request_id"] == header_id
 
 
+def test_value_error_subclass_is_a_500_not_a_422():
+    """json.JSONDecodeError is a ValueError subclass but signals corrupt stored
+    data, not a rejected input: it must fall through to internal_error."""
+    import json
+
+    exc = json.JSONDecodeError("corrupt kw_index_json", SECRET, 0)
+    with _client_whose_auth_raises(exc) as c:
+        resp = c.get(PATH, headers={"Origin": ORIGIN})
+    assert resp.status_code == 500, resp.text
+    assert resp.json()["detail"]["code"] == "internal_error"
+    assert SECRET not in resp.text
+    assert resp.headers.get("access-control-allow-origin") == ORIGIN
+
+
 def test_value_error_returns_422_with_the_message(value_error_response):
     assert value_error_response.status_code == 422, value_error_response.text
     detail = value_error_response.json()["detail"]

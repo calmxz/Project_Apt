@@ -253,6 +253,7 @@ onUnmounted(() => {
         type="search"
         class="library-search coarse-2x"
         data-testid="library-search"
+        maxlength="200"
         placeholder="Search topics..."
         aria-label="Search sessions by topic"
         @input="onSearchInput"

@@ -20,11 +20,11 @@ Two layers, deliberately different mechanisms:
 * `ValueError` goes through the ordinary exception-handler mechanism.
   Starlette's ExceptionMiddleware runs INSIDE the user-middleware stack, so
   that response already passes through CORSMiddleware on its way out.
-  Known widening: pydantic's ValidationError and json.JSONDecodeError are
-  ValueError subclasses, so an escaped one now answers 422 rather than 500.
-  Both are genuinely "bad value" failures; FastAPI's own request/response
-  validation errors are registered against more specific classes and are
-  matched first by Starlette's MRO lookup.
+  Exact type only: pydantic's ValidationError and json.JSONDecodeError are
+  ValueError subclasses, but an escaped one is usually server-side data
+  corruption (a bad stored JSON blob), not a rejected input, so the handler
+  re-raises anything that is not a plain ValueError and the catch-all above
+  answers 500 internal_error instead.
 
 Both bodies satisfy the ErrorResponse contract and carry the request id, which
 is also on the X-Request-Id response header (RequestIdMiddleware is the
@@ -121,7 +121,13 @@ class UnhandledErrorMiddleware:
 
 
 async def value_error_handler(request: Request, exc: Exception) -> JSONResponse:
-    """An uncaught ValueError is a rejected input, not a server fault -> 422."""
+    """An uncaught plain ValueError is a rejected input, not a server fault -> 422.
+
+    Subclasses (pydantic ValidationError, json.JSONDecodeError, ...) re-raise
+    so UnhandledErrorMiddleware reports them as 500 internal_error.
+    """
+    if type(exc) is not ValueError:
+        raise exc
     request_id = request_id_var.get()
     log.warning(
         "invalid value request_id=%s method=%s path=%s: %s",
