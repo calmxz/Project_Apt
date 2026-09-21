@@ -143,9 +143,9 @@ def upgrade() -> None:
     # completeness). batch_alter_table recreates each table under a temp name
     # and moves the rows across.
     for table in CREATED_AT_TABLES:
-        op.execute(
-            sa.text(f"UPDATE {table} SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL")
-        )
+        # Plain string like the Postgres branch: `table` is a module constant,
+        # never user input, and semgrep blocks sa.text() on f-strings.
+        op.execute(f"UPDATE {table} SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL")
         with op.batch_alter_table(table) as batch_op:
             batch_op.alter_column(
                 "created_at",
