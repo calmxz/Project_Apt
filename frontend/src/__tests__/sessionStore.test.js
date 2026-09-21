@@ -1198,6 +1198,30 @@ describe('session store — streaming', () => {
     expect(s.streamState).toBe('idle')
   })
 
+  // Dup-key fix: the local AbortError path appends a row with the literal
+  // message_id 'pending'. MessageList falls back to client_id when
+  // message_id is 'pending', so this row must carry one (two Stop clicks in
+  // one session would otherwise produce duplicate keys).
+  it('the local-cancel path (AbortError) appends a row with a client_id (dup-key fix)', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 's1'
+    vi.spyOn(streamSvc, 'streamChat').mockImplementation(
+      ({ signal }) =>
+        new Promise((_res, rej) => {
+          signal.addEventListener('abort', () =>
+            rej(Object.assign(new Error('aborted'), { name: 'AbortError' })),
+          )
+        }),
+    )
+    const p = s.sendMessageStreaming({ text: 'q' })
+    s.stopStream()
+    await p
+    const row = s.messages.find((m) => m.role === 'assistant')
+    expect(row).toBeDefined()
+    expect(row.message_id).toBe('pending')
+    expect(row.client_id).toMatch(/^c-/)
+  })
+
   it('abandonStream aborts silently without persisting a cancelled bubble (F-01)', async () => {
     const s = useSessionStore()
     s.currentSessionId = 's1'

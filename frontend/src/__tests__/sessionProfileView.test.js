@@ -542,4 +542,71 @@ describe('SessionProfileView (per-session)', () => {
     expect(active.text()).toBe('advanced')
     expect(wrapper.find('[data-testid="sprof-loading"]').exists()).toBe(false)
   })
+
+  // Stale-sibling-state fix: the route component is reused across
+  // session->session navigation (E-18), so a write-error banner, an unsaved
+  // draft, and an open gap picker left over from session A must not still be
+  // showing once the id-change watcher has loaded session B.
+  it('clears writeError, drafts, and the gap picker when props.id changes', async () => {
+    vi.spyOn(profileApi, 'getSessionProfile').mockResolvedValue({
+      profile: {
+        knowledge_level: 'beginner',
+        confirmed_gaps: [
+          { name: 'a', evidence_type: null, last_event_at: null },
+          { name: 'b', evidence_type: null, last_event_at: null },
+        ],
+        mastered_concepts: [],
+      },
+      etag: 'e0',
+      recent_learning_events: [],
+    })
+    vi.spyOn(profileApi, 'patchProfile').mockRejectedValueOnce(
+      Object.assign(new Error('boom'), { status: 500 }),
+    )
+    const wrapper = mount(ProfileView, { props: { id: 's1' }, global: { stubs } })
+    await flushPromises()
+
+    await wrapper.get('[data-testid="add-mastered"]').setValue('loops')
+    await wrapper.get('[data-testid="add-mastered-submit"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sprof-write-error"]').exists()).toBe(true)
+
+    await wrapper.get('[data-testid="add-gap"]').setValue('unsaved-draft')
+    await wrapper.get('[data-testid="sprof-review-gaps"]').trigger('click')
+    expect(wrapper.find('[data-testid="gap-picker"]').exists()).toBe(true)
+
+    await wrapper.setProps({ id: 's2' })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="sprof-write-error"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="gap-picker"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="add-gap"]').element.value).toBe('')
+  })
+
+  // Same fix, the conflict banner: a 412 leaves conflict=true after the
+  // recovery reload finishes, and that must not survive a subsequent
+  // id-change navigation either.
+  it('clears the conflict banner when props.id changes after a 412', async () => {
+    const getSessionProfile = vi.spyOn(profileApi, 'getSessionProfile').mockResolvedValue({
+      profile: { knowledge_level: 'beginner', confirmed_gaps: [], mastered_concepts: [] },
+      etag: 'e0',
+      recent_learning_events: [],
+    })
+    vi.spyOn(profileApi, 'patchProfile').mockRejectedValueOnce(
+      Object.assign(new Error('x'), { status: 412 }),
+    )
+    const wrapper = mount(ProfileView, { props: { id: 's1' }, global: { stubs } })
+    await flushPromises()
+
+    await wrapper.get('[data-testid="add-mastered"]').setValue('loops')
+    await wrapper.get('[data-testid="add-mastered-submit"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="sprof-conflict"]').exists()).toBe(true)
+    expect(getSessionProfile).toHaveBeenCalledTimes(2)
+
+    await wrapper.setProps({ id: 's2' })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="sprof-conflict"]').exists()).toBe(false)
+  })
 })

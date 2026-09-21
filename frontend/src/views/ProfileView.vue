@@ -355,6 +355,16 @@ let loadSeq = 0
 
 async function load() {
   const seq = ++loadSeq
+  // Stale-sibling-state fix: the route component is reused across
+  // session->session navigation (E-18), so these must not survive into the
+  // newly-loaded session -- a write-error banner, an open-conflict notice, an
+  // unsaved add-item draft, or an open gap picker all belong to the session
+  // being left.
+  conflict.value = false
+  writeError.value = ''
+  drafts.confirmed_gaps = ''
+  drafts.mastered_concepts = ''
+  gapPickerOpen.value = false
   loading.value = true
   error.value = ''
   try {
@@ -398,8 +408,12 @@ async function _doWrite(fn) {
     data.value = { ...data.value, profile: res.profile, etag: res.etag }
   } catch (e) {
     if (e?.status === 412) {
-      conflict.value = true
+      // load() resets conflict at its top (stale-sibling-state fix), so the
+      // flag must be set after the recovery reload finishes, not before --
+      // otherwise load() would immediately wipe the notice it is meant to
+      // introduce.
       await load()
+      conflict.value = true
     } else {
       writeError.value = friendlyError(e)
     }

@@ -808,6 +808,11 @@ export const useSessionStore = defineStore('session', () => {
     _appendMessage({
       ...streamingMessage.value,
       message_id,
+      // Dup-key fix: the two local AbortError arms call this with the
+      // literal message_id 'pending', and MessageList's key falls back to
+      // client_id whenever message_id is 'pending' -- so this row needs one
+      // too, or two Stop clicks in one session would share a key.
+      client_id: _newClientId(),
       status: 'cancelled',
       partial_content_chars: partial_chars,
       estimated_cost_usd,
