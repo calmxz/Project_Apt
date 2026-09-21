@@ -518,4 +518,156 @@ describe('apiClient', () => {
       expect(fetchMock).toHaveBeenCalledTimes(2)
     })
   })
+
+  // F-18 backend half: conditional revalidation via ETag / If-None-Match.
+  describe('GET cache conditional revalidation (F-18)', () => {
+    function etagResp(status, body, etag) {
+      return Promise.resolve(new Response(JSON.stringify(body), { status, headers: { etag } }))
+    }
+
+    it('stores the ETag from a 200 GET and sends If-None-Match once the entry expires', async () => {
+      const now = Date.now()
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(now)
+      fetchMock
+        .mockReturnValueOnce(etagResp(200, { n: 1 }, '"v1"'))
+        .mockReturnValueOnce(jsonResp(200, { n: 1 }))
+      await expect(apiGet('/x')).resolves.toEqual({ n: 1 })
+      clock.mockReturnValue(now + GET_CACHE_TTL_MS + 1)
+      await expect(apiGet('/x')).resolves.toEqual({ n: 1 })
+      const secondInit = fetchMock.mock.calls[1][1]
+      expect(secondInit.headers['if-none-match']).toBe('"v1"')
+    })
+
+    it('a 304 resolves to the cached value and refreshes the TTL', async () => {
+      const now = Date.now()
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(now)
+      fetchMock
+        .mockReturnValueOnce(etagResp(200, { n: 1 }, '"v1"'))
+        .mockReturnValueOnce(Promise.resolve(new Response(null, { status: 304 })))
+      await expect(apiGet('/x')).resolves.toEqual({ n: 1 })
+      clock.mockReturnValue(now + GET_CACHE_TTL_MS + 1)
+      await expect(apiGet('/x')).resolves.toEqual({ n: 1 })
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+      // TTL was refreshed by the 304: a read shortly after is served from cache.
+      clock.mockReturnValue(now + GET_CACHE_TTL_MS + 1 + 1000)
+      await expect(apiGet('/x')).resolves.toEqual({ n: 1 })
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    })
+
+    it('a 304 raced by a mid-flight invalidation still returns the cached value but does not refresh the TTL', async () => {
+      const now = Date.now()
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(now)
+      fetchMock.mockReturnValueOnce(etagResp(200, { n: 1 }, '"v1"'))
+      await expect(apiGet('/sessions/abc')).resolves.toEqual({ n: 1 })
+
+      clock.mockReturnValue(now + GET_CACHE_TTL_MS + 1)
+      let release
+      fetchMock.mockReturnValueOnce(
+        new Promise((resolve) => {
+          release = () => resolve(new Response(null, { status: 304 }))
+        }),
+      )
+      const inFlight = apiGet('/sessions/abc')
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+      invalidateGetCache('/sessions/abc')
+      release()
+      await expect(inFlight).resolves.toEqual({ n: 1 })
+
+      // Entry was dropped by the invalidation, so the next GET fetches again.
+      fetchMock.mockReturnValueOnce(jsonResp(200, { n: 2 }))
+      await expect(apiGet('/sessions/abc')).resolves.toEqual({ n: 2 })
+      expect(fetchMock).toHaveBeenCalledTimes(3)
+    })
+
+    it('fresh: true against an expired entry still sends If-None-Match', async () => {
+      const now = Date.now()
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(now)
+      fetchMock
+        .mockReturnValueOnce(etagResp(200, { n: 1 }, '"v1"'))
+        .mockReturnValueOnce(jsonResp(200, { n: 2 }))
+      await expect(apiGet('/x')).resolves.toEqual({ n: 1 })
+      clock.mockReturnValue(now + GET_CACHE_TTL_MS + 1)
+      await expect(apiGet('/x', null, { fresh: true })).resolves.toEqual({ n: 2 })
+      const secondInit = fetchMock.mock.calls[1][1]
+      expect(secondInit.headers['if-none-match']).toBe('"v1"')
+    })
+
+    it('fresh: true within the TTL revalidates with If-None-Match instead of a plain fetch', async () => {
+      const now = Date.now()
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(now)
+      fetchMock
+        .mockReturnValueOnce(etagResp(200, { n: 1 }, '"v1"'))
+        .mockReturnValueOnce(new Response(null, { status: 304 }))
+      await expect(apiGet('/x')).resolves.toEqual({ n: 1 })
+      clock.mockReturnValue(now + 1000)
+      await expect(apiGet('/x', null, { fresh: true })).resolves.toEqual({ n: 1 })
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+      expect(fetchMock.mock.calls[1][1].headers['if-none-match']).toBe('"v1"')
+    })
+
+    it('a 304 does not overwrite a newer entry stored by a concurrent GET', async () => {
+      const now = Date.now()
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(now)
+      fetchMock.mockReturnValueOnce(etagResp(200, { n: 1 }, '"v1"'))
+      await expect(apiGet('/x')).resolves.toEqual({ n: 1 })
+      clock.mockReturnValue(now + GET_CACHE_TTL_MS + 1)
+      // GET-A revalidates and is answered 304 late; GET-B (also fresh) lands a
+      // 200 with a newer body first. Server-side write: the epoch never moves.
+      let resolveA
+      fetchMock
+        .mockReturnValueOnce(new Promise((r) => (resolveA = r)))
+        .mockReturnValueOnce(etagResp(200, { n: 2 }, '"v2"'))
+      const a = apiGet('/x', null, { fresh: true })
+      await expect(apiGet('/x', null, { fresh: true })).resolves.toEqual({ n: 2 })
+      resolveA(new Response(null, { status: 304 }))
+      await expect(a).resolves.toEqual({ n: 1 })
+      // Next plain read within the TTL is served from cache: must be v2.
+      clock.mockReturnValue(now + GET_CACHE_TTL_MS + 2)
+      await expect(apiGet('/x')).resolves.toEqual({ n: 2 })
+      expect(fetchMock).toHaveBeenCalledTimes(3)
+    })
+
+    it('sends no If-None-Match after a write drops the cache entry', async () => {
+      fetchMock.mockReturnValueOnce(etagResp(200, { n: 1 }, '"v1"'))
+      await expect(apiGet('/sessions/abc')).resolves.toEqual({ n: 1 })
+      fetchMock.mockReturnValueOnce(jsonResp(200, {}))
+      await apiPost('/sessions/abc/end', {})
+      fetchMock.mockReturnValueOnce(jsonResp(200, { n: 2 }))
+      await expect(apiGet('/sessions/abc')).resolves.toEqual({ n: 2 })
+      const thirdInit = fetchMock.mock.calls[2][1]
+      expect(thirdInit.headers['if-none-match']).toBeUndefined()
+    })
+
+    it('a cached entry under a different token is never used for If-None-Match', async () => {
+      globalThis.__supabaseAuthStub.getSession
+        .mockResolvedValueOnce({
+          data: { session: { access_token: 'tok-a', user: { id: 'a' } } },
+        })
+        .mockResolvedValueOnce({
+          data: { session: { access_token: 'tok-b', user: { id: 'b' } } },
+        })
+      fetchMock.mockReturnValueOnce(etagResp(200, { who: 'a' }, '"v1"'))
+      await expect(apiGet('/sessions')).resolves.toEqual({ who: 'a' })
+      fetchMock.mockReturnValueOnce(jsonResp(200, { who: 'b' }))
+      await expect(apiGet('/sessions')).resolves.toEqual({ who: 'b' })
+      const secondInit = fetchMock.mock.calls[1][1]
+      expect(secondInit.headers['if-none-match']).toBeUndefined()
+    })
+
+    it('a fresh 200 response replaces the stored ETag', async () => {
+      const now = Date.now()
+      const clock = vi.spyOn(Date, 'now').mockReturnValue(now)
+      fetchMock
+        .mockReturnValueOnce(etagResp(200, { n: 1 }, '"v1"'))
+        .mockReturnValueOnce(etagResp(200, { n: 2 }, '"v2"'))
+      await expect(apiGet('/x')).resolves.toEqual({ n: 1 })
+      clock.mockReturnValue(now + GET_CACHE_TTL_MS + 1)
+      await expect(apiGet('/x')).resolves.toEqual({ n: 2 })
+      clock.mockReturnValue(now + 2 * (GET_CACHE_TTL_MS + 1))
+      fetchMock.mockReturnValueOnce(jsonResp(200, { n: 3 }))
+      await expect(apiGet('/x')).resolves.toEqual({ n: 3 })
+      const thirdInit = fetchMock.mock.calls[2][1]
+      expect(thirdInit.headers['if-none-match']).toBe('"v2"')
+    })
+  })
 })

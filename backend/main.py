@@ -9,6 +9,7 @@ from config import assert_prod_database, settings
 from db.database import create_tables
 from lib.body_limit import BodySizeLimitMiddleware
 from lib.error_handlers import UnhandledErrorMiddleware, value_error_handler
+from lib.etag import ETagMiddleware
 from lib.logging_config import configure_logging
 from lib.request_id import RequestIdMiddleware
 from routes import chat, documents, health, me, profile, review, sessions, upload, usage
@@ -62,6 +63,17 @@ app = FastAPI(title="Crux", lifespan=lifespan)
 # client sees an opaque CORS error instead of the body_too_large payload.
 app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.max_json_body_bytes)
 
+# F-18 / #331: registered between BodySizeLimit and UnhandledError, so this
+# layer sits INSIDE UnhandledErrorMiddleware (a bug in the ETag code is logged
+# and answered as a coded 500, not an opaque crash) and INSIDE CORSMiddleware
+# (a 304 still carries access-control-allow-origin, so the browser can read
+# it). GET/HEAD on these prefixes only; every other request, including the SSE
+# POSTs, passes straight through untouched.
+app.add_middleware(
+    ETagMiddleware,
+    prefixes=("/api/sessions", "/api/profile", "/api/review/queue", "/api/usage/summary"),
+)
+
 # C-14: registered between BodySizeLimit and CORS, which puts it INSIDE
 # CORSMiddleware (so a cross-origin 500 carries access-control-allow-origin
 # and the browser shows the body) and OUTSIDE BodySizeLimitMiddleware (whose
@@ -75,8 +87,8 @@ app.add_middleware(
     allow_origins=settings.cors_origin_list,
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-    allow_headers=["Content-Type", "Accept", "Authorization", "If-Match"],
-    expose_headers=["X-Cost-Warning", "X-Request-Id"],
+    allow_headers=["Content-Type", "Accept", "Authorization", "If-Match", "If-None-Match"],
+    expose_headers=["X-Cost-Warning", "X-Request-Id", "ETag"],
 )
 
 # Added last, so RequestIdMiddleware is the outermost layer and every

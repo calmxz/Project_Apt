@@ -25,8 +25,11 @@ const RETRYABLE_STATUS = new Set([502, 503, 504])
 // F-18: a short read-through cache for GETs. Several views mount at once and
 // ask for the same session/profile; 5s is long enough to collapse that burst
 // and short enough that no mutation of ours is invisible for a whole beat.
+// An expired entry (or a `fresh: true` read) that still has a stored ETag is
+// revalidated with If-None-Match rather than dropped outright -- a 304 means
+// the cached body is still current and just refreshes the TTL.
 export const GET_CACHE_TTL_MS = 5000
-// url -> { at, value }
+// url -> { at, value, token, etag }
 const _getCache = new Map()
 // Bumped by every invalidation/reset. A GET captures it before its fetch and
 // skips the cache write if it moved meanwhile -- otherwise a GET that was
@@ -242,10 +245,24 @@ async function request(
   // Read the cache only after the token is known: the url alone is not a
   // sufficient key. Sign out and straight back in as someone else inside the
   // TTL and a url-keyed hit would render the previous account's data.
-  if (isGet && !fresh) {
+  //
+  // A fresh-within-TTL hit (and not `fresh: true`) returns straight from
+  // cache. An expired hit, or a `fresh: true` read, is instead revalidated
+  // with If-None-Match when an ETag was stored -- `fresh` means "always ask
+  // the server", not "always download the body". A hit under a different
+  // token is dropped outright: that account's ETag must never be sent as ours.
+  let revalidate = null
+  if (isGet) {
     const hit = _getCache.get(url)
-    if (hit && hit.token === token && Date.now() - hit.at < GET_CACHE_TTL_MS) return hit.value
-    if (hit) _getCache.delete(url)
+    if (hit && hit.token === token) {
+      if (!fresh && Date.now() - hit.at < GET_CACHE_TTL_MS) return hit.value
+      if (hit.etag) {
+        revalidate = hit
+        baseHeaders['if-none-match'] = hit.etag
+      }
+    } else if (hit) {
+      _getCache.delete(url)
+    }
   }
 
   const buildInit = () => {
@@ -281,6 +298,27 @@ async function request(
     return request(method, path, { body, params, silent, headers, fresh }, true)
   }
 
+  // F-18: a 304 only ever comes back for a GET that sent If-None-Match, i.e.
+  // one with a `revalidate` entry -- the cached body is still current, so
+  // return it and refresh the TTL. Skip the refresh (but still return the
+  // cached body) if an invalidation landed mid-flight: the server's answer is
+  // current as of its response, but extending the TTL now would hide a write
+  // that happened after, or if a concurrent GET for the same url already
+  // stored a newer entry (server-side writes move the body without moving the
+  // epoch; the identity check keeps this 304 from overwriting that 200).
+  // resp.ok is false for 304, so this must run before the resp.text() /
+  // !resp.ok block below.
+  if (resp.status === 304) {
+    if (revalidate) {
+      if (epochAtFetch === _cacheEpoch && _getCache.get(url) === revalidate) {
+        _getCache.set(url, { ...revalidate, at: Date.now() })
+      }
+      return revalidate.value
+    }
+    // Nothing sent If-None-Match, so the server should not have answered 304
+    // -- fall through to the generic error path below rather than guessing.
+  }
+
   const text = await resp.text()
   const parsed = text ? safeJson(text) : null
 
@@ -299,7 +337,8 @@ async function request(
   // Skipped when an invalidation landed while this GET was in flight: the body
   // may predate the write, and a stale hit for a full TTL is worse than a miss.
   if (isGet && epochAtFetch === _cacheEpoch) {
-    _getCache.set(url, { at: Date.now(), value: parsed, token })
+    const etag = resp.headers?.get?.('etag') ?? null
+    _getCache.set(url, { at: Date.now(), value: parsed, token, etag })
   }
 
   return parsed
