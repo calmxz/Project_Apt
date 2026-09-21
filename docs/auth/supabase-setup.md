@@ -79,6 +79,7 @@ Backend (`.env` at repo root, gitignored):
 SUPABASE_URL=https://<project-ref>.supabase.co
 SUPABASE_SECRET_KEY=sb_secret_<...>
 DATABASE_URL=postgresql+psycopg://postgres.<ref>:<password>@<region>.pooler.supabase.com:6543/postgres
+# Local default; the Render blueprint pins lower values, see docs/reference.md.
 LLM_SOFT_CAP_USD=2.00
 LLM_HARD_CAP_USD=3.00
 ```

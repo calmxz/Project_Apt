@@ -31,8 +31,12 @@ services:
         value: "50"
       - key: BURST_LIMIT_PER_MINUTE
         value: "20"
+      # B-08: lowered from 0.8 so the soft/urgent/hard tiers (urgent = hard *
+      # 0.9, see backend/services/cost_meter.py) aren't too tight to act on.
+      # Blueprint value only, not backend/config.py's local/dev default; see
+      # "Cost cap tiers" in docs/reference.md.
       - key: LLM_SOFT_CAP_USD
-        value: "0.8"
+        value: "0.50"
       - key: LLM_HARD_CAP_USD
         value: "1.00"
       - key: GEMINI_API_KEY

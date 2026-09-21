@@ -3,6 +3,54 @@
 Durable "why": decisions, findings, tradeoffs. Newest first. Technical
 how-it-works lookup belongs in `docs/reference.md` instead.
 
+## 2026-09-21 - QA re-triage Wave 4 (issue #326): triage and deviations
+
+- **A-01**: access tokens are stateless JWTs with no revocation primitive
+  (`token_valid_after` / `denylist` / `jti` / `revoke` grep to zero hits in
+  `backend/`); `backend/services/auth.py` verifies signature, `exp`, `aud`
+  and `iss` only. Logout or a ban therefore takes effect only at the next
+  access-token expiry, not immediately. Worst-case residual window = the
+  configured access-token TTL, left at the Supabase default of **~1 hour**
+  (`docs/auth/supabase-setup.md` section 8: "Leave the access token (JWT)
+  expiry at its default (~1hr)"). Refresh tokens ARE revoked server-side by
+  Supabase on sign-out, so a stolen refresh token cannot mint new access
+  tokens post-logout; only the already-issued access token still works, and
+  only until it expires. Accepted as-is: a revocation list is a feature, not
+  a Wave 4 docs fix.
+- **B-08**: the Render blueprint's cap tiers (soft 0.80 / urgent 0.90 / hard
+  1.00; `cost_meter.py:213` derives urgent as `hard_cap * 0.9`) left only
+  0.10 USD between soft warning and hard cutoff, too tight to act on. The
+  hard cap is untouched (changing user-facing spend behavior is out of scope
+  for a docs wave); only the blueprint's `LLM_SOFT_CAP_USD` in `render.yaml`
+  drops to `0.50`, making the tiers 0.50 / 0.90 / 1.00. `backend/config.py`
+  local/dev defaults (2.00 / 3.00) are unchanged and remain the source of
+  truth outside the Render deploy target. See "Cost cap tiers" in
+  `docs/reference.md`. These are blueprint values, not confirmed deployed.
+- **G-13 wontfix**: `run_streaming` is a ~494-line generator with metering,
+  partial-persist and tool dispatch interleaved across `yield` points.
+  Extracting three seams is a behaviour-neutral refactor with a large
+  regression surface (streaming order, abort persistence, cost double-count
+  guard at `tutor.py:591-600`) and only a readability payoff. Revisit when a
+  feature next touches `run_streaming`; do it then under that feature's
+  tests.
+- **Triage** (19 items from `docs/planning/2026-09-19-qa-retriage.md`, 18 fix
+  landed in this PR, 1 wontfix): A-01 fix, docs only (above). B-08 fix, docs
+  + blueprint soft cap (above). C-14 fix, global exception handlers with
+  `X-Request-Id` (Task A). C-15 fix, `documents.status` / `chat_messages.role`
+  CHECK constraints (Task B). C-16 fix, `created_at` NOT NULL + server
+  default (Task B). C-17 fix, `q` search param length cap and LIKE escaping
+  (Task A). C-18 fix, tie-break ordering on `chat_messages` queries (Task A).
+  D-21 fix, visually-hidden session `h1` fallback (Task C). D-22 fix, resting
+  underline on the topic link (Task D). D-25 fix, composer Skip button
+  removed (Task C, with E-20). E-15 fix, stuck "still processing" chip
+  cleared on timeout (Task C). E-17 fix, check-question double-submit guard
+  (Task C). E-18 fix, `ProfileView` reloads on id change (Task D). E-19 fix,
+  quick-start rejection caught (Task D). E-20 fix, dead `checkLocked`
+  computed removed (Task C). F-20 fix, `useTheme` media-query listener leak
+  (Task D). F-21 fix, optimistic chat row keyed by `client_id` (Task C).
+  G-13 wontfix (above). G-14 fix, `profile_insights` split out of
+  `profile_service` (Task A).
+
 ## 2026-09-20 - QA re-triage Wave 3 (issue #325): deviations from the recommended fixes
 
 - **F-18 split: frontend half only.** The retriage asked for HTTP `ETag` /

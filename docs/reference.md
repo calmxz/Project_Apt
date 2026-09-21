@@ -118,6 +118,25 @@ value from `ingestion_service.INGEST_ERROR_MESSAGES` (or upload.py's fixed
   (pure ASGI, registered outermost) before any parsing. Multipart uploads have
   their own gate in `routes/upload.py`.
 
+### Access-token revocation window (A-01)
+
+`backend/services/auth.py` verifies JWT signature, `exp`, `aud` and `iss`
+only; there is no revocation primitive. See `docs/decisions.md`, 2026-09-21
+Wave 4 entry, for the residual-window tradeoff and the TTL value.
+
+### Cost cap tiers (B-08)
+
+| Tier | Formula | Local/dev default (`backend/config.py`) | Render blueprint (`render.yaml`) |
+|---|---|---|---|
+| Soft | `LLM_SOFT_CAP_USD` | 2.00 | 0.50 |
+| Urgent | `hard_cap * 0.9` (`cost_meter.py:213`) | 2.70 | 0.90 |
+| Hard | `LLM_HARD_CAP_USD` | 3.00 | 1.00 |
+
+The Render blueprint values are what `render.yaml` pins for the Render
+deploy target: blueprint values, not confirmed deployed. Local dev
+(native uvicorn, docker compose) and tests use `backend/config.py` defaults
+unless `.env` overrides them.
+
 ## Frontend
 
 ### `--control-edge` token (D-20)
