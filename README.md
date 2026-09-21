@@ -231,7 +231,7 @@ The backend reads `.env` at the repo root. For the production stack, the same `.
 | `EMBEDDING_DIM` | Vector dimension for `chunk_embeddings`. Must match the migration; changing requires re-embedding. | `768` |
 | `SUPABASE_URL` | Project URL — used to derive JWKS endpoint for JWT verification. | — |
 | `SUPABASE_SECRET_KEY` | Backend-only secret API key (`sb_secret_…`; replaces legacy `service_role` per Supabase 2025 key model). | — |
-| `LLM_SOFT_CAP_USD` / `LLM_HARD_CAP_USD` | Per-user daily LLM spend thresholds (soft = warning header, hard = 429). | `2.00` / `3.00` |
+| `LLM_SOFT_CAP_USD` / `LLM_HARD_CAP_USD` | Per-user daily LLM spend thresholds (soft = warning header, hard = 429). | `2.00` / `3.00` (local default; the Render blueprint pins lower values, see docs/reference.md) |
 
 ### Frontend `.env.local`
 

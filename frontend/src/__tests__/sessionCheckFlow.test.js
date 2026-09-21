@@ -225,4 +225,40 @@ describe('multi-check store', () => {
     await store.completeCheck().catch(() => {})
     expect(store.pendingCheck).not.toBeNull()
   })
+
+  // E-17: the in-flight guard was invisible to the view, so the card kept its
+  // options live while the POST was out and swallowed the second click.
+  it('exposes checkAnswering while an answer POST is in flight', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 'sid'
+    s.handleCheckQuestion(batchEvent())
+    let release
+    sessionsApi.answerCheck.mockImplementation(
+      () =>
+        new Promise((res) => {
+          release = res
+        }),
+    )
+    expect(s.checkAnswering).toBe(false)
+    const p = s.answerCheck(0)
+    expect(s.checkAnswering).toBe(true)
+    release({
+      correct: true,
+      explanation: 'a.',
+      correct_index: 0,
+      current_index: 1,
+      total: 2,
+      has_next: true,
+      done: false,
+    })
+    await p
+    expect(s.checkAnswering).toBe(false)
+  })
+
+  // E-20: the composer never locked on an open check, so the constant-false
+  // computed and its binding went.
+  it('no longer exposes checkLocked', () => {
+    const s = useSessionStore()
+    expect(s.checkLocked).toBeUndefined()
+  })
 })

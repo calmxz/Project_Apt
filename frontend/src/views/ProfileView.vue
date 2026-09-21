@@ -264,7 +264,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useConfirm } from 'primevue/useconfirm'
 
@@ -347,15 +347,41 @@ const gapNames = computed(() => (data.value?.profile?.confirmed_gaps ?? []).map(
 
 const subtopicEntries = computed(() => Object.entries(data.value?.profile?.subtopic_levels ?? {}))
 
+// E-18: the route component is reused across session->session navigation
+// (same idiom as SessionView.vue), so a slow earlier load must not overwrite
+// a newer one once it finally resolves. `loadSeq` marks each call; only the
+// most recent one is allowed to write state.
+let loadSeq = 0
+
+let loadedId = null
 async function load() {
+  const seq = ++loadSeq
+  // Stale-sibling-state fix: the route component is reused across
+  // session->session navigation (E-18), so these must not survive into the
+  // newly-loaded session -- a write-error banner, an open-conflict notice, an
+  // unsaved add-item draft, or an open gap picker all belong to the session
+  // being left. Drafts and the picker are reset only when the id actually
+  // changed: load() is also the 412 recovery path, and a half-typed draft
+  // must survive a conflict reload.
+  conflict.value = false
+  writeError.value = ''
+  if (loadedId !== props.id) {
+    drafts.confirmed_gaps = ''
+    drafts.mastered_concepts = ''
+    gapPickerOpen.value = false
+  }
+  loadedId = props.id
   loading.value = true
   error.value = ''
   try {
-    data.value = await getSessionProfile(props.id)
+    const res = await getSessionProfile(props.id)
+    if (seq !== loadSeq) return
+    data.value = res
   } catch (e) {
+    if (seq !== loadSeq) return
     error.value = friendlyError(e)
   } finally {
-    loading.value = false
+    if (seq === loadSeq) loading.value = false
   }
 }
 
@@ -381,15 +407,24 @@ function _applyWrite(fn) {
 async function _doWrite(fn) {
   conflict.value = false
   writeError.value = ''
+  // A write started on session A must not paint its result, its error, or
+  // its conflict notice onto session B if the user navigated mid-flight.
+  const idAtWrite = props.id
   try {
     const res = await fn()
+    if (props.id !== idAtWrite) return
     // One source of truth for the etag: keeping a separate ref alongside
     // data.etag let the spread re-seed the stale value on the next write.
     data.value = { ...data.value, profile: res.profile, etag: res.etag }
   } catch (e) {
+    if (props.id !== idAtWrite) return
     if (e?.status === 412) {
-      conflict.value = true
+      // load() resets conflict at its top (stale-sibling-state fix), so the
+      // flag must be set after the recovery reload finishes, not before --
+      // otherwise load() would immediately wipe the notice it is meant to
+      // introduce.
       await load()
+      if (props.id === idAtWrite) conflict.value = true
     } else {
       writeError.value = friendlyError(e)
     }
@@ -453,6 +488,7 @@ function goReview(gap) {
 }
 
 onMounted(load)
+watch(() => props.id, load)
 </script>
 
 <style scoped>

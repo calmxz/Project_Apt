@@ -695,6 +695,19 @@ describe('SessionsLibraryView', () => {
       expect(wrapper.get('[data-testid="library-search"]').element.value).toBe('gly')
     })
 
+    it('clamps a bookmarked q to the backend cap of 200 chars', async () => {
+      Object.assign(mockRouteQuery, { q: 'x'.repeat(250) })
+      sessionsApi.getSessionLibrary.mockResolvedValue(page([item('a')]))
+      const wrapper = mount(SessionsLibraryView, { global: { stubs } })
+      await flushPromises()
+
+      expect(sessionsApi.getSessionLibrary).toHaveBeenCalledWith(
+        expect.objectContaining({ q: 'x'.repeat(200) }),
+        { silent: true },
+      )
+      expect(wrapper.get('[data-testid="library-search"]').element.value).toHaveLength(200)
+    })
+
     it('ignores an invalid status query value', async () => {
       Object.assign(mockRouteQuery, { status: 'garbage' })
       sessionsApi.getSessionLibrary.mockResolvedValue(page([item('a')]))

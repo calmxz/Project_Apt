@@ -118,6 +118,43 @@ value from `ingestion_service.INGEST_ERROR_MESSAGES` (or upload.py's fixed
   (pure ASGI, registered outermost) before any parsing. Multipart uploads have
   their own gate in `routes/upload.py`.
 
+### Unhandled-error contract (C-14)
+
+`backend/lib/error_handlers.py`. Any exception that escapes a route answers
+`500 {"detail": {"code": "internal_error", "message": "Something went wrong.",
+"request_id": ...}}`; the exception text never reaches the body. It is a pure
+ASGI middleware registered between BodySizeLimit and CORS so the 500 carries
+CORS headers (the C-03 trap) and does not buffer SSE. A plain `ValueError`
+(exact type only) answers `422 invalid_value` with its message; subclasses
+such as pydantic `ValidationError` and `json.JSONDecodeError` fall through to
+the 500 because they usually mean corrupt stored data, not bad input.
+Route-level `except ValueError` blocks still take precedence.
+
+### Cross-session insights module (G-14)
+
+`services/profile_insights.py` owns `aggregate_for_user` and the weekly
+insights; it imports from `services/profile_service.py`, never the reverse
+(a test walks the AST to keep it that way).
+
+### Access-token revocation window (A-01)
+
+`backend/services/auth.py` verifies JWT signature, `exp`, `aud` and `iss`
+only; there is no revocation primitive. See `docs/decisions.md`, 2026-09-21
+Wave 4 entry, for the residual-window tradeoff and the TTL value.
+
+### Cost cap tiers (B-08)
+
+| Tier | Formula | Local/dev default (`backend/config.py`) | Render blueprint (`render.yaml`) |
+|---|---|---|---|
+| Soft | `LLM_SOFT_CAP_USD` | 2.00 | 0.50 |
+| Urgent | `hard_cap * 0.9` (`cost_meter.py:213`) | 2.70 | 0.90 |
+| Hard | `LLM_HARD_CAP_USD` | 3.00 | 1.00 |
+
+The Render blueprint values are what `render.yaml` pins for the Render
+deploy target: blueprint values, not confirmed deployed. Local dev
+(native uvicorn, docker compose) and tests use `backend/config.py` defaults
+unless `.env` overrides them.
+
 ## Frontend
 
 ### `--control-edge` token (D-20)
@@ -216,6 +253,14 @@ streamed in 40-char chunks goes from ~214 k chars through markdown-it to ~15 k.
 only. Eviction drops from the top until the head carries a server id and sets
 `hasMoreMessages = true`; `loadEarlierMessages` uses the oldest retained server
 id as its `before` cursor. Manual prepends are not capped.
+
+### Optimistic chat row identity (F-21)
+
+The optimistic user row and locally-cancelled assistant rows carry a
+`client_id` (`c-<uuid>`); `message_id` is only ever a server id or the
+literal `'pending'`. `MessageList` keys on a real `message_id`, then
+`client_id`, then index. Never write a client value into `message_id`:
+`_hasServerId` and the `before` pagination cursor read it.
 
 ### Favicon generation
 

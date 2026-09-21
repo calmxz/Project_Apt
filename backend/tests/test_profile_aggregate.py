@@ -370,7 +370,7 @@ def test_concept_accuracy_empty_when_no_events(client, db_session):
 
 
 def test_weekly_mastery_buckets_first_correct_only(db_session):
-    from services.profile_service import aggregate_for_user
+    from services.profile_insights import aggregate_for_user
 
     _seed_session_for_insights(db_session)
     # mitosis: wrong then correct in week of 2026-06-29, correct again 2 weeks later
@@ -397,7 +397,7 @@ def test_weekly_mastery_buckets_first_correct_only(db_session):
 
 
 def test_weekly_mastery_outside_window_dropped(db_session):
-    from services.profile_service import aggregate_for_user
+    from services.profile_insights import aggregate_for_user
 
     _seed_session_for_insights(db_session)
     # first correct 20 weeks before `now` -> outside the 12-week window
@@ -409,7 +409,7 @@ def test_weekly_mastery_outside_window_dropped(db_session):
 
 
 def test_weekly_mastery_diagnostic_correct_not_counted(db_session):
-    from services.profile_service import aggregate_for_user
+    from services.profile_insights import aggregate_for_user
 
     _seed_session_for_insights(db_session)
     _seed_event_for_insights(db_session, "s1", "mitosis", True, T0, purpose="diagnostic")
@@ -695,10 +695,10 @@ AGGREGATE_PIN = {
 
 def test_aggregate_response_matches_pre_change_pin(db_session):
     """F-08 regression pin: the optimisation must not move a single field."""
-    from services import profile_service
+    from services import profile_insights
 
     _seed_pin_fixture(db_session)
-    result = profile_service.aggregate_for_user(db_session, PIN_USER, now=AGG_NOW)
+    result = profile_insights.aggregate_for_user(db_session, PIN_USER, now=AGG_NOW)
     assert result.model_dump(mode="json") == AGGREGATE_PIN
 
 
@@ -706,11 +706,11 @@ def test_aggregate_does_not_load_full_session_rows(db_session):
     """F-08: the sessions scan must project only the columns the aggregate
     reads. Loading whole ORM rows drags kw_index_json and the rolling summary
     for every session the user has ever created."""
-    from services import profile_service
+    from services import profile_insights
 
     _seed_pin_fixture(db_session)
     with capture_statements(db_session) as stmts:
-        profile_service.aggregate_for_user(db_session, PIN_USER, now=AGG_NOW)
+        profile_insights.aggregate_for_user(db_session, PIN_USER, now=AGG_NOW)
 
     session_selects = [s for s in stmts if "FROM sessions" in s]
     assert session_selects, stmts
@@ -721,11 +721,11 @@ def test_aggregate_does_not_load_full_session_rows(db_session):
 
 def test_aggregate_statement_count_does_not_grow_with_sessions(db_session):
     """F-08: statement count is constant in the number of sessions."""
-    from services import profile_service
+    from services import profile_insights
 
     _seed_pin_fixture(db_session)
     with capture_statements(db_session) as small:
-        profile_service.aggregate_for_user(db_session, PIN_USER, now=AGG_NOW)
+        profile_insights.aggregate_for_user(db_session, PIN_USER, now=AGG_NOW)
     baseline = len(small)
 
     for i in range(50):
@@ -740,7 +740,61 @@ def test_aggregate_statement_count_does_not_grow_with_sessions(db_session):
     db_session.commit()
 
     with capture_statements(db_session) as large:
-        profile_service.aggregate_for_user(db_session, PIN_USER, now=AGG_NOW)
+        profile_insights.aggregate_for_user(db_session, PIN_USER, now=AGG_NOW)
 
     assert len(large) == baseline, (baseline, len(large))
     assert baseline <= 6, baseline
+
+
+# --- G-14: the insights half lives in its own module ---
+
+MOVED_NAMES = ("aggregate_for_user", "_learning_insights", "_monday")
+
+
+def test_insights_module_owns_the_moved_names():
+    from services import profile_insights
+
+    for name in MOVED_NAMES:
+        assert hasattr(profile_insights, name), name
+
+
+def test_profile_service_keeps_no_re_export_shim():
+    """A shim would leave the old coupling in place and hide missed callers."""
+    from services import profile_service
+
+    for name in MOVED_NAMES:
+        assert not hasattr(profile_service, name), name
+
+
+def test_profile_service_does_not_import_profile_insights():
+    """One-way dependency: insights -> service, never the reverse."""
+    import ast
+    from pathlib import Path
+
+    src = Path(__file__).resolve().parents[1] / "services" / "profile_service.py"
+    tree = ast.parse(src.read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                assert "profile_insights" not in alias.name, ast.dump(node)
+        elif isinstance(node, ast.ImportFrom):
+            assert "profile_insights" not in (node.module or ""), ast.dump(node)
+            for alias in node.names:
+                assert alias.name != "profile_insights", ast.dump(node)
+
+
+def test_aggregate_route_calls_the_insights_module(db_session, client, monkeypatch):
+    """The route is repointed, not just the tests."""
+    from services import profile_insights
+
+    calls: list[str] = []
+    real = profile_insights.aggregate_for_user
+
+    def _spy(db, user_id, now=None):
+        calls.append(user_id)
+        return real(db, user_id, now=now)
+
+    monkeypatch.setattr("routes.profile.profile_insights.aggregate_for_user", _spy)
+    r = client.get("/api/profile/aggregate")
+    assert r.status_code == 200, r.text
+    assert calls == ["test-user"]

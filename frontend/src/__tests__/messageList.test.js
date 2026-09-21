@@ -136,6 +136,112 @@ describe('MessageList', () => {
     expect(w.find('[data-testid="msg-streaming"]').exists()).toBe(false)
   })
 
+  // F-21: an optimistic user row has no message_id, so two of them in a row
+  // both fell back to the array index and shared a key. client_id is the
+  // stand-in until (and only until) a real server id exists.
+  describe('keying (F-21)', () => {
+    // The rendered key is not reachable from the component tree (TransitionGroup
+    // consumes it), so this asserts what the key buys: a row keeps its own
+    // component instance when the list shifts underneath it.
+    it('keeps an id-less row on its own instance when older messages are prepended', async () => {
+      const rows = [
+        { message_id: 'u9', role: 'user', content: 'one' },
+        { role: 'user', content: 'two', client_id: 'c-2' },
+      ]
+      const w = mount(MessageList, { props: { messages: rows } })
+      const firstUid = w.findAllComponents(UserBubble)[0].vm.$.uid
+      await w.setProps({
+        messages: [{ message_id: 'u8', role: 'user', content: 'older' }, ...rows],
+      })
+      const after = w.findAllComponents(UserBubble)
+      expect(after.map((b) => b.props('content'))).toEqual(['older', 'one', 'two'])
+      // Index keys re-point the first instance at 'older'; a stable id keeps
+      // 'one' on the instance that already rendered it.
+      expect(after[1].vm.$.uid).toBe(firstUid)
+    })
+
+    it('keeps an optimistic row on its own instance too', async () => {
+      const rows = [
+        { role: 'user', content: 'one', client_id: 'c-1' },
+        { role: 'user', content: 'two', client_id: 'c-2' },
+      ]
+      const w = mount(MessageList, { props: { messages: rows } })
+      const firstUid = w.findAllComponents(UserBubble)[0].vm.$.uid
+      await w.setProps({
+        messages: [{ role: 'user', content: 'older', client_id: 'c-0' }, ...rows],
+      })
+      const after = w.findAllComponents(UserBubble)
+      expect(after.map((b) => b.props('content'))).toEqual(['older', 'one', 'two'])
+      expect(after[1].vm.$.uid).toBe(firstUid)
+    })
+
+    it('still renders rows that carry neither id', () => {
+      const w = mount(MessageList, {
+        props: { messages: [{ role: 'user', content: 'q' }] },
+      })
+      expect(w.findAllComponents(UserBubble)).toHaveLength(1)
+    })
+
+    // Dup-key fix: a local Stop cancel appends an assistant row with the
+    // literal message_id 'pending' (session.js handleCancelled). `??` does
+    // not skip that string, so two such rows shared a key. The fallback must
+    // treat 'pending' as absent and use client_id instead.
+    //
+    // The dupe only breaks Vue's keyed diff when both 'pending' rows land in
+    // the "unknown middle" range of a patch (i.e. neither the head nor tail
+    // sync can resolve them positionally) -- which is exactly what happens
+    // when an older row drops off the front and a new one lands at the back
+    // in the same update. A same-key-at-tail shuffle (see the other tests in
+    // this describe block) happens to resolve correctly by luck, so this
+    // case is asserted separately.
+    it('keeps two locally-cancelled rows (both message_id="pending") on distinct instances across a full reshuffle', async () => {
+      const pending1 = {
+        message_id: 'pending',
+        role: 'assistant',
+        content: 'one',
+        tool_calls: [],
+        citations: [],
+        status: 'cancelled',
+        client_id: 'c-1',
+      }
+      const pending2 = {
+        message_id: 'pending',
+        role: 'assistant',
+        content: 'two',
+        tool_calls: [],
+        citations: [],
+        status: 'cancelled',
+        client_id: 'c-2',
+      }
+      const older = {
+        message_id: 'a-older',
+        role: 'assistant',
+        content: 'zero',
+        tool_calls: [],
+        citations: [],
+        status: 'complete',
+      }
+      const newer = {
+        message_id: 'a-newer',
+        role: 'assistant',
+        content: 'three',
+        tool_calls: [],
+        citations: [],
+        status: 'complete',
+      }
+      const w = mount(MessageList, { props: { messages: [older, pending1, pending2] } })
+      const bubbles = w.findAllComponents(AssistantBubble)
+      const oneUid = bubbles.find((b) => b.props('message').content === 'one').vm.$.uid
+
+      await w.setProps({ messages: [pending1, pending2, newer] })
+
+      const after = w.findAllComponents(AssistantBubble)
+      expect(after.map((b) => b.props('message').content)).toEqual(['one', 'two', 'three'])
+      const oneAfter = after.find((b) => b.props('message').content === 'one')
+      expect(oneAfter.vm.$.uid).toBe(oneUid)
+    })
+  })
+
   // F-18: the transcript is no longer a live region — it spammed screen
   // readers with every token mutation while streaming. Discrete
   // announcements live in SessionView instead (see sessionView.test.js).

@@ -854,9 +854,10 @@ describe('SessionView', () => {
     expect(wrapper.findComponent(ReferenceStatusBannerStub).props('failed')).toBe(true)
   })
 
-  // E-07: the attempt ceiling became a wall-clock one. Still pending at 90s ->
-  // the same "still processing" copy the 90-attempt loop used to print.
-  it('falls back to the still-processing chip at the poll ceiling', async () => {
+  // E-15: still pending at the wall-clock ceiling is not a chip-worthy outcome.
+  // ReferenceStatusBanner owns steady-state ingestion status, so the chip clears
+  // and the banner carries it from there - nothing is left stuck.
+  it('clears the upload chip at the poll ceiling and leaves the banner to it', async () => {
     vi.useFakeTimers()
     try {
       const store = useSessionStore()
@@ -880,9 +881,8 @@ describe('SessionView', () => {
 
       await vi.advanceTimersByTimeAsync(WATCH_CEILING_MS)
       await flushPromises()
-      expect(wrapper.find('[data-testid="upload-status-pending"]').text()).toContain(
-        'still processing',
-      )
+      expect(wrapper.find('[data-testid="upload-status-pending"]').exists()).toBe(false)
+      expect(wrapper.text()).not.toContain('still processing')
     } finally {
       vi.useRealTimers()
     }
@@ -1732,6 +1732,109 @@ describe('SessionView', () => {
       expect(
         wrapper.find('[data-testid="session-messages"] [data-testid="check-card"]').exists(),
       ).toBe(false)
+    })
+  })
+
+  // D-21: SessionHeader's h1 is gated on a resolved topic, so before the detail
+  // fetch lands the page had no h1 at all. A visually-hidden fallback fills the
+  // gap -- and only while the gap exists, so the page never carries two h1s.
+  describe('page heading (D-21)', () => {
+    it('renders a visually-hidden fallback h1 before the topic resolves', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(() => new Promise(() => {}))
+      const wrapper = mountView()
+      await flushPromises()
+      const headings = wrapper.findAll('h1')
+      expect(headings).toHaveLength(1)
+      expect(headings[0].text()).toBe('Session')
+      expect(headings[0].classes()).toContain('sr-only')
+    })
+
+    it('drops the fallback once the topic resolves, leaving exactly one h1', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      const wrapper = mountView()
+      await flushPromises()
+      const headings = wrapper.findAll('h1')
+      expect(headings).toHaveLength(1)
+      expect(headings[0].text()).toBe('Calculus')
+    })
+
+    it('renders only the not-found h1 on the 404 branch', async () => {
+      const store = useSessionStore()
+      const err = Object.assign(new Error('not found'), { status: 404 })
+      vi.spyOn(store, 'loadSession').mockRejectedValue(err)
+      const wrapper = mountView({ id: 'gone' })
+      await flushPromises()
+      const headings = wrapper.findAll('h1')
+      expect(headings).toHaveLength(1)
+      expect(headings[0].text()).toBe('Session not found')
+    })
+  })
+
+  // E-20 / D-25: the composer never locked on an open check (checkLocked was a
+  // constant false), so the prop, its Skip button and the store computed went.
+  // CheckQuestion owns Skip.
+  describe('composer has no check lock (E-20)', () => {
+    it('does not render a composer Skip button while a check batch is open', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+        store.pendingCheck = {
+          gap: 'ATP yield',
+          total: 1,
+          currentIndex: 0,
+          viewIndex: 0,
+          items: [{ question: 'How many ATP?', options: ['30', '38'], status: 'pending' }],
+        }
+      })
+      const wrapper = mountView()
+      await flushPromises()
+      expect(wrapper.find('[data-testid="composer-skip"]').exists()).toBe(false)
+      expect(wrapper.findComponent(Composer).props()).not.toHaveProperty('locked')
+      expect(store.checkLocked).toBeUndefined()
+    })
+  })
+
+  // E-17: options were gated on `answered` only, which flips after the POST
+  // returns - the in-flight window accepted a second click that the store then
+  // dropped silently.
+  describe('check answering (E-17)', () => {
+    function openBatch(store) {
+      store.pendingCheck = {
+        gap: 'ATP yield',
+        total: 1,
+        currentIndex: 0,
+        viewIndex: 0,
+        items: [
+          {
+            question: 'How many ATP?',
+            options: ['30', '38'],
+            status: 'pending',
+            selectedIndex: null,
+            correctIndex: null,
+            correct: null,
+            explanation: null,
+          },
+        ],
+      }
+    }
+
+    it('passes the store answering flag down to the check card', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+        openBatch(store)
+      })
+      const wrapper = mountView()
+      await flushPromises()
+      const card = wrapper.findComponent(CheckQuestion)
+      expect(card.props('answering')).toBe(false)
+      store.checkAnswering = true
+      await nextTick()
+      expect(card.props('answering')).toBe(true)
     })
   })
 })

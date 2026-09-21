@@ -38,21 +38,35 @@ const resolved = computed(() => {
   return systemDark.value ? 'dark' : 'light'
 })
 
+// F-20: module-scope so dispose() can remove the exact listener init() added
+// (a closure declared inside init() would be a different function reference
+// each call, so removeEventListener/removeListener would silently no-op).
+function handler(event) {
+  systemDark.value = event.matches
+  applyAttribute(resolved.value)
+}
+
 function init() {
   if (typeof window === 'undefined' || typeof document === 'undefined') return
+  // Re-entry guard: a second init() call (e.g. a second component mount)
+  // must not attach a second matchMedia listener with no way to remove it.
+  if (mediaQuery) return
 
   if (window.matchMedia) {
     mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
     systemDark.value = mediaQuery.matches
-    const handler = (event) => {
-      systemDark.value = event.matches
-      applyAttribute(resolved.value)
-    }
     if (mediaQuery.addEventListener) mediaQuery.addEventListener('change', handler)
     else mediaQuery.addListener(handler)
   }
 
   applyAttribute(resolved.value)
+}
+
+export function dispose() {
+  if (!mediaQuery) return
+  if (mediaQuery.removeEventListener) mediaQuery.removeEventListener('change', handler)
+  else mediaQuery.removeListener(handler)
+  mediaQuery = null
 }
 
 function setTheme(value) {
@@ -72,6 +86,7 @@ export function useTheme() {
     resolved: readonly(resolved),
     isDark: computed(() => resolved.value === 'dark'),
     init,
+    dispose,
     setTheme,
     toggle,
   }

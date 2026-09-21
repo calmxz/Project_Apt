@@ -28,6 +28,12 @@
 
     <template v-else>
       <div class="sheet-header">
+        <!-- D-21: SessionHeader's own h1 is gated on a resolved topic, so the
+             page had no h1 at all while the detail fetch was in flight. This
+             fills that window only -- the two are mutually exclusive on the
+             same predicate, so the page never carries two h1s. The 404 branch
+             is excluded structurally: it is the v-if arm above. -->
+        <h1 v-if="!headerTopic" class="sr-only">Session</h1>
         <SessionHeader
           :topic="headerTopic"
           :session-id="props.id"
@@ -87,6 +93,7 @@
                 class="check-inline"
                 :check="store.pendingCheck"
                 :busy="store.streamState !== 'idle'"
+                :answering="store.checkAnswering"
                 @answer="onAnswerCheck"
                 @skip="onSkipCheck"
                 @next="store.nextCheck"
@@ -102,6 +109,7 @@
               v-if="!isNarrow && store.pendingCheck && !store.detailLoading"
               :check="store.pendingCheck"
               :busy="store.streamState !== 'idle'"
+              :answering="store.checkAnswering"
               @answer="onAnswerCheck"
               @skip="onSkipCheck"
               @next="store.nextCheck"
@@ -179,11 +187,9 @@
               :sending="sending"
               :stream-state="store.streamState"
               :describedby="capDescribedby"
-              :locked="store.checkLocked"
               @send="send"
               @stop="store.stopStream"
               @attach="onAttachFile"
-              @skip="onSkipCheck"
             />
 
             <SessionEndedBanner
@@ -922,10 +928,11 @@ function applyUploadOutcome(outcome, filename) {
     }
     return
   }
-  uploadStatus.value = {
-    kind: 'pending',
-    text: `${filename} is still processing. You can keep asking while it finishes.`,
-  }
+  // E-15: still pending at the wall-clock ceiling. The chip is a report on one
+  // upload attempt and nothing clears it, so a "still processing" caption sat
+  // there for the rest of the session on top of ReferenceStatusBanner, which
+  // already owns steady-state ingestion status. Hand it over: clear the chip.
+  uploadStatus.value = null
 }
 
 async function resume() {

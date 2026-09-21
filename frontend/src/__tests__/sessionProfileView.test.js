@@ -490,4 +490,183 @@ describe('SessionProfileView (per-session)', () => {
     )
     expect(wrapper.get('[data-testid="add-gap"]').attributes('aria-label')).toBe('Add a gap')
   })
+
+  // E-18: navigating from one session's profile straight to another's (no
+  // remount, same route component) must reload for the new id.
+  it('reloads the profile when props.id changes', async () => {
+    const getSessionProfile = vi.spyOn(profileApi, 'getSessionProfile').mockResolvedValue({
+      profile: { knowledge_level: 'beginner', confirmed_gaps: [], mastered_concepts: [] },
+      etag: 'e0',
+      recent_learning_events: [],
+    })
+    const wrapper = mount(ProfileView, { props: { id: 's1' }, global: { stubs } })
+    await flushPromises()
+    expect(getSessionProfile).toHaveBeenNthCalledWith(1, 's1')
+
+    await wrapper.setProps({ id: 's2' })
+    await flushPromises()
+    expect(getSessionProfile).toHaveBeenNthCalledWith(2, 's2')
+  })
+
+  // E-18: a slow response for the id navigated away from must not overwrite
+  // the newer id's data once it arrives later.
+  it('discards a stale load that resolves after a newer one', async () => {
+    const pending = {}
+    vi.spyOn(profileApi, 'getSessionProfile').mockImplementation(
+      (id) =>
+        new Promise((resolve) => {
+          pending[id] = resolve
+        }),
+    )
+    const wrapper = mount(ProfileView, { props: { id: 's1' }, global: { stubs } })
+    await flushPromises()
+
+    await wrapper.setProps({ id: 's2' })
+    await flushPromises()
+
+    pending.s2({
+      profile: { knowledge_level: 'advanced', confirmed_gaps: [], mastered_concepts: [] },
+      etag: 'e-s2',
+      recent_learning_events: [],
+    })
+    await flushPromises()
+
+    pending.s1({
+      profile: { knowledge_level: 'beginner', confirmed_gaps: [], mastered_concepts: [] },
+      etag: 'e-s1',
+      recent_learning_events: [],
+    })
+    await flushPromises()
+
+    const active = wrapper.get('[data-testid="level-select"]').find('.level-opt.active')
+    expect(active.text()).toBe('advanced')
+    expect(wrapper.find('[data-testid="sprof-loading"]').exists()).toBe(false)
+  })
+
+  // Stale-sibling-state fix: the route component is reused across
+  // session->session navigation (E-18), so a write-error banner, an unsaved
+  // draft, and an open gap picker left over from session A must not still be
+  // showing once the id-change watcher has loaded session B.
+  it('discards a write result that resolves after props.id changed', async () => {
+    const getSessionProfile = vi
+      .spyOn(profileApi, 'getSessionProfile')
+      .mockImplementation(async (id) => ({
+        profile: { knowledge_level: 'beginner', confirmed_gaps: [], mastered_concepts: [] },
+        etag: `etag-${id}`,
+        recent_learning_events: [],
+      }))
+    let resolveWrite
+    vi.spyOn(profileApi, 'patchProfile').mockReturnValueOnce(
+      new Promise((r) => {
+        resolveWrite = r
+      }),
+    )
+    const wrapper = mount(ProfileView, { props: { id: 's1' }, global: { stubs } })
+    await flushPromises()
+
+    await wrapper.get('[data-testid="add-mastered"]').setValue('loops')
+    await wrapper.get('[data-testid="add-mastered-submit"]').trigger('click')
+
+    await wrapper.setProps({ id: 's2' })
+    await flushPromises()
+    expect(getSessionProfile).toHaveBeenLastCalledWith('s2')
+
+    // s1's write lands late with s1's profile + etag: must not paint onto s2.
+    resolveWrite({
+      profile: {
+        knowledge_level: 'advanced',
+        confirmed_gaps: [],
+        mastered_concepts: [{ name: 'loops', evidence_type: 'declared', last_event_at: null }],
+      },
+      etag: 'etag-s1-after-write',
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('loops')
+    expect(wrapper.vm.data.etag).toBe('etag-s2')
+  })
+
+  it('keeps an unsaved draft across a 412 recovery reload', async () => {
+    vi.spyOn(profileApi, 'getSessionProfile').mockResolvedValue({
+      profile: { knowledge_level: 'beginner', confirmed_gaps: [], mastered_concepts: [] },
+      etag: 'e0',
+      recent_learning_events: [],
+    })
+    vi.spyOn(profileApi, 'patchProfile').mockRejectedValueOnce(
+      Object.assign(new Error('x'), { status: 412 }),
+    )
+    const wrapper = mount(ProfileView, { props: { id: 's1' }, global: { stubs } })
+    await flushPromises()
+
+    await wrapper.get('[data-testid="add-gap"]').setValue('half-typed')
+    await wrapper.get('[data-testid="add-mastered"]').setValue('loops')
+    await wrapper.get('[data-testid="add-mastered-submit"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="sprof-conflict"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="add-gap"]').element.value).toBe('half-typed')
+  })
+
+  it('clears writeError, drafts, and the gap picker when props.id changes', async () => {
+    vi.spyOn(profileApi, 'getSessionProfile').mockResolvedValue({
+      profile: {
+        knowledge_level: 'beginner',
+        confirmed_gaps: [
+          { name: 'a', evidence_type: null, last_event_at: null },
+          { name: 'b', evidence_type: null, last_event_at: null },
+        ],
+        mastered_concepts: [],
+      },
+      etag: 'e0',
+      recent_learning_events: [],
+    })
+    vi.spyOn(profileApi, 'patchProfile').mockRejectedValueOnce(
+      Object.assign(new Error('boom'), { status: 500 }),
+    )
+    const wrapper = mount(ProfileView, { props: { id: 's1' }, global: { stubs } })
+    await flushPromises()
+
+    await wrapper.get('[data-testid="add-mastered"]').setValue('loops')
+    await wrapper.get('[data-testid="add-mastered-submit"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sprof-write-error"]').exists()).toBe(true)
+
+    await wrapper.get('[data-testid="add-gap"]').setValue('unsaved-draft')
+    await wrapper.get('[data-testid="sprof-review-gaps"]').trigger('click')
+    expect(wrapper.find('[data-testid="gap-picker"]').exists()).toBe(true)
+
+    await wrapper.setProps({ id: 's2' })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="sprof-write-error"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="gap-picker"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="add-gap"]').element.value).toBe('')
+  })
+
+  // Same fix, the conflict banner: a 412 leaves conflict=true after the
+  // recovery reload finishes, and that must not survive a subsequent
+  // id-change navigation either.
+  it('clears the conflict banner when props.id changes after a 412', async () => {
+    const getSessionProfile = vi.spyOn(profileApi, 'getSessionProfile').mockResolvedValue({
+      profile: { knowledge_level: 'beginner', confirmed_gaps: [], mastered_concepts: [] },
+      etag: 'e0',
+      recent_learning_events: [],
+    })
+    vi.spyOn(profileApi, 'patchProfile').mockRejectedValueOnce(
+      Object.assign(new Error('x'), { status: 412 }),
+    )
+    const wrapper = mount(ProfileView, { props: { id: 's1' }, global: { stubs } })
+    await flushPromises()
+
+    await wrapper.get('[data-testid="add-mastered"]').setValue('loops')
+    await wrapper.get('[data-testid="add-mastered-submit"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="sprof-conflict"]').exists()).toBe(true)
+    expect(getSessionProfile).toHaveBeenCalledTimes(2)
+
+    await wrapper.setProps({ id: 's2' })
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="sprof-conflict"]').exists()).toBe(false)
+  })
 })
