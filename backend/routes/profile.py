@@ -12,7 +12,7 @@ from contracts import (
 from db.database import get_db
 from db.models import LearningEvent
 from db.models import Session as SessionModel
-from services import profile_service
+from services import profile_insights, profile_service
 from services.auth import current_user_id
 
 router = APIRouter(prefix="/api")
@@ -23,7 +23,7 @@ def get_aggregate_profile(
     user_id: str = Depends(current_user_id),
     db: Session = Depends(get_db),
 ):
-    return profile_service.aggregate_for_user(db, user_id)
+    return profile_insights.aggregate_for_user(db, user_id)
 
 
 @router.get("/profile/{session_id}", response_model=ProfileResponse)

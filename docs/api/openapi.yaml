@@ -178,7 +178,8 @@ paths:
         - in: query
           name: q
           required: false
-          schema: { type: [string, "null"], default: null }
+          description: Case-insensitive substring match on topic. LIKE metacharacters are matched literally.
+          schema: { type: [string, "null"], default: null, maxLength: 200 }
         - in: query
           name: sort
           required: false

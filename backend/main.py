@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from config import assert_prod_database, settings
 from db.database import create_tables
 from lib.body_limit import BodySizeLimitMiddleware
+from lib.error_handlers import UnhandledErrorMiddleware, value_error_handler
 from lib.logging_config import configure_logging
 from lib.request_id import RequestIdMiddleware
 from routes import chat, documents, health, me, profile, review, sessions, upload, usage
@@ -61,6 +62,14 @@ app = FastAPI(title="Crux", lifespan=lifespan)
 # client sees an opaque CORS error instead of the body_too_large payload.
 app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.max_json_body_bytes)
 
+# C-14: registered between BodySizeLimit and CORS, which puts it INSIDE
+# CORSMiddleware (so a cross-origin 500 carries access-control-allow-origin
+# and the browser shows the body) and OUTSIDE BodySizeLimitMiddleware (whose
+# 413 and internal control-flow exception must not be logged as unhandled).
+# add_exception_handler(Exception, ...) cannot be used here: it runs in
+# ServerErrorMiddleware, outside every layer below. Same trap as C-03 above.
+app.add_middleware(UnhandledErrorMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
@@ -74,6 +83,13 @@ app.add_middleware(
 # response -- including the 413 from BodySizeLimitMiddleware below it --
 # carries X-Request-Id.
 app.add_middleware(RequestIdMiddleware)
+
+# C-14: unlike the catch-all above, this one can use the ordinary handler
+# mechanism -- Starlette's ExceptionMiddleware runs INSIDE the middleware
+# stack, so the 422 still passes out through CORSMiddleware. Route-level
+# ValueError catches (routes/profile.py, routes/upload.py) still win; this is
+# the backstop for the ones nobody caught.
+app.add_exception_handler(ValueError, value_error_handler)
 
 app.include_router(health.router)
 app.include_router(chat.router)

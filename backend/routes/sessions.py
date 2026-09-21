@@ -329,11 +329,33 @@ def _build_end_summary(db: Session, session_id: str, text: str) -> SessionEndSum
     return SessionEndSummary(kind="summary", text=cleaned)
 
 
+LIKE_ESCAPE = "\\"
+
+
+def _like_literal(value: str) -> str:
+    """C-17: escape LIKE metacharacters so a search term is matched literally.
+
+    `%` and `_` are wildcards, so an unescaped "50%" matched every topic
+    starting with "50" and a bare "%" matched the user's whole library. The
+    escape character itself must be doubled FIRST, or the escapes added below
+    would themselves be escaped. Pair with `escape=LIKE_ESCAPE` on the
+    comparison.
+    """
+    return (
+        value.replace(LIKE_ESCAPE, LIKE_ESCAPE * 2)
+        .replace("%", LIKE_ESCAPE + "%")
+        .replace("_", LIKE_ESCAPE + "_")
+    )
+
+
 # NOTE: must be declared BEFORE GET /sessions/{session_id} or it is captured as a session lookup.
 @router.get("/sessions/library", response_model=SessionLibraryPage)
 def list_session_library(
     status: Literal["all", "active", "ended"] = "all",
-    q: str | None = None,
+    # C-17: capped like the sibling /sessions/lookup `topic` param. `q` drives a
+    # leading-wildcard LIKE over every topic the user owns, so an uncapped term
+    # is an unbounded-work knob.
+    q: str | None = Query(None, max_length=200),
     sort: Literal["last_activity", "created", "topic", "pinned_activity"] = "last_activity",
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
@@ -346,7 +368,9 @@ def list_session_library(
     elif status == "ended":
         base = base.where(SessionModel.ended_at.is_not(None))
     if q:
-        base = base.where(SessionModel.topic.ilike(f"%{q}%"))
+        base = base.where(
+            SessionModel.topic.ilike(f"%{_like_literal(q)}%", escape=LIKE_ESCAPE)
+        )
 
     total = db.execute(
         select(func.count()).select_from(base.subquery())
@@ -755,7 +779,9 @@ def _recent_history(db: Session, session_id: str) -> list[dict]:
     rows = db.execute(
         select(ChatMessage)
         .where(ChatMessage.session_id == session_id)
-        .order_by(ChatMessage.created_at.desc())
+        # C-18: see routes/chat.py::_prepare_turn_context -- id DESC breaks
+        # created_at ties so the history window is deterministic.
+        .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
         .limit(20)
     ).scalars().all()
     return [{"role": m.role, "content": m.content} for m in reversed(rows)]

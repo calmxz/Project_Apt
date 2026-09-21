@@ -95,8 +95,11 @@ def test_prompt_build_failure_still_persists_user_message(client, db_session, mo
 
     monkeypatch.setattr("routes.chat.prompts.build_system_prompt", _boom)
 
-    with pytest.raises(RuntimeError, match="prompt build exploded"):
-        _post_stream(client, message="save me")
+    # C-14: the crash is now answered by UnhandledErrorMiddleware instead of
+    # propagating out of the TestClient. The persist behaviour under test is
+    # unchanged; only the shape of the client-visible failure moved.
+    status, _ = _post_stream(client, message="save me")
+    assert status == 500
 
     user_msgs = db_session.execute(
         select(ChatMessage).where(
@@ -129,8 +132,10 @@ def test_prepare_turn_failure_rerecords_embedding_spend(client, db_session, monk
 
     monkeypatch.setattr("routes.chat.prompts.build_system_prompt", _boom)
 
-    with pytest.raises(RuntimeError, match="boom"):
-        _post_stream(client, message="hi")
+    # C-14: answered as a coded 500 rather than propagating; see
+    # test_prompt_build_failure_still_persists_user_message.
+    status, _ = _post_stream(client, message="hi")
+    assert status == 500
 
     from services import cost_meter
 
@@ -220,8 +225,10 @@ def test_prepare_turn_failure_releases_the_reserve(client, db_session, monkeypat
 
     monkeypatch.setattr("routes.chat.prompts.build_system_prompt", _boom)
 
-    with pytest.raises(RuntimeError, match="prompt build exploded"):
-        _post_stream(client, message="save me")
+    # C-14: answered as a coded 500 rather than propagating; see
+    # test_prompt_build_failure_still_persists_user_message.
+    status, _ = _post_stream(client, message="save me")
+    assert status == 500
 
     assert cost_meter.current_spend(db_session, USER_ID) == Decimal("0.0000")
 

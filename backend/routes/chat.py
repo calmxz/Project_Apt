@@ -280,7 +280,10 @@ def _prepare_turn_context(req: ChatRequest, db: Session, session: SessionModel):
     history = db.execute(
         select(ChatMessage)
         .where(ChatMessage.session_id == req.session_id)
-        .order_by(ChatMessage.created_at.desc())
+        # C-18: id DESC breaks created_at ties, so a batched write (or a coarse
+        # clock) cannot reorder the prompt history or drop the wrong turn.
+        # Matches services/session_enrichment.py and the session library query.
+        .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
         .limit(20)
     ).scalars().all()
     history = list(reversed(history))
