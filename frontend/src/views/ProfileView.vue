@@ -353,18 +353,24 @@ const subtopicEntries = computed(() => Object.entries(data.value?.profile?.subto
 // most recent one is allowed to write state.
 let loadSeq = 0
 
+let loadedId = null
 async function load() {
   const seq = ++loadSeq
   // Stale-sibling-state fix: the route component is reused across
   // session->session navigation (E-18), so these must not survive into the
   // newly-loaded session -- a write-error banner, an open-conflict notice, an
   // unsaved add-item draft, or an open gap picker all belong to the session
-  // being left.
+  // being left. Drafts and the picker are reset only when the id actually
+  // changed: load() is also the 412 recovery path, and a half-typed draft
+  // must survive a conflict reload.
   conflict.value = false
   writeError.value = ''
-  drafts.confirmed_gaps = ''
-  drafts.mastered_concepts = ''
-  gapPickerOpen.value = false
+  if (loadedId !== props.id) {
+    drafts.confirmed_gaps = ''
+    drafts.mastered_concepts = ''
+    gapPickerOpen.value = false
+  }
+  loadedId = props.id
   loading.value = true
   error.value = ''
   try {
@@ -401,23 +407,24 @@ function _applyWrite(fn) {
 async function _doWrite(fn) {
   conflict.value = false
   writeError.value = ''
+  // A write started on session A must not paint its result, its error, or
+  // its conflict notice onto session B if the user navigated mid-flight.
+  const idAtWrite = props.id
   try {
     const res = await fn()
+    if (props.id !== idAtWrite) return
     // One source of truth for the etag: keeping a separate ref alongside
     // data.etag let the spread re-seed the stale value on the next write.
     data.value = { ...data.value, profile: res.profile, etag: res.etag }
   } catch (e) {
+    if (props.id !== idAtWrite) return
     if (e?.status === 412) {
       // load() resets conflict at its top (stale-sibling-state fix), so the
       // flag must be set after the recovery reload finishes, not before --
       // otherwise load() would immediately wipe the notice it is meant to
       // introduce.
-      const idAtConflict = props.id
       await load()
-      // Guard the same way load() does: if the user left for another session
-      // while the recovery reload was in flight, the notice belongs to the
-      // session they left.
-      if (props.id === idAtConflict) conflict.value = true
+      if (props.id === idAtWrite) conflict.value = true
     } else {
       writeError.value = friendlyError(e)
     }

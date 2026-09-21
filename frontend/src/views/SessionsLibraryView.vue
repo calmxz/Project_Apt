@@ -72,8 +72,11 @@ const VALID_STATUSES = ['all', 'active', 'ended']
 function statusFromQuery(query) {
   return VALID_STATUSES.includes(query.status) ? query.status : 'all'
 }
+// Clamped to the backend's 200-char cap on `q` (C-17) so a long bookmarked
+// ?q= cannot turn the first load into a 422.
+const Q_MAX = 200
 function qFromQuery(query) {
-  return typeof query.q === 'string' ? query.q : ''
+  return typeof query.q === 'string' ? query.q.slice(0, Q_MAX) : ''
 }
 const status = ref(statusFromQuery(route.query))
 const q = ref(qFromQuery(route.query))
