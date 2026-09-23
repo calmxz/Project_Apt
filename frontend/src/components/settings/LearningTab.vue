@@ -1,5 +1,5 @@
 <template>
-  <div class="profile-tab" data-testid="agg-profile">
+  <div class="learning-tab" data-testid="agg-profile">
     <section class="sec" data-testid="profile-feedback">
       <h2 class="sec-title">Feedback style</h2>
       <FeedbackStylePicker v-model="feedback" :options="feedbackOptions" />
@@ -167,13 +167,13 @@ async function saveFeedback() {
 </script>
 
 <style scoped>
-/* The account tab holds only what is true at account level: Feedback style,
+/* The learning tab holds only what is true at account level: Feedback style,
    then one pencil summary line (topic count, total mastered when non-zero,
    and the most recently active session's open focus cue) with a link to the
    library. Per-topic gaps, mastered concepts and focus live on that
    session's own profile page; the full per-session list lives in the
    library at /sessions, not duplicated here. */
-.profile-tab {
+.learning-tab {
   /* Full panel width. Two independent sections -- Feedback style, then
      Topics -- are their own desk-deep cards, stacked here and sitting side
      by side from 60rem up. */
@@ -224,7 +224,7 @@ async function saveFeedback() {
 }
 
 /* Card shell, .sec-title, .saved-flash, .tick and .skel-block come from
-   SettingsView's .panel; only this tab's own alignment is declared here. */
+   assets/sheet.css; only this tab's own alignment is declared here. */
 .sec {
   align-items: stretch;
   gap: 0.5rem;
@@ -272,7 +272,7 @@ async function saveFeedback() {
 
 /* From 60rem the two cards sit side by side. */
 @media (min-width: 60rem) {
-  .profile-tab {
+  .learning-tab {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 

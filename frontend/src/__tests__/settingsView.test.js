@@ -15,7 +15,7 @@ vi.mock('../services/profileApi.js', () => ({
   getUsageSummary: (...a) => getUsageSummary(...a),
 }))
 
-// ProfileTab lists topics from GET /sessions now, not the aggregate profile.
+// LearningTab lists topics from GET /sessions now, not the aggregate profile.
 const listSessions = vi.fn()
 vi.mock('../services/sessionsApi.js', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -48,9 +48,8 @@ function minimalUsageFixture() {
 }
 
 const stubs = {
-  ProfileTab: { template: '<div data-testid="stub-profile" />' },
+  LearningTab: { template: '<div data-testid="stub-learning" />' },
   UsageTab: { template: '<div data-testid="stub-usage" />' },
-  AccountTab: { template: '<div data-testid="stub-account" />' },
   AppearanceTab: { template: '<div data-testid="stub-appearance" />' },
 }
 
@@ -59,7 +58,7 @@ function makeRouter() {
     history: createMemoryHistory(),
     routes: [
       { path: '/settings/:tab', name: 'settings', component: SettingsView, props: true },
-      // ProfileTab's topic rows link here; without the route vue-router
+      // LearningTab's topic rows link here; without the route vue-router
       // throws an unhandled "No match" while resolving the link.
       {
         path: '/sessions/:id/profile',
@@ -82,54 +81,59 @@ async function mountAt(tab) {
 }
 
 describe('SettingsView shell', () => {
-  it('renders four rail tabs with testids', async () => {
-    const { w } = await mountAt('profile')
-    for (const slug of ['profile', 'usage', 'account', 'appearance']) {
+  it('renders three rail tabs with testids', async () => {
+    const { w } = await mountAt('learning')
+    for (const slug of ['learning', 'usage', 'appearance']) {
       expect(w.find(`[data-testid="settings-tab-${slug}"]`).exists()).toBe(true)
     }
     expect(w.find('[data-testid="settings-tab-rail"]').attributes('role')).toBe('tablist')
+    expect(w.findAll('[role="tab"]').map((t) => t.text())).toEqual([
+      'Learning',
+      'Usage',
+      'Appearance',
+    ])
   })
 
   it('R2: rail tabs carry coarse-2x for a coarse-pointer two-pitch target', async () => {
-    const { w } = await mountAt('profile')
-    expect(w.find('[data-testid="settings-tab-profile"]').classes()).toContain('coarse-2x')
+    const { w } = await mountAt('learning')
+    expect(w.find('[data-testid="settings-tab-learning"]').classes()).toContain('coarse-2x')
   })
 
   it('active tab follows the tab prop', async () => {
     const { w } = await mountAt('usage')
     expect(w.find('[data-testid="stub-usage"]').exists()).toBe(true)
-    expect(w.find('[data-testid="stub-profile"]').exists()).toBe(false)
+    expect(w.find('[data-testid="stub-learning"]').exists()).toBe(false)
     expect(w.find('[data-testid="settings-tab-usage"]').attributes('aria-selected')).toBe('true')
   })
 
   it('clicking a rail tab pushes the route', async () => {
-    const { w, router } = await mountAt('profile')
-    await w.find('[data-testid="settings-tab-account"]').trigger('click')
+    const { w, router } = await mountAt('learning')
+    await w.find('[data-testid="settings-tab-usage"]').trigger('click')
     await flushPromises()
-    expect(router.currentRoute.value.params.tab).toBe('account')
+    expect(router.currentRoute.value.params.tab).toBe('usage')
   })
 
   it('arrow key moves selection to the next tab (a11y)', async () => {
-    const { w, router } = await mountAt('profile')
-    await w.find('[data-testid="settings-tab-profile"]').trigger('keydown', { key: 'ArrowDown' })
+    const { w, router } = await mountAt('learning')
+    await w.find('[data-testid="settings-tab-learning"]').trigger('keydown', { key: 'ArrowDown' })
     await flushPromises()
     expect(router.currentRoute.value.params.tab).toBe('usage')
   })
 
   it('pressing ArrowDown twice moves two tabs forward (real focus must follow activation)', async () => {
     const router = makeRouter()
-    await router.push('/settings/profile')
+    await router.push('/settings/learning')
     const w = mount(SettingsView, {
-      props: { tab: 'profile' },
+      props: { tab: 'learning' },
       global: { plugins: [router], stubs },
       attachTo: document.body,
     })
 
-    // Dispatch a real (bubbling) keydown on the profile tab button, the way
+    // Dispatch a real (bubbling) keydown on the learning tab button, the way
     // a keyboard user would. Do NOT re-query by testid for the second press
     // -- with roving tabindex the second ArrowDown must land wherever DOM
     // focus actually is.
-    w.find('[data-testid="settings-tab-profile"]').element.dispatchEvent(
+    w.find('[data-testid="settings-tab-learning"]').element.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }),
     )
     await flushPromises()
@@ -140,24 +144,24 @@ describe('SettingsView shell', () => {
       new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }),
     )
     await flushPromises()
-    expect(router.currentRoute.value.params.tab).toBe('account')
+    expect(router.currentRoute.value.params.tab).toBe('appearance')
 
     w.unmount()
   })
 
-  it('KeepAlive prevents ProfileTab refetch when navigating profile -> usage -> profile', async () => {
+  it('KeepAlive prevents LearningTab refetch when navigating learning -> usage -> learning', async () => {
     setActivePinia(createPinia())
     listSessions.mockReset().mockResolvedValue(minimalSessionsFixture())
     getUsageSummary.mockReset().mockResolvedValue(minimalUsageFixture())
 
     const router = makeRouter()
-    await router.push('/settings/profile')
+    await router.push('/settings/learning')
 
     const Root = { template: '<router-view />' }
     const w = mount(Root, {
       global: {
         plugins: [router],
-        stubs: { AccountTab: stubs.AccountTab, AppearanceTab: stubs.AppearanceTab },
+        stubs: { AppearanceTab: stubs.AppearanceTab },
       },
     })
     await flushPromises()
@@ -167,7 +171,7 @@ describe('SettingsView shell', () => {
     await flushPromises()
     expect(getUsageSummary).toHaveBeenCalledTimes(1)
 
-    await w.find('[data-testid="settings-tab-profile"]').trigger('click')
+    await w.find('[data-testid="settings-tab-learning"]').trigger('click')
     await flushPromises()
     expect(listSessions).toHaveBeenCalledTimes(1)
 

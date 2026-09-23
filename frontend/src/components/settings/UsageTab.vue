@@ -49,7 +49,7 @@ onActivated(() => {
 </script>
 
 <style scoped>
-/* The card shell and .skel-block come from SettingsView's .panel; the tab
+/* The card shell and .skel-block come from assets/sheet.css; the tab
    carries the .sec class and declares only what is its own. */
 
 /* A failed read is a line of text-safe red on the pitch, not a banner, with

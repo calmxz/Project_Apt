@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
-import AccountTab from '@/components/settings/AccountTab.vue'
+import AccountView from '@/views/AccountView.vue'
 import { AUTH_CODE_COPY } from '@/lib/authErrors.js'
 import { useUserStore } from '@/stores/user.js'
 import { useAuthStore } from '@/stores/auth.js'
@@ -33,7 +33,7 @@ function ok(body) {
   })
 }
 
-describe('AccountTab', () => {
+describe('AccountView', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     showSuccess.mockClear()
@@ -48,7 +48,7 @@ describe('AccountTab', () => {
   })
 
   it('renders name field testids', () => {
-    const w = mount(AccountTab, { global: { stubs } })
+    const w = mount(AccountView, { global: { stubs } })
     for (const id of ['settings-name', 'settings-save']) {
       expect(w.find(`[data-testid="${id}"]`).exists()).toBe(true)
     }
@@ -59,21 +59,21 @@ describe('AccountTab', () => {
   it('does not render any sign-out control', async () => {
     const auth = useAuthStore()
     auth.session = { user: { id: 'u-1' }, access_token: 't' }
-    const w = mount(AccountTab, { global: { stubs } })
+    const w = mount(AccountView, { global: { stubs } })
     await flushPromises()
     expect(w.find('[data-testid="settings-signout-section"]').exists()).toBe(false)
     expect(w.find('[data-testid="settings-sign-out"]').exists()).toBe(false)
   })
 
   it('does not render the security card when unauthenticated', () => {
-    const w = mount(AccountTab, { global: { stubs } })
+    const w = mount(AccountView, { global: { stubs } })
     expect(w.find('[data-testid="settings-security"]').exists()).toBe(false)
   })
 
   it('renders the security card when authenticated', async () => {
     const auth = useAuthStore()
     auth.session = { user: { id: 'u-1', email: 'a@b.c' }, access_token: 't' }
-    const w = mount(AccountTab, { global: { stubs } })
+    const w = mount(AccountView, { global: { stubs } })
     await flushPromises()
     expect(w.find('[data-testid="settings-security"]').exists()).toBe(true)
   })
@@ -82,7 +82,7 @@ describe('AccountTab', () => {
   it('both submits are filled buttons', async () => {
     const auth = useAuthStore()
     auth.session = { user: { id: 'u-1', email: 'a@b.c' }, access_token: 't' }
-    const w = mount(AccountTab, { global: { stubs } })
+    const w = mount(AccountView, { global: { stubs } })
     await flushPromises()
     expect(w.get('[data-testid="settings-save"]').classes()).toContain('btn-fill')
     expect(w.get('[data-testid="settings-pw-submit"]').classes()).toContain('btn-fill')
@@ -90,7 +90,7 @@ describe('AccountTab', () => {
   })
 
   it('save button disabled until name changes (feedback no longer affects dirty)', async () => {
-    const w = mount(AccountTab, { global: { stubs } })
+    const w = mount(AccountView, { global: { stubs } })
     expect(w.find('[data-testid="settings-save"]').attributes('disabled')).toBeDefined()
     await w.find('[data-testid="settings-name"]').setValue('New Name')
     expect(w.find('[data-testid="settings-save"]').attributes('disabled')).toBeUndefined()
@@ -99,7 +99,7 @@ describe('AccountTab', () => {
   it('save sends name plus current stored feedback', async () => {
     const user = useUserStore()
     const updateProfile = vi.spyOn(user, 'updateProfile').mockResolvedValue()
-    const w = mount(AccountTab, { global: { stubs } })
+    const w = mount(AccountView, { global: { stubs } })
     await w.find('[data-testid="settings-name"]').setValue('New Name')
     await w.find('form').trigger('submit.prevent')
     await flushPromises()
@@ -110,7 +110,7 @@ describe('AccountTab', () => {
   it('shows inline error and re-enables on API failure', async () => {
     const user = useUserStore()
     vi.spyOn(user, 'updateProfile').mockRejectedValue(new Error('down'))
-    const w = mount(AccountTab, { global: { stubs } })
+    const w = mount(AccountView, { global: { stubs } })
     await w.find('[data-testid="settings-name"]').setValue('New Name')
     await w.find('form').trigger('submit.prevent')
     await flushPromises()
@@ -121,7 +121,7 @@ describe('AccountTab', () => {
   it('password mismatch hint shows when confirm differs', async () => {
     const auth = useAuthStore()
     auth.session = { user: { id: 'u-1', email: 'a@b.c' }, access_token: 't' }
-    const w = mount(AccountTab, { global: { stubs } })
+    const w = mount(AccountView, { global: { stubs } })
     await flushPromises()
     await w.find('[data-testid="settings-pw-new"]').setValue('longenough1')
     await w.find('[data-testid="settings-pw-confirm"]').setValue('different1')
@@ -131,7 +131,7 @@ describe('AccountTab', () => {
   it('change-password submit is gated until current + matching 8+ new password', async () => {
     const auth = useAuthStore()
     auth.session = { user: { id: 'u-1', email: 'a@b.c' }, access_token: 't' }
-    const w = mount(AccountTab, { global: { stubs } })
+    const w = mount(AccountView, { global: { stubs } })
     await flushPromises()
     const btn = w.get('[data-testid="settings-pw-submit"]')
     expect(btn.attributes('disabled')).toBeDefined()
@@ -146,7 +146,7 @@ describe('AccountTab', () => {
     auth.session = { user: { id: 'u-1', email: 'a@b.c' }, access_token: 't' }
     vi.spyOn(auth, 'signIn').mockRejectedValue(new Error('Invalid login credentials'))
     const update = vi.spyOn(auth, 'updatePassword').mockResolvedValue()
-    const w = mount(AccountTab, { global: { stubs } })
+    const w = mount(AccountView, { global: { stubs } })
     await flushPromises()
     await w.get('[data-testid="settings-pw-current"]').setValue('wrongpass')
     await w.get('[data-testid="settings-pw-new"]').setValue('newpass12')
@@ -167,7 +167,7 @@ describe('AccountTab', () => {
     auth.session = { user: { id: 'u-1', email: 'a@b.c' }, access_token: 't' }
     const signIn = vi.spyOn(auth, 'signIn').mockResolvedValue()
     const update = vi.spyOn(auth, 'updatePassword').mockResolvedValue()
-    const w = mount(AccountTab, { global: { stubs } })
+    const w = mount(AccountView, { global: { stubs } })
     await flushPromises()
     await w.get('[data-testid="settings-pw-current"]').setValue('oldpass12')
     await w.get('[data-testid="settings-pw-new"]').setValue('newpass12')
@@ -193,7 +193,7 @@ describe('AccountTab', () => {
         status: 422,
       }),
     )
-    const w = mount(AccountTab, { global: { stubs } })
+    const w = mount(AccountView, { global: { stubs } })
     await flushPromises()
     await w.get('[data-testid="settings-pw-current"]').setValue('oldpass12')
     await w.get('[data-testid="settings-pw-new"]').setValue('oldpass12x')
@@ -203,5 +203,20 @@ describe('AccountTab', () => {
     const text = w.get('[data-testid="settings-pw-error"]').text()
     expect(text).toBe(AUTH_CODE_COPY.same_password)
     expect(text).not.toContain('should be different')
+  })
+
+  // R2-18/20: the Account page shows the signed-in email, read-only, sourced
+  // from the auth store (never editable here).
+  it('renders the signed-in email from the auth store', async () => {
+    const auth = useAuthStore()
+    auth.session = { user: { id: 'u-1', email: 'learner@example.com' }, access_token: 't' }
+    const w = mount(AccountView, { global: { stubs } })
+    await flushPromises()
+    expect(w.get('[data-testid="account-email"]').text()).toContain('learner@example.com')
+  })
+
+  it('falls back to "No email" when the auth store has none', () => {
+    const w = mount(AccountView, { global: { stubs } })
+    expect(w.get('[data-testid="account-email"]').text()).toContain('No email')
   })
 })

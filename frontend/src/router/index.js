@@ -62,7 +62,7 @@ const router = createRouter({
     },
     {
       path: '/settings',
-      redirect: { name: 'settings', params: { tab: 'profile' } },
+      redirect: { name: 'settings', params: { tab: 'learning' } },
     },
     {
       path: '/settings/:tab',
@@ -70,19 +70,31 @@ const router = createRouter({
       component: () => import('../views/SettingsView.vue'),
       props: true,
       beforeEnter: (to) => {
-        const valid = ['profile', 'usage', 'account', 'appearance']
+        // Account moved to its own route (2026-09-23): the old Account tab
+        // URL redirects there instead of resolving as a Settings tab.
+        if (to.params.tab === 'account') {
+          return { name: 'account' }
+        }
+        const valid = ['learning', 'usage', 'appearance']
         if (!valid.includes(to.params.tab)) {
-          return { name: 'settings', params: { tab: 'profile' } }
+          return { name: 'settings', params: { tab: 'learning' } }
         }
       },
     },
     {
       // Unified into Settings (2026-08-02): aggregate profile is now the
-      // Profile tab. Redirect kept so old links and router.push({name})
+      // Learning tab. Redirect kept so old links and router.push({name})
       // calls keep working.
       path: '/profile',
       name: 'profile-aggregate',
-      redirect: { name: 'settings', params: { tab: 'profile' } },
+      redirect: { name: 'settings', params: { tab: 'learning' } },
+    },
+    {
+      // Account moved out of Settings and into its own page (2026-09-23):
+      // name, read-only email and password live here now.
+      path: '/account',
+      name: 'account',
+      component: () => import('../views/AccountView.vue'),
     },
     {
       // Unified into Home (2026-08-02): one canonical start experience.

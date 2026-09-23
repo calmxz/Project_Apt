@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount, flushPromises, RouterLinkStub } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
-import ProfileTab from '@/components/settings/ProfileTab.vue'
+import LearningTab from '@/components/settings/LearningTab.vue'
 import { useUserStore } from '@/stores/user.js'
 import * as sessionsApi from '@/services/sessionsApi.js'
 
@@ -59,7 +59,7 @@ function sessionList() {
   ]
 }
 
-describe('ProfileTab', () => {
+describe('LearningTab', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.restoreAllMocks()
@@ -79,7 +79,7 @@ describe('ProfileTab', () => {
     })
     vi.spyOn(sessionsApi, 'listSessions').mockReturnValue(pending)
 
-    const wrapper = mount(ProfileTab, { global: { stubs } })
+    const wrapper = mount(LearningTab, { global: { stubs } })
     await wrapper.vm.$nextTick()
 
     expect(wrapper.find('[data-testid="agg-loading"]').exists()).toBe(true)
@@ -94,7 +94,7 @@ describe('ProfileTab', () => {
     seedUser()
     vi.spyOn(sessionsApi, 'listSessions').mockResolvedValue(sessionList())
 
-    const wrapper = mount(ProfileTab, { global: { stubs } })
+    const wrapper = mount(LearningTab, { global: { stubs } })
     await flushPromises()
 
     expect(wrapper.find('[data-testid="agg-profile"]').exists()).toBe(true)
@@ -120,7 +120,7 @@ describe('ProfileTab', () => {
       },
     ])
 
-    const wrapper = mount(ProfileTab, { global: { stubs } })
+    const wrapper = mount(LearningTab, { global: { stubs } })
     await flushPromises()
 
     expect(wrapper.get('[data-testid="profile-summary-line"]').text()).toBe('1 topic')
@@ -130,7 +130,7 @@ describe('ProfileTab', () => {
     seedUser()
     vi.spyOn(sessionsApi, 'listSessions').mockResolvedValue(sessionList())
 
-    const wrapper = mount(ProfileTab, { global: { stubs } })
+    const wrapper = mount(LearningTab, { global: { stubs } })
     await flushPromises()
 
     const link = wrapper.getComponent('[data-testid="profile-see-all"]')
@@ -142,7 +142,7 @@ describe('ProfileTab', () => {
     seedUser()
     vi.spyOn(sessionsApi, 'listSessions').mockResolvedValue(sessionList())
 
-    const wrapper = mount(ProfileTab, { global: { stubs } })
+    const wrapper = mount(LearningTab, { global: { stubs } })
     await flushPromises()
 
     const html = wrapper.html()
@@ -157,7 +157,7 @@ describe('ProfileTab', () => {
     seedUser()
     vi.spyOn(sessionsApi, 'listSessions').mockRejectedValue(new Error('boom'))
 
-    const wrapper = mount(ProfileTab, { global: { stubs } })
+    const wrapper = mount(LearningTab, { global: { stubs } })
     await flushPromises()
 
     const err = wrapper.find('[data-testid="agg-error"]')
@@ -175,7 +175,7 @@ describe('ProfileTab', () => {
       .mockRejectedValueOnce(new Error('boom'))
       .mockResolvedValueOnce(sessionList())
 
-    const wrapper = mount(ProfileTab, { global: { stubs } })
+    const wrapper = mount(LearningTab, { global: { stubs } })
     await flushPromises()
 
     const retry = wrapper.find('[data-testid="agg-retry"]')
@@ -197,9 +197,9 @@ describe('ProfileTab', () => {
       .mockResolvedValue(sessionList())
 
     const Host = {
-      components: { ProfileTab },
+      components: { LearningTab },
       data: () => ({ show: true }),
-      template: '<KeepAlive><ProfileTab v-if="show" /></KeepAlive>',
+      template: '<KeepAlive><LearningTab v-if="show" /></KeepAlive>',
     }
     const wrapper = mount(Host, { global: { stubs } })
     await flushPromises()
@@ -225,7 +225,7 @@ describe('ProfileTab', () => {
     seedUser()
     vi.spyOn(sessionsApi, 'listSessions').mockResolvedValue([])
 
-    const wrapper = mount(ProfileTab, { global: { stubs } })
+    const wrapper = mount(LearningTab, { global: { stubs } })
     await flushPromises()
 
     expect(wrapper.find('[data-testid="agg-empty"]').exists()).toBe(true)
@@ -236,7 +236,7 @@ describe('ProfileTab', () => {
     seedUser()
     vi.spyOn(sessionsApi, 'listSessions').mockResolvedValue(sessionList())
 
-    const wrapper = mount(ProfileTab, { global: { stubs } })
+    const wrapper = mount(LearningTab, { global: { stubs } })
     await flushPromises()
 
     const saveBtn = wrapper.get('[data-testid="profile-feedback-save"]')
@@ -253,7 +253,7 @@ describe('ProfileTab', () => {
     const user = useUserStore()
     const updateSpy = vi.spyOn(user, 'updateProfile').mockResolvedValue()
 
-    const wrapper = mount(ProfileTab, { global: { stubs } })
+    const wrapper = mount(LearningTab, { global: { stubs } })
     await flushPromises()
 
     await wrapper.get('[data-testid="feedback-style-direct_answers"]').setValue(true)
@@ -275,7 +275,7 @@ describe('ProfileTab', () => {
       }),
     )
 
-    const wrapper = mount(ProfileTab, { global: { stubs } })
+    const wrapper = mount(LearningTab, { global: { stubs } })
     await flushPromises()
 
     await wrapper.get('[data-testid="feedback-style-direct_answers"]').setValue(true)
@@ -298,7 +298,7 @@ describe('ProfileTab', () => {
     const user = useUserStore()
     vi.spyOn(user, 'updateProfile').mockResolvedValue()
 
-    const wrapper = mount(ProfileTab, { global: { stubs } })
+    const wrapper = mount(LearningTab, { global: { stubs } })
     await flushPromises()
     await wrapper.get('[data-testid="feedback-style-direct_answers"]').setValue(true)
 
@@ -317,7 +317,7 @@ describe('ProfileTab', () => {
     seedUser()
     vi.spyOn(sessionsApi, 'listSessions').mockResolvedValue(sessionList())
 
-    const wrapper = mount(ProfileTab, { global: { stubs } })
+    const wrapper = mount(LearningTab, { global: { stubs } })
     await flushPromises()
 
     expect(wrapper.find('[data-testid="usage-panel"]').exists()).toBe(false)

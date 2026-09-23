@@ -25,6 +25,7 @@ describe('router', () => {
         'home',
         'onboarding',
         'settings',
+        'account',
         'profile-aggregate',
         'new-session',
         'session',
@@ -47,6 +48,12 @@ describe('router', () => {
     const user = useUserStore()
     user.onboardingComplete = true
     await router.push({ name: 'home' })
+    expect(router.currentRoute.value.name).toBe('login')
+  })
+
+  it('redirects unauthenticated user away from /account to /login', async () => {
+    setAuth(false)
+    await router.push({ name: 'account' })
     expect(router.currentRoute.value.name).toBe('login')
   })
 
@@ -219,7 +226,7 @@ describe('router', () => {
     expect(router.currentRoute.value.name).toBe('settings')
     expect(warn).toHaveBeenCalledWith(
       '[router] focus target #main-content not found for',
-      '/settings/profile',
+      '/settings/learning',
     )
     warn.mockRestore()
   })
