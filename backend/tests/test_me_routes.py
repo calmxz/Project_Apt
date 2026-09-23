@@ -252,8 +252,6 @@ def test_delete_me_409_when_a_row_lands_mid_delete(client, db_session, store, ad
     # back and the learner is told to retry, not shown a 500.
     from sqlalchemy.exc import IntegrityError
 
-    import routes.me as me_routes
-
     _seed_user(db_session, VICTIM, store)
     before = _counts(db_session, VICTIM)
 

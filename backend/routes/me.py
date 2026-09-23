@@ -109,7 +109,9 @@ def delete_me(
     try:
         delete_auth_user(user_id)
     except AuthAdminError:
-        logger.error("account %s: app data deleted; auth user removal failed", user_id)
+        # Strip line breaks so the id cannot forge extra log lines (CodeQL).
+        safe_id = user_id.replace("\r", "").replace("\n", "")
+        logger.error("account %s: app data deleted; auth user removal failed", safe_id)
         raise HTTPException(
             status_code=503, detail="app data deleted; auth user removal failed"
         ) from None

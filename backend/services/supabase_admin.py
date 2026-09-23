@@ -4,6 +4,8 @@ The `sb_secret_...` key (settings.supabase_secret_key) replaces the legacy
 service_role key; it is backend-only and must never be logged or echoed.
 """
 
+from urllib.parse import quote
+
 import httpx
 
 from config import settings
@@ -26,7 +28,9 @@ def delete_auth_user(user_id: str) -> None:
     status code -- never the key or the response body.
     """
     key = settings.supabase_secret_key
-    url = f"{settings.supabase_url.rstrip('/')}/auth/v1/admin/users/{user_id}"
+    # Percent-encode the id so it can only ever address one path segment.
+    safe_user_id = quote(user_id, safe="")
+    url = f"{settings.supabase_url.rstrip('/')}/auth/v1/admin/users/{safe_user_id}"
     headers = {"apikey": key, "Authorization": f"Bearer {key}"}
     try:
         resp = httpx.delete(url, headers=headers, timeout=_TIMEOUT_S)
