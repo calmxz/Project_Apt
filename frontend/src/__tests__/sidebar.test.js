@@ -44,6 +44,7 @@ vi.mock('@/services/sessionsApi.js', async (importOriginal) => {
 import Sidebar from '@/components/sidebar/Sidebar.vue'
 import { useSessionStore } from '@/stores/session.js'
 import { useAuthStore } from '@/stores/auth.js'
+import { useUserStore } from '@/stores/user.js'
 import { useSidebar, __test__ as sidebarTest } from '@/composables/useSidebar.js'
 import { RouterLink as MockRouterLink } from 'vue-router'
 
@@ -1092,9 +1093,9 @@ describe('Sidebar.vue — footer rail labels', () => {
   })
 })
 
-// Sign out moved out of Settings > Account and onto the footer rail: it is a
-// navigation act, not a setting.
-describe('Sidebar.vue — footer sign out', () => {
+// The foot's identity row opens the user menu; Sign out lives inside it and
+// keeps its old test hook.
+describe('Sidebar.vue — identity row and user menu', () => {
   let wrapper
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -1106,29 +1107,226 @@ describe('Sidebar.vue — footer sign out', () => {
     routeRef.params = {}
     routeRef.fullPath = '/'
   })
-  afterEach(() => wrapper?.unmount())
+  afterEach(() => {
+    wrapper?.unmount()
+    wrapper = null
+    document.body.innerHTML = ''
+  })
+
+  function signIn({ name = 'ada lovelace', email = 'ada@example.com' } = {}) {
+    const auth = useAuthStore()
+    auth.session = { user: { id: 'u-1', email }, access_token: 't' }
+    useUserStore().name = name
+  }
+
+  async function openMenu() {
+    await wrapper.get('[data-testid="sidebar-user-trigger"]').trigger('click')
+    await flushPromises()
+  }
 
   it('is hidden when unauthenticated', async () => {
     wrapper = mount(Sidebar)
     await flushPromises()
+    expect(wrapper.find('[data-testid="sidebar-user-trigger"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="sidebar-sign-out"]').exists()).toBe(false)
   })
 
-  it('renders a written Sign out line when authenticated and expanded', async () => {
-    const auth = useAuthStore()
-    auth.session = { user: { id: 'u-1' }, access_token: 't' }
+  it('shows the upper-cased initial and the display name', async () => {
+    signIn()
     wrapper = mount(Sidebar)
     await flushPromises()
-    const btn = wrapper.get('[data-testid="sidebar-sign-out"]')
-    expect(btn.text()).toContain('Sign out')
-    expect(btn.attributes('aria-label')).toBe('Sign out')
+    expect(wrapper.get('[data-testid="sidebar-user-initial"]').text()).toBe('A')
+    expect(wrapper.get('[data-testid="sidebar-user-name"]').text()).toBe('ada lovelace')
+    const trigger = wrapper.get('[data-testid="sidebar-user-trigger"]')
+    expect(trigger.attributes('aria-label')).toBe('Account menu for ada lovelace')
+    expect(trigger.attributes('aria-haspopup')).toBe('menu')
+    expect(trigger.attributes('aria-expanded')).toBe('false')
+    // No dangling id reference while the menu is closed.
+    expect(trigger.attributes('aria-controls')).toBeUndefined()
+  })
+
+  // stores/user.js writes 'Learner' when the name is left blank; the row
+  // treats that placeholder as unset and shows the email instead.
+  it("treats the store's 'Learner' placeholder as no name", async () => {
+    signIn({ name: 'Learner', email: 'zed@example.com' })
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(wrapper.get('[data-testid="sidebar-user-initial"]').text()).toBe('Z')
+    expect(wrapper.get('[data-testid="sidebar-user-name"]').text()).toBe('zed@example.com')
+  })
+
+  it('ArrowDown and Enter on the trigger open the menu on the first item', async () => {
+    signIn()
+    wrapper = mount(Sidebar, { attachTo: document.body })
+    await flushPromises()
+    const trigger = wrapper.get('[data-testid="sidebar-user-trigger"]')
+    for (const key of ['ArrowDown', 'Enter']) {
+      trigger.element.focus()
+      await trigger.trigger('keydown', { key })
+      await flushPromises()
+      expect(trigger.attributes('aria-expanded')).toBe('true')
+      expect(document.activeElement).toBe(
+        wrapper.get('[data-testid="sidebar-user-menu-account"]').element,
+      )
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+      await flushPromises()
+      expect(wrapper.find('[data-testid="sidebar-user-menu"]').exists()).toBe(false)
+    }
+  })
+
+  it('ArrowUp on the trigger opens the menu on the last item', async () => {
+    signIn()
+    wrapper = mount(Sidebar, { attachTo: document.body })
+    await flushPromises()
+    const trigger = wrapper.get('[data-testid="sidebar-user-trigger"]')
+    trigger.element.focus()
+    await trigger.trigger('keydown', { key: 'ArrowUp' })
+    await flushPromises()
+    expect(document.activeElement).toBe(wrapper.get('[data-testid="sidebar-sign-out"]').element)
+  })
+
+  it('Tab closes the menu and leaves focus on the trigger', async () => {
+    signIn()
+    wrapper = mount(Sidebar, { attachTo: document.body })
+    await flushPromises()
+    await openMenu()
+    const menu = wrapper.get('[data-testid="sidebar-user-menu"]')
+    const ev = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
+    menu.element.dispatchEvent(ev)
+    await flushPromises()
+    expect(ev.defaultPrevented).toBe(true)
+    expect(wrapper.find('[data-testid="sidebar-user-menu"]').exists()).toBe(false)
+    expect(document.activeElement).toBe(wrapper.get('[data-testid="sidebar-user-trigger"]').element)
+  })
+
+  it('folding the sidebar with the menu open closes it and refocuses the trigger', async () => {
+    signIn()
+    wrapper = mount(Sidebar, { attachTo: document.body })
+    await flushPromises()
+    await openMenu()
+    expect(document.activeElement).toBe(
+      wrapper.get('[data-testid="sidebar-user-menu-account"]').element,
+    )
+    useSidebar().toggleDesktop()
+    await flushPromises()
+    expect(useSidebar().mode.value).toBe('collapsed')
+    expect(document.querySelector('[data-testid="sidebar-user-menu"]')).toBeNull()
+    expect(document.activeElement).toBe(wrapper.get('[data-testid="sidebar-user-trigger"]').element)
+  })
+
+  it('Escape in the mobile drawer closes only the menu, not the drawer', async () => {
+    setViewport(390)
+    signIn()
+    wrapper = mount(Sidebar, { attachTo: document.body })
+    await flushPromises()
+    useSidebar().openDrawer()
+    await flushPromises()
+    await openMenu()
+    expect(wrapper.find('[data-testid="sidebar-user-menu"]').exists()).toBe(true)
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sidebar-user-menu"]').exists()).toBe(false)
+    expect(wrapper.get('aside').attributes('data-mode')).toBe('drawer-open')
+    expect(document.activeElement).toBe(wrapper.get('[data-testid="sidebar-user-trigger"]').element)
+  })
+
+  it('falls back to the email and its first letter when no name is set', async () => {
+    signIn({ name: null, email: 'zed@example.com' })
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(wrapper.get('[data-testid="sidebar-user-initial"]').text()).toBe('Z')
+    expect(wrapper.get('[data-testid="sidebar-user-name"]').text()).toBe('zed@example.com')
+  })
+
+  it('keeps Sign out inside the closed menu until the row is opened', async () => {
+    signIn()
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sidebar-sign-out"]').exists()).toBe(false)
+    await openMenu()
+    expect(wrapper.find('[data-testid="sidebar-sign-out"]').exists()).toBe(true)
+  })
+
+  it('opens a labelled menu with name, email, Account and Sign out', async () => {
+    signIn()
+    wrapper = mount(Sidebar, { attachTo: document.body })
+    await flushPromises()
+    await openMenu()
+    const trigger = wrapper.get('[data-testid="sidebar-user-trigger"]')
+    const menu = wrapper.get('[data-testid="sidebar-user-menu"]')
+    // role=menu sits on the inner list, which holds only the menuitems; the
+    // name/email head stays outside it.
+    const list = menu.get('[role="menu"]')
+    expect(list.attributes('data-testid')).toBe('sidebar-user-menu-list')
+    expect(trigger.attributes('aria-expanded')).toBe('true')
+    expect(trigger.attributes('aria-controls')).toBe(list.attributes('id'))
+    expect(menu.attributes('role')).toBeUndefined()
+    expect(list.attributes('aria-label')).toBe('Account menu for ada lovelace')
+    expect(list.element.contains(menu.get('.sb-user-menu-head').element)).toBe(false)
+    expect(list.findAll('[role="menuitem"]')).toHaveLength(2)
+    expect(menu.get('[data-testid="sidebar-user-menu-name"]').text()).toBe('ada lovelace')
+    expect(menu.get('[data-testid="sidebar-user-menu-email"]').text()).toBe('ada@example.com')
+    const items = menu.findAll('[role="menuitem"]')
+    expect(items.map((i) => i.text())).toEqual(['Account', 'Sign out'])
+    // Focus moves into the menu on open.
+    expect(document.activeElement).toBe(items[0].element)
+  })
+
+  it('ArrowDown and ArrowUp cycle the menu items', async () => {
+    signIn()
+    wrapper = mount(Sidebar, { attachTo: document.body })
+    await flushPromises()
+    await openMenu()
+    const menu = wrapper.get('[data-testid="sidebar-user-menu"]')
+    const [account, signOut] = menu.findAll('[role="menuitem"]')
+    await menu.trigger('keydown', { key: 'ArrowDown' })
+    expect(document.activeElement).toBe(signOut.element)
+    await menu.trigger('keydown', { key: 'ArrowDown' })
+    expect(document.activeElement).toBe(account.element)
+    await menu.trigger('keydown', { key: 'ArrowUp' })
+    expect(document.activeElement).toBe(signOut.element)
+  })
+
+  it('Account routes to the account page, closes, and refocuses the trigger', async () => {
+    signIn()
+    wrapper = mount(Sidebar, { attachTo: document.body })
+    await flushPromises()
+    await openMenu()
+    await wrapper.get('[data-testid="sidebar-user-menu-account"]').trigger('click')
+    await flushPromises()
+    expect(routerPush).toHaveBeenCalledWith({ name: 'account' })
+    expect(wrapper.find('[data-testid="sidebar-user-menu"]').exists()).toBe(false)
+    expect(document.activeElement).toBe(wrapper.get('[data-testid="sidebar-user-trigger"]').element)
+  })
+
+  it('Escape closes the menu and returns focus to the trigger', async () => {
+    signIn()
+    wrapper = mount(Sidebar, { attachTo: document.body })
+    await flushPromises()
+    await openMenu()
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    await flushPromises()
+    const trigger = wrapper.get('[data-testid="sidebar-user-trigger"]')
+    expect(wrapper.find('[data-testid="sidebar-user-menu"]').exists()).toBe(false)
+    expect(trigger.attributes('aria-expanded')).toBe('false')
+    expect(document.activeElement).toBe(trigger.element)
+  })
+
+  it('an outside pointerdown closes the menu', async () => {
+    signIn()
+    wrapper = mount(Sidebar, { attachTo: document.body })
+    await flushPromises()
+    await openMenu()
+    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sidebar-user-menu"]').exists()).toBe(false)
   })
 
   it('signs out and redirects to /login', async () => {
-    const auth = useAuthStore()
-    auth.session = { user: { id: 'u-1' }, access_token: 't' }
+    signIn()
     wrapper = mount(Sidebar)
     await flushPromises()
+    await openMenu()
     await wrapper.get('[data-testid="sidebar-sign-out"]').trigger('click')
     await flushPromises()
     expect(globalThis.__supabaseAuthStub.signOut).toHaveBeenCalled()
@@ -1139,14 +1337,43 @@ describe('Sidebar.vue — footer sign out', () => {
     globalThis.__supabaseAuthStub.signOut.mockResolvedValueOnce({
       error: new Error('network down'),
     })
-    const auth = useAuthStore()
-    auth.session = { user: { id: 'u-1' }, access_token: 't' }
+    signIn()
     wrapper = mount(Sidebar)
     await flushPromises()
+    await openMenu()
     await wrapper.get('[data-testid="sidebar-sign-out"]').trigger('click')
     await flushPromises()
     expect(showError).toHaveBeenCalledWith('network down')
     expect(routerPush).not.toHaveBeenCalled()
+  })
+
+  it('the folded rail shows the circle alone and still opens the menu', async () => {
+    sidebarTest._setExpanded(false)
+    signIn()
+    wrapper = mount(Sidebar, { attachTo: document.body })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="sidebar-user-initial"]').text()).toBe('A')
+    expect(wrapper.find('[data-testid="sidebar-user-name"]').exists()).toBe(false)
+    await openMenu()
+    // Folded, the card lifts out of the clipped rail onto <body>.
+    const menu = document.querySelector('[data-testid="sidebar-user-menu"]')
+    expect(menu).not.toBeNull()
+    expect(wrapper.element.contains(menu)).toBe(false)
+    expect(menu.querySelector('[data-testid="sidebar-sign-out"]')).not.toBeNull()
+    expect(document.activeElement).toBe(
+      menu.querySelector('[data-testid="sidebar-user-menu-account"]'),
+    )
+  })
+
+  it('the mobile drawer shows the identity row with the name', async () => {
+    setViewport(390)
+    signIn()
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    useSidebar().openDrawer()
+    await flushPromises()
+    expect(wrapper.get('[data-testid="sidebar-user-initial"]').text()).toBe('A')
+    expect(wrapper.get('[data-testid="sidebar-user-name"]').text()).toBe('ada lovelace')
   })
 })
 

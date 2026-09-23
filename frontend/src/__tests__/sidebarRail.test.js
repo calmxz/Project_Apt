@@ -92,6 +92,42 @@ describe('Sidebar.vue -- folded icon rail', () => {
     expect(toggle.element.contains(brand.element)).toBe(false)
   })
 
+  // WCAG 2.4.3: the toggle is drawn above the mark when folded, so it must
+  // also precede it in the DOM; open, it follows the wordmark.
+  it('the head toggle precedes the mark in DOM order only when folded', async () => {
+    const precedes = (a, b) =>
+      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    let header = wrapper.get('.sb-header')
+    let toggle = header.get('[data-testid="sidebar-collapse-toggle"]').element
+    let brand = header.get('.sb-brand').element
+    expect(precedes(toggle, brand)).toBe(true)
+
+    await wrapper.get('[data-testid="sidebar-collapse-toggle"]').trigger('click')
+    await flushPromises()
+    header = wrapper.get('.sb-header')
+    toggle = header.get('[data-testid="sidebar-collapse-toggle"]').element
+    brand = header.get('.sb-brand').element
+    expect(precedes(brand, toggle)).toBe(true)
+  })
+
+  // Folding re-orders the head, which moves the toggle node; a keyboard user
+  // must not lose focus to <body> when they fold or unfold.
+  it('keeps focus on the head toggle across folding and unfolding', async () => {
+    wrapper = mount(Sidebar, { attachTo: document.body })
+    await flushPromises()
+    for (let i = 0; i < 2; i++) {
+      const toggle = wrapper.get('[data-testid="sidebar-collapse-toggle"]')
+      toggle.element.focus()
+      await toggle.trigger('click')
+      await flushPromises()
+      expect(document.activeElement).toBe(
+        wrapper.get('[data-testid="sidebar-collapse-toggle"]').element,
+      )
+    }
+  })
+
   it('exposes New session and Search rows with names and tooltips', async () => {
     wrapper = mount(Sidebar)
     await flushPromises()
