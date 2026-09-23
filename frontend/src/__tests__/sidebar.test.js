@@ -1249,9 +1249,19 @@ describe('Sidebar.vue — review entry', () => {
     expect(wrapper.find('[data-testid="sidebar-review"]').exists()).toBe(false)
   })
 
-  it('hides the review entry in icon-rail (collapsed) mode even with a count due', async () => {
+  it('keeps the review entry in the icon rail (collapsed) with the due count', async () => {
     sidebarTest._setExpanded(false)
     apiReviewQueue.mockResolvedValue({ items: [], total: 13, limit: 1, offset: 0 })
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    const entry = wrapper.get('[data-testid="sidebar-review"]')
+    expect(entry.text()).toContain('13')
+    expect(entry.attributes('aria-label')).toBe('Review: 13 concepts due')
+  })
+
+  it('hides the rail review entry when nothing is due', async () => {
+    sidebarTest._setExpanded(false)
+    apiReviewQueue.mockResolvedValue({ items: [], total: 0, limit: 1, offset: 0 })
     wrapper = mount(Sidebar)
     await flushPromises()
     expect(wrapper.find('[data-testid="sidebar-review"]').exists()).toBe(false)
@@ -1282,10 +1292,10 @@ describe('Sidebar.vue — review entry', () => {
   })
 })
 
-// Card Box redesign (Task 5): the desktop collapse toggle is a visible
-// half-tab on the sidebar's right edge instead of an icon buried in the
-// header, and the collapsed rail marks sessions as dots instead of strokes.
-describe('Sidebar.vue — card box collapse toggle and collapsed dots', () => {
+// The desktop collapse toggle is a drawn sidebar icon in the head (the old
+// right-edge half-tab overlapped the mark in the rail), and the collapsed rail
+// marks sessions as dots instead of strokes.
+describe('Sidebar.vue — collapse toggle and collapsed dots', () => {
   let wrapper
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -1297,13 +1307,15 @@ describe('Sidebar.vue — card box collapse toggle and collapsed dots', () => {
   })
   afterEach(() => wrapper?.unmount())
 
-  it('the half-tab collapse toggle carries hit-44 and a descriptive aria-label', async () => {
+  it('the head sidebar-icon toggle carries hit-44 and a descriptive aria-label', async () => {
     sidebarTest._setExpanded(true)
     wrapper = mount(Sidebar)
     await flushPromises()
     const toggle = wrapper.get('[data-testid="sidebar-collapse-toggle"]')
     expect(toggle.classes()).toContain('hit-44')
-    expect(toggle.classes()).toContain('sb-toggle--edge')
+    expect(toggle.classes()).toContain('sb-toggle--head')
+    expect(toggle.classes()).not.toContain('sb-toggle--edge')
+    expect(toggle.element.closest('.sb-header')).not.toBeNull()
     expect(toggle.attributes('aria-label')).toBe('Collapse sidebar')
 
     await toggle.trigger('click')

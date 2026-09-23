@@ -271,6 +271,14 @@ watch(isExpanded, (expanded) => {
   if (!expanded) searchQuery.value = ''
 })
 
+// Rail Search unfolds the sidebar, then hands the caret to the search field
+// once the expanded body has rendered.
+async function onRailSearch() {
+  toggleDesktop()
+  await nextTick()
+  asideEl.value?.querySelector('[data-testid="sidebar-search"]')?.focus()
+}
+
 function onNewSession() {
   closeDrawer()
   router.push({ name: 'new-session' })
@@ -320,17 +328,18 @@ async function onSignOut() {
       <button
         v-if="isDesktop"
         type="button"
-        class="sb-toggle sb-toggle--edge hit-44"
+        class="sb-toggle sb-toggle--head hit-44"
         :aria-label="isExpanded ? 'Collapse sidebar' : 'Expand sidebar'"
         :title="isExpanded ? 'Collapse sidebar' : 'Expand sidebar'"
         data-testid="sidebar-collapse-toggle"
         @click="toggleDesktop"
       >
+        <!-- The drawn "sidebar" glyph: a page with a narrow left pane. -->
         <svg
           class="sb-toggle-icon"
           viewBox="0 0 20 20"
-          width="14"
-          height="14"
+          width="20"
+          height="20"
           fill="none"
           stroke="currentColor"
           stroke-width="1.5"
@@ -339,14 +348,8 @@ async function onSignOut() {
           aria-hidden="true"
           focusable="false"
         >
-          <template v-if="isExpanded">
-            <path d="M12.5 4.5 L7 10 L12.5 15.5" />
-            <path d="M17 4.5 L11.5 10 L17 15.5" />
-          </template>
-          <template v-else>
-            <path d="M7.5 4.5 L13 10 L7.5 15.5" />
-            <path d="M3 4.5 L8.5 10 L3 15.5" />
-          </template>
+          <rect x="3" y="4" width="14" height="12" rx="2" />
+          <path d="M8 4 L8 16" />
         </svg>
       </button>
       <button
@@ -382,6 +385,7 @@ async function onSignOut() {
         class="sb-new-session"
         :class="{ 'sb-new-session--icon': !isExpanded }"
         :title="isExpanded ? '' : 'New session'"
+        :aria-label="isExpanded ? null : 'New session'"
         data-testid="sidebar-new-session"
         @click="onNewSession"
       >
@@ -402,6 +406,61 @@ async function onSignOut() {
         </svg>
         <span v-if="isExpanded">New session</span>
       </button>
+    </div>
+
+    <!-- Folded rail: Search and Review stay one click away without unfolding. -->
+    <div v-if="isDesktop && !isExpanded" class="sb-rail-actions">
+      <button
+        type="button"
+        class="sb-icon sb-icon-btn hit-44"
+        aria-label="Search sessions"
+        title="Search sessions"
+        data-testid="sidebar-rail-search"
+        @click="onRailSearch"
+      >
+        <svg
+          class="sb-inline-icon"
+          viewBox="0 0 20 20"
+          width="16"
+          height="16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <circle cx="8.5" cy="8.5" r="6" />
+          <path d="M13 13 L17.5 17.5" />
+        </svg>
+      </button>
+      <RouterLink
+        v-if="reviewTotal > 0"
+        to="/review"
+        class="sb-icon sb-rail-review hit-44"
+        data-testid="sidebar-review"
+        :aria-label="`Review: ${reviewTotal} ${reviewTotal === 1 ? 'concept' : 'concepts'} due`"
+        title="Review"
+      >
+        <svg
+          class="sb-inline-icon"
+          viewBox="0 0 20 20"
+          width="16"
+          height="16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <circle cx="10" cy="10.5" r="7" />
+          <path d="M10 6.5 L10 10.5 L13 12.5" />
+        </svg>
+        <span class="sb-rail-badge" aria-hidden="true">{{ reviewTotal }}</span>
+      </RouterLink>
     </div>
 
     <RouterLink
@@ -845,19 +904,42 @@ async function onSignOut() {
   outline-offset: 2px;
 }
 
-/* The collapse control is a half-tab standing off the sidebar's right edge,
-   the one control on the contents page allowed to look like a fixture rather
-   than a written line. */
-.sb-toggle--edge {
+/* The fold control is a drawn icon in the head: right of the wordmark when
+   open, alone above the mark when folded, so it never sits on the mark. */
+.sb-toggle--head {
+  margin-left: auto;
+  width: 2rem;
+  height: 2rem;
+}
+
+.sidebar--collapsed .sb-toggle--head {
+  order: -1;
+  margin-left: 0;
+}
+
+/* Folded rail rows: Search and Review, centred under New session. */
+.sb-rail-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0 0 0.25rem;
+}
+
+.sb-rail-review {
+  position: relative;
+}
+
+.sb-rail-badge {
   position: absolute;
-  top: 0.875rem;
-  right: -1px;
-  width: 22px;
-  height: 28px;
-  border: 1px solid var(--card-edge);
-  border-right: 0;
-  border-radius: 6px 0 0 6px;
-  background: var(--card);
+  top: 0;
+  right: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ink-learner);
+  font-variant-numeric: tabular-nums;
 }
 
 .sb-cta {
