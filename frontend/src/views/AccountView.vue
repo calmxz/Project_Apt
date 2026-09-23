@@ -131,12 +131,80 @@
           </div>
         </form>
       </section>
+
+      <section v-if="authStore.isAuthenticated" class="sec sec-danger" data-testid="account-danger">
+        <h2 class="sec-title">Delete account</h2>
+        <p class="danger-copy">
+          Deleting your account permanently erases your sessions, topic profiles, uploaded files,
+          learning history, and the sign-in itself. This cannot be undone.
+        </p>
+        <button
+          type="button"
+          class="danger-open-btn"
+          data-testid="account-delete-open"
+          @click="openDeleteDialog"
+        >
+          Delete account
+        </button>
+      </section>
     </div>
+
+    <Dialog
+      :visible="deleteDialogOpen"
+      modal
+      header="Delete account"
+      class="crux-dialog"
+      :style="{ width: 'min(28rem, calc(100vw - 2rem))' }"
+      data-testid="account-delete-dialog"
+      :closable="!deleteBusy"
+      :close-on-escape="!deleteBusy"
+      @update:visible="handleDialogVisible"
+    >
+      <p class="danger-copy">
+        This permanently erases your sessions, topic profiles, uploaded files, learning history, and
+        the sign-in itself. This cannot be undone.
+      </p>
+      <div class="field">
+        <label class="lbl" for="account-delete-confirm">Type delete to confirm</label>
+        <input
+          id="account-delete-confirm"
+          v-model="deleteConfirmText"
+          data-testid="account-delete-confirm-input"
+          class="input"
+          type="text"
+          autocomplete="off"
+        />
+      </div>
+      <p v-if="deleteError" class="error" role="alert" data-testid="account-delete-error">
+        {{ deleteError }}
+      </p>
+      <template #footer>
+        <button
+          type="button"
+          class="dialog-cancel-btn"
+          data-testid="account-delete-cancel"
+          @click="closeDeleteDialog"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          class="p-button p-button-danger confirm-delete-strong danger-submit-btn"
+          data-testid="account-delete-submit"
+          :disabled="!deleteArmed || deleteBusy"
+          @click="submitDelete"
+        >
+          {{ deleteBusy ? 'Deleting…' : 'Delete my account' }}
+        </button>
+      </template>
+    </Dialog>
   </section>
 </template>
 
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import Dialog from 'primevue/dialog'
 
 import '@/assets/sheet.css'
 import { authErrorCopy } from '@/lib/authErrors.js'
@@ -144,9 +212,11 @@ import { friendlyError } from '@/lib/errors.js'
 import { useUserStore } from '../stores/user.js'
 import { useAuthStore } from '../stores/auth.js'
 import { useToast } from '../composables/useToast.js'
+import { deleteAccount } from '../services/meApi.js'
 
 const user = useUserStore()
 const authStore = useAuthStore()
+const router = useRouter()
 const { showSuccess } = useToast()
 
 // The deep-desk ground must fill the whole routed pane, not just the
@@ -224,6 +294,86 @@ async function changePassword() {
     pwError.value = authErrorCopy(e, 'Could not update password. Try again.')
   } finally {
     pwSubmitting.value = false
+  }
+}
+
+// R2-22/23/24/25: the 503 the backend returns once app data is already gone
+// but the auth user removal failed (docs/api/openapi.yaml `DELETE /api/me`).
+// That literal detail string means the delete didn't fully finish -- the
+// learner should never see the raw backend prose for it. This constant must
+// match backend/routes/me.py's `detail=` string byte for byte or the
+// friendly copy below silently stops matching.
+const DELETE_AUTH_STEP_DETAIL = 'app data deleted; auth user removal failed'
+
+const deleteDialogOpen = ref(false)
+const deleteConfirmText = ref('')
+const deleteBusy = ref(false)
+const deleteError = ref('')
+
+// Case-sensitive, trimmed exact match -- "Delete" or "delet" must not arm it.
+const deleteArmed = computed(() => deleteConfirmText.value.trim() === 'delete')
+
+function openDeleteDialog() {
+  deleteDialogOpen.value = true
+}
+
+function closeDeleteDialog() {
+  // A request is in flight -- closing now would let the learner reopen and
+  // resubmit over it. Dialog is also bound :closable/:close-on-escape=false
+  // while busy, so this guard only matters for the Cancel button itself.
+  if (deleteBusy.value) return
+  deleteDialogOpen.value = false
+  deleteConfirmText.value = ''
+  deleteError.value = ''
+}
+
+// Dialog's own Escape / outside-click handling emits update:visible(false);
+// route it through the same reset as Cancel so no path leaves stale state.
+function handleDialogVisible(v) {
+  if (v) {
+    deleteDialogOpen.value = true
+  } else {
+    closeDeleteDialog()
+  }
+}
+
+function deleteErrorMessage(e) {
+  const detail = e?.body?.detail
+  if (typeof detail === 'string' && detail) {
+    if (detail === DELETE_AUTH_STEP_DETAIL) {
+      // The backend delete is idempotent, so a retry can finish the job
+      // without support -- only point the learner at support if it keeps failing.
+      return (
+        'Your data was removed but the sign-in could not be deleted. ' +
+        'Try again, or contact support if this keeps happening.'
+      )
+    }
+    return detail
+  }
+  return friendlyError(e) || 'Could not delete your account. Try again.'
+}
+
+async function submitDelete() {
+  if (!deleteArmed.value || deleteBusy.value) return
+  deleteBusy.value = true
+  deleteError.value = ''
+  try {
+    await deleteAccount()
+    user.clearForAccountDeletion()
+    try {
+      await authStore.signOut()
+    } catch {
+      // The auth user is already gone server-side by this point; a local
+      // signOut failure must not strand the learner mid-delete.
+    }
+    showSuccess('Your account has been deleted.')
+    router.push({ name: 'login' })
+  } catch (e) {
+    // Keep the dialog open and do NOT sign out -- the account may still be
+    // fully intact (e.g. 503 with no key configured, nothing deleted).
+    deleteError.value = deleteErrorMessage(e)
+  } finally {
+    deleteBusy.value = false
   }
 }
 </script>
@@ -334,5 +484,61 @@ async function changePassword() {
   flex-direction: column;
   align-items: flex-start;
   width: 100%;
+}
+
+.danger-copy {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--ink);
+}
+
+/* Marks the whole delete-account section as the danger zone: its own
+   .sec-title (shared rule in assets/sheet.css) reads text-safe red here
+   instead of the default heading ink. */
+.sec-danger .sec-title {
+  color: var(--ink-marker-text);
+}
+
+/* Text-safe red, underlined like the other in-card text buttons (see
+   ProfileView's .text-btn) but never set on the delete confirm itself --
+   that stays the shared .confirm-delete-strong filled control. */
+.danger-open-btn {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-marker-text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  line-height: var(--lh-body);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.danger-open-btn:hover {
+  color: var(--ink-marker-text-hover);
+}
+
+.dialog-cancel-btn {
+  padding: 0.5rem 1rem;
+  border: 0;
+  background: transparent;
+  color: var(--ink-learner);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.dialog-cancel-btn:hover {
+  color: var(--color-accent-hover);
+}
+
+.danger-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

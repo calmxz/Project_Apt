@@ -6,6 +6,12 @@ import AccountView from '@/views/AccountView.vue'
 import { AUTH_CODE_COPY } from '@/lib/authErrors.js'
 import { useUserStore } from '@/stores/user.js'
 import { useAuthStore } from '@/stores/auth.js'
+import { ApiError } from '@/services/apiClient.js'
+import { deleteAccount } from '@/services/meApi.js'
+
+vi.mock('@/services/meApi.js', () => ({
+  deleteAccount: vi.fn(),
+}))
 
 const showSuccess = vi.fn()
 const showError = vi.fn()
@@ -18,8 +24,21 @@ vi.mock('vue-router', () => ({
   RouterLink: { template: '<a><slot /></a>', props: ['to'] },
 }))
 
+// Matches the fallthrough-attrs pattern already used in gapPickerDialog's
+// spec for GapPickerDialog: declaring only the props/emits the stub cares
+// about lets data-testid/class/etc. from the real usage land on the stub
+// root via Vue's default attr inheritance. Both the default slot and the
+// named #footer slot are rendered (unlike GapPickerDialog, our dialog puts
+// its action buttons in #footer) so both are reachable from a spec.
+const DialogStub = {
+  props: ['visible'],
+  emits: ['update:visible'],
+  template: '<div v-if="visible"><slot /><slot name="footer" /></div>',
+}
+
 const stubs = {
   RouterLink: { template: '<a><slot /></a>', props: ['to'] },
+  Dialog: DialogStub,
 }
 
 // F-46: updateProfile writes through to PATCH /me via the real apiClient
@@ -39,6 +58,7 @@ describe('AccountView', () => {
     showSuccess.mockClear()
     showError.mockClear()
     routerPush.mockClear()
+    deleteAccount.mockReset()
     globalThis.fetch = vi.fn().mockReturnValue(ok({}))
     const user = useUserStore()
     user.userId = 'u_test'
@@ -218,5 +238,201 @@ describe('AccountView', () => {
   it('falls back to "No email" when the auth store has none', () => {
     const w = mount(AccountView, { global: { stubs } })
     expect(w.get('[data-testid="account-email"]').text()).toContain('No email')
+  })
+
+  // R2-22 through R2-25: the delete-account section and its confirm dialog.
+  describe('delete account', () => {
+    function mountAuthed() {
+      const auth = useAuthStore()
+      auth.session = { user: { id: 'u-1', email: 'learner@example.com' }, access_token: 't' }
+      return mount(AccountView, { global: { stubs } })
+    }
+
+    it('the danger section copy lists every category that is erased', async () => {
+      const w = mountAuthed()
+      await flushPromises()
+      const text = w.get('[data-testid="account-danger"]').text()
+      expect(text).toContain('sessions')
+      expect(text).toContain('profiles')
+      expect(text).toContain('uploaded files')
+      expect(text).toContain('learning history')
+      expect(text).toContain('sign-in')
+    })
+
+    it('submit stays disabled until the confirmation word matches exactly', async () => {
+      const w = mountAuthed()
+      await flushPromises()
+      await w.get('[data-testid="account-delete-open"]').trigger('click')
+      const submit = w.get('[data-testid="account-delete-submit"]')
+      expect(submit.attributes('disabled')).toBeDefined()
+
+      await w.get('[data-testid="account-delete-confirm-input"]').setValue('Delete')
+      expect(w.get('[data-testid="account-delete-submit"]').attributes('disabled')).toBeDefined()
+
+      await w.get('[data-testid="account-delete-confirm-input"]').setValue('delet')
+      expect(w.get('[data-testid="account-delete-submit"]').attributes('disabled')).toBeDefined()
+
+      await w.get('[data-testid="account-delete-confirm-input"]').setValue('delete')
+      expect(w.get('[data-testid="account-delete-submit"]').attributes('disabled')).toBeUndefined()
+    })
+
+    it('cancel closes the dialog and resets the input', async () => {
+      const w = mountAuthed()
+      await flushPromises()
+      await w.get('[data-testid="account-delete-open"]').trigger('click')
+      await w.get('[data-testid="account-delete-confirm-input"]').setValue('delete')
+      await w.get('[data-testid="account-delete-cancel"]').trigger('click')
+      expect(w.find('[data-testid="account-delete-confirm-input"]').exists()).toBe(false)
+
+      await w.get('[data-testid="account-delete-open"]').trigger('click')
+      expect(w.get('[data-testid="account-delete-confirm-input"]').element.value).toBe('')
+    })
+
+    it('success clears the user store, signs out, toasts and routes to login', async () => {
+      deleteAccount.mockResolvedValue(undefined)
+      const w = mountAuthed()
+      await flushPromises()
+      const user = useUserStore()
+      const auth = useAuthStore()
+      const clearSpy = vi.spyOn(user, 'clearForAccountDeletion')
+      const signOutSpy = vi.spyOn(auth, 'signOut').mockResolvedValue()
+
+      await w.get('[data-testid="account-delete-open"]').trigger('click')
+      await w.get('[data-testid="account-delete-confirm-input"]').setValue('delete')
+      await w.get('[data-testid="account-delete-submit"]').trigger('click')
+      await flushPromises()
+
+      expect(deleteAccount).toHaveBeenCalled()
+      expect(clearSpy).toHaveBeenCalled()
+      expect(signOutSpy).toHaveBeenCalled()
+      expect(showSuccess).toHaveBeenCalledWith('Your account has been deleted.')
+      expect(routerPush).toHaveBeenCalledWith({ name: 'login' })
+    })
+
+    it('failure keeps the dialog open, shows the detail, and does not sign out', async () => {
+      deleteAccount.mockRejectedValue(
+        new ApiError(503, { detail: 'auth admin not configured' }, '/me'),
+      )
+      const w = mountAuthed()
+      await flushPromises()
+      const auth = useAuthStore()
+      const signOutSpy = vi.spyOn(auth, 'signOut')
+
+      await w.get('[data-testid="account-delete-open"]').trigger('click')
+      await w.get('[data-testid="account-delete-confirm-input"]').setValue('delete')
+      await w.get('[data-testid="account-delete-submit"]').trigger('click')
+      await flushPromises()
+
+      expect(w.find('[data-testid="account-delete-dialog"]').exists()).toBe(true)
+      expect(w.get('[data-testid="account-delete-error"]').text()).toContain(
+        'auth admin not configured',
+      )
+      expect(signOutSpy).not.toHaveBeenCalled()
+      expect(routerPush).not.toHaveBeenCalled()
+    })
+
+    it('the auth-removal 503 detail renders a retry-invite sentence, not the raw detail', async () => {
+      deleteAccount.mockRejectedValue(
+        new ApiError(503, { detail: 'app data deleted; auth user removal failed' }, '/me'),
+      )
+      const w = mountAuthed()
+      await flushPromises()
+
+      await w.get('[data-testid="account-delete-open"]').trigger('click')
+      await w.get('[data-testid="account-delete-confirm-input"]').setValue('delete')
+      await w.get('[data-testid="account-delete-submit"]').trigger('click')
+      await flushPromises()
+
+      const text = w.get('[data-testid="account-delete-error"]').text()
+      expect(text).toContain('Try again')
+      expect(text).toContain('contact support')
+      expect(text).not.toContain('auth user removal failed')
+    })
+
+    it('signs out before routing to login on success (order matters)', async () => {
+      deleteAccount.mockResolvedValue(undefined)
+      const w = mountAuthed()
+      await flushPromises()
+      const auth = useAuthStore()
+      const signOutSpy = vi.spyOn(auth, 'signOut').mockResolvedValue()
+
+      await w.get('[data-testid="account-delete-open"]').trigger('click')
+      await w.get('[data-testid="account-delete-confirm-input"]').setValue('delete')
+      await w.get('[data-testid="account-delete-submit"]').trigger('click')
+      await flushPromises()
+
+      expect(signOutSpy).toHaveBeenCalled()
+      expect(routerPush).toHaveBeenCalled()
+      expect(signOutSpy.mock.invocationCallOrder[0]).toBeLessThan(
+        routerPush.mock.invocationCallOrder[0],
+      )
+    })
+
+    it('still toasts and routes to login when signOut rejects after a successful delete', async () => {
+      deleteAccount.mockResolvedValue(undefined)
+      const w = mountAuthed()
+      await flushPromises()
+      const auth = useAuthStore()
+      vi.spyOn(auth, 'signOut').mockRejectedValue(new Error('network'))
+
+      await w.get('[data-testid="account-delete-open"]').trigger('click')
+      await w.get('[data-testid="account-delete-confirm-input"]').setValue('delete')
+      await w.get('[data-testid="account-delete-submit"]').trigger('click')
+      await flushPromises()
+
+      expect(showSuccess).toHaveBeenCalledWith('Your account has been deleted.')
+      expect(routerPush).toHaveBeenCalledWith({ name: 'login' })
+    })
+
+    it('Escape (Dialog emitting update:visible(false)) resets the input and error', async () => {
+      deleteAccount.mockRejectedValue(
+        new ApiError(503, { detail: 'auth admin not configured' }, '/me'),
+      )
+      const w = mountAuthed()
+      await flushPromises()
+
+      await w.get('[data-testid="account-delete-open"]').trigger('click')
+      await w.get('[data-testid="account-delete-confirm-input"]').setValue('delete')
+      await w.get('[data-testid="account-delete-submit"]').trigger('click')
+      await flushPromises()
+      expect(w.get('[data-testid="account-delete-error"]').text()).toContain(
+        'auth admin not configured',
+      )
+
+      // Drive the same event the Dialog stub emits on Escape / outside-click.
+      const dialog = w.findComponent(DialogStub)
+      await dialog.vm.$emit('update:visible', false)
+      await flushPromises()
+
+      expect(w.find('[data-testid="account-delete-dialog"]').exists()).toBe(false)
+      await w.get('[data-testid="account-delete-open"]').trigger('click')
+      expect(w.get('[data-testid="account-delete-confirm-input"]').element.value).toBe('')
+      expect(w.find('[data-testid="account-delete-error"]').exists()).toBe(false)
+    })
+
+    it('while a delete request is in flight, Cancel does nothing', async () => {
+      let resolveDelete
+      deleteAccount.mockReturnValue(
+        new Promise((resolve) => {
+          resolveDelete = resolve
+        }),
+      )
+      const w = mountAuthed()
+      await flushPromises()
+
+      await w.get('[data-testid="account-delete-open"]').trigger('click')
+      await w.get('[data-testid="account-delete-confirm-input"]').setValue('delete')
+      await w.get('[data-testid="account-delete-submit"]').trigger('click')
+      await flushPromises()
+
+      // Request is still pending -- the dialog must still be open and the
+      // input must still hold its value; Cancel is a no-op while busy.
+      await w.get('[data-testid="account-delete-cancel"]').trigger('click')
+      expect(w.find('[data-testid="account-delete-dialog"]').exists()).toBe(true)
+      expect(w.get('[data-testid="account-delete-confirm-input"]').element.value).toBe('delete')
+
+      resolveDelete(undefined)
+      await flushPromises()
+    })
   })
 })

@@ -100,6 +100,22 @@ describe('user store', () => {
     expect(localStorage.getItem(key('u1'))).toBeNull()
   })
 
+  // R2-25: clearForAccountDeletion is called right after DELETE /me succeeds.
+  // It delegates to resetOnboarding() for the wipe -- same behavior, kept as
+  // its own name so the call site reads as "account just got deleted", not
+  // "onboarding restarted".
+  it('clearForAccountDeletion wipes memory and removes the persisted key', async () => {
+    const u = useUserStore()
+    u.setActiveUser('user-a')
+    await u.completeOnboarding({ name: 'Alice', feedback: 'direct' })
+    expect(localStorage.getItem(key('user-a'))).not.toBeNull()
+
+    u.clearForAccountDeletion()
+    expect(u.name).toBeNull()
+    expect(u.onboardingComplete).toBe(false)
+    expect(localStorage.getItem(key('user-a'))).toBeNull()
+  })
+
   it('updateProfile merges name and feedback', async () => {
     const u = useUserStore()
     u.setActiveUser('u1')
