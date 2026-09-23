@@ -81,3 +81,6 @@ CLAUDE.md
 
 # Impeccable critique snapshots (local design-review runs)
 .impeccable/
+
+# Local-markdown issue tracker scratch space (mattpocock-skills)
+.scratch/
