@@ -58,6 +58,62 @@ describe('Composer — touch targets', () => {
   })
 })
 
+describe('SessionHeader — action bar touch targets', () => {
+  let SessionHeader
+
+  const RouterLinkStub = { template: '<a><slot /></a>', props: ['to'] }
+  const session = {
+    id: 's1',
+    topic: 'Glycolysis pathway',
+    created_at: null,
+    pinned: false,
+    ended_at: null,
+  }
+
+  beforeEach(async () => {
+    vi.resetModules()
+    vi.doMock('@/composables/useSessionActions.js', async () => {
+      const { ref } = await import('vue')
+      return {
+        useSessionActions: () => ({
+          busy: ref(false),
+          confirmEnd: vi.fn(),
+          endSession: vi.fn(),
+          resume: vi.fn(),
+          continueTopic: vi.fn(),
+          setPinned: vi.fn(),
+          rename: vi.fn(),
+        }),
+      }
+    })
+    setActivePinia(createPinia())
+    SessionHeader = (await import('@/components/chat/SessionHeader.vue')).default
+  })
+
+  afterEach(() => {
+    vi.doUnmock('@/composables/useSessionActions.js')
+  })
+
+  function mountHeader(props = {}) {
+    return mount(SessionHeader, {
+      props: { session, ...props },
+      global: { stubs: { RouterLink: RouterLinkStub } },
+    })
+  }
+
+  it('Rename, Pin and End carry hit-44', () => {
+    const w = mountHeader()
+    expect(w.get('[data-testid="session-action-rename"]').classes()).toContain('hit-44')
+    expect(w.get('[data-testid="session-action-pin"]').classes()).toContain('hit-44')
+    expect(w.get('[data-testid="session-action-end"]').classes()).toContain('hit-44')
+  })
+
+  it('Resume carries hit-44 on an ended session', () => {
+    const w = mountHeader({ session: { ...session, ended_at: '2026-01-01T00:00:00Z' } })
+    expect(w.get('[data-testid="session-action-resume"]').classes()).toContain('hit-44')
+  })
+})
+
 describe('CueColumn — disclosure and panel-collapse touch targets', () => {
   let CueColumn
 

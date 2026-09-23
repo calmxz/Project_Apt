@@ -155,6 +155,12 @@ vi.mock('vue-router', () => ({
   RouterLink: { template: '<a><slot /></a>' },
 }))
 
+// The session action bar calls useSessionActions, which calls useConfirm in
+// setup; jsdom has no ConfirmationService installed.
+vi.mock('primevue/useconfirm', () => ({
+  useConfirm: () => ({ require: vi.fn() }),
+}))
+
 vi.mock('@/services/uploadApi.js', () => ({
   uploadDocument: vi.fn().mockResolvedValue({ document_id: 1 }),
   validateFile: vi.fn(() => ({ ok: true })),

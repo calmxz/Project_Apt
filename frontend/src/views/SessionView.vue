@@ -35,10 +35,10 @@
              is excluded structurally: it is the v-if arm above. -->
         <h1 v-if="!headerTopic" class="sr-only">Session</h1>
         <SessionHeader
-          :topic="headerTopic"
-          :session-id="props.id"
-          :started-at="startedAt"
+          :session="headerSession"
           :level="profileLevel"
+          :ref-status="headerRefStatus"
+          :streaming="store.streamState !== 'idle'"
         />
       </div>
 
@@ -477,6 +477,36 @@ const headerTopic = computed(() => {
   return knownRow.value?.topic || ''
 })
 
+// Ticket 10: the action bar takes one session object. Built from the same
+// optimistic sources as headerTopic so the D-21 h1 gating is unchanged;
+// ended_at reads `current` only, so End/Resume flips on the same predicate as
+// isEnded and the composer. `pinned` falls back to the list row (setPinned
+// patches both copies optimistically).
+const headerSession = computed(() => {
+  if (!current.value && !knownRow.value) return null
+  return {
+    id: props.id,
+    topic: headerTopic.value,
+    created_at: startedAt.value,
+    pinned: Boolean(current.value?.pinned ?? knownRow.value?.pinned),
+    ended_at: current.value?.ended_at ?? null,
+  }
+})
+
+// The reference-file dot in the action bar reads the same session-wide
+// aggregate the status banner reads (refStatus from useReferencePoll, which
+// mirrors backend documents_service.aggregate_status: (pending or processing)
+// > ready > failed > null). Re-deriving a rank from the raw document list here
+// used a different priority (any non-terminal doc beat a failure), so a
+// session with one ready and one failed file showed a green banner alongside
+// a red dot -- two different verdicts for the same ingestion state. The
+// aggregate's 'pending' maps onto the header's own 'processing' vocabulary;
+// 'ready'/'failed'/null pass through unchanged.
+const headerRefStatus = computed(() => {
+  const s = refStatus.value
+  return s === 'pending' ? 'processing' : s || null
+})
+
 // When the composer is disabled because a daily/cost cap was hit, point its
 // aria-describedby at the matching cap banner so screen-reader users hear why
 // input is blocked. null when not cap-disabled (renders no attribute).
@@ -852,7 +882,8 @@ async function onDiagLevel(level) {
   }
 }
 
-// End is triggered from the sidebar row context menu (S2). When the store
+// End is triggered from the sidebar row context menu (S2) or the session action
+// bar (ticket 10); both call useSessionActions.confirmEnd. When the store
 // commits the End and the ended session matches this view's id, surface the
 // closing summary modal here. Watching pendingSummary keeps the trigger
 // location decoupled from the dialog owner.
