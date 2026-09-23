@@ -29,7 +29,6 @@ describe('UsagePanel', () => {
     expect(glance.find('.glance-figure').text()).toBe('$1.00')
     expect(glance.find('.glance-caption').text()).toBe('today · $3.00 daily cap')
     expect(glance.find('.glance-week').text()).toBe('Last 7 days $1.50')
-    expect(w.find('.spend-chart').exists()).toBe(false)
   })
 
   it('sums only the last 7 daily entries', () => {
@@ -99,21 +98,128 @@ describe('UsagePanel', () => {
     const w = factory(usage({ hard_cap_usd: 4.0, soft_cap_usd: 1.0, urgent_cap_usd: 3.6 }))
     expect(w.find('.meter-label-soft').text()).toBe('soft $1.00')
     expect(w.find('.meter-label-urgent').text()).toBe('urgent $3.60')
-    expect(w.find('.meter-label-cap').exists()).toBe(false)
     expect(w.find('.glance-caption').text()).toContain('$4.00 daily cap')
   })
 
-  it('positions tier markers from response values, not literals', () => {
-    const w = factory(usage({ hard_cap_usd: 4.0, soft_cap_usd: 1.0, urgent_cap_usd: 3.6 }))
-    const markers = w.findAll('.tier-marker')
-    expect(markers).toHaveLength(2) // soft + urgent; hard = 100% end
-    expect(markers[0].attributes('style')).toContain('left: 25%') // 1.0 / 4.0
-    expect(markers[1].attributes('style')).toContain('left: 90%') // 3.6 / 4.0
+  it('renders the "$x.xx of $y.yy today" figure in tabular figures beside the meter', () => {
+    const w = factory(usage({ today_spend_usd: 1.0, hard_cap_usd: 3.0 }))
+    const figure = w.find('.meter-figure')
+    expect(figure.text()).toBe('$1.00 of $3.00 today')
+    expect(figure.attributes('data-tabular')).toBeDefined()
   })
 
-  it('fills the meter to today/hard ratio', () => {
-    const w = factory() // 1.0 / 3.0
-    expect(w.find('.meter-fill').attributes('style')).toContain('width: 33%')
+  it('names the meter once, by percentage of cap, with no duplicate hidden text', () => {
+    const w = factory(usage({ today_spend_usd: 1.0, hard_cap_usd: 4.0 }))
+    const meter = w.find('.meter')
+    expect(meter.attributes('role')).toBe('img')
+    expect(meter.attributes('aria-label')).toBe('25% of daily cap spent')
+    expect(w.find('.meter-wrap .sr-only').exists()).toBe(false)
+    expect(w.text()).not.toContain('25% of daily cap spent')
+  })
+
+  it('keeps the tier labels in the same column as the meter so they line up with the ticks', () => {
+    const w = factory()
+    const col = w.find('.meter-col')
+    expect(col.find('.meter').exists()).toBe(true)
+    expect(col.find('.meter-labels').exists()).toBe(true)
+    expect(col.find('.meter-figure').exists()).toBe(false)
+  })
+
+  it('positions three ticks (soft, urgent, hard) as a fraction of the hard cap', () => {
+    const w = factory(usage({ hard_cap_usd: 4.0, soft_cap_usd: 1.0, urgent_cap_usd: 3.6 }))
+    const soft = w.find('[data-testid="usage-tick-soft"]')
+    const urgent = w.find('[data-testid="usage-tick-urgent"]')
+    const hard = w.find('[data-testid="usage-tick-hard"]')
+    expect(soft.attributes('style')).toContain('left: 25%') // 1.0 / 4.0
+    expect(urgent.attributes('style')).toContain('left: 90%') // 3.6 / 4.0
+    expect(hard.attributes('style')).toContain('left: 100%')
+  })
+
+  it('fills the meter to today/hard ratio and stays blue under the urgent cap', () => {
+    const w = factory() // 1.0 / 3.0, urgent cap 2.7 -- not reached
+    const fill = w.find('.meter-fill')
+    expect(fill.attributes('style')).toContain('width: 33%')
+    expect(fill.classes()).not.toContain('meter-fill--over-urgent')
+  })
+
+  it('turns the meter fill text-safe red once spend passes the urgent cap', () => {
+    const w = factory(usage({ today_spend_usd: 2.8, urgent_cap_usd: 2.7, hard_cap_usd: 3.0 }))
+    expect(w.find('.meter-fill').classes()).toContain('meter-fill--over-urgent')
+  })
+
+  it('renders seven week columns padded to a full week, with today marked last', () => {
+    const w = factory(
+      usage({
+        daily: [
+          { date_utc: '2026-07-09', cost_usd: 0.5 },
+          { date_utc: '2026-07-10', cost_usd: 1.0 },
+        ],
+      }),
+    )
+    const cols = w.findAll('[data-testid="usage-week-col"]')
+    expect(cols).toHaveLength(7)
+    // 5 padded zero-cost columns, then the 2 real days; today is the last column.
+    expect(cols[6].attributes('data-today')).toBe('true')
+    for (let i = 0; i < 6; i++) {
+      expect(cols[i].attributes('data-today')).toBe('false')
+    }
+  })
+
+  it('makes the last column today, labelled with the newest date', () => {
+    const w = factory(
+      usage({
+        daily: [
+          { date_utc: '2026-07-09', cost_usd: 0.5 },
+          { date_utc: '2026-07-10', cost_usd: 1.0 },
+        ],
+      }),
+    )
+    const cols = w.findAll('[data-testid="usage-week-col"]')
+    const last = cols[cols.length - 1]
+    expect(last.attributes('data-today')).toBe('true')
+    expect(last.find('title').text()).toBe('Jul 10: $1.00')
+    const labels = w.findAll('.week-labels .week-label')
+    expect(labels).toHaveLength(7)
+    expect(labels[6].text()).toBe('Fri')
+  })
+
+  it('gives every day, zero included, a full-band hover target carrying its title', () => {
+    const w = factory()
+    const hits = w.findAll('[data-testid="usage-week-hit"]')
+    expect(hits).toHaveLength(7)
+    expect(hits[0].find('title').text()).toBe('No data: $0.00')
+    expect(Number(hits[0].attributes('height'))).toBeGreaterThan(0)
+  })
+
+  it('draws the cap line inside the plot, never at the clipped SVG edge', () => {
+    const under = factory()
+    const lineUnder = under.find('[data-testid="usage-cap-line"]')
+    expect(lineUnder.exists()).toBe(true)
+    expect(Number(lineUnder.attributes('y1'))).toBe(8)
+    expect(under.find('[data-testid="usage-cap-label"]').text()).toBe('cap $3.00')
+
+    const over = factory(
+      usage({
+        daily: [
+          { date_utc: '2026-07-09', cost_usd: 0.5 },
+          { date_utc: '2026-07-10', cost_usd: 6.0 },
+        ],
+      }),
+    )
+    const y = Number(over.find('[data-testid="usage-cap-line"]').attributes('y1'))
+    // Plot spans [8, 96]; cap 3.0 against a 6.0 max sits halfway down.
+    expect(y).toBeGreaterThan(8)
+    expect(y).toBeLessThan(96)
+    expect(y).toBe(52)
+  })
+
+  it('draws no hidden week table: the ledger rows are the accessible table for the chart', () => {
+    const w = factory()
+    expect(w.find('[data-testid="usage-week-table"]').exists()).toBe(false)
+    expect(w.find('[data-testid="usage-ledger"]').exists()).toBe(true)
+    expect(w.findAll('[data-testid="usage-ledger-row"]').length).toBeGreaterThan(0)
+    expect(w.find('svg.week-svg').attributes('aria-hidden')).toBe('true')
+    expect(w.find('[data-testid="usage-week"] .sub-title').text()).toBe('This week')
   })
 
   it('lists top sessions with links', () => {
@@ -146,6 +252,22 @@ describe('UsagePanel', () => {
     expect(ranks[1].text()).toBe('2.')
   })
 
+  it('sizes the top session bar proportionally to the max, longest at 100%', () => {
+    const w = factory(
+      usage({
+        top_sessions: [
+          { session_id: 's9', topic: 'algebra', cost_usd: 0.42 },
+          { session_id: 's8', topic: 'geometry', cost_usd: 0.21 },
+        ],
+      }),
+    )
+    const rows = w.findAll('[data-testid="usage-top-session"]')
+    expect(rows).toHaveLength(2)
+    const bars = w.findAll('[data-testid="usage-top-session-bar"]')
+    expect(bars[0].attributes('style')).toContain('width: 100%')
+    expect(bars[1].attributes('style')).toContain('width: 50%')
+  })
+
   it('shows empty state when there is no spend at all', () => {
     const w = factory(
       usage({
@@ -159,6 +281,7 @@ describe('UsagePanel', () => {
     expect(w.find('[data-testid="usage-empty"]').exists()).toBe(true)
     expect(w.find('[data-testid="usage-glance"]').exists()).toBe(false)
     expect(w.find('[data-testid="usage-ledger"]').exists()).toBe(false)
+    expect(w.find('svg.week-svg').exists()).toBe(false)
   })
 
   it('does not show the empty-state copy when top_sessions has rows', () => {
