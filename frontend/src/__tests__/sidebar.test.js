@@ -1333,7 +1333,7 @@ describe('Sidebar.vue — identity row and user menu', () => {
     expect(routerPush).toHaveBeenCalledWith('/login')
   })
 
-  it('surfaces an error toast and does not redirect on failure', async () => {
+  it('surfaces an error toast and still leaves the protected route on failure', async () => {
     globalThis.__supabaseAuthStub.signOut.mockResolvedValueOnce({
       error: new Error('network down'),
     })
@@ -1344,7 +1344,10 @@ describe('Sidebar.vue — identity row and user menu', () => {
     await wrapper.get('[data-testid="sidebar-sign-out"]').trigger('click')
     await flushPromises()
     expect(showError).toHaveBeenCalledWith('network down')
-    expect(routerPush).not.toHaveBeenCalled()
+    // The store clears the local session in its finally, so the shell is
+    // already signed out; staying on a protected route would strand the
+    // learner behind a toast.
+    expect(routerPush).toHaveBeenCalledWith('/login')
   })
 
   it('the folded rail shows the circle alone and still opens the menu', async () => {

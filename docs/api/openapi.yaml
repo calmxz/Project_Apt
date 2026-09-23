@@ -319,6 +319,15 @@ paths:
           description: Account deleted.
         "401":
           $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: >-
+            A row for this account was written while the delete ran (for
+            example a streaming reply or an upload still being processed).
+            Nothing was deleted; retry once that work has settled.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "503":
           description: >-
             The auth admin service key is not configured (nothing was

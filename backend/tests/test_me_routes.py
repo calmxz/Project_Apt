@@ -246,6 +246,28 @@ def test_delete_me_idempotent_for_user_with_no_rows(client, db_session, store, a
     assert admin["deleted"] == [VICTIM, VICTIM]
 
 
+def test_delete_me_409_when_a_row_lands_mid_delete(client, db_session, store, admin, monkeypatch):
+    # A streamed reply or chunk embedding written between the child deletes
+    # and the sessions/users delete fails the FK; the whole transaction rolls
+    # back and the learner is told to retry, not shown a 500.
+    from sqlalchemy.exc import IntegrityError
+
+    import routes.me as me_routes
+
+    _seed_user(db_session, VICTIM, store)
+    before = _counts(db_session, VICTIM)
+
+    def boom(db, user_id):
+        raise IntegrityError("insert", {}, Exception("fk"))
+
+    monkeypatch.setattr(me_routes, "delete_user_account", boom)
+    resp = client.delete("/api/me", headers=HV)
+    assert resp.status_code == 409
+    assert "try again" in resp.json()["detail"]
+    assert _counts(db_session, VICTIM) == before
+    assert admin["deleted"] == []
+
+
 def test_delete_me_rejects_invalid_token(client, admin):
     resp = client.delete("/api/me", headers={"Authorization": "Bearer not-a-test-token"})
     assert resp.status_code == 401

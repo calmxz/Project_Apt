@@ -324,9 +324,10 @@ describe('AccountView', () => {
       await flushPromises()
 
       expect(w.find('[data-testid="account-delete-dialog"]').exists()).toBe(true)
-      expect(w.get('[data-testid="account-delete-error"]').text()).toContain(
-        'auth admin not configured',
-      )
+      const notConfigured = w.get('[data-testid="account-delete-error"]').text()
+      expect(notConfigured).toContain('not available right now')
+      expect(notConfigured).toContain('Nothing was removed')
+      expect(notConfigured).not.toContain('auth admin not configured')
       expect(signOutSpy).not.toHaveBeenCalled()
       expect(routerPush).not.toHaveBeenCalled()
     })
@@ -396,7 +397,7 @@ describe('AccountView', () => {
       await w.get('[data-testid="account-delete-submit"]').trigger('click')
       await flushPromises()
       expect(w.get('[data-testid="account-delete-error"]').text()).toContain(
-        'auth admin not configured',
+        'not available right now',
       )
 
       // Drive the same event the Dialog stub emits on Escape / outside-click.

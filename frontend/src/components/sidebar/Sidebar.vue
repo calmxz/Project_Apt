@@ -324,8 +324,10 @@ async function onSignOut() {
   try {
     await authStore.signOut()
   } catch (err) {
+    // The store clears the local session even when the SDK throws, so the
+    // shell is already signed out; say so and still leave the protected
+    // route rather than stranding the learner on it.
     useToast().showError(err?.message || 'Sign out failed')
-    return
   }
   router.push('/login')
 }

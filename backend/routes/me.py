@@ -4,6 +4,7 @@ users row, not per-browser localStorage. A new device hydrates from here."""
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from contracts import MePatchRequest, MeResponse
@@ -85,8 +86,18 @@ def delete_me(
     if not admin_configured():
         raise HTTPException(status_code=503, detail="auth admin not configured")
 
-    keys = delete_user_account(db, user_id)
-    db.commit()
+    try:
+        keys = delete_user_account(db, user_id)
+        db.commit()
+    except IntegrityError:
+        # A child row (streamed reply, chunk embedding) landed between the
+        # child deletes and the sessions/users delete. The transaction rolls
+        # back whole, so nothing is half-deleted; the learner retries once
+        # that work has settled.
+        db.rollback()
+        raise HTTPException(
+            status_code=409, detail="account changed during deletion; try again"
+        ) from None
 
     # Best-effort blob cleanup after commit, same policy as delete_document.
     for key in keys:

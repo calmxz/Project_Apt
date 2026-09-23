@@ -304,6 +304,9 @@ async function changePassword() {
 // match backend/routes/me.py's `detail=` string byte for byte or the
 // friendly copy below silently stops matching.
 const DELETE_AUTH_STEP_DETAIL = 'app data deleted; auth user removal failed'
+// Same rule: these two must match backend/routes/me.py byte for byte.
+const DELETE_NOT_CONFIGURED_DETAIL = 'auth admin not configured'
+const DELETE_CONFLICT_DETAIL = 'account changed during deletion; try again'
 
 const deleteDialogOpen = ref(false)
 const deleteConfirmText = ref('')
@@ -347,6 +350,12 @@ function deleteErrorMessage(e) {
         'Your data was removed but the sign-in could not be deleted. ' +
         'Try again, or contact support if this keeps happening.'
       )
+    }
+    if (detail === DELETE_NOT_CONFIGURED_DETAIL) {
+      return 'Account deletion is not available right now. Nothing was removed. Contact support.'
+    }
+    if (detail === DELETE_CONFLICT_DETAIL) {
+      return 'Something was still being saved to your account. Nothing was removed. Try again in a moment.'
     }
     return detail
   }
