@@ -3,6 +3,56 @@
 Durable "why": decisions, findings, tradeoffs. Newest first. Technical
 how-it-works lookup belongs in `docs/reference.md` instead.
 
+## 2026-09-23 - Archived the executed QA re-triage, the 10x roadmap, and the branch-protection script
+
+Removed from the working tree. Everything is recoverable with
+`git show c2ef3db:<path>` (last commit on `dev` before the removal).
+
+| Path | What it was | Why removed |
+|---|---|---|
+| `docs/planning/2026-09-19-qa-retriage.md` | Re-verification of all 107 findings from the 2026-08-06 QA audit: 30 FIXED, 1 OBSOLETE, 1 ACCEPTED, 75 open (62 STILL + 13 PARTIAL) | All 75 open items were closed via waves 1-4 (issues #320-#326, #330, #331; PRs through #334, 2026-09-19 to 2026-09-21). Per-wave deviations are recorded in the entries below. |
+| `docs/superpowers/plans/2026-09-19-qa-wave-{1,2,3,4}.md` | Executor plans for the four waves | Executed and merged. Same precedent as the 2026-07-12 slice-plan removal. |
+| `docs/planning/2026-07-06-10x-roadmap.md` | Post-v1 roadmap (tracks R/P/D/S, dead-code audit, sequencing) | Status EXECUTED since 2026-07-12; slices 1-8 merged via PRs #106-#114. Only R5 remained; its acceptance criteria are preserved below so the demand gate survives the removal. |
+| `docs/deploy/enable-branch-protection.sh` | W-07 script to apply branch protection + code-scanning default setup | Protection is now live on `dev` and `main` (verified via `gh api` 2026-09-23). Supersedes the 2026-09-19 note "W-07 deferred, not done". |
+
+**Branch protection as actually configured** (diverges from the Phase 6 plan in
+`docs/security/CI_INVENTORY.md`, which now records the live state):
+
+- `dev`: required checks `Backend (pytest)`, `Frontend (Vitest + lint)`,
+  `Security (SAST + deps + secrets + images)`, `Analyze (javascript-typescript)`;
+  1 approving review required (maintainer merges with `--admin`);
+  `enforce_admins` off.
+- `main`: same checks plus `Analyze (python)`; no review requirement;
+  `enforce_admins` off; signed commits required.
+- `Playwright (chromium)` is not a required check on either branch (e2e is
+  advisory; it runs on push/PR but does not gate merge).
+- GitHub code-scanning *default setup* is `not-configured`; the `Analyze (*)`
+  checks come from `.github/workflows/codeql.yml` (advanced setup). GitHub does
+  not allow both, so enabling default setup would require removing the
+  workflow first. The deleted script's default-setup PATCH was never run.
+
+**R5 - Practice exam mode (demand-gated; do not build without user demand).**
+Generate a timed, mixed practice exam from a session's uploaded documents plus
+its gap list, reusing the existing check-batch machinery (batches of 1-5, MC,
+server-graded).
+- AC1: "Practice exam" action on sessions with a ready document: N questions
+  (configurable 5-15) drawn to cover confirmed gaps first, then document
+  keyword coverage; generated via one agent call using `ask_check_questions`
+  batching (multiple sequential batches, no new grading path).
+- AC2: Exam summary card: score, per-gap breakdown, wrong answers feed
+  `learning_events` exactly like normal checks (so R2/R3 pick them up free).
+- AC3: Cost-guard: exam generation respects the hard cap pre-check and shows
+  estimated cost before starting.
+- AC4: Live-LLM smoke checklist written (paid gate) before merge, matching the
+  project's owed-smoke convention.
+
+**Kept on purpose:** `docs/Crux_Spec.md` and `docs/Crux_DevPlan.md` (historical
+v2 reference, listed in CLAUDE.md read order), `docs/deploy/ngrok.md` (still the
+local public-demo path referenced by `docker-compose.prod.yml` and the READMEs),
+`docs/dev/debug-accounts.example.txt` (template consumed by
+`backend/scripts/seed_debug_accounts.py`), `docs/security/CI_INVENTORY.md`
+(living CI rationale, updated this pass).
+
 ## 2026-09-21 - Issue #331: backend ETag (F-18 backend half)
 
 - **Middleware, not per-route logic.** One allowlist of path prefixes

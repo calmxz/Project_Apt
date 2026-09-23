@@ -27,8 +27,8 @@ reads, and the JWT verification model.
 
 `Authentication → URL Configuration`:
 
-- **Site URL**: `http://localhost:5173` for dev. Switch to your Fly.io URL
-  for Phase 8.
+- **Site URL**: `http://localhost:5173` for dev; the Vercel frontend URL in
+  production (see `docs/deploy/RUNBOOK.md`).
 - **Redirect URLs**: add `http://localhost:5173/**` for dev. The confirmation
   link redirects back here and `supabase-js` (`detectSessionInUrl: true`)
   completes the session.

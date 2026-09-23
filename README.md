@@ -556,7 +556,7 @@ git commit
 
 ## Roadmap
 
-Crux v1 is feature-complete, and the post-v1 roadmap (slices 1-8, see `docs/planning/2026-07-06-10x-roadmap.md`) has shipped:
+Crux v1 is feature-complete, and the post-v1 roadmap (slices 1-8, PRs #106-#114; the roadmap doc is archived in git history, see `docs/decisions.md` 2026-09-23) has shipped:
 
 - **Spaced repetition.** SM-2-lite review queue over confirmed gaps, surfaced on the home dashboard.
 - **Learning insights dashboard.** Trends and usage transparency across sessions.
