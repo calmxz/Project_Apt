@@ -1,14 +1,20 @@
 """Account-level user state (F-46): onboarding + preferences live on the
 users row, not per-browser localStorage. A new device hydrates from here."""
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
 from contracts import MePatchRequest, MeResponse
 from db.database import get_db
 from db.models import User
+from services import object_store
 from services.auth import accepted_terms_from_request, current_user_id
-from services.user_service import ensure_user
+from services.supabase_admin import AuthAdminError, admin_configured, delete_auth_user
+from services.user_service import delete_user_account, ensure_user
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api")
 
@@ -67,3 +73,33 @@ def patch_me(
     db.commit()
     db.refresh(user)
     return _to_response(user)
+
+
+@router.delete("/me", status_code=204)
+def delete_me(
+    user_id: str = Depends(current_user_id),
+    db: Session = Depends(get_db),
+):
+    # Checked before any row is touched: without the admin key the auth user
+    # could not be removed, so a half-deleted account would be left behind.
+    if not admin_configured():
+        raise HTTPException(status_code=503, detail="auth admin not configured")
+
+    keys = delete_user_account(db, user_id)
+    db.commit()
+
+    # Best-effort blob cleanup after commit, same policy as delete_document.
+    for key in keys:
+        try:
+            object_store.get_store().delete(key)
+        except Exception:
+            logger.warning("could not delete stored object %s during account deletion", key)
+
+    try:
+        delete_auth_user(user_id)
+    except AuthAdminError:
+        logger.error("account %s: app data deleted; auth user removal failed", user_id)
+        raise HTTPException(
+            status_code=503, detail="app data deleted; auth user removal failed"
+        ) from None
+    return Response(status_code=204)

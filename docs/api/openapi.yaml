@@ -310,6 +310,25 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
+    delete:
+      tags: [me]
+      summary: Delete the caller's account, every row, stored upload, and the auth user.
+      operationId: deleteMe
+      responses:
+        "204":
+          description: Account deleted.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          description: >-
+            The auth admin service key is not configured (nothing was
+            deleted), app data was removed but the auth user removal
+            failed, or the auth JWKS endpoint is unavailable. The
+            ErrorResponse detail names the failed step.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/sessions/{session_id}:
     get:
