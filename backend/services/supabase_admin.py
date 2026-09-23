@@ -4,7 +4,7 @@ The `sb_secret_...` key (settings.supabase_secret_key) replaces the legacy
 service_role key; it is backend-only and must never be logged or echoed.
 """
 
-from urllib.parse import quote
+import uuid
 
 import httpx
 
@@ -28,8 +28,12 @@ def delete_auth_user(user_id: str) -> None:
     status code -- never the key or the response body.
     """
     key = settings.supabase_secret_key
-    # Percent-encode the id so it can only ever address one path segment.
-    safe_user_id = quote(user_id, safe="")
+    # Supabase auth ids are UUIDs. Rebuilding the path segment from the parsed
+    # value rejects anything else and never forwards the raw string.
+    try:
+        safe_user_id = str(uuid.UUID(user_id))
+    except (ValueError, AttributeError, TypeError):
+        raise AuthAdminError("auth admin delete refused: user id is not a UUID") from None
     url = f"{settings.supabase_url.rstrip('/')}/auth/v1/admin/users/{safe_user_id}"
     headers = {"apikey": key, "Authorization": f"Bearer {key}"}
     try:
