@@ -1,10 +1,8 @@
 <script setup>
 import { computed, nextTick, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useConfirm } from 'primevue/useconfirm'
 import { useSidebar } from '@/composables/useSidebar.js'
-import { useSessionStore } from '@/stores/session.js'
-import { useToast } from '@/composables/useToast.js'
+import { useSessionActions } from '@/composables/useSessionActions.js'
 import SidebarRowMenu from './SidebarRowMenu.vue'
 
 const props = defineProps({
@@ -15,12 +13,9 @@ const props = defineProps({
 
 const route = useRoute()
 const router = useRouter()
-const store = useSessionStore()
 const { mode, closeDrawer } = useSidebar()
-const { showSuccess, showError } = useToast()
-const confirm = useConfirm()
-
-const busy = ref(false)
+const actions = useSessionActions()
+const { busy } = actions
 
 const renaming = ref(false)
 const draft = ref('')
@@ -57,66 +52,15 @@ function openSession() {
 // so it asks first. Same dialog contract as the file delete in
 // ReferenceStatusBanner: no icon, neutral cancel, strong destructive accept.
 function onEnd() {
-  if (busy.value) return
-  confirm.require({
-    header: 'End session',
-    message: `End "${props.session.topic || 'Untitled'}"? You can still read it, but you cannot continue the conversation.`,
-    rejectLabel: 'Cancel',
-    acceptLabel: 'End session',
-    rejectClass: 'p-button-text p-button-secondary',
-    acceptClass: 'p-button-danger confirm-delete-strong',
-    accept: endNow,
-  })
+  actions.confirmEnd(props.session)
 }
 
-// busy is raised here rather than in onEnd: a cancelled dialog must leave the
-// row usable, and it also guards a second accept arriving mid-request.
-async function endNow() {
-  if (busy.value) return
-  busy.value = true
-  try {
-    await store.endSession(props.session.id)
-    // F-44: the summary dialog lives in SessionView; ending from anywhere
-    // else would silently drop the pending summary. Toast it instead.
-    const s = store.pendingSummary
-    const onThatSession = route.name === 'session' && route.params.id === props.session.id
-    if (s && s.sessionId === props.session.id && !onThatSession) {
-      showSuccess(s.text)
-      store.consumePendingSummary()
-    }
-  } catch {
-    /* store.error populated */
-  } finally {
-    busy.value = false
-  }
+function onResume() {
+  actions.resume(props.session)
 }
 
-async function onResume() {
-  if (busy.value) return
-  busy.value = true
-  try {
-    await store.reopenSession(props.session.id)
-    closeDrawer()
-    router.push({ name: 'session', params: { id: props.session.id } })
-  } catch {
-    /* store.error populated */
-  } finally {
-    busy.value = false
-  }
-}
-
-async function onContinueTopic() {
-  if (busy.value) return
-  busy.value = true
-  try {
-    const created = await store.continueTopic(props.session)
-    if (created) router.push({ name: 'session', params: { id: created.id } })
-    closeDrawer()
-  } catch {
-    /* F-06: store.error populated; without this the rethrow is unhandled */
-  } finally {
-    busy.value = false
-  }
+function onContinueTopic() {
+  actions.continueTopic(props.session)
 }
 
 // Rename never moves the row between lists, so this instance's own menu is
@@ -138,9 +82,7 @@ function refocusRowTrigger(id) {
 
 function setPin(on) {
   const id = props.session.id
-  store
-    .setPinned(id, on)
-    .catch(() => showError(on ? 'Could not pin the session.' : 'Could not unpin the session.'))
+  actions.setPinned(props.session, on)
   refocusRowTrigger(id)
 }
 
@@ -160,14 +102,9 @@ function cancelRename() {
 
 async function commitRename() {
   if (!renaming.value) return
-  const next = draft.value.trim()
+  const next = draft.value
   renaming.value = false
-  if (!next || next === (props.session.topic || '')) return
-  try {
-    await store.renameSession(props.session.id, next)
-  } catch {
-    showError('Could not rename the session.')
-  }
+  await actions.rename(props.session, next)
 }
 
 function commitRenameFromKey() {
