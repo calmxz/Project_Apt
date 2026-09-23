@@ -252,4 +252,42 @@ describe('MessageList', () => {
     expect(list.exists()).toBe(true)
     expect(list.attributes('aria-atomic')).toBeUndefined()
   })
+
+  // Thread redesign: the gap between turns grows only at a change of voice.
+  describe('speaker-change gap', () => {
+    it('marks a voice change, not a run of the same voice', () => {
+      const messages = [
+        { message_id: 'a1', role: 'assistant', content: 'a1', tool_calls: [], citations: [] },
+        { message_id: 'u1', role: 'user', content: 'u1' },
+        { message_id: 'u2', role: 'user', content: 'u2' },
+        { message_id: 'a2', role: 'assistant', content: 'a2', tool_calls: [], citations: [] },
+      ]
+      const w = mount(MessageList, { props: { messages } })
+      const rows = w.findAll('.msg')
+      expect(rows).toHaveLength(4)
+      expect(rows[0].classes()).not.toContain('msg-row--speaker-change')
+      expect(rows[1].classes()).toContain('msg-row--speaker-change')
+      expect(rows[2].classes()).not.toContain('msg-row--speaker-change')
+      expect(rows[3].classes()).toContain('msg-row--speaker-change')
+    })
+
+    it('marks the typing row when the last rendered turn was the learner', () => {
+      const w = mount(MessageList, { props: { messages: [userMsg], awaiting: true } })
+      expect(w.find('[data-testid="msg-typing"]').classes()).toContain('msg-row--speaker-change')
+    })
+
+    it('does not mark the typing row when the last rendered turn was the tutor', () => {
+      const w = mount(MessageList, { props: { messages: [assistantMsg], awaiting: true } })
+      expect(w.find('[data-testid="msg-typing"]').classes()).not.toContain(
+        'msg-row--speaker-change',
+      )
+    })
+
+    it('marks the streaming bubble when the last rendered turn was the learner', () => {
+      const w = mount(MessageList, {
+        props: { messages: [userMsg], streamingMessage: streamingMsg },
+      })
+      expect(w.find('[data-testid="msg-streaming"]').classes()).toContain('msg-row--speaker-change')
+    })
+  })
 })
