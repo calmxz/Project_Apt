@@ -3,6 +3,118 @@
 Durable "why": decisions, findings, tradeoffs. Newest first. Technical
 how-it-works lookup belongs in `docs/reference.md` instead.
 
+## 2026-09-23 - Shell, chat and settings redesign
+
+Replaced the broken half-tab sidebar toggle, the identity-less sidebar foot,
+the two-stocks thread and the four-tab Settings with the Card Box's rail,
+identity row, tutor-on-desk and three-tab Settings. Tickets 01-10, this repo's
+`.scratch/shell-settings-redesign/`.
+
+- **Icon rail over full hide.** Folding no longer hides the sidebar to a bare
+  strip; it folds to a 3rem icon rail (ChatGPT-style) carrying the drawn
+  "sidebar" toggle, New session, Search, Review (with due count), one dot per
+  session, then the foot (Settings, identity initial). The old half-tab
+  chevron overlapped the centred Crux mark at 3rem with neither cleanly
+  clickable; the drawn toggle now sits in the head, above the mark when
+  folded, so the two never share space. Ctrl+B, the persisted
+  `crux.sidebar.expanded` key, the 60/40 widths and the mobile top strip /
+  drawer are unchanged — only the toggle glyphs moved.
+- **Identity row and user menu replace Sign out.** The sidebar foot now shows
+  a 28px initial circle (card stock, 1px card edge, blue initial at 700)
+  plus the display name, opening a lifted user-menu card (name, email,
+  Account, Sign out) on click or keyboard. Root cause of the blank-identity
+  bug: `stores/user.js` writes the literal string `'Learner'` when the
+  learner leaves the display name field blank (`completeOnboarding` and
+  `updateProfile`), so the identity row treats that placeholder as unset and
+  falls back to the sign-in email. The store still writes the placeholder;
+  a follow-up should stop writing it so `'Learner'` isn't baked into
+  `display_name` rows that a future surface might render verbatim.
+- **Account is its own route, not a Settings tab.** `/account` holds display
+  name (with save and saved-flash), read-only email, password change and
+  delete-account, styled in the same Settings-sheet grammar
+  (`frontend/src/assets/sheet.css`, shared with `SettingsView.vue`) so the
+  card shell, `.sec`, `.saved-flash` and `.skel-block` furniture are declared
+  once. `/settings/profile` redirects to Learning; `/settings/account`
+  redirects to `/account`. The Account page is a single column top to
+  bottom (Account, Security, Danger sections stacked); the old Settings
+  two-column-from-60rem grid was dropped rather than carried over, since
+  password fields and the delete section read better in one line of sight
+  than split across columns.
+- **Tutor on the desk, not a second card stock.** The "Two Stocks Rule" is
+  gone: `AssistantBubble.vue` renders the pencil head line and body flat on
+  the desk (no edge, no drop, no stock) at the same 78% measure (92% under
+  600px) the tutor card used; the landed tick, tool-activity aside,
+  citations and typing dots keep their slots. The learner keeps its blue
+  card unchanged. `MessageList.vue` grows the gap to 1.5rem only at a
+  change of voice (`speakerChangeAt`), 0.75rem within one voice. Inline
+  code chips now sit directly on the desk with no card to frame them; the
+  Impeccable pass should confirm whether they read cleanly without a border
+  or need one added.
+- **Session action bar: 56px, shared handlers.** `SessionHeader.vue` is now
+  a 56px bar with a 1px `card-edge` rule below it (was 72px, no rule, no
+  actions). Left: topic link, level mark/word, middot, started. Right: 28px
+  drawn icon buttons for Rename, Pin, End (Resume when ended), plus an
+  8px reference-file status dot. Rename/pin/end/resume were lifted out of
+  the sidebar row menu into `composables/useSessionActions.js` so the header
+  and the sidebar row call the same implementation; End is disabled while
+  `streaming` is true, since `store.endSession` never aborts an in-flight
+  reply. The status dot reads the same `useReferencePoll` aggregate as
+  `ReferenceStatusBanner`, mapping its `'pending'` value onto the header's
+  `'processing'` vocabulary (`'ready'`/`'failed'`/`null` pass through).
+- **Usage chart choices.** The today meter's soft/urgent/hard ticks are
+  positioned as a fraction of the hard cap (`pctOfHard`), since hard is the
+  only cap guaranteed non-zero. The seven-day chart draws past days in a new
+  `--chart-bar-past` token (light `#5a78c2` / dark `#5570ad`, both clearing
+  3:1 non-text contrast on `--desk-deep`, asserted by `tokenContrast.test.js`)
+  and today in `--color-accent`, not `--color-accent-strong` as the spec
+  named — in the dark theme `accent-strong` (3.16:1) reads fainter than the
+  past-day token, which would make today the least prominent column instead
+  of the most. The ledger rows stay the one accessible table; the SVG is
+  `aria-hidden`.
+- **Learning tab reads the aggregate endpoint.** `LearningTab.vue` calls
+  `GET /profile/aggregate` for the per-topic overview, a weekly mastery
+  series and a concept accuracy list. The server always returns 12
+  zero-filled weekly points (`profile_insights.py`), so the tab gates its
+  empty state on `total_sessions === 0`, not on array length, and shows
+  "none yet" per section when every point is zero. Concept accuracy shows
+  the 3 least- and 3 most-accurate concepts (server-sorted ascending, so
+  the two slices are the array's head and tail). Grading ticks and crosses
+  on the accuracy rows use `--ink-marker`, the same correctness exemption
+  from the tab law that check-card grading already uses.
+- **Delete account (`DELETE /api/me`).** 503 before touching any row when
+  `admin_configured()` is false (checked against `supabase_secret_key` /
+  `supabase_url`, not a new setting — the spec called for "a new
+  service-role setting", but the repo already has one under a different
+  name: `supabase_secret_key` replaced the legacy `service_role` key
+  end-to-end, see `services/supabase_admin.py`). `services/user_service.py
+  delete_user_account` deletes in one transaction in explicit FK order —
+  chunk embeddings, documents, learning events, chat messages, LLM call
+  log, usage counter, daily cost ledger, session rows (topic profiles are a
+  JSON column on the session row, not a separate table, so they go with
+  it), then the user row — commits, then best-effort deletes the object
+  store blobs, then calls the Supabase GoTrue admin API to delete the auth
+  user. A failure at the auth step after commit returns 503 naming that
+  step (`"app data deleted; auth user removal failed"`); the frontend
+  matches that literal string to show a retry-safe message instead of raw
+  backend prose, and does not sign the learner out, since the delete is
+  idempotent and a retry can finish the job. Known gap: between the app-data
+  commit and a successful auth-user delete, the learner's still-valid JWT
+  plus `ensure_user`'s lazy row creation could recreate an empty `users`
+  row on any authenticated request; mitigated by the client signing out
+  immediately on success, but not closed for the failure path until the
+  auth step succeeds or the token expires. Object storage keys are per
+  document (`object_store.key_for(doc_id, filename)`), not a per-user
+  directory, so deletion iterates the user's document keys rather than
+  removing one directory.
+- **Rejected:** a keyboard shortcut reference card, and an in-app
+  reduced-motion toggle (the OS-level `prefers-reduced-motion` media query
+  already drives every animation in the build).
+- **Process note:** destructive confirm buttons (`.confirm-delete-strong`)
+  were painting PrimeVue's default blue inside `crux-dialog` and
+  `p-confirmdialog` footers — a `(0,2,0)`-specificity PrimeVue rule beat the
+  app's own selector. Fixed once in `frontend/src/assets/dialogs.css` with a
+  `(0,5,0)` override covering both dialog contexts, rather than per-caller.
+
 ## 2026-09-23 - Archived the executed QA re-triage, the 10x roadmap, and the branch-protection script
 
 Removed from the working tree. Everything is recoverable with

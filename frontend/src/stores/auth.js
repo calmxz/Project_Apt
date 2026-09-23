@@ -44,8 +44,7 @@ export const useAuthStore = defineStore('auth', () => {
       email,
       password,
       options: {
-        emailRedirectTo:
-          typeof window !== 'undefined' ? `${window.location.origin}/` : undefined,
+        emailRedirectTo: typeof window !== 'undefined' ? `${window.location.origin}/` : undefined,
         // F-52: consent travels as a verified JWT metadata claim; the backend
         // stamps accepted_terms_at only when it is present. The register form
         // cannot submit without the checkbox, so this is set iff consent.
@@ -72,9 +71,7 @@ export const useAuthStore = defineStore('auth', () => {
     const sb = getSupabase()
     const { error } = await sb.auth.resetPasswordForEmail(email, {
       redirectTo:
-        typeof window !== 'undefined'
-          ? `${window.location.origin}/reset-password`
-          : undefined,
+        typeof window !== 'undefined' ? `${window.location.origin}/reset-password` : undefined,
     })
     if (error) throw error
   }
@@ -87,12 +84,19 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function signOut() {
     const sb = getSupabase()
-    const { error } = await sb.auth.signOut()
-    if (error) throw error
-    session.value = null
-    // Belt-and-braces: the SIGNED_OUT event from onAuthStateChange also
-    // clears the user store; setActiveUser(null) is idempotent.
-    useUserStore().setActiveUser(null)
+    try {
+      const { error } = await sb.auth.signOut()
+      if (error) throw error
+    } finally {
+      // Clear local session even when the SDK call throws (network drop,
+      // already-revoked token, etc). Otherwise the router guard's stale
+      // isAuthenticated bounces /login back to home and re-hydrates /me,
+      // recreating a users row for an account that just tried to sign out.
+      session.value = null
+      // Belt-and-braces: the SIGNED_OUT event from onAuthStateChange also
+      // clears the user store; setActiveUser(null) is idempotent.
+      useUserStore().setActiveUser(null)
+    }
   }
 
   function _resetForTests() {

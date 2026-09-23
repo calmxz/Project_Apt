@@ -99,6 +99,20 @@ describe('base.css tokens', () => {
       })
     })
 
+    // WCAG 1.4.11: past-day columns in the Usage week chart are graphical
+    // marks on --desk-deep and need 3:1.
+    it(`${themeName}: --chart-bar-past is >= 3:1 on --desk-deep in every block`, () => {
+      const grounds = hex('--desk-deep', block)
+      const bars = hex('--chart-bar-past', block)
+      expect(bars.length).toBe(grounds.length)
+      bars.forEach((bar, i) => {
+        expect(
+          ratio(bar, grounds[i]),
+          `--chart-bar-past on --desk-deep (${themeName})`,
+        ).toBeGreaterThanOrEqual(3)
+      })
+    })
+
     it(`${themeName}: --tab-ink is >= 4.5:1 on every --tab-* fill`, () => {
       const inks = hex('--tab-ink', block)
       for (const tabToken of ['--tab-focus', '--tab-gaps', '--tab-mastered', '--tab-level']) {

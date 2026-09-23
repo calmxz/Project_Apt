@@ -58,6 +58,62 @@ describe('Composer — touch targets', () => {
   })
 })
 
+describe('SessionHeader — action bar touch targets', () => {
+  let SessionHeader
+
+  const RouterLinkStub = { template: '<a><slot /></a>', props: ['to'] }
+  const session = {
+    id: 's1',
+    topic: 'Glycolysis pathway',
+    created_at: null,
+    pinned: false,
+    ended_at: null,
+  }
+
+  beforeEach(async () => {
+    vi.resetModules()
+    vi.doMock('@/composables/useSessionActions.js', async () => {
+      const { ref } = await import('vue')
+      return {
+        useSessionActions: () => ({
+          busy: ref(false),
+          confirmEnd: vi.fn(),
+          endSession: vi.fn(),
+          resume: vi.fn(),
+          continueTopic: vi.fn(),
+          setPinned: vi.fn(),
+          rename: vi.fn(),
+        }),
+      }
+    })
+    setActivePinia(createPinia())
+    SessionHeader = (await import('@/components/chat/SessionHeader.vue')).default
+  })
+
+  afterEach(() => {
+    vi.doUnmock('@/composables/useSessionActions.js')
+  })
+
+  function mountHeader(props = {}) {
+    return mount(SessionHeader, {
+      props: { session, ...props },
+      global: { stubs: { RouterLink: RouterLinkStub } },
+    })
+  }
+
+  it('Rename, Pin and End carry hit-44', () => {
+    const w = mountHeader()
+    expect(w.get('[data-testid="session-action-rename"]').classes()).toContain('hit-44')
+    expect(w.get('[data-testid="session-action-pin"]').classes()).toContain('hit-44')
+    expect(w.get('[data-testid="session-action-end"]').classes()).toContain('hit-44')
+  })
+
+  it('Resume carries hit-44 on an ended session', () => {
+    const w = mountHeader({ session: { ...session, ended_at: '2026-01-01T00:00:00Z' } })
+    expect(w.get('[data-testid="session-action-resume"]').classes()).toContain('hit-44')
+  })
+})
+
 describe('CueColumn — disclosure and panel-collapse touch targets', () => {
   let CueColumn
 
@@ -138,14 +194,14 @@ describe('Sidebar — collapse toggle touch target', () => {
   // D-17: the drawer footer is the one place the rail's 28px pitch leaves a
   // control well under 44px, so both footer controls take the utility plus
   // coarse-2x (the row layout has the width to spare).
-  it('the footer Settings link and Sign out button carry hit-44 and coarse-2x', () => {
+  it('the footer Settings link and identity row trigger carry hit-44 and coarse-2x', () => {
     const w = mount(Sidebar)
     const settings = w.get('[data-testid="sidebar-settings"]')
     expect(settings.classes()).toContain('hit-44')
     expect(settings.classes()).toContain('coarse-2x')
-    const signOut = w.get('[data-testid="sidebar-sign-out"]')
-    expect(signOut.classes()).toContain('hit-44')
-    expect(signOut.classes()).toContain('coarse-2x')
+    const identity = w.get('[data-testid="sidebar-user-trigger"]')
+    expect(identity.classes()).toContain('hit-44')
+    expect(identity.classes()).toContain('coarse-2x')
   })
 })
 

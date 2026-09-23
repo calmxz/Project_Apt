@@ -8,6 +8,7 @@ import { useSidebar } from '@/composables/useSidebar.js'
 import { useToast } from '@/composables/useToast.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useSessionStore } from '@/stores/session.js'
+import { useUserStore } from '@/stores/user.js'
 import { useSessionGroups } from '@/composables/useSessionGroups.js'
 import { getReviewQueue } from '@/services/reviewApi.js'
 import * as sessionsApi from '@/services/sessionsApi.js'
@@ -15,12 +16,15 @@ import { runWhenIdle } from '@/utils/idle.js'
 import Logo from '@/components/Logo.vue'
 import SidebarSessionRow from './SidebarSessionRow.vue'
 import SidebarSkeletonList from './SidebarSkeletonList.vue'
+import SidebarUserMenu from './SidebarUserMenu.vue'
 
 const { mode, isDesktop, drawerOpen, toggleDesktop, closeDrawer } = useSidebar()
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
-const { isAuthenticated } = storeToRefs(authStore)
+const { isAuthenticated, userEmail } = storeToRefs(authStore)
+const userStore = useUserStore()
+const { name: userName } = storeToRefs(userStore)
 const sessionStore = useSessionStore()
 const { sessions, loading, activeTotal, endedTotal, searchRows } = storeToRefs(sessionStore)
 
@@ -265,27 +269,65 @@ watch(
 
 const isExpanded = computed(() => mode.value === 'expanded' || mode.value === 'drawer-open')
 const showDrawerClose = computed(() => !isDesktop.value && mode.value === 'drawer-open')
+const isRail = computed(() => isDesktop.value && !isExpanded.value)
+
+// Folded, the fold control is drawn above the mark, so it must also come
+// first in the DOM or Tab would reach the mark before it (WCAG 2.4.3).
+const headOrder = computed(() => (isRail.value ? ['toggle', 'brand'] : ['brand', 'toggle']))
+
+// Identity row: the display name, else the sign-in email. stores/user.js
+// writes the literal 'Learner' when the learner leaves the name blank, so
+// that placeholder counts as unset here.
+const identityName = computed(() => {
+  const n = userName.value
+  return n && n !== 'Learner' ? n : userEmail.value || ''
+})
 
 // Clear search when collapsing so the icon rail is never gated empty.
 watch(isExpanded, (expanded) => {
   if (!expanded) searchQuery.value = ''
 })
 
+// Folding moves the toggle node within the head (headOrder), which drops a
+// keyboard user's focus to <body>; put it back on the toggle.
+async function onHeadToggle(e) {
+  const hadFocus = document.activeElement === e.currentTarget
+  toggleDesktop()
+  await nextTick()
+  if (hadFocus) {
+    asideEl.value?.querySelector('[data-testid="sidebar-collapse-toggle"]')?.focus()
+  }
+}
+
+// Rail Search unfolds the sidebar, then hands the caret to the search field
+// once the expanded body has rendered.
+async function onRailSearch() {
+  toggleDesktop()
+  await nextTick()
+  asideEl.value?.querySelector('[data-testid="sidebar-search"]')?.focus()
+}
+
 function onNewSession() {
   closeDrawer()
   router.push({ name: 'new-session' })
 }
 
-// Sign out lives on the footer rail rather than inside Settings > Account:
-// it is a navigation act, not a setting, and it belongs with the other
-// written lines at the foot of the contents page.
+function onAccount() {
+  closeDrawer()
+  router.push({ name: 'account' })
+}
+
+// Sign out lives in the identity row's menu at the foot of the contents page:
+// it is a navigation act, not a setting.
 async function onSignOut() {
   closeDrawer()
   try {
     await authStore.signOut()
   } catch (err) {
+    // The store clears the local session even when the SDK throws, so the
+    // shell is already signed out; say so and still leave the protected
+    // route rather than stranding the learner on it.
     useToast().showError(err?.message || 'Sign out failed')
-    return
   }
   router.push('/login')
 }
@@ -314,41 +356,44 @@ async function onSignOut() {
     aria-label="App navigation"
   >
     <div class="sb-header">
-      <RouterLink to="/" class="sb-brand" aria-label="Crux home" @click="closeDrawer">
-        <Logo :size="isExpanded ? 'md' : 'sm'" :variant="isExpanded ? 'full' : 'mark-only'" />
-      </RouterLink>
-      <button
-        v-if="isDesktop"
-        type="button"
-        class="sb-toggle sb-toggle--edge hit-44"
-        :aria-label="isExpanded ? 'Collapse sidebar' : 'Expand sidebar'"
-        :title="isExpanded ? 'Collapse sidebar' : 'Expand sidebar'"
-        data-testid="sidebar-collapse-toggle"
-        @click="toggleDesktop"
-      >
-        <svg
-          class="sb-toggle-icon"
-          viewBox="0 0 20 20"
-          width="14"
-          height="14"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.5"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-          focusable="false"
+      <template v-for="part in headOrder" :key="part">
+        <RouterLink
+          v-if="part === 'brand'"
+          to="/"
+          class="sb-brand"
+          aria-label="Crux home"
+          @click="closeDrawer"
         >
-          <template v-if="isExpanded">
-            <path d="M12.5 4.5 L7 10 L12.5 15.5" />
-            <path d="M17 4.5 L11.5 10 L17 15.5" />
-          </template>
-          <template v-else>
-            <path d="M7.5 4.5 L13 10 L7.5 15.5" />
-            <path d="M3 4.5 L8.5 10 L3 15.5" />
-          </template>
-        </svg>
-      </button>
+          <Logo :size="isExpanded ? 'md' : 'sm'" :variant="isExpanded ? 'full' : 'mark-only'" />
+        </RouterLink>
+        <button
+          v-else-if="isDesktop"
+          type="button"
+          class="sb-toggle sb-toggle--head hit-44"
+          :aria-label="isExpanded ? 'Collapse sidebar' : 'Expand sidebar'"
+          :title="isExpanded ? 'Collapse sidebar' : 'Expand sidebar'"
+          data-testid="sidebar-collapse-toggle"
+          @click="onHeadToggle"
+        >
+          <!-- The drawn "sidebar" glyph: a page with a narrow left pane. -->
+          <svg
+            class="sb-toggle-icon"
+            viewBox="0 0 20 20"
+            width="20"
+            height="20"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <rect x="3" y="4" width="14" height="12" rx="2" />
+            <path d="M8 4 L8 16" />
+          </svg>
+        </button>
+      </template>
       <button
         v-if="showDrawerClose"
         type="button"
@@ -382,6 +427,7 @@ async function onSignOut() {
         class="sb-new-session"
         :class="{ 'sb-new-session--icon': !isExpanded }"
         :title="isExpanded ? '' : 'New session'"
+        :aria-label="isExpanded ? null : 'New session'"
         data-testid="sidebar-new-session"
         @click="onNewSession"
       >
@@ -402,6 +448,61 @@ async function onSignOut() {
         </svg>
         <span v-if="isExpanded">New session</span>
       </button>
+    </div>
+
+    <!-- Folded rail: Search and Review stay one click away without unfolding. -->
+    <div v-if="isDesktop && !isExpanded" class="sb-rail-actions">
+      <button
+        type="button"
+        class="sb-icon sb-icon-btn hit-44"
+        aria-label="Search sessions"
+        title="Search sessions"
+        data-testid="sidebar-rail-search"
+        @click="onRailSearch"
+      >
+        <svg
+          class="sb-inline-icon"
+          viewBox="0 0 20 20"
+          width="16"
+          height="16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <circle cx="8.5" cy="8.5" r="6" />
+          <path d="M13 13 L17.5 17.5" />
+        </svg>
+      </button>
+      <RouterLink
+        v-if="reviewTotal > 0"
+        to="/review"
+        class="sb-icon sb-rail-review hit-44"
+        data-testid="sidebar-review"
+        :aria-label="`Review: ${reviewTotal} ${reviewTotal === 1 ? 'concept' : 'concepts'} due`"
+        title="Review"
+      >
+        <svg
+          class="sb-inline-icon"
+          viewBox="0 0 20 20"
+          width="16"
+          height="16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <circle cx="10" cy="10.5" r="7" />
+          <path d="M10 6.5 L10 10.5 L13 12.5" />
+        </svg>
+        <span class="sb-rail-badge" aria-hidden="true">{{ reviewTotal }}</span>
+      </RouterLink>
     </div>
 
     <RouterLink
@@ -673,34 +774,14 @@ async function onSignOut() {
         </svg>
         <span v-if="isExpanded" class="sb-icon-label">Settings</span>
       </RouterLink>
-      <button
+      <SidebarUserMenu
         v-if="isAuthenticated"
-        type="button"
-        class="sb-icon sb-icon-btn hit-44 coarse-2x"
-        :class="{ 'sb-icon--row': isExpanded }"
-        aria-label="Sign out"
-        title="Sign out"
-        data-testid="sidebar-sign-out"
-        @click="onSignOut"
-      >
-        <svg
-          class="sb-inline-icon"
-          viewBox="0 0 20 20"
-          width="16"
-          height="16"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.5"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-          focusable="false"
-        >
-          <path d="M12 4 H5 V16 H12" />
-          <path d="M9 10 H17 M14 7 L17 10 L14 13" />
-        </svg>
-        <span v-if="isExpanded" class="sb-icon-label">Sign out</span>
-      </button>
+        :name="identityName"
+        :email="userEmail || ''"
+        :collapsed="isRail"
+        @account="onAccount"
+        @sign-out="onSignOut"
+      />
     </footer>
   </aside>
 </template>
@@ -845,19 +926,43 @@ async function onSignOut() {
   outline-offset: 2px;
 }
 
-/* The collapse control is a half-tab standing off the sidebar's right edge,
-   the one control on the contents page allowed to look like a fixture rather
-   than a written line. */
-.sb-toggle--edge {
+/* The fold control is a drawn icon in the head: right of the wordmark when
+   open, alone above the mark when folded, so it never sits on the mark. */
+.sb-toggle--head {
+  margin-left: auto;
+  width: 2rem;
+  height: 2rem;
+}
+
+.sidebar--collapsed .sb-toggle--head {
+  margin-left: 0;
+}
+
+/* Folded rail rows: Search and Review, centred under New session. */
+.sb-rail-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0 0 0.25rem;
+}
+
+.sb-rail-review {
+  position: relative;
+}
+
+.sb-rail-badge {
   position: absolute;
-  top: 0.875rem;
-  right: -1px;
-  width: 22px;
-  height: 28px;
-  border: 1px solid var(--card-edge);
-  border-right: 0;
-  border-radius: 6px 0 0 6px;
-  background: var(--card);
+  top: -4px;
+  /* The 36px icon sits centred in the 48px rail (47px inside its right
+     border), so -4px keeps the count clear of the rail's overflow clip. */
+  right: -4px;
+  font-family: var(--font-sans);
+  font-size: var(--fs-label);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ink-learner);
+  font-variant-numeric: tabular-nums;
 }
 
 .sb-cta {
@@ -1032,8 +1137,8 @@ async function onSignOut() {
   border-radius: 0;
 }
 
-/* Sign out is a button, not a link; strip the UA chrome so it reads as the
-   same written line as Settings. */
+/* Rail Search is a button, not a link; strip the UA chrome so it reads as the
+   same drawn mark as the links around it. */
 .sb-icon-btn {
   background: transparent;
   border: 0;

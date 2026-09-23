@@ -42,6 +42,21 @@ const lastAssistantIndex = computed(() => {
 function tickAt(i) {
   return props.landed && !props.streamingMessage && i === lastAssistantIndex.value
 }
+
+// Speaker-change gap: the rhythm of the thread grows when the voice changes.
+// Based on visibleMessages (the rendered list), not the raw messages array,
+// so a skipped-empty assistant row (U-01) never counts as a voice change.
+function speakerChangeAt(i) {
+  if (i === 0) return false
+  return visibleMessages.value[i].role !== visibleMessages.value[i - 1].role
+}
+
+// The typing/streaming row is always the tutor; it grows the gap only when
+// the last rendered turn was the learner's.
+const trailingSpeakerChange = computed(() => {
+  const last = visibleMessages.value[visibleMessages.value.length - 1]
+  return last ? last.role === 'user' : false
+})
 </script>
 
 <template>
@@ -66,15 +81,22 @@ function tickAt(i) {
       >
         <UserBubble
           v-if="m.role === 'user'"
+          :class="{ 'msg-row--speaker-change': speakerChangeAt(i) }"
           :content="m.content || ''"
           :created-at="m.created_at || null"
         />
-        <AssistantBubble v-else :message="m" :streaming="false" :landed="tickAt(i)" />
+        <AssistantBubble
+          v-else
+          :class="{ 'msg-row--speaker-change': speakerChangeAt(i) }"
+          :message="m"
+          :streaming="false"
+          :landed="tickAt(i)"
+        />
       </template>
     </TransitionGroup>
     <article
       v-if="awaiting && !streamingMessage"
-      class="msg assistant typing"
+      :class="['msg', 'assistant', 'typing', { 'msg-row--speaker-change': trailingSpeakerChange }]"
       data-testid="msg-typing"
     >
       <div class="msg-gutter">
@@ -88,7 +110,12 @@ function tickAt(i) {
         <p class="content typing-dots"><span></span><span></span><span></span></p>
       </div>
     </article>
-    <AssistantBubble v-if="streamingMessage" :message="streamingMessage" :streaming="true" />
+    <AssistantBubble
+      v-if="streamingMessage"
+      :class="{ 'msg-row--speaker-change': trailingSpeakerChange }"
+      :message="streamingMessage"
+      :streaming="true"
+    />
   </div>
 </template>
 
@@ -97,6 +124,12 @@ function tickAt(i) {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+}
+
+/* Speaker-change gap: 0.75rem inside one voice (the flex gap above), 1.5rem
+   when the voice changes -- the extra margin stacks on top of the gap. */
+.msg-list > .msg-row--speaker-change {
+  margin-top: 0.75rem;
 }
 
 /* A card appears; it never slides. */
@@ -123,19 +156,21 @@ function tickAt(i) {
   margin-top: 0.75rem;
 }
 
-/* Typing indicator: a tutor card with three dots instead of prose. Scoped to
-   .typing so it never collides with the learner card's own rule. */
+.msg-list + .msg.typing.msg-row--speaker-change,
+.msg-list + .msg.assistant.msg-row--speaker-change {
+  margin-top: 1.5rem;
+}
+
+/* Typing indicator: a flat tutor turn with three dots instead of prose, the
+   same measure as the settled turn so nothing jumps when the first token
+   lands. Scoped to .typing so it never collides with the learner card. */
 .msg.typing {
   align-self: flex-start;
+  width: 78%;
   max-width: 78%;
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  background: var(--card);
-  border: 1px solid var(--card-edge);
-  border-radius: var(--radius-card);
-  box-shadow: 0 1px 0 var(--card-drop);
-  padding: 0.55rem 0.9rem 0.7rem;
 }
 
 .msg.typing .msg-gutter {

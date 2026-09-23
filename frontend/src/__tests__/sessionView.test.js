@@ -27,6 +27,17 @@ vi.mock('vue-router', () => ({
   RouterLink: { template: '<a><slot /></a>' },
 }))
 
+// Ticket 10: the session action bar calls useSessionActions, which calls
+// useConfirm in setup. Capture the last dialog config so a test can accept it.
+let lastConfirm = null
+vi.mock('primevue/useconfirm', () => ({
+  useConfirm: () => ({
+    require: (cfg) => {
+      lastConfirm = cfg
+    },
+  }),
+}))
+
 const showError = vi.fn()
 vi.mock('@/composables/useToast.js', () => ({
   useToast: () => ({ showError, showWarn: vi.fn(), showSuccess: vi.fn() }),
@@ -148,7 +159,7 @@ describe('SessionView', () => {
     // Header renders inline (no teleport); topic comes from props
     const header = wrapper.findComponent(SessionHeader)
     expect(header.exists()).toBe(true)
-    expect(header.props('topic')).toBe('Calculus')
+    expect(header.props('session').topic).toBe('Calculus')
     expect(wrapper.find('[data-testid="session-header"]').exists()).toBe(true)
   })
 
@@ -221,7 +232,7 @@ describe('SessionView', () => {
     store.detailLoading = true
     const wrapper = mountView({ id: 's2' })
     await flushPromises()
-    expect(wrapper.findComponent(SessionHeader).props('topic')).toBe('Thermodynamics')
+    expect(wrapper.findComponent(SessionHeader).props('session')?.topic).toBe('Thermodynamics')
   })
 
   it('shows the message skeleton while detailLoading and hides empty-state + stale check card', async () => {
@@ -254,7 +265,7 @@ describe('SessionView', () => {
     store.messages = [{ role: 'assistant', content: 'hi', message_id: 'm1', citations: [] }]
     await nextTick()
     expect(wrapper.find('[data-testid="session-messages-skeleton"]').exists()).toBe(false)
-    expect(wrapper.findComponent(SessionHeader).props('topic')).toBe('Calculus')
+    expect(wrapper.findComponent(SessionHeader).props('session')?.topic).toBe('Calculus')
   })
 
   it('prefers the target list row topic over a stale previous session during load', async () => {
@@ -266,7 +277,7 @@ describe('SessionView', () => {
     store.detailLoading = true
     const wrapper = mountView({ id: 's2' })
     await flushPromises()
-    expect(wrapper.findComponent(SessionHeader).props('topic')).toBe('Thermodynamics')
+    expect(wrapper.findComponent(SessionHeader).props('session')?.topic).toBe('Thermodynamics')
   })
 
   it('hides the previous ended-session banner while loading a different session', async () => {
@@ -549,6 +560,115 @@ describe('SessionView', () => {
     )
     expect(store.pendingSummary).toBe(null)
   })
+
+  it('ending from the action bar still opens the summary dialog here (ticket 10)', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession()
+    })
+    vi.spyOn(store, 'endSession').mockImplementation(async (id) => {
+      store.currentSession.ended_at = new Date().toISOString()
+      store.pendingSummary = { sessionId: id, kind: 'summary', text: 'Ended from the head.' }
+    })
+    route.name = 'session'
+    route.params = { id: 's1' }
+    try {
+      lastConfirm = null
+      const wrapper = mountView()
+      await flushPromises()
+      await wrapper.get('[data-testid="session-action-end"]').trigger('click')
+      expect(lastConfirm?.header).toBe('End session')
+      await lastConfirm.accept()
+      await flushPromises()
+      expect(store.endSession).toHaveBeenCalledWith('s1')
+      expect(wrapper.get('[data-testid="session-summary-summary"]').text()).toContain(
+        'Ended from the head.',
+      )
+      expect(wrapper.find('[data-testid="session-action-end"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="session-action-resume"]').exists()).toBe(true)
+    } finally {
+      delete route.name
+      delete route.params
+    }
+  })
+
+  it('passes the header the session object with pinned and ended_at', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession({ ended: true })
+      store.currentSession.pinned = true
+      store.currentSession.created_at = '2026-09-20T10:00:00Z'
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    const session = wrapper.findComponent(SessionHeader).props('session')
+    expect(session).toMatchObject({
+      id: 's1',
+      topic: 'Calculus',
+      created_at: '2026-09-20T10:00:00Z',
+      pinned: true,
+    })
+    expect(session.ended_at).toBeTruthy()
+  })
+
+  // The header dot reads the already-fetched aggregate (refStatus from
+  // useReferencePoll, itself the backend's documents_service.aggregate_status
+  // value), not a re-derivation from the raw document list -- so it always
+  // agrees with ReferenceStatusBanner, which reads the same aggregate. 'ready'
+  // wins even with a failed doc present in the list because the backend
+  // aggregate itself already resolved to 'ready' (e.g. the failed doc was
+  // since replaced); re-ranking from the documents here previously produced a
+  // conflicting verdict against the banner.
+  // End must not stay clickable while the tutor stream is mid-turn (ending
+  // then would leave the stream running unaborted). SessionView forwards the
+  // live stream state; SessionHeader's own disabled logic is covered in
+  // sessionHeader.test.js.
+  it('forwards the live stream state to the header as `streaming`', async () => {
+    const store = useSessionStore()
+    vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+      setupSession()
+    })
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.findComponent(SessionHeader).props('streaming')).toBe(false)
+    store.streamState = 'streaming'
+    await nextTick()
+    expect(wrapper.findComponent(SessionHeader).props('streaming')).toBe(true)
+    store.streamState = 'tool_running'
+    await nextTick()
+    expect(wrapper.findComponent(SessionHeader).props('streaming')).toBe(true)
+    store.streamState = 'idle'
+    await nextTick()
+    expect(wrapper.findComponent(SessionHeader).props('streaming')).toBe(false)
+  })
+
+  it.each([
+    ['pending', [], 'processing'],
+    ['processing', [], 'processing'],
+    [
+      'ready',
+      [
+        { id: 'a', status: 'ready' },
+        { id: 'c', status: 'failed' },
+      ],
+      'ready',
+    ],
+    ['failed', [{ id: 'c', status: 'failed' }], 'failed'],
+    [null, [], null],
+  ])(
+    'derives the header refStatus from the ingestion aggregate (status=%s, docs=%j -> %s)',
+    async (status, docs, want) => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      getSessionIngestion.mockResolvedValue({ status, documents: docs })
+      const wrapper = mountView()
+      await flushPromises()
+      expect(wrapper.findComponent(SessionHeader).props('refStatus')).toBe(want)
+      expect(wrapper.find('[data-testid="session-ref-status"]').exists()).toBe(want !== null)
+    },
+  )
 
   it('summary dialog carries the shared dialog chrome class', async () => {
     const store = useSessionStore()

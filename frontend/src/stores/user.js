@@ -125,6 +125,20 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
+  // R2-25: called right after DELETE /me succeeds, before authStore.signOut().
+  // Wipes the in-memory state AND removes the persisted localStorage snapshot
+  // for this account -- signOut alone (setActiveUser(null)) clears memory but
+  // leaves the storage key behind, so a later sign-in on the same browser
+  // (same uid resurrected, or reused by a new account) must not read the
+  // deleted user's name/onboarding flags back out of localStorage.
+  //
+  // Body is identical to resetOnboarding(); it keeps its own name because the
+  // call site's intent (post-delete wipe vs. onboarding restart) is what a
+  // reader needs, not the mechanism.
+  function clearForAccountDeletion() {
+    resetOnboarding()
+  }
+
   async function updateProfile({ name: displayName, feedback }) {
     const body = {}
     if (displayName != null) body.display_name = displayName.trim() || 'Learner'
@@ -151,6 +165,7 @@ export const useUserStore = defineStore('user', () => {
     hydrateFromServer,
     completeOnboarding,
     resetOnboarding,
+    clearForAccountDeletion,
     updateProfile,
   }
 })

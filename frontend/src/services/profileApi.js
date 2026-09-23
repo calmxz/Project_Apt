@@ -10,6 +10,14 @@ import { apiDelete, apiGet, apiPatch } from './apiClient.js'
 export const getSessionProfile = (sessionId) =>
   apiGet(`/profile/${sessionId}`, undefined, { fresh: true })
 
+// Cross-session aggregate dashboard (AggregateProfileResponse). This does
+// carry tutor-written data -- recent_topics[].progress comes from each
+// session's topic_profile_json -- but the Learning tab is a read-only
+// overview, not a write path like getSessionProfile above, so the plain
+// short GET cache is acceptable here: it needs neither `fresh` nor an etag
+// round-trip.
+export const getAggregateProfile = () => apiGet('/profile/aggregate')
+
 export const getUsageSummary = () => apiGet('/usage/summary')
 
 // Both write calls send If-Match so the server can enforce optimistic

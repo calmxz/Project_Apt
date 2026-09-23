@@ -42,10 +42,11 @@ test.describe.skip('resume carries profile', () => {
     await page.getByTestId('session-send').click()
     await expect(page.getByTestId('msg-assistant').last()).toContainText('[STUB:fresh]')
 
-    // End session A. There is no in-page end control on SessionView; ending
-    // happens from the session's row in the sidebar (overflow menu -> End
-    // session), which awaits the end-of-session summary synchronously and
-    // persists it onto topic_profile.last_session_summary.
+    // End session A via the sidebar row's overflow menu (ticket 10 also added
+    // an in-page End control on SessionView itself, but the row menu exercises
+    // the same shared useSessionActions.confirmEnd path). Awaits the
+    // end-of-session summary synchronously and persists it onto
+    // topic_profile.last_session_summary.
     await page
       .locator(`[data-session-id="${sessionId}"] [data-testid="sidebar-row-menu-trigger"]`)
       .click()
