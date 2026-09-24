@@ -20,10 +20,16 @@ PR #366.
   the final set resolves, or from the answered items when the learner stops
   or the session ends mid-check. An all-skip diagnostic still leaves the
   level unset (F-25).
-- **A chat message during a check ends it.** The composer stays enabled
-  during a check, and the frontend already clears the card on send, so the
-  server treats any message as the #339 point 8 "learner stop" (remaining
-  items skipped, results line folded into the turn).
+- **Chat clarifies; the Stop button stops.** #339 point 8 left "the learner
+  stops" open. The composer stays enabled and the card stays open while the
+  learner chats, so a chat message never ends a check: the tutor sees the
+  open question (stem and options, never the answer) and may clarify its
+  wording without hinting. A "Stop check" button on the card calls
+  POST /sessions/{id}/check/stop, which grades the rest of the open set as
+  skipped and streams the results turn like /check/complete. Considered and
+  rejected: "any message stops the check" plus an "Ask about this" button,
+  which would have killed a check on every clarifying question typed into the
+  normal composer.
 
 ## 2026-09-23 - Shell, chat and settings redesign
 
