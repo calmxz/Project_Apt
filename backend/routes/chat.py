@@ -282,7 +282,7 @@ def _prepare_turn_guards(
                 "code": DAILY_CAP_REACHED,
                 "cap": settings.daily_cap,
                 "used": used,
-                "resets_at": rate_limit.midnight_utc_iso(),
+                "resets_at": cost_meter.midnight_utc_iso(),
             },
         )
 
