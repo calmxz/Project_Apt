@@ -4,6 +4,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { useSidebar } from '@/composables/useSidebar.js'
 import { useSessionActions } from '@/composables/useSessionActions.js'
 import SidebarRowMenu from './SidebarRowMenu.vue'
+// PROTOTYPE - throwaway due-marker variants (src/prototype/dueMarkerProto.js)
+import { dueFor, variant as protoVariant } from '@/prototype/dueMarkerProto.js'
 
 const props = defineProps({
   session: { type: Object, required: true },
@@ -33,6 +35,10 @@ const tooltip = computed(() => props.session.topic || 'Untitled')
 const masteredCount = computed(() => props.session.progress?.mastered_count || 0)
 const focusCue = computed(() => props.session.progress?.focus_target_gap || '')
 const level = computed(() => props.session.progress?.level || null)
+
+// PROTOTYPE
+const protoDue = computed(() => dueFor(props.session.id))
+const protoDueLine = computed(() => protoDue.value.map((d) => d.concept).join(', '))
 
 const rowLabel = computed(() => {
   const parts = [`Open session: ${props.session.topic || 'Untitled'}`]
@@ -133,7 +139,12 @@ function commitRenameFromKey() {
       data-testid="sidebar-row-open"
       @click="openSession"
     >
-      <span v-if="isCollapsed" class="sb-row-mark" aria-hidden="true" />
+      <span
+        v-if="isCollapsed"
+        class="sb-row-mark"
+        :class="{ 'proto-mark-due': protoVariant === 'A' && protoDue.length }"
+        aria-hidden="true"
+      />
       <input
         v-else-if="renaming"
         ref="inputEl"
@@ -165,6 +176,23 @@ function commitRenameFromKey() {
           <path d="M6 3.5 H14 V16.5 L10 13.5 L6 16.5 Z" />
         </svg>
         {{ session.topic || 'Untitled' }}
+        <!-- PROTOTYPE variant A: count pill -->
+        <span
+          v-if="protoVariant === 'A' && protoDue.length"
+          class="proto-pill"
+          data-testid="proto-due-pill"
+        >
+          {{ protoDue.length }} due
+        </span>
+      </span>
+      <!-- PROTOTYPE variant B: due line under the topic -->
+      <span
+        v-if="protoVariant === 'B' && !isCollapsed && !renaming && protoDue.length"
+        class="proto-line"
+        data-testid="proto-due-line"
+        :title="protoDueLine"
+      >
+        Due: {{ protoDueLine }}
       </span>
     </button>
     <SidebarRowMenu
@@ -320,5 +348,43 @@ function commitRenameFromKey() {
   vertical-align: middle;
   color: var(--pencil);
   margin-right: 0.25rem;
+}
+
+/* PROTOTYPE styles - throwaway */
+.sb-row-topic:has(.proto-pill) {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.proto-pill {
+  flex-shrink: 0;
+  margin-left: auto;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: var(--tab-gaps);
+  color: var(--tab-ink);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+.proto-mark-due {
+  box-shadow: 0 0 0 2px var(--tab-gaps);
+  opacity: 1;
+}
+
+.proto-line {
+  display: block;
+  margin-top: -0.35rem;
+  padding-bottom: 0.2rem;
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  line-height: 1.3;
+  color: var(--tab-gaps);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 </style>

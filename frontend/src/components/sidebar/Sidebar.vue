@@ -17,6 +17,13 @@ import Logo from '@/components/Logo.vue'
 import SidebarSessionRow from './SidebarSessionRow.vue'
 import SidebarSkeletonList from './SidebarSkeletonList.vue'
 import SidebarUserMenu from './SidebarUserMenu.vue'
+// PROTOTYPE - throwaway due-marker variants (src/prototype/dueMarkerProto.js)
+import {
+  dueFor,
+  dueTotal as protoDueTotal,
+  loadDue as protoLoadDue,
+  variant as protoVariant,
+} from '@/prototype/dueMarkerProto.js'
 
 const { mode, isDesktop, drawerOpen, toggleDesktop, closeDrawer } = useSidebar()
 const router = useRouter()
@@ -217,6 +224,13 @@ const showEmptyHint = computed(() => !loading.value && !searching.value && !sess
 
 const reviewTotal = ref(0)
 
+// PROTOTYPE variant C: sessions that have something due, in list order.
+const protoDueSessions = computed(() => sessions.value.filter((s) => dueFor(s.id).length))
+function protoOpenDue(s, concept) {
+  closeDrawer()
+  router.push({ name: 'session', params: { id: s.id }, query: { proto_due: concept } })
+}
+
 const showEmptyActiveHint = computed(
   () =>
     !loading.value &&
@@ -241,6 +255,8 @@ onMounted(async () => {
     await sessionStore.listSessions().catch(() => {})
   }
   if (isAuthenticated.value) {
+    // PROTOTYPE: group the due queue by source session.
+    protoLoadDue(sessions.value)
     // Badge count only; silent - a sidebar badge must never toast.
     // Deferred to browser idle so it never competes with first paint.
     cancelIdleBadge = runWhenIdle(() => {
@@ -630,6 +646,41 @@ async function onSignOut() {
         <template v-else>
           <!-- ACTIVE view: pinned mini-group + session activity buckets -->
           <template v-if="statusFilter === 'active'">
+            <!-- PROTOTYPE variant C: due divider section -->
+            <section
+              v-if="protoVariant === 'C' && protoDueSessions.length"
+              class="sb-section proto-due-section"
+              data-testid="proto-due-section"
+            >
+              <h2 class="sb-section-label label proto-due-tab">
+                Due for review
+                <span class="sb-section-count proto-due-count">({{ protoDueTotal }})</span>
+              </h2>
+              <ul class="sb-session-list proto-due-list">
+                <li v-for="s in protoDueSessions" :key="s.id" class="proto-due-row">
+                  <button
+                    type="button"
+                    class="proto-due-topic"
+                    @click="protoOpenDue(s, dueFor(s.id)[0].concept)"
+                  >
+                    {{ s.topic || 'Untitled' }}
+                  </button>
+                  <div class="proto-chips">
+                    <button
+                      v-for="d in dueFor(s.id)"
+                      :key="d.concept"
+                      type="button"
+                      class="proto-chip"
+                      :title="`${d.streak} correct in a row`"
+                      @click="protoOpenDue(s, d.concept)"
+                    >
+                      {{ d.concept }}
+                    </button>
+                  </div>
+                </li>
+              </ul>
+            </section>
+
             <section
               v-if="cappedPinnedActive.length"
               class="sb-section sb-section--pinned"
@@ -1057,6 +1108,84 @@ async function onSignOut() {
   font-variant-numeric: tabular-nums;
   color: var(--pencil);
   font-weight: 400;
+}
+
+/* PROTOTYPE variant C styles - throwaway. A divider: amber tab joined to a
+   white body, the same grammar as the profile panel's Gaps divider. */
+.proto-due-section {
+  margin: 0 0.5rem 0.75rem;
+}
+
+.proto-due-tab {
+  display: inline-flex;
+  width: auto;
+  padding: 0 0.6rem;
+  background: var(--tab-gaps);
+  color: var(--tab-ink);
+  border-radius: 5px 5px 0 0;
+}
+
+.proto-due-count {
+  color: var(--tab-ink);
+  opacity: 0.85;
+}
+
+.proto-due-list {
+  margin: 0;
+  padding: 0.35rem 0.5rem 0.4rem;
+  list-style: none;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-top-left-radius: 0;
+  border-radius: 0 var(--radius-card) var(--radius-card) var(--radius-card);
+  box-shadow: 0 1px 0 var(--card-drop);
+}
+
+.proto-due-row + .proto-due-row {
+  margin-top: 0.4rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--rule);
+}
+
+.proto-due-topic {
+  display: block;
+  width: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  text-align: left;
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--color-text);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.proto-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.25rem;
+}
+
+.proto-chip {
+  border: 1px solid var(--tab-gaps);
+  border-radius: 999px;
+  padding: 0.05rem 0.5rem;
+  background: transparent;
+  color: var(--tab-gaps);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.proto-chip:hover {
+  background: var(--tab-gaps);
+  color: var(--tab-ink);
 }
 
 .sb-section-label .sb-section-count {

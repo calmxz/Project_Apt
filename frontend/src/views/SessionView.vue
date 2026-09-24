@@ -198,6 +198,7 @@
               :summary="endedSummary"
               :loading="resuming"
               :has-gaps="hasGaps"
+              :due-concepts="protoDueConcepts"
               @resume="resume"
               @resume-gaps="resumeReviewGaps"
             />
@@ -274,6 +275,8 @@ import { uploadDocument, validateFile } from '../services/uploadApi.js'
 import { useReferencePoll } from '../composables/useReferencePoll.js'
 import { NARROW_QUERY, useMediaQuery } from '../composables/useMediaQuery.js'
 import { entryNames } from '../utils/conceptEntry.js'
+// PROTOTYPE - throwaway (src/prototype/dueMarkerProto.js)
+import { dueFor as protoDueFor } from '../prototype/dueMarkerProto.js'
 import { formatResetTime } from '../utils/formatDate.js'
 import {
   session as sessionStorageThunk,
@@ -447,6 +450,17 @@ const confirmedGaps = computed(() => entryNames(current.value?.topic_profile?.co
 // Gates the "Review my gaps" CTA — only meaningful once we're showing the
 // ended banner for this session.
 const hasGaps = computed(() => confirmedGaps.value.length > 0)
+
+// PROTOTYPE: due concepts for this session; a ?proto_due=<concept> deep link
+// (variant C chips) puts that concept first so the banner names it.
+const protoDueConcepts = computed(() => {
+  const names = protoDueFor(props.id).map((d) => d.concept)
+  const pick = route.query.proto_due
+  if (pick && names.includes(String(pick))) {
+    return [String(pick), ...names.filter((n) => n !== pick)]
+  }
+  return names
+})
 const canEnd = computed(() => Boolean(current.value) && !isEnded.value)
 const canSend = computed(() => canEnd.value && !store.dailyCapReached && !store.costCapReached)
 
@@ -980,6 +994,11 @@ async function resume() {
 
 async function resumeReviewGaps() {
   if (!store.currentSession) return
+  // PROTOTYPE: a due concept wins over the profile's first gap.
+  if (protoDueConcepts.value.length) {
+    await sendReviewSeed(protoDueConcepts.value[0])
+    return
+  }
   if (confirmedGaps.value.length > 1) {
     gapPickerOpen.value = true
     return

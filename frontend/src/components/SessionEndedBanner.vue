@@ -7,8 +7,21 @@
       profile.
     </p>
     <p class="actions">
+      <!-- PROTOTYPE: when the queue has something due for this session, the
+           review action names it. -->
       <button
-        v-if="hasGaps"
+        v-if="dueConcepts.length"
+        type="button"
+        class="resume-btn gaps-btn"
+        data-testid="session-resume-gaps"
+        :disabled="loading"
+        @click="$emit('resume-gaps')"
+      >
+        Review: {{ dueConcepts[0]
+        }}<template v-if="dueConcepts.length > 1"> (+{{ dueConcepts.length - 1 }} due)</template>
+      </button>
+      <button
+        v-else-if="hasGaps"
         type="button"
         class="resume-btn gaps-btn"
         data-testid="session-resume-gaps"
@@ -39,6 +52,8 @@ defineProps({
   hasGaps: { type: Boolean, default: false },
   // topic_profile.last_session_summary, already stripped of the [auto] marker.
   summary: { type: String, default: '' },
+  // PROTOTYPE: concept names due for spaced-repetition review in this session.
+  dueConcepts: { type: Array, default: () => [] },
 })
 
 defineEmits(['resume', 'resume-gaps'])
