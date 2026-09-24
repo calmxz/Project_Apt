@@ -31,12 +31,15 @@ def _today_utc() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 
-def midnight_utc_iso() -> str:
-    now = datetime.now(timezone.utc)
-    tomorrow = (now + timedelta(days=1)).replace(
+def next_midnight_utc(now: datetime | None = None) -> datetime:
+    now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    return (now + timedelta(days=1)).replace(
         hour=0, minute=0, second=0, microsecond=0
     )
-    return tomorrow.isoformat()
+
+
+def midnight_utc_iso(now: datetime | None = None) -> str:
+    return next_midnight_utc(now).isoformat()
 
 
 def _quantize(v: Decimal) -> Decimal:

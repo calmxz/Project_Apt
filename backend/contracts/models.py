@@ -753,7 +753,8 @@ class UsageSummaryResponse(BaseModel):
     Spend transparency for the current user. daily covers the last 14 UTC
     days, oldest first, zero-filled for missing ledger rows. Cap values
     mirror the runtime cost meter; the urgent tier is derived (0.9 x
-    hard), never a duplicated literal.
+    hard), never a duplicated literal. resets_at is the next UTC midnight,
+    the same instant the daily cap and rate limit 429 payloads report.
 
     """
 
@@ -766,6 +767,7 @@ class UsageSummaryResponse(BaseModel):
     urgent_cap_usd: float
     hard_cap_usd: float
     top_sessions: list[SessionSpend] = Field(..., max_length=3)
+    resets_at: datetime
 
 
 class CodedErrorDetail(BaseModel):

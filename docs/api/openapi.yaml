@@ -1901,11 +1901,13 @@ components:
         - urgent_cap_usd
         - hard_cap_usd
         - top_sessions
+        - resets_at
       description: |
         Spend transparency for the current user. daily covers the last 14 UTC
         days, oldest first, zero-filled for missing ledger rows. Cap values
         mirror the runtime cost meter; the urgent tier is derived (0.9 x
-        hard), never a duplicated literal.
+        hard), never a duplicated literal. resets_at is the next UTC midnight,
+        the same instant the daily cap and rate limit 429 payloads report.
       properties:
         daily:
           type: array
@@ -1918,6 +1920,7 @@ components:
           type: array
           maxItems: 3
           items: { $ref: "#/components/schemas/SessionSpend" }
+        resets_at: { type: string, format: date-time }
 
     # I-02: structured errors (409 session_ended / duplicate_topic /
     # check_conflict, 429 caps, 413/400/415/507 upload) send detail as an
