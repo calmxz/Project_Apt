@@ -203,7 +203,7 @@ function strokes(n) {
   color: var(--color-accent-hover);
 }
 
-/* Narrow (390px checked): cue on its own line, the three pencil facts on a
+/* Narrow (repo's 599px breakpoint; not yet viewed in a browser at 390): cue on its own line, the three pencil facts on a
    second line under it. Pitch grows to two lines. */
 @media (max-width: 599px) {
   .row {

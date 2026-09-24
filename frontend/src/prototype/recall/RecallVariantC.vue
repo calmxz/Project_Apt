@@ -346,7 +346,7 @@ summary {
   min-height: 0;
 }
 
-/* Narrow (390px checked): card runs edge to edge, ghosts fan tighter,
+/* Narrow (repo's 599px breakpoint; not yet viewed in a browser at 390): card runs edge to edge, ghosts fan tighter,
    the fold list stacks meta under the cue. */
 @media (max-width: 599px) {
   .card {

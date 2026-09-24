@@ -243,7 +243,7 @@ const groups = computed(() => groupBySource(props.items))
   color: var(--color-accent-hover);
 }
 
-/* Narrow (390px checked): one card per line, the sheet loses its side
+/* Narrow (repo's 599px breakpoint; not yet viewed in a browser at 390): one card per line, the sheet loses its side
    padding so cards run near the edge like the chat's learner cards. */
 @media (max-width: 599px) {
   .cards {
