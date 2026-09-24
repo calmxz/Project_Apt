@@ -3,6 +3,36 @@
 Durable "why": decisions, findings, tradeoffs. Newest first. Technical
 how-it-works lookup belongs in `docs/reference.md` instead.
 
+## 2026-09-24 - Check-question sets: diagnostic grading and learner stop (#340)
+
+Departs from two points of the #339 resolution, decided while reviewing
+PR #366.
+
+- **Diagnostic is 1-3 sets, tutor's choice.** #339 point 5 fixed the
+  diagnostic at 3 sets of 3. The tutor now picks `set_total`: 1 for a narrow
+  topic, up to 3 when the topic has distinct subtopics worth sampling.
+- **Diagnostic level graded once, over every set.** #339 point 4 keeps
+  grading per batch. Grading the level from set 1 alone would have placed
+  the learner on one subtopic's 3 items, while sets 2-3 ran as ordinary
+  checks and wrote mastered/gap entries for subtopics never taught. Now the
+  current-check pointer carries `purpose`, so later sets stay diagnostic (no
+  mastery effects), and a running `diag` score. The level is written when
+  the final set resolves, or when the learner stops or the session ends
+  mid-check. Items a stop leaves unreached count as skipped, and skipped items
+  stay in the denominator exactly as a Skip click does (#339 point 8, "early
+  stop = skip"). An all-skip diagnostic still leaves the
+  level unset (F-25).
+- **Chat clarifies; the Stop button stops.** #339 point 8 left "the learner
+  stops" open. The composer stays enabled and the card stays open while the
+  learner chats, so a chat message never ends a check: the tutor sees the
+  open question (stem and options, never the answer) and may clarify its
+  wording without hinting. A "Stop check" button on the card calls
+  POST /sessions/{id}/check/stop, which grades the rest of the open set as
+  skipped and streams the results turn like /check/complete. Considered and
+  rejected: "any message stops the check" plus an "Ask about this" button,
+  which would have killed a check on every clarifying question typed into the
+  normal composer.
+
 ## 2026-09-23 - Shell, chat and settings redesign
 
 Replaced the broken half-tab sidebar toggle, the identity-less sidebar foot,

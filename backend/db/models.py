@@ -78,6 +78,8 @@ class Session(Base):
     kw_index_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
     pending_check_json: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     quiz_cooldown_json: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+    # #340: check-level pointer across sets; see services/pending_check_store.py.
+    current_check_json: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     # C-16: see User.created_at.
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), default=_utcnow

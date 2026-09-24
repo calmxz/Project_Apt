@@ -91,6 +91,7 @@ from contracts import AskCheckQuestionsArgs
 
 def _one_item_args(sid="s1"):
     return AskCheckQuestionsArgs(
+        set_index=1, set_total=1,
         session_id=sid,
         gap="derivatives",
         items=[{

@@ -85,6 +85,11 @@ def _build_prompt_state(
         "last_session_summary": profile.last_session_summary,
         "rolling_summary": getattr(session, "rolling_summary", None),
         "pending_check": pending_check,
+        # #340: lets the prompt tell "between sets" from "no check".
+        "current_check": (
+            pending_check_store.get_current_check_from_row(session)
+            if getattr(session, "current_check_json", None) else None
+        ),
         "quiz_cooldown": quiz_cooldown,
         "gap_accuracy": gap_accuracy or {},
     }

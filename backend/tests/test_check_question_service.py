@@ -103,6 +103,7 @@ def ctx_session_with_level(db_session):
 
 def one_item_args(gap: str, correct_index: int = 0):
     return AskCheckQuestionsArgs(
+        set_index=1, set_total=1,
         session_id=SESSION_ID,
         gap=gap,
         items=[{
@@ -116,6 +117,7 @@ def one_item_args(gap: str, correct_index: int = 0):
 
 def _batch_args(session_id):
     return AskCheckQuestionsArgs(
+        set_index=1, set_total=1,
         session_id=session_id,
         gap="atp",
         items=[
@@ -133,6 +135,8 @@ def test_register_batch_persists_items_pending(db, ctx, session_id):
     assert res.data == {
         "gap": "atp",
         "total": 2,
+        "set_index": 1,
+        "set_total": 1,
         "items": [
             {"question": "Q1?", "options": ["2 ATP", "36 ATP"]},
             {"question": "Q2?", "options": ["yes", "no", "maybe"]},
@@ -153,6 +157,7 @@ def test_register_rejects_second_batch_while_open(db, ctx, session_id):
 
 def test_register_rejects_bad_correct_index(db, ctx, session_id):
     bad = AskCheckQuestionsArgs(
+        set_index=1, set_total=1,
         session_id=session_id, gap="g",
         items=[{"question": "q", "options": ["a", "b"],
                 "correct_index": 5, "explanation": "e"}],

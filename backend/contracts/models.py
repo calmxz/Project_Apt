@@ -196,10 +196,13 @@ class Item(BaseModel):
 
 class AskCheckQuestionsArgs(BaseModel):
     """
-    Register an ordered batch of 1..5 multiple-choice check-questions and end
-    the turn. The card renders from this payload; any lead-in prose is the
-    model's own text in the same turn.
-    Per-item correct_index must be < len(options); that cross-field rule is
+    Register one SET (an ordered batch of 1..5 multiple-choice
+    check-questions) and end the turn. A check is set_total sets, posed one
+    set per turn. The card renders from this payload; any lead-in prose is
+    the model's own text in the same turn.
+    Per-item correct_index must be < len(options), set_index must be
+    <= set_total, and a later set must continue the current check
+    (same set_total, set_index = previous + 1); those cross-field rules are
     enforced in check_question_service, not here.
 
     """
@@ -213,11 +216,19 @@ class AskCheckQuestionsArgs(BaseModel):
     """
     gap: constr(max_length=200)
     """
-    The single confirmed gap every item probes. Use the exact name from confirmed_gaps so grading updates the right profile entry.
+    The single confirmed gap every item in this set probes. Use the exact name from confirmed_gaps so grading updates the right profile entry. Each set carries its own gap.
+    """
+    set_index: conint(ge=1, le=3)
+    """
+    1-based position of this set within the check. set_index=1 starts a new check; each later set must be the previous set_index + 1.
+    """
+    set_total: conint(ge=1, le=3)
+    """
+    Number of sets in this check, declared on set 1 and never changed. Mid-lesson checks default to 1.
     """
     items: list[Item] = Field(..., max_length=5, min_length=1)
     """
-    Ordered batch of questions, all on gap. One batch per turn.
+    Ordered questions for this set, all on gap. One set per turn.
     """
 
 
@@ -249,6 +260,14 @@ class PendingCheck(BaseModel):
     gap: str
     current_index: int
     total: int
+    set_index: int | None = None
+    """
+    1-based set position within the check; null for pre-set batches.
+    """
+    set_total: int | None = None
+    """
+    Sets in the check; null for pre-set batches.
+    """
     items: list[Item1]
 
 

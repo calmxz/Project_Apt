@@ -809,24 +809,54 @@ def _complete_check_prepare(session_id: str, user_id: str, db: Session):
     # clear_pending_check commit below, then re-reads an empty batch and 409s;
     # that same commit releases the lock, well before the LLM stream starts.
     profile_service.lock_session_row(db, session_id)
-    pc = check_question_service.get_pending_check(db, session_id)
-    if pc is None or not check_question_service.is_done(pc):
+    pc = pending_check_store.get_pending_check(db, session_id)
+    if pc is None or not pending_check_store.is_done(pc):
         raise HTTPException(status_code=409, detail={"code": "no_resolved_batch"})
 
     summary = check_question_service.build_results_summary(pc)
-    cooldown = check_question_service.build_quiz_cooldown(pc)
     # F-24 crash-window backstop: if the per-item grade call never ran (crash
     # between the answer commit and grade), grade the diagnostic NOW, while
     # the resolved batch still exists -- clearing below would otherwise leave
-    # knowledge_level None and re-trigger the diagnostic.
-    diagnostic_service.grade_if_diagnostic(db, session_id)
-    check_question_service.write_check_batch(db, pc)
-    pending_check_store.clear_pending_check(db, session_id)
-    check_question_service.set_quiz_cooldown(db, session_id, cooldown)
+    # knowledge_level None and re-trigger the diagnostic. commit=False: the
+    # grade lands in close_set's single commit, so the B-02 row lock holds
+    # until the set is closed.
+    diagnostic_service.grade_if_diagnostic(db, session_id, commit=False)
+    # #340: between sets the current-check pointer survives this close, and
+    # register() lets the suppressed follow-up turn pose the next set.
+    cooldown = check_question_service.close_set(db, session_id, pc)
+    return _followup_context(db, row, session_id, user_id, summary, cooldown)
 
+
+def _stop_check_prepare(session_id: str, user_id: str, db: Session):
+    """F-11: synchronous segment of stop_check (#340 Stop button).
+
+    stop_open_check claims the check under the session row lock and commits
+    before returning, so a double click's loser re-reads no check in progress
+    and 409s, well before any LLM stream starts (same shape as B-02 for
+    /check/complete)."""
+    row = db.get(SessionModel, session_id)
+    if row is None or row.user_id != user_id:
+        raise HTTPException(status_code=404, detail="session not found")
+    if row.ended_at is not None:
+        raise HTTPException(status_code=409, detail={"code": "session_ended"})
+    summary = check_question_service.stop_open_check(db, session_id)
+    if summary is None:
+        raise HTTPException(status_code=409, detail={"code": "no_open_check"})
+    cooldown = check_question_service.get_quiz_cooldown(db, session_id)
+    return _followup_context(db, row, session_id, user_id, summary, cooldown)
+
+
+def _followup_context(
+    db: Session, row: SessionModel, session_id: str, user_id: str,
+    summary: str, cooldown: dict | None,
+):
+    """Shared tail of the check follow-up turns (/check/complete and
+    /check/stop): history plus the NON-persisted summary turn, prompt, and a
+    suppressed ToolContext. Returns (allowed, messages, system_prompt, ctx).
+    """
     # S2: the follow-up is a real LLM turn, so it counts against the daily
-    # message cap. Grading above is already committed and is never blocked;
-    # at the cap we skip only the tutor's reaction.
+    # message cap. Grading is already committed and is never blocked; at the
+    # cap we skip only the tutor's reaction.
     allowed, _used = rate_limit.check_and_increment(db, user_id)
     if not allowed:
         return False, None, None, None
@@ -880,9 +910,36 @@ async def complete_check(
     F-11: the synchronous DB work lives in _complete_check_prepare and runs in
     a worker thread so it never blocks the event loop.
     """
-    allowed, messages, system_prompt, ctx = await run_in_threadpool(
-        _complete_check_prepare, session_id, user_id, db
-    )
+    prepared = await run_in_threadpool(_complete_check_prepare, session_id, user_id, db)
+    return _followup_response(request, *prepared)
+
+
+@router.post(
+    "/sessions/{session_id}/check/stop",
+    dependencies=[Depends(velocity_limit.enforce_velocity)],
+)
+async def stop_check(
+    session_id: str,
+    request: Request,
+    user_id: str = Depends(current_user_id),
+    db: Session = Depends(get_db),
+):
+    """#340 Stop button: end the check in progress early and stream the
+    tutor's reaction to the results.
+
+    Unanswered items of the open set are graded as skipped (Skip-button
+    semantics), a diagnostic check is graded from what was answered, and the
+    follow-up runs exactly like /check/complete's, with a summary line
+    reading "learner stopped at set N of M". Chat messages never stop a
+    check; the set stays open while the learner asks about it.
+    """
+    prepared = await run_in_threadpool(_stop_check_prepare, session_id, user_id, db)
+    return _followup_response(request, *prepared)
+
+
+def _followup_response(request: Request, allowed, messages, system_prompt, ctx):
+    """SSE response for a check follow-up turn: the daily-cap skip event, or
+    the tutor's streamed reaction."""
     if not allowed:
         async def skipped_stream():
             yield StreamEvent("followup_skipped", {"reason": "daily_cap"}).to_sse()

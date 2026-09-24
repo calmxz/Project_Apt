@@ -298,6 +298,7 @@ def _open_batch(db, session_id, user_id=USER_ID, n=2):
     return check_question_service.register(
         db, ctx,
         AskCheckQuestionsArgs(
+            set_index=1, set_total=1,
             session_id=session_id,
             gap="g",
             items=[

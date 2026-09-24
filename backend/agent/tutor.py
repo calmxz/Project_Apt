@@ -428,6 +428,8 @@ async def run_streaming(
                             "gap": data.get("gap"),
                             "items": data.get("items", []),
                             "total": data.get("total", 0),
+                            "set_index": data.get("set_index"),
+                            "set_total": data.get("set_total"),
                         },
                     )
                     asked_check = True
