@@ -116,7 +116,7 @@ function later() {
   position: relative;
   width: 100%;
   max-width: 32rem;
-  padding-bottom: 0.75rem;
+  padding-bottom: 1.25rem;
 }
 
 /* A check card: white stock, 3px ink head rule, the pencil head line first. */
@@ -165,7 +165,7 @@ function later() {
 }
 
 .ghost-1 {
-  bottom: 0.375rem;
+  bottom: 0.625rem;
   margin: 0 0.5rem;
   z-index: 1;
 }
