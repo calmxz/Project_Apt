@@ -1180,12 +1180,15 @@ components:
     AskCheckQuestionsArgs:
       type: object
       additionalProperties: false
-      required: [session_id, gap, items]
+      required: [session_id, gap, items, set_index, set_total]
       description: |
-        Register an ordered batch of 1..5 multiple-choice check-questions and end
-        the turn. The card renders from this payload; any lead-in prose is the
-        model's own text in the same turn.
-        Per-item correct_index must be < len(options); that cross-field rule is
+        Register one SET (an ordered batch of 1..5 multiple-choice
+        check-questions) and end the turn. A check is set_total sets, posed one
+        set per turn. The card renders from this payload; any lead-in prose is
+        the model's own text in the same turn.
+        Per-item correct_index must be < len(options), set_index must be
+        <= set_total, and a later set must continue the current check
+        (same set_total, set_index = previous + 1); those cross-field rules are
         enforced in check_question_service, not here.
       properties:
         session_id:
@@ -1196,13 +1199,28 @@ components:
           type: string
           maxLength: 200
           description: >-
-            The single confirmed gap every item probes. Use the exact name from
-            confirmed_gaps so grading updates the right profile entry.
+            The single confirmed gap every item in this set probes. Use the
+            exact name from confirmed_gaps so grading updates the right profile
+            entry. Each set carries its own gap.
+        set_index:
+          type: integer
+          minimum: 1
+          maximum: 3
+          description: >-
+            1-based position of this set within the check. set_index=1 starts a
+            new check; each later set must be the previous set_index + 1.
+        set_total:
+          type: integer
+          minimum: 1
+          maximum: 3
+          description: >-
+            Number of sets in this check, declared on set 1 and never changed.
+            Mid-lesson checks default to 1.
         items:
           type: array
           minItems: 1
           maxItems: 5
-          description: Ordered batch of questions, all on gap. One batch per turn.
+          description: Ordered questions for this set, all on gap. One set per turn.
           items:
             type: object
             additionalProperties: false
@@ -1246,6 +1264,14 @@ components:
         gap:           { type: string }
         current_index: { type: integer }
         total:         { type: integer }
+        set_index:
+          type: [integer, "null"]
+          default: null
+          description: 1-based set position within the check; null for pre-set batches.
+        set_total:
+          type: [integer, "null"]
+          default: null
+          description: Sets in the check; null for pre-set batches.
         items:
           type: array
           items:
@@ -1944,8 +1970,10 @@ x-sse-events:
       type: object
       required: [gap, total, items]
       properties:
-        gap:   { type: string }
-        total: { type: integer }
+        gap:       { type: string }
+        total:     { type: integer }
+        set_index: { type: integer, description: 1-based set position within the check. }
+        set_total: { type: integer, description: Sets in the check. }
         items:
           type: array
           items:

@@ -32,6 +32,7 @@ def _resolved_batch(db, sid):
     ctx = ToolContext(db=db, session_id=sid, user_id=USER_ID,
                       turn_started_at=datetime(2026, 1, 1, tzinfo=timezone.utc))
     check_question_service.register(db, ctx, AskCheckQuestionsArgs(
+        set_index=1, set_total=1,
         session_id=sid, gap="atp",
         items=[{"question": "Q1?", "options": ["a", "b"],
                 "correct_index": 0, "explanation": "a."}]))
@@ -69,6 +70,7 @@ def resolved_diagnostic_batch_session(db_session):
                       turn_started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
                       diagnostic_required=True)
     check_question_service.register(db_session, ctx, AskCheckQuestionsArgs(
+        set_index=1, set_total=1,
         session_id=row.id, gap="atp",
         items=[{"question": "Q1?", "options": ["a", "b"],
                 "correct_index": 0, "explanation": "a."}]))
@@ -119,6 +121,7 @@ def test_complete_409_when_not_done(client, db_session, seeded_session, monkeypa
     ctx = ToolContext(db=db_session, session_id=sid, user_id=USER_ID,
                       turn_started_at=datetime(2026, 1, 1, tzinfo=timezone.utc))
     check_question_service.register(db_session, ctx, AskCheckQuestionsArgs(
+        set_index=1, set_total=1,
         session_id=sid, gap="g",
         items=[{"question": "q", "options": ["a", "b"],
                 "correct_index": 0, "explanation": "a."}]))
@@ -162,6 +165,7 @@ def _resolved_batch_miss(db, sid):
     ctx = ToolContext(db=db, session_id=sid, user_id=USER_ID,
                       turn_started_at=datetime(2026, 1, 1, tzinfo=timezone.utc))
     check_question_service.register(db, ctx, AskCheckQuestionsArgs(
+        set_index=1, set_total=1,
         session_id=sid, gap="atp",
         items=[{"question": "Q1?", "options": ["a", "b"],
                 "correct_index": 0, "explanation": "a."}]))

@@ -48,7 +48,6 @@ from services import (
     cost_meter,
     diagnostic_service,
     documents_service,
-    pending_check_store,
     profile_service,
     rate_limit,
     summary_service,
@@ -814,15 +813,14 @@ def _complete_check_prepare(session_id: str, user_id: str, db: Session):
         raise HTTPException(status_code=409, detail={"code": "no_resolved_batch"})
 
     summary = check_question_service.build_results_summary(pc)
-    cooldown = check_question_service.build_quiz_cooldown(pc)
     # F-24 crash-window backstop: if the per-item grade call never ran (crash
     # between the answer commit and grade), grade the diagnostic NOW, while
     # the resolved batch still exists -- clearing below would otherwise leave
     # knowledge_level None and re-trigger the diagnostic.
     diagnostic_service.grade_if_diagnostic(db, session_id)
-    check_question_service.write_check_batch(db, pc)
-    pending_check_store.clear_pending_check(db, session_id)
-    check_question_service.set_quiz_cooldown(db, session_id, cooldown)
+    # #340: between sets the current-check pointer survives this close, and
+    # register() lets the suppressed follow-up turn pose the next set.
+    cooldown = check_question_service.close_set(db, session_id, pc)
 
     # S2: the follow-up is a real LLM turn, so it counts against the daily
     # message cap. Grading above is already committed and is never blocked;

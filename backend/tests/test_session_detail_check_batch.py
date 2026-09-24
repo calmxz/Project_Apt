@@ -54,6 +54,7 @@ def test_open_batch_message_suppressed(client, seeded):
     ctx = ToolContext(db=db, session_id=SID, user_id=USER_ID,
                       turn_started_at=datetime(2026, 1, 1, tzinfo=timezone.utc))
     check_question_service.register(db, ctx, AskCheckQuestionsArgs(
+        set_index=1, set_total=1,
         session_id=SID, gap="atp",
         items=[{"question": "Q1?", "options": ["a", "b"],
                 "correct_index": 0, "explanation": "a."}]))

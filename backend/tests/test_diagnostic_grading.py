@@ -55,6 +55,7 @@ def fresh_session_with_diagnostic_batch(db_session):
         db_session,
         ctx,
         AskCheckQuestionsArgs(
+            set_index=1, set_total=1,
             session_id=row.id,
             gap="warmup",
             items=[
@@ -104,6 +105,7 @@ def session_with_level_and_check_batch(db_session):
         db_session,
         ctx,
         AskCheckQuestionsArgs(
+            set_index=1, set_total=1,
             session_id=row.id,
             gap="atp",
             items=[

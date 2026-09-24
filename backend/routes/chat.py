@@ -321,6 +321,23 @@ def _prepare_turn_context(req: ChatRequest, db: Session, session: SessionModel):
     return messages, profile, gap_accuracy, retrieval_required
 
 
+def _stop_open_check(
+    req: ChatRequest, db: Session, session: SessionModel
+) -> tuple[str | None, dict | None]:
+    """#340 early stop: a learner message while a check is in progress stops
+    the check (see check_question_service.stop_open_check). Returns the
+    [check results] text and the post-stop quiz cooldown, or (None, None).
+
+    Gated on the guard-loaded (expunged) row so a turn with no check in
+    progress pays no extra statement or row lock."""
+    if not (session.pending_check_json or session.current_check_json):
+        return None, None
+    summary = check_question_service.stop_open_check(db, req.session_id)
+    if summary is None:
+        return None, None
+    return summary, check_question_service.get_quiz_cooldown(db, req.session_id)
+
+
 def _persist_user_turn(req: ChatRequest, db: Session) -> None:
     """F-11: synchronous user-message persist segment."""
     db.add(ChatMessage(session_id=req.session_id, role="user", content=req.message))
@@ -362,9 +379,19 @@ async def _prepare_turn_after_guards(
     # statement.
     embed_cost_holder: list = []
     try:
+        stop_summary, stop_cooldown = await run_in_threadpool(
+            _stop_open_check, req, db, session
+        )
         messages, profile, gap_accuracy, retrieval_required = await run_in_threadpool(
             _prepare_turn_context, req, db, session
         )
+        if stop_summary is not None:
+            # Same channel as the /check/complete follow-up, but folded into
+            # the learner's own turn (in memory only; the persisted user
+            # message stays the learner's words).
+            messages[-1] = {
+                "role": "user", "content": f"{stop_summary}\n\n{req.message}",
+            }
         query_vec = None
         if not retrieval_required:
             retrieval_required, query_vec = await retrieval_service.semantic_fallback_required(
@@ -387,8 +414,16 @@ async def _prepare_turn_after_guards(
             review_gaps=getattr(req, "review_gaps", False),
             review_gap=getattr(req, "review_gap", None),
             diagnostic_accepted=getattr(req, "diagnostic_accepted", False),
-            pending_check=pending_check_store.get_pending_check_from_row(session),
-            quiz_cooldown=check_question_service.get_quiz_cooldown_from_row(session),
+            # After a stop the expunged row is stale: the batch is closed and
+            # the cooldown was just rewritten.
+            pending_check=(
+                None if stop_summary is not None
+                else pending_check_store.get_pending_check_from_row(session)
+            ),
+            quiz_cooldown=(
+                stop_cooldown if stop_summary is not None
+                else check_question_service.get_quiz_cooldown_from_row(session)
+            ),
             gap_accuracy=gap_accuracy,
             prefetched_chunks=prefetched_chunks,
         )

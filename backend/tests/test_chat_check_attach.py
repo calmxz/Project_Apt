@@ -80,6 +80,7 @@ def _make_fake_run_streaming_asking():
             ctx.db,
             ctx,
             AskCheckQuestionsArgs(
+                set_index=1, set_total=1,
                 session_id=ctx.session_id, gap="linear_algebra", items=ASK_ITEMS
             ),
         )
@@ -272,6 +273,7 @@ async def test_failed_ask_does_not_clobber_prior_batch_message_id(
         db_session,
         prior_ctx,
         AskCheckQuestionsArgs(
+            set_index=1, set_total=1,
             session_id=SESSION_ID,
             gap="prior_gap",
             items=[
