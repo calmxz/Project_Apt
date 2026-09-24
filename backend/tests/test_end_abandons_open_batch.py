@@ -7,8 +7,9 @@ surfaced a confusing "Could not ask questions" on a read-only ended session.
 
 abandon_open_batch resolves the dangling batch on end: remaining pending items
 become "skipped", the batch is frozen onto its message for honest history, and
-the pending pointer is cleared -- side-effect free (no learning events, no
-profile mutation). A later ask_check_questions then succeeds.
+the pending pointer is cleared -- no learning events and no mastery effects
+(the only profile write is grading an in-progress diagnostic, #340). A later
+ask_check_questions then succeeds.
 """
 
 import json

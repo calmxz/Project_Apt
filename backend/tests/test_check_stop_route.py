@@ -190,3 +190,18 @@ def test_chat_message_mid_set_leaves_the_set_open(client, db_session, monkeypatc
     pc = cq.get_pending_check(db_session, SESSION_ID)
     assert pc is not None and pc["current_index"] == 1
     assert pcs.get_current_check(db_session, SESSION_ID)["last_set_index"] == 1
+
+
+def test_chat_between_sets_tells_the_tutor_to_pose_the_next_set(client, db_session, monkeypatch):
+    _register(db_session, 1, 3, "glycolysis")
+    cq.answer(db_session, SESSION_ID, 0, 0)
+    cq.answer(db_session, SESSION_ID, 1, 0)
+    cq.close_set(db_session, SESSION_ID, cq.get_pending_check(db_session, SESSION_ID))
+    captured = _fake_tutor(monkeypatch)
+
+    _stream(client, "/api/chat/stream", json={"session_id": SESSION_ID, "message": "ok"})
+
+    assert (
+        'PENDING_CHECK: {"between_sets": true, "last_set_index": 1, "set_total": 3}'
+        in captured["system_prompt"]
+    )

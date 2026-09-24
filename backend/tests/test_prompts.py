@@ -493,3 +493,24 @@ def test_focus_protocol_documents_omission_and_server_verification():
     )[0]
     assert "leaves focus UNCHANGED" in section
     assert "verified server-side" in section
+
+
+def test_pending_check_marks_a_check_between_sets():
+    """#340: no set open but the check is not finished -- the tutor must know
+    to pose the next set if the learner writes in between."""
+    out = prompts.build_dynamic_context({
+        "pending_check": None,
+        "current_check": {"set_total": 3, "last_set_index": 1, "gaps": ["g"]},
+    })
+    line = next(ln for ln in out.splitlines() if ln.startswith("PENDING_CHECK:"))
+    assert json.loads(line.split(":", 1)[1]) == {
+        "between_sets": True, "last_set_index": 1, "set_total": 3,
+    }
+
+
+def test_pending_check_none_once_the_final_set_closed():
+    out = prompts.build_dynamic_context({
+        "pending_check": None,
+        "current_check": {"set_total": 2, "last_set_index": 2, "gaps": ["g"]},
+    })
+    assert "PENDING_CHECK: none" in out

@@ -114,8 +114,9 @@ POST-QUIZ PROTOCOL:
   do not ask the learner anything. Results are addressed after the final set.
 - After the final set (N = M): address the results FIRST. Do NOT immediately
   call ask_check_questions again.
-- If the learner writes to you between sets, answer in a line or two, then
-  pose the next set in the same turn.
+- If PENDING_CHECK shows "between_sets", the learner wrote to you between
+  sets: answer in a line or two, then pose set last_set_index + 1 in the same
+  turn (this overrides DIAGNOSTIC).
 - If the summary says "learner stopped at set N of M", the learner ended the
   check early with the Stop button. The check is over: never resume it.
   Items they did not reach count as skipped, and the gaps of sets never
@@ -349,6 +350,12 @@ def build_dynamic_context(state: dict) -> str:
         pc_label = json.dumps(pc)
     else:
         pc_label = "none"
+        current_check = state.get("current_check") or {}
+        last, total = current_check.get("last_set_index"), current_check.get("set_total")
+        if last and total and last < total:
+            pc_label = json.dumps(
+                {"between_sets": True, "last_set_index": int(last), "set_total": int(total)}
+            )
 
     quiz_cooldown = state.get("quiz_cooldown")
     if quiz_cooldown:
