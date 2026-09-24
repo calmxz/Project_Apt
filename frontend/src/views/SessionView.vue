@@ -94,10 +94,10 @@
                 :check="store.pendingCheck"
                 :busy="store.streamState !== 'idle'"
                 :answering="store.checkAnswering"
-                @answer="onAnswerCheck"
-                @skip="onSkipCheck"
-                @next="store.nextCheck"
-                @done="onDoneCheck"
+                @answer="protoAnswer"
+                @skip="protoSkip"
+                @next="protoNext"
+                @done="protoDone"
               />
             </template>
           </div>
@@ -110,10 +110,10 @@
               :check="store.pendingCheck"
               :busy="store.streamState !== 'idle'"
               :answering="store.checkAnswering"
-              @answer="onAnswerCheck"
-              @skip="onSkipCheck"
-              @next="store.nextCheck"
-              @done="onDoneCheck"
+              @answer="protoAnswer"
+              @skip="protoSkip"
+              @next="protoNext"
+              @done="protoDone"
             />
 
             <DiagnosticConsentCard
@@ -244,7 +244,9 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, provide, ref, watch } from 'vue'
+// PROTOTYPE - throwaway (src/prototype/checkSetsProto.js)
+import { createCheckSetsProto, variant as protoVariant } from '../prototype/checkSetsProto.js'
 import { useRoute, useRouter } from 'vue-router'
 
 import Button from 'primevue/button'
@@ -292,6 +294,24 @@ const store = useSessionStore()
 // Drives the panel column width only (see --panel-col in <style>); CueColumn
 // owns its own collapsed rendering and the toggle button.
 const { collapsed: panelCollapsed } = usePanel()
+
+// PROTOTYPE: with ?variant= in dev, a fake three-set check is appended to the
+// thread once it loads and the card's events are graded locally.
+const protoOn = import.meta.env.DEV && Boolean(route.query.variant)
+const proto = protoOn ? createCheckSetsProto(store) : null
+provide('checkSetsVariant', protoOn ? protoVariant : null)
+if (proto) {
+  watch(
+    () => store.detailLoading,
+    (loading) => {
+      if (!loading && !store.pendingCheck) proto.seed()
+    },
+  )
+}
+const protoAnswer = (i) => (proto ? proto.answer(i) : onAnswerCheck(i))
+const protoSkip = () => (proto ? proto.skip() : onSkipCheck())
+const protoNext = () => (proto ? proto.next() : store.nextCheck())
+const protoDone = () => (proto ? proto.done() : onDoneCheck())
 
 const draft = ref('')
 const lastSentText = ref('')

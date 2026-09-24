@@ -11,6 +11,9 @@ import { friendlyError } from './lib/errors.js'
 import Sidebar from './components/sidebar/Sidebar.vue'
 import SidebarMobileTopStrip from './components/sidebar/SidebarMobileTopStrip.vue'
 import RouteProgressBar from './components/RouteProgressBar.vue'
+// PROTOTYPE - throwaway variant switcher (see src/prototype/checkSetsProto.js)
+import PrototypeSwitcher from './prototype/PrototypeSwitcher.vue'
+const isDevBuild = import.meta.env.DEV
 
 const { showError } = useToast()
 const route = useRoute()
@@ -142,6 +145,7 @@ onBeforeUnmount(() => {
   </div>
   <Toast position="top-right" />
   <ConfirmDialog />
+  <PrototypeSwitcher v-if="isDevBuild && showShell" />
 </template>
 
 <style>

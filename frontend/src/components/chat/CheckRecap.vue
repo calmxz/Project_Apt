@@ -1,12 +1,24 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, inject } from 'vue'
 
 // Batch (camelCase, mapped by the session store):
-//   { gap, total, items: [
+//   { gap, total, setIndex, setTotal, items: [
 //     { question, options, status, selectedIndex, correctIndex, correct, explanation } ] }
+// setIndex / setTotal (1-based, #339) are optional; absent means one set.
 const props = defineProps({
   batch: { type: Object, required: true },
 })
+
+// PROTOTYPE (#353): multi-set treatment keyed by the injected variant.
+const variantRef = inject('checkSetsVariant', null)
+const variant = computed(() => variantRef?.value ?? null)
+const setIndex = computed(() => props.batch.setIndex ?? 1)
+const setTotal = computed(() => props.batch.setTotal ?? 1)
+const multi = computed(() => Boolean(variant.value) && setTotal.value > 1)
+const hasNext = computed(() => multi.value && setIndex.value < setTotal.value)
+function segState(n) {
+  return n <= setIndex.value ? 'done' : 'todo'
+}
 
 const LETTERS = ['A', 'B', 'C', 'D', 'E']
 
@@ -26,12 +38,43 @@ function isYourAnswer(item, i) {
 
 <template>
   <section class="recap-card" data-testid="check-recap">
-    <header class="recap-header">
+    <header class="recap-header" :class="{ 'is-segmented': multi && variant === 'B' }">
       <span class="recap-score" data-testid="recap-score" data-tabular>
         {{ nCorrect }} / {{ graded.length }}
       </span>
-      <span class="recap-gap">{{ batch.gap }}</span>
+      <span class="recap-gap">
+        {{ batch.gap
+        }}<span v-if="multi && variant === 'B'" class="recap-gap-set">
+          &middot; set {{ setIndex }} of {{ setTotal }}</span
+        >
+      </span>
+      <span v-if="multi && variant === 'A'" class="recap-set" data-tabular>
+        set {{ setIndex }} of {{ setTotal }}
+      </span>
+      <span
+        v-if="multi && variant === 'C'"
+        class="recap-setmarks"
+        role="img"
+        :aria-label="`Set ${setIndex} of ${setTotal}`"
+      >
+        <svg
+          v-for="n in setTotal"
+          :key="n"
+          class="recap-setmark"
+          :class="segState(n)"
+          viewBox="0 0 14 11"
+          width="14"
+          height="11"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <rect x="1" y="1" width="12" height="9" rx="1" />
+        </svg>
+      </span>
     </header>
+    <div v-if="multi && variant === 'B'" class="recap-rule" aria-hidden="true">
+      <span v-for="n in setTotal" :key="n" class="recap-rule-seg" :class="segState(n)"></span>
+    </div>
 
     <div v-for="(item, qi) in items" :key="qi" class="recap-item">
       <p class="recap-question">{{ item.question }}</p>
@@ -63,6 +106,9 @@ function isYourAnswer(item, i) {
       <p v-if="item.selectedIndex == null" class="recap-norecord">Answer not recorded</p>
       <p v-if="item.explanation" class="recap-explanation">{{ item.explanation }}</p>
     </div>
+    <p v-if="hasNext && variant === 'B'" class="recap-next">
+      set {{ setIndex + 1 }} of {{ setTotal }} follows
+    </p>
   </section>
 </template>
 
@@ -100,6 +146,69 @@ function isYourAnswer(item, i) {
 .recap-gap {
   font-size: var(--fs-caption);
   color: var(--pencil);
+}
+
+/* PROTOTYPE (#353) set chrome per variant. */
+.recap-set {
+  margin-left: auto;
+  white-space: nowrap;
+  font-size: var(--fs-label);
+  color: var(--pencil);
+}
+
+/* The score never breaks across lines, whatever the head line beside it. */
+.recap-score {
+  white-space: nowrap;
+}
+
+.recap-gap-set {
+  white-space: nowrap;
+}
+
+.recap-header.is-segmented {
+  border-bottom: 0;
+}
+
+.recap-rule {
+  display: flex;
+  gap: 4px;
+  height: 3px;
+  margin-top: -0.6rem;
+}
+
+.recap-rule-seg {
+  flex: 1 1 0;
+  background: var(--rule-strong);
+}
+
+.recap-rule-seg.done {
+  background: var(--ink);
+}
+
+.recap-next {
+  margin: 0;
+  font-size: var(--fs-label);
+  line-height: var(--lh-body);
+  color: var(--pencil);
+}
+
+.recap-setmarks {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+  align-self: center;
+}
+
+.recap-setmark {
+  fill: none;
+  stroke: var(--pencil);
+  stroke-width: 1.5;
+}
+
+.recap-setmark.done {
+  fill: var(--ink);
+  stroke: var(--ink);
 }
 
 .recap-item {

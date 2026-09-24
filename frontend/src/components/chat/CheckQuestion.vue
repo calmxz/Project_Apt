@@ -1,9 +1,10 @@
 <script setup>
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, inject, nextTick, ref, watch } from 'vue'
 
 const props = defineProps({
-  // Batch: { gap, total, currentIndex, viewIndex, items: [
+  // Batch: { gap, total, currentIndex, viewIndex, setIndex, setTotal, items: [
   //   { question, options, status, selectedIndex, correctIndex, correct, explanation } ] }
+  // setIndex / setTotal (1-based, #339) are optional; absent means one set.
   check: { type: Object, required: true },
   // F-04: true while a stream is live; Skip/Next/Done are disabled so the
   // follow-up stream cannot be started on top of an active one.
@@ -25,6 +26,43 @@ const isLast = computed(() => props.check.viewIndex >= props.check.total - 1)
 const showProgress = computed(() => props.check.total > 1)
 // Hidden-until-graded: the explanation is a raise, not a hint.
 const graded = computed(() => item.value.status === 'answered')
+
+// PROTOTYPE (#353): multi-set progress, three treatments keyed by the
+// injected variant. null = shipped behaviour (no set chrome at all).
+const variantRef = inject('checkSetsVariant', null)
+const variant = computed(() => variantRef?.value ?? null)
+const setIndex = computed(() => props.check.setIndex ?? 1)
+const setTotal = computed(() => props.check.setTotal ?? 1)
+const multi = computed(() => Boolean(variant.value) && setTotal.value > 1)
+const answeredCount = computed(
+  () => props.check.items.filter((it) => it.status !== 'pending').length,
+)
+// B: one segment per set; the live one fills item by item.
+const segments = computed(() =>
+  Array.from({ length: setTotal.value }, (_, k) => {
+    const n = k + 1
+    if (n < setIndex.value) return { state: 'done', fill: 1 }
+    if (n === setIndex.value)
+      return { state: 'live', fill: answeredCount.value / props.check.total }
+    return { state: 'todo', fill: 0 }
+  }),
+)
+// C: the sets still to come sit under the card as stacked edges.
+const stackStyle = computed(() => {
+  const remaining = setTotal.value - setIndex.value
+  if (variant.value !== 'C' || !multi.value || remaining <= 0) return null
+  const parts = ['0 1px 0 var(--card-drop)']
+  for (let k = 1; k <= remaining; k += 1) {
+    parts.push(`0 ${k * 4}px 0 -${k}px var(--card)`)
+    parts.push(`0 ${k * 4 + 1}px 0 -${k}px var(--card-edge)`)
+  }
+  return { boxShadow: parts.join(', ') }
+})
+function markState(n) {
+  if (n < setIndex.value) return 'done'
+  if (n === setIndex.value) return 'live'
+  return 'todo'
+}
 
 function optionClass(i) {
   if (item.value.status !== 'answered') return ''
@@ -48,14 +86,52 @@ watch(answered, async (is) => {
   <section
     class="check-card"
     :class="{ answered, correct, incorrect: answered && !correct }"
+    :style="stackStyle"
     data-testid="check-card"
   >
-    <div class="check-gutter">
-      <span class="role-tag">check</span>
-      <p v-if="showProgress" class="check-progress" data-tabular>
-        {{ check.viewIndex + 1 }}/{{ check.total }}
+    <div class="check-gutter" :class="{ 'is-segmented': multi && variant === 'B' }">
+      <span class="role-tag">
+        check<template v-if="multi && variant === 'B'">
+          &middot; set {{ setIndex }} of {{ setTotal }}</template
+        >
+      </span>
+      <p v-if="showProgress || multi" class="check-progress" data-tabular>
+        <template v-if="multi && variant === 'A'"
+          >set {{ setIndex }} of {{ setTotal }} &middot;
+        </template>
+        <span
+          v-if="multi && variant === 'C'"
+          class="check-setmarks"
+          role="img"
+          :aria-label="`Set ${setIndex} of ${setTotal}`"
+        >
+          <svg
+            v-for="n in setTotal"
+            :key="n"
+            class="check-setmark"
+            :class="markState(n)"
+            viewBox="0 0 14 11"
+            width="14"
+            height="11"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <rect x="1" y="1" width="12" height="9" rx="1" />
+          </svg>
+        </span>
+        <template v-if="showProgress">{{ check.viewIndex + 1 }}/{{ check.total }}</template>
       </p>
     </div>
+    <div v-if="multi && variant === 'B'" class="check-rule" aria-hidden="true">
+      <span
+        v-for="(s, k) in segments"
+        :key="k"
+        class="check-rule-seg"
+        :class="s.state"
+        :style="{ '--fill': s.fill }"
+      ></span>
+    </div>
+    <p v-if="multi && variant === 'C'" class="check-setline">{{ check.gap }}</p>
     <div class="check-box">
       <p class="check-question">{{ item.question }}</p>
 
@@ -209,6 +285,68 @@ watch(answered, async (is) => {
   margin: 0;
   flex: 0 0 auto;
   font-size: var(--fs-label);
+  color: var(--pencil);
+}
+
+/* PROTOTYPE (#353) variant B: the head rule is the progress. The gutter
+   drops its border and a 3px segmented rule takes its place. */
+.check-gutter.is-segmented {
+  border-bottom: 0;
+}
+
+.check-rule {
+  display: flex;
+  gap: 4px;
+  height: 3px;
+  margin-top: -0.5rem;
+}
+
+.check-rule-seg {
+  position: relative;
+  flex: 1 1 0;
+  overflow: hidden;
+  background: var(--rule-strong);
+}
+
+.check-rule-seg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: calc(var(--fill, 0) * 100%);
+  background: var(--ink);
+  transition: width var(--motion-base) cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* PROTOTYPE (#353) variant C: drawn card marks for the sets, the gap name
+   as a pencil line under the head line. */
+.check-setmarks {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-right: 0.5rem;
+  vertical-align: -1px;
+}
+
+.check-setmark {
+  fill: none;
+  stroke: var(--pencil);
+  stroke-width: 1.5;
+}
+
+.check-setmark.live {
+  stroke: var(--ink);
+  stroke-width: 2;
+}
+
+.check-setmark.done {
+  fill: var(--ink);
+  stroke: var(--ink);
+}
+
+.check-setline {
+  margin: -0.15rem 0 0;
+  font-size: var(--fs-label);
+  line-height: var(--lh-body);
   color: var(--pencil);
 }
 

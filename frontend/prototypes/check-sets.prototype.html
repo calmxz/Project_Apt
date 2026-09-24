@@ -1,0 +1,22 @@
+<!doctype html>
+<!--
+  PROTOTYPE - throwaway. Answers wayfinder ticket #353 without a signed-in
+  session: the real CheckQuestion / CheckRecap / MessageList components and
+  the real stylesheet, mounted on a bare desk with the same thread measure
+  and foot as SessionView. Same variants and fake data as ?variant= on the
+  real /session/:id route (src/prototype/checkSetsProto.js).
+
+  Run: `npm run dev` in frontend/, then open
+  http://localhost:5173/prototypes/check-sets.prototype.html?variant=A
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PROTOTYPE - multi-set check progress</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="./check-sets.main.js"></script>
+  </body>
+</html>
