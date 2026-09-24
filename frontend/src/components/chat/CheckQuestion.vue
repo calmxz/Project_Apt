@@ -312,9 +312,10 @@ watch(answered, async (is) => {
   content: '';
   position: absolute;
   inset: 0;
-  width: calc(var(--fill, 0) * 100%);
   background: var(--ink);
-  transition: width var(--motion-base) cubic-bezier(0.16, 1, 0.3, 1);
+  transform: scaleX(var(--fill, 0));
+  transform-origin: left;
+  transition: transform var(--motion-base) cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* PROTOTYPE (#353) variant C: drawn card marks for the sets, the gap name
