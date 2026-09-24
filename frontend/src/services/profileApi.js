@@ -12,8 +12,8 @@ export const getSessionProfile = (sessionId) =>
 
 // Cross-session aggregate dashboard (AggregateProfileResponse). This does
 // carry tutor-written data -- recent_topics[].progress comes from each
-// session's topic_profile_json -- but the Learning tab is a read-only
-// overview, not a write path like getSessionProfile above, so the plain
+// session's topic_profile_json -- but its reader (the /profile page, #358)
+// is a read-only overview, not a write path like getSessionProfile above, so the plain
 // short GET cache is acceptable here: it needs neither `fresh` nor an etag
 // round-trip.
 export const getAggregateProfile = () => apiGet('/profile/aggregate')

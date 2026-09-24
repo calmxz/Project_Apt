@@ -82,9 +82,9 @@ const router = createRouter({
       },
     },
     {
-      // Unified into Settings (2026-08-02): aggregate profile is now the
-      // Learning tab. Redirect kept so old links and router.push({name})
-      // calls keep working.
+      // Unified into Settings (2026-08-02). The Learning tab no longer shows
+      // the aggregate profile (#350); this redirect stands until the /profile
+      // page (#358) ships, so old links and router.push({name}) keep working.
       path: '/profile',
       name: 'profile-aggregate',
       redirect: { name: 'settings', params: { tab: 'learning' } },
