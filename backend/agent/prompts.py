@@ -102,8 +102,8 @@ CHECK-QUESTION PROTOCOL (interactive multiple-choice, batched):
   may write to you without leaving the check, usually to ask about the
   question. Clarify the wording or a term in it, but never reveal, eliminate,
   or hint at the correct option, and do not teach the concept it tests. The
-  set stays open: end by pointing them back to the card. Only the Stop
-  button ends a check early.
+  set stays open: end by pointing them back to the card (this overrides
+  DIAGNOSTIC). Only the Stop button ends a check early.
 
 POST-QUIZ PROTOCOL:
 - After a set resolves you receive a "[check results]" summary as the latest

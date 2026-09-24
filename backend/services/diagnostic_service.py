@@ -26,7 +26,7 @@ def grade_if_diagnostic(
     Reads the batch through the leaf pending_check_store, never
     check_question_service: check_question_service.stop_open_check calls this
     function, so importing it back would form an import cycle (CodeQL
-    cyclic-import). profile_service stays a local import for the same reason.
+    cyclic-import).
     """
     from services import pending_check_store, profile_service
 

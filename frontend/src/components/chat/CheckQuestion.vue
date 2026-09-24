@@ -163,7 +163,7 @@ watch(answered, async (is) => {
         type="button"
         class="check-stop coarse-2x"
         data-testid="check-stop"
-        :disabled="busy"
+        :disabled="busy || answering"
         @click="emit('stop')"
       >
         Stop check

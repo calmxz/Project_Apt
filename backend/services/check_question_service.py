@@ -47,6 +47,7 @@ from db.models import Session as SessionModel
 # would create a cyclic import). Only the ones this module calls internally
 # are imported; callers wanting parse_asked_at / get_pending_check_from_row
 # import them from services.pending_check_store directly.
+from services import diagnostic_service
 from services.pending_check_store import (
     _save,
     clear_pending_check,
@@ -353,8 +354,6 @@ def abandon_open_batch(db: Session, session_id: str, commit: bool = True) -> boo
 
     commit=False defers all writes to the caller's single commit (F-33).
     """
-    from services import diagnostic_service  # local import avoids circular
-
     pc = get_pending_check(db, session_id)
     if pc is not None:
         _skip_remaining(pc)
@@ -411,7 +410,7 @@ def stop_open_check(db: Session, session_id: str) -> str | None:
     nothing to grade; the summary only records where the learner stopped so
     the untested gaps are not mistaken for tested ones. Either way a
     diagnostic check is graded from whatever was answered."""
-    from services import diagnostic_service, profile_service  # local import avoids circular
+    from services import profile_service  # local import avoids circular
 
     profile_service.lock_session_row(db, session_id)
     pc = get_pending_check(db, session_id)

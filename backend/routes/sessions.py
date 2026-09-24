@@ -48,6 +48,7 @@ from services import (
     cost_meter,
     diagnostic_service,
     documents_service,
+    pending_check_store,
     profile_service,
     rate_limit,
     summary_service,
@@ -808,16 +809,18 @@ def _complete_check_prepare(session_id: str, user_id: str, db: Session):
     # clear_pending_check commit below, then re-reads an empty batch and 409s;
     # that same commit releases the lock, well before the LLM stream starts.
     profile_service.lock_session_row(db, session_id)
-    pc = check_question_service.get_pending_check(db, session_id)
-    if pc is None or not check_question_service.is_done(pc):
+    pc = pending_check_store.get_pending_check(db, session_id)
+    if pc is None or not pending_check_store.is_done(pc):
         raise HTTPException(status_code=409, detail={"code": "no_resolved_batch"})
 
     summary = check_question_service.build_results_summary(pc)
     # F-24 crash-window backstop: if the per-item grade call never ran (crash
     # between the answer commit and grade), grade the diagnostic NOW, while
     # the resolved batch still exists -- clearing below would otherwise leave
-    # knowledge_level None and re-trigger the diagnostic.
-    diagnostic_service.grade_if_diagnostic(db, session_id)
+    # knowledge_level None and re-trigger the diagnostic. commit=False: the
+    # grade lands in close_set's single commit, so the B-02 row lock holds
+    # until the set is closed.
+    diagnostic_service.grade_if_diagnostic(db, session_id, commit=False)
     # #340: between sets the current-check pointer survives this close, and
     # register() lets the suppressed follow-up turn pose the next set.
     cooldown = check_question_service.close_set(db, session_id, pc)

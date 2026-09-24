@@ -17,8 +17,10 @@ PR #366.
   checks and wrote mastered/gap entries for subtopics never taught. Now the
   current-check pointer carries `purpose`, so later sets stay diagnostic (no
   mastery effects), and a running `diag` score. The level is written when
-  the final set resolves, or from the answered items when the learner stops
-  or the session ends mid-check. An all-skip diagnostic still leaves the
+  the final set resolves, or when the learner stops or the session ends
+  mid-check. Items a stop leaves unreached count as skipped, and skipped items
+  stay in the denominator exactly as a Skip click does (#339 point 8, "early
+  stop = skip"). An all-skip diagnostic still leaves the
   level unset (F-25).
 - **Chat clarifies; the Stop button stops.** #339 point 8 left "the learner
   stops" open. The composer stays enabled and the card stays open while the

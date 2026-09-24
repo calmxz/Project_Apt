@@ -49,6 +49,11 @@ describe('CheckQuestion batch', () => {
     expect(w.find('[data-testid="check-stop"]').attributes('disabled')).toBeDefined()
   })
 
+  it('#340 Stop check is disabled while an answer is in flight', () => {
+    const w = mount(CheckQuestion, { props: { check: batch(), answering: true } })
+    expect(w.find('[data-testid="check-stop"]').attributes('disabled')).toBeDefined()
+  })
+
   it('#340 Stop check is gone once every item is resolved (Done closes it)', () => {
     const done = batch({ currentIndex: 2, viewIndex: 1 })
     done.items = done.items.map((it) => ({ ...it, status: 'skipped' }))

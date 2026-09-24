@@ -122,7 +122,7 @@ def test_abandon_clears_a_done_but_uncleared_batch(db_session, seeded_session):
     check_question_service.skip(db_session, sid, 0)
     check_question_service.skip(db_session, sid, 1)
     pc_done = pending_check_store.get_pending_check(db_session, sid)
-    assert check_question_service.is_done(pc_done) is True
+    assert pending_check_store.is_done(pc_done) is True
 
     assert check_question_service.abandon_open_batch(db_session, sid) is True
     assert pending_check_store.get_pending_check(db_session, sid) is None
