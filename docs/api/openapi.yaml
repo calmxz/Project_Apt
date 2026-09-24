@@ -967,6 +967,18 @@ components:
       type: string
       enum: [demonstrated, tested_correct, user_redirected]
 
+    FeedbackPref:
+      type: string
+      enum: [hints, direct_answers]
+
+    CheckIns:
+      type: string
+      enum: [often, sometimes, only_when_asked]
+
+    ReplyLength:
+      type: string
+      enum: [brief, balanced, thorough]
+
     IngestionStatus:
       type: string
       enum: [pending, processing, ready, failed]
@@ -1658,10 +1670,18 @@ components:
     MeResponse:
       type: object
       additionalProperties: false
-      required: [onboarding_complete]
+      required: [onboarding_complete, feedback_pref, check_ins, reply_length]
       properties:
         display_name:        { type: [string, "null"], default: null, maxLength: 120 }
-        feedback_pref:       { type: [string, "null"], default: null, maxLength: 40 }
+        feedback_pref:
+          allOf: [{ $ref: "#/components/schemas/FeedbackPref" }]
+          default: hints
+        check_ins:
+          allOf: [{ $ref: "#/components/schemas/CheckIns" }]
+          default: sometimes
+        reply_length:
+          allOf: [{ $ref: "#/components/schemas/ReplyLength" }]
+          default: balanced
         onboarding_complete: { type: boolean, default: false }
 
     MePatchRequest:
@@ -1670,7 +1690,9 @@ components:
       minProperties: 1
       properties:
         display_name:        { type: string, maxLength: 120 }
-        feedback_pref:       { type: string, maxLength: 40 }
+        feedback_pref:       { $ref: "#/components/schemas/FeedbackPref" }
+        check_ins:           { $ref: "#/components/schemas/CheckIns" }
+        reply_length:        { $ref: "#/components/schemas/ReplyLength" }
         onboarding_complete: { type: boolean }
 
     ProfileResponse:

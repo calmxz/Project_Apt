@@ -3,6 +3,27 @@
 Durable "why": decisions, findings, tradeoffs. Newest first. Technical
 how-it-works lookup belongs in `docs/reference.md` instead.
 
+## 2026-09-24 - Learner preferences reach the tutor prompt (#342, #356)
+
+Supersedes the v1 design spec's "drop interaction_preferences, profile-only"
+spike outcome (see also the 2026-05-04 entry below): #342 decided learners
+set three preferences, and the tutor honors them.
+
+- **Three enums on the users row.** `feedback_pref` [hints, direct_answers],
+  `check_ins` [often, sometimes, only_when_asked], `reply_length` [brief,
+  balanced, thorough]; defaults hints / sometimes / balanced. Migration 0030
+  coerces pre-enum `feedback_pref` values to `hints`; NULL stays "never set"
+  and reads as `hints`.
+- **Per-request, not cached.** The `LEARNER PREFERENCES` block sits next to
+  `CURRENT TOPIC PROFILE` in the dynamic context, so changing a preference
+  never invalidates the cached `IMMUTABLE_RULES` prefix. The prefs ride the
+  existing step-1 guard read, so a turn costs no extra statement.
+- **only_when_asked is bounded.** DIAGNOSTIC and REVIEW-GAPS still call
+  `ask_check_questions` on their own, and finishing a multi-set check the
+  learner already started does not count as unprompted.
+- **reply_length is guidance only.** No token cap; `thorough` overrides the
+  base "Be concise" rule.
+
 ## 2026-09-24 - Check-question sets: diagnostic grading and learner stop (#340)
 
 Departs from two points of the #339 resolution, decided while reviewing
