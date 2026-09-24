@@ -38,6 +38,24 @@ describe('CheckQuestion batch', () => {
     expect(w.text()).toContain('1/2')
   })
 
+  it('#340 Stop check emits stop while items remain', async () => {
+    const w = mount(CheckQuestion, { props: { check: batch() } })
+    await w.find('[data-testid="check-stop"]').trigger('click')
+    expect(w.emitted('stop')).toHaveLength(1)
+  })
+
+  it('#340 Stop check is disabled during a stream', () => {
+    const w = mount(CheckQuestion, { props: { check: batch(), busy: true } })
+    expect(w.find('[data-testid="check-stop"]').attributes('disabled')).toBeDefined()
+  })
+
+  it('#340 Stop check is gone once every item is resolved (Done closes it)', () => {
+    const done = batch({ currentIndex: 2, viewIndex: 1 })
+    done.items = done.items.map((it) => ({ ...it, status: 'skipped' }))
+    const w = mount(CheckQuestion, { props: { check: done } })
+    expect(w.find('[data-testid="check-stop"]').exists()).toBe(false)
+  })
+
   it('emits answer with the clicked option index', async () => {
     const w = mount(CheckQuestion, { props: { check: batch() } })
     await w.findAll('[data-testid="check-option"]')[1].trigger('click')

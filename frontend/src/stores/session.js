@@ -2,7 +2,11 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import * as sessionsApi from '../services/sessionsApi.js'
-import { streamChat, streamCheckComplete } from '../services/chatStreamService.js'
+import {
+  streamChat,
+  streamCheckComplete,
+  streamCheckStop,
+} from '../services/chatStreamService.js'
 import { reportCostWarning } from '../services/costBus.js'
 import {
   friendlyError,
@@ -624,7 +628,17 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  async function completeCheck() {
+  function completeCheck() {
+    return _runCheckFollowup(streamCheckComplete)
+  }
+
+  // #340 Stop button: ends the check early (unanswered items count as
+  // skipped) and streams the tutor's reaction, exactly like completeCheck.
+  function stopCheck() {
+    return _runCheckFollowup(streamCheckStop)
+  }
+
+  async function _runCheckFollowup(streamFollowup) {
     const id = currentSessionId.value
     if (!id || !pendingCheck.value) return
     if (checkCompleting.value) return
@@ -649,7 +663,7 @@ export const useSessionStore = defineStore('session', () => {
     const deltaBatcher = createDeltaBatcher(appendAssistantDelta)
     let sawTerminal = false
     try {
-      await streamCheckComplete({
+      await streamFollowup({
         sessionId: id,
         signal: ctrl.signal,
         onEvent: ({ event, data }) => {
@@ -1058,6 +1072,7 @@ export const useSessionStore = defineStore('session', () => {
     nextCheck,
     skipCheck,
     completeCheck,
+    stopCheck,
     appendAssistantDelta,
     recordToolCall,
     setCitations,

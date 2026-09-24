@@ -54,6 +54,27 @@ describe('multi-check store', () => {
     expect(s.pendingCheck.items[0].correct).toBe(true)
   })
 
+  it('#340 stopCheck streams the stop follow-up and clears the card', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 'sid'
+    s.handleCheckQuestion(batchEvent())
+    streamSvc.streamCheckStop.mockResolvedValue(undefined)
+    await s.stopCheck()
+    expect(streamSvc.streamCheckStop).toHaveBeenCalledTimes(1)
+    expect(streamSvc.streamCheckStop.mock.calls[0][0].sessionId).toBe('sid')
+    expect(streamSvc.streamCheckComplete).not.toHaveBeenCalled()
+    expect(s.pendingCheck).toBeNull()
+  })
+
+  it('#340 stopCheck restores the card when the stop fails before streaming', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 'sid'
+    s.handleCheckQuestion(batchEvent())
+    streamSvc.streamCheckStop.mockRejectedValue(new ApiErrorLike(409, { detail: {} }))
+    await s.stopCheck().catch(() => {})
+    expect(s.pendingCheck).not.toBeNull()
+  })
+
   it('nextCheck moves view to the next unanswered item', async () => {
     const s = useSessionStore()
     s.currentSessionId = 'sid'
