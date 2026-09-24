@@ -604,6 +604,44 @@ paths:
         "503":
           $ref: "#/components/responses/ServiceUnavailable"
 
+  /api/sessions/{session_id}/check/stop:
+    post:
+      tags: [sessions]
+      summary: Learner ends the check early (Stop button); results follow-up (SSE over POST).
+      description: |
+        Ends the check in progress: the open set's unanswered items are
+        graded as skipped (Skip-button semantics: results summary, quiz
+        cooldown), a diagnostic check is graded from the answered items, and
+        sets not yet posed are never posed. Between sets there is no open set;
+        the summary only records where the learner stopped. Then streams the
+        tutor's reaction exactly like POST .../check/complete (same event
+        vocabulary, same followup_skipped on the daily cap). The summary line
+        reads "learner stopped at set N of M".
+      operationId: stopCheck
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          description: SSE stream of the tutor's follow-up reaction.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Session already ended (code session_ended), or no check is in progress to stop (code no_open_check). A fully answered set is not stoppable; POST .../check/complete closes it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
   /api/upload:
     post:
       tags: [upload]

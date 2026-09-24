@@ -321,31 +321,6 @@ def _prepare_turn_context(req: ChatRequest, db: Session, session: SessionModel):
     return messages, profile, gap_accuracy, retrieval_required
 
 
-def _stop_open_check(
-    req: ChatRequest, db: Session, session: SessionModel
-) -> tuple[str | None, SessionModel]:
-    """#340 early stop: a learner message while a check is in progress stops
-    the check (see check_question_service.stop_open_check). Returns the
-    [check results] text (or None) and the session row the rest of the turn
-    should read.
-
-    Gated on the guard-loaded (expunged) row so a turn with no check in
-    progress pays no extra statement or row lock. A stop rewrites the batch,
-    pointer, cooldown and, mid-diagnostic, the graded profile, so it hands
-    back a freshly loaded (again expunged) row instead of the stale one."""
-    if not (session.pending_check_json or session.current_check_json):
-        return None, session
-    summary = check_question_service.stop_open_check(db, req.session_id)
-    if summary is None:
-        return None, session
-    fresh = db.get(SessionModel, req.session_id)
-    if fresh is None:  # deleted mid-turn; later steps fail on their own
-        return summary, session
-    db.refresh(fresh)
-    db.expunge(fresh)
-    return summary, fresh
-
-
 def _persist_user_turn(req: ChatRequest, db: Session) -> None:
     """F-11: synchronous user-message persist segment."""
     db.add(ChatMessage(session_id=req.session_id, role="user", content=req.message))
@@ -387,19 +362,9 @@ async def _prepare_turn_after_guards(
     # statement.
     embed_cost_holder: list = []
     try:
-        stop_summary, session = await run_in_threadpool(
-            _stop_open_check, req, db, session
-        )
         messages, profile, gap_accuracy, retrieval_required = await run_in_threadpool(
             _prepare_turn_context, req, db, session
         )
-        if stop_summary is not None:
-            # Same channel as the /check/complete follow-up, but folded into
-            # the learner's own turn (in memory only; the persisted user
-            # message stays the learner's words).
-            messages[-1] = {
-                "role": "user", "content": f"{stop_summary}\n\n{req.message}",
-            }
         query_vec = None
         if not retrieval_required:
             retrieval_required, query_vec = await retrieval_service.semantic_fallback_required(

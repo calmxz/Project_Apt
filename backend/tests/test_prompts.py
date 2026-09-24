@@ -1,5 +1,7 @@
 """Tests for agent/prompts.py -- IMMUTABLE_RULES and build_dynamic_context."""
 
+import json
+
 from agent import prompts
 from contracts import TopicProfile
 
@@ -54,6 +56,32 @@ def test_pending_check_render_is_batch_aware():
     assert '"total": 2' in ctx
     # must NOT crash on missing top-level "question" and must not render null
     assert "null" not in ctx.split("PENDING_CHECK:")[1]
+
+
+def test_pending_check_shows_the_open_question_but_never_the_answer():
+    """#340: the learner may ask about the open question mid-set, so the
+    tutor needs its text -- and must not be handed the answer."""
+    state = {
+        "pending_check": {
+            "gap": "atp", "set_index": 2, "set_total": 3, "current_index": 1,
+            "items": [
+                {"question": "Q1", "options": ["a", "b"], "status": "answered",
+                 "correct_index": 0, "explanation": "E1"},
+                {"question": "Which yields more ATP?", "options": ["glycolysis", "ETC"],
+                 "status": "pending", "correct_index": 1, "explanation": "E2"},
+            ],
+        }
+    }
+    line = next(
+        ln for ln in prompts.build_dynamic_context(state).splitlines()
+        if ln.startswith("PENDING_CHECK:")
+    )
+    label = json.loads(line.split(":", 1)[1])
+    assert label["current_question"] == {
+        "question": "Which yields more ATP?", "options": ["glycolysis", "ETC"],
+    }
+    assert (label["set_index"], label["set_total"]) == (2, 3)
+    assert "correct_index" not in line and "E2" not in line
 
 
 def test_prompt_describes_mc_and_drops_self_grading():

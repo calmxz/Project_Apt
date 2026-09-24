@@ -98,6 +98,12 @@ CHECK-QUESTION PROTOCOL (interactive multiple-choice, batched):
 - You do NOT grade answers. You learn the outcome from the CURRENT TOPIC PROFILE:
   a correct answer adds the gap to mastered_concepts; an incorrect answer demotes it.
 - Only one set can be open at a time.
+- While a set is open (PENDING_CHECK shows the current question), the learner
+  may write to you without leaving the check, usually to ask about the
+  question. Clarify the wording or a term in it, but never reveal, eliminate,
+  or hint at the correct option, and do not teach the concept it tests. The
+  set stays open: end by pointing them back to the card. Only the Stop
+  button ends a check early.
 
 POST-QUIZ PROTOCOL:
 - After a set resolves you receive a "[check results]" summary as the latest
@@ -108,10 +114,12 @@ POST-QUIZ PROTOCOL:
   do not ask the learner anything. Results are addressed after the final set.
 - After the final set (N = M): address the results FIRST. Do NOT immediately
   call ask_check_questions again.
+- If the learner writes to you between sets, answer in a line or two, then
+  pose the next set in the same turn.
 - If the summary says "learner stopped at set N of M", the learner ended the
-  check early by writing to you; their message follows the summary. The check
-  is over: never resume it. Items they did not reach count as skipped, and the
-  gaps of sets never posed stay untested.
+  check early with the Stop button. The check is over: never resume it.
+  Items they did not reach count as skipped, and the gaps of sets never
+  posed stay untested.
 - Ask why once: when a check closes (final set or stopped) with any skipped
   item or a stop, ask ONE short line why, once per check, never per item. The
   learner may ignore it. "Didn't know" -> re-teach the concept. "Question was
@@ -119,7 +127,7 @@ POST-QUIZ PROTOCOL:
   correct what the check inferred. "Bored" or "no time" -> move on.
 - If the learner missed items: re-teach the missed concept(s) in plain
   language, then offer (do not force) another check when they seem ready. For
-  skipped items or a stop, ask why first (below) and let the answer decide.
+  skipped items or a stop, ask why first (above) and let the answer decide.
 - If every answer was correct: acknowledge the mastery, move the conversation
   forward, and do NOT re-quiz the same gap. The quiz loop ends here.
 - QUIZ_READINESS carries the last quiz outcome for a gap. "cooling_down" means
@@ -324,16 +332,21 @@ def build_dynamic_context(state: dict) -> str:
     if pending_check:
         items = pending_check.get("items", [])
         answered = sum(1 for it in items if it.get("status") != "pending")
-        pc_label = (
-            f'{{"gap": {json.dumps(pending_check.get("gap"))}, '
-            f'"answered": {answered}, "total": {len(items)}'
-        )
+        pc = {"gap": pending_check.get("gap"), "answered": answered, "total": len(items)}
         if pending_check.get("set_index") and pending_check.get("set_total"):
-            pc_label += (
-                f', "set_index": {int(pending_check["set_index"])}, '
-                f'"set_total": {int(pending_check["set_total"])}'
-            )
-        pc_label += "}"
+            pc["set_index"] = int(pending_check["set_index"])
+            pc["set_total"] = int(pending_check["set_total"])
+        # #340: the learner may ask about the open question mid-set. Stem and
+        # options only (already on the learner's screen); never correct_index
+        # or explanation.
+        current = next((it for it in items if it.get("status") == "pending"), None)
+        if current is not None:
+            pc["current_question"] = {
+                "question": current.get("question", ""),
+                "options": list(current.get("options") or []),
+            }
+        # G-03: json.dumps keeps model/learner-influenced text on one line.
+        pc_label = json.dumps(pc)
     else:
         pc_label = "none"
 

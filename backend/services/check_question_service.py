@@ -400,10 +400,10 @@ def close_set(db: Session, session_id: str, pc: dict) -> dict | None:
 
 
 def stop_open_check(db: Session, session_id: str) -> str | None:
-    """The learner stopped mid-check by sending a chat message (#340 "early
-    stop = skip"). Grade the open set's remaining items as skipped, with
+    """The learner ended the check early with the Stop button (#340 "early
+    stop = skip"; POST /check/stop). Chat messages never stop a check. Grade the open set's remaining items as skipped, with
     Skip-button semantics (results summary, cooldown), close it, and end the
-    check. Returns the [check results] text for the learner's turn, or None
+    check. Returns the [check results] text for the follow-up turn, or None
     when no check is in progress or the open set is fully answered (that set
     is /check/complete's to close).
 
