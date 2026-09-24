@@ -35,6 +35,12 @@ def parse_asked_at(pc: dict) -> datetime:
     return datetime.fromisoformat(pc["asked_at_turn"])
 
 
+def is_done(pc: dict | None) -> bool:
+    if not pc:
+        return False
+    return pc.get("current_index", 0) >= len(pc.get("items", []))
+
+
 def _save(db: Session, session_id: str, pc: dict, commit: bool = True) -> None:
     row = db.get(SessionModel, session_id)
     if row is None:

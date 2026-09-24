@@ -16,13 +16,15 @@ def grade_if_diagnostic(db: "Session", session_id: str) -> None:
     twice is a no-op because knowledge_level is only ever written from None
     (see the guard below), never overwritten once set.
 
-    Local imports avoid circular imports (check_question_service and
-    profile_service both sit alongside this module in services/).
+    Reads the batch through the leaf pending_check_store, never
+    check_question_service: check_question_service.stop_open_check calls this
+    function, so importing it back would form an import cycle (CodeQL
+    cyclic-import). profile_service stays a local import for the same reason.
     """
-    from services import check_question_service, profile_service
+    from services import pending_check_store, profile_service
 
-    pc = check_question_service.get_pending_check(db, session_id)
-    if not pc or pc.get("purpose") != "diagnostic" or not check_question_service.is_done(pc):
+    pc = pending_check_store.get_pending_check(db, session_id)
+    if not pc or pc.get("purpose") != "diagnostic" or not pending_check_store.is_done(pc):
         return
     items = pc.get("items", [])
     graded = [it for it in items if it["status"] == "answered"]

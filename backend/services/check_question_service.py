@@ -52,6 +52,7 @@ from services.pending_check_store import (
     clear_pending_check,
     get_current_check,
     get_pending_check,
+    is_done,
     set_current_check,
 )
 
@@ -127,12 +128,6 @@ def write_check_batch(db: Session, pc: dict | None, commit: bool = True) -> None
     msg.check_batch_json = json.dumps(public_view(pc))
     if commit:
         db.commit()
-
-
-def is_done(pc: dict | None) -> bool:
-    if not pc:
-        return False
-    return pc.get("current_index", 0) >= len(pc.get("items", []))
 
 
 _SUPPRESSED = "address the check results before quizzing again"
