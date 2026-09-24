@@ -3,6 +3,29 @@
 Durable "why": decisions, findings, tradeoffs. Newest first. Technical
 how-it-works lookup belongs in `docs/reference.md` instead.
 
+## 2026-09-24 - Session view scrolls the page, not the messages box (#346)
+
+Reverses the app-shell lock from PR #24 (`body.chat-locked`, `.messages` as the
+sole scroller), which had no decision record.
+
+- **The document is the scroller.** A body class (`session-page`) now drives
+  only a flex-height cascade, so a short transcript still puts the composer at
+  the foot of the viewport. The composer is pinned by a sticky `.notes-foot`.
+- **Cards scroll with the transcript at every width.** The check batch and the
+  level picker (DiagnosticConsentCard) render at the end of `.messages`, never
+  in the foot. The width-dependent `isNarrow` split is gone.
+- **Profile stays pinned, the header does not.** The cue strip (under 900px)
+  and the profile panel (900px and up) stay sticky so the learner's focus and
+  gaps stay in view. The session header scrolls away with the page: it is
+  page chrome, and pinning it too would cost a third band of a phone screen.
+- **Leaving the session resets the scroll.** There is no router
+  `scrollBehavior`, so without the reset the next route would open scrolled
+  down.
+- **`overflow: clip` stays on the narrow sheet** so the expanded profile's
+  overlay never grows the page; clip is not a scroll container, so sticky
+  still resolves to the viewport. The 390px e2e spec now guards that the page
+  height is unchanged when the profile opens.
+
 ## 2026-09-24 - Learner preferences reach the tutor prompt (#342, #356)
 
 Supersedes the v1 design spec's "drop interaction_preferences, profile-only"

@@ -296,7 +296,8 @@ watch(isEnded, async (ended) => {
 
 <style scoped>
 /* The action bar: one 56px row on the desk, a hairline card-edge rule below.
-   The thread scrolls in .messages beneath it, so the bar never moves. */
+   It heads the page and scrolls away with it (#346); only the composer and
+   the profile stay pinned. */
 .session-header {
   display: flex;
   align-items: center;

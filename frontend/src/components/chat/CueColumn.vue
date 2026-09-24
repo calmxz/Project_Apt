@@ -694,13 +694,11 @@ const isCollapsed = computed(() => panelCollapsed.value && !isNarrow.value)
     display: none;
   }
 
-  /* R2: the strip stays put while the sheet under it scrolls, so the disclosure
-     control is always reachable without hunting for it. */
+  /* The strip stays put while the page scrolls under it; SessionView makes
+     its .sheet-cue grid cell sticky, since this element's own containing
+     block is only as tall as the strip. */
   .cue-strip {
     display: grid;
-    position: sticky;
-    top: 0;
-    z-index: 1;
     background: var(--desk);
     padding: 0.35rem clamp(1rem, 3vw, 1.5rem) 0;
   }

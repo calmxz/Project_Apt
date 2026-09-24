@@ -1792,9 +1792,9 @@ describe('SessionView', () => {
   })
 
   // R2 (UI audit 2026-09-13): at 390x844 the check card pinned in the foot took
-  // ~420px and left the transcript ~190px (0px with the cue strip expanded). The
-  // card now scrolls with the transcript below 900px. The two placements are
-  // v-if/v-else on one matchMedia flag, so exactly one card exists at any width.
+  // ~420px and left the transcript ~190px (0px with the cue strip expanded).
+  // #346 made the transcript the card's only home; the width stub guards
+  // against a width-dependent placement coming back.
   describe('check card placement', () => {
     const realMatchMedia = window.matchMedia
 
@@ -1820,8 +1820,13 @@ describe('SessionView', () => {
       window.matchMedia = realMatchMedia
     })
 
-    it('renders the card inside the messages scroller below 900px', async () => {
-      stubMatchMedia(true)
+    // #346: the document is the scroller, so the card scrolls with the page at
+    // every width -- the foot carries only the status slot and the composer.
+    it.each([
+      ['below 900px', true],
+      ['at 900px and above', false],
+    ])('renders the card in the transcript %s', async (_label, narrow) => {
+      stubMatchMedia(narrow)
       const store = useSessionStore()
       vi.spyOn(store, 'loadSession').mockImplementation(async () => {
         setupSession({ messages: [{ role: 'user', content: 'hi', message_id: 9 }] })
@@ -1836,22 +1841,116 @@ describe('SessionView', () => {
       ).toBe(true)
       expect(wrapper.find('.notes-foot [data-testid="check-card"]').exists()).toBe(false)
     })
+  })
 
-    it('keeps the card in the foot at 900px and above', async () => {
-      stubMatchMedia(false)
+  // #346: whole-page scroll. The document scrolls, not the .messages box; the
+  // level picker scrolls with the transcript and autoscroll drives the window.
+  describe('whole-page scroll', () => {
+    let scrollSpy
+
+    beforeEach(() => {
+      scrollSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    })
+
+    afterEach(() => {
+      scrollSpy.mockRestore()
+      delete document.documentElement.scrollHeight
+      delete window.scrollY
+    })
+
+    function stubDocHeight(getHeight) {
+      Object.defineProperty(document.documentElement, 'scrollHeight', {
+        configurable: true,
+        get: getHeight,
+      })
+    }
+
+    it('does not lock document scroll while mounted', async () => {
       const store = useSessionStore()
       vi.spyOn(store, 'loadSession').mockImplementation(async () => {
-        setupSession({ messages: [{ role: 'user', content: 'hi', message_id: 9 }] })
-        openBatch(store)
+        setupSession()
       })
       const wrapper = mountView()
       await flushPromises()
 
-      expect(wrapper.findAllComponents(CheckQuestion)).toHaveLength(1)
-      expect(wrapper.find('.notes-foot [data-testid="check-card"]').exists()).toBe(true)
+      expect(document.body.classList.contains('chat-locked')).toBe(false)
+      expect(document.body.classList.contains('session-page')).toBe(true)
+      wrapper.unmount()
+      expect(document.body.classList.contains('session-page')).toBe(false)
+    })
+
+    it('resets the document scroll on leave so the next route starts at the top', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      const wrapper = mountView()
+      await flushPromises()
+      scrollSpy.mockClear()
+
+      wrapper.unmount()
+      expect(scrollSpy).toHaveBeenCalledWith(0, 0)
+    })
+
+    it('renders the level picker in the transcript, not the foot', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession()
+      })
+      getSessionProfile.mockResolvedValue({ profile: { knowledge_level: null }, etag: 't1' })
+      const wrapper = mountView()
+      await flushPromises()
+
       expect(
-        wrapper.find('[data-testid="session-messages"] [data-testid="check-card"]').exists(),
-      ).toBe(false)
+        wrapper
+          .find('[data-testid="session-messages"] [data-testid="diagnostic-consent-card"]')
+          .exists(),
+      ).toBe(true)
+      expect(wrapper.find('.notes-foot [data-testid="diagnostic-consent-card"]').exists()).toBe(
+        false,
+      )
+    })
+
+    it('scrolls the window to the bottom when a message lands', async () => {
+      stubDocHeight(() => 1500)
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession({ messages: [{ role: 'user', content: 'hi', message_id: 9 }] })
+      })
+      mountView()
+      await flushPromises()
+      scrollSpy.mockClear()
+
+      store.messages = [...store.messages, { role: 'assistant', content: 'yo', message_id: 10 }]
+      await flushPromises()
+
+      expect(scrollSpy).toHaveBeenCalledWith(0, 1500)
+    })
+
+    it('keeps the reading position when earlier messages are prepended', async () => {
+      let height = 1000
+      stubDocHeight(() => height)
+      Object.defineProperty(window, 'scrollY', { configurable: true, value: 200 })
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession({
+          messages: [{ role: 'user', content: 'hi', message_id: 9 }],
+          hasMoreMessages: true,
+        })
+      })
+      vi.spyOn(store, 'loadEarlierMessages').mockImplementation(async () => {
+        store.messages = [{ role: 'user', content: 'older', message_id: 8 }, ...store.messages]
+        height = 1600
+      })
+      const wrapper = mountView()
+      await flushPromises()
+      scrollSpy.mockClear()
+
+      await wrapper.get('[data-testid="load-earlier"]').trigger('click')
+      await flushPromises()
+
+      expect(scrollSpy).toHaveBeenCalledTimes(1)
+      expect(scrollSpy).toHaveBeenCalledWith(0, 800)
     })
   })
 

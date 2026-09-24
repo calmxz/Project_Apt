@@ -3,9 +3,12 @@
 // The transcript scroller collapsed to ~190px, and expanding the cue strip took
 // it to 0px and pushed the composer below the fold (top: 846 on an 840 viewport).
 //
-// This spec locks the two numbers that must hold in the worst case (cue strip
-// expanded, batch open): the composer stays inside the viewport, and the
-// transcript keeps a usable height.
+// #346 then made the document the scroller: the card scrolls with the page and
+// the composer is pinned by a sticky foot. This spec locks what must hold in
+// the worst case (cue strip expanded, batch open): the composer and the strip
+// stay on screen at both ends of the scroll, the card is never hidden behind
+// the foot, and opening the profile never grows the page. A second test checks
+// the desktop profile panel stays in view while the page scrolls.
 //
 // Like auth.spec.js, it runs entirely offline: Supabase GoTrue and every /api
 // call is stubbed with page.route, so no backend and no Postgres are needed —
@@ -157,36 +160,73 @@ test.describe('mobile 390 check card', () => {
     await expect(page).toHaveURL(/\/$/)
   })
 
-  test('composer stays on screen and the transcript keeps height with the cue expanded', async ({
+  const docHeight = (page) => page.evaluate(() => document.documentElement.scrollHeight)
+  const scrollDoc = (page, y) => page.evaluate((top) => window.scrollTo(0, top), y)
+
+  async function expectInViewport(locator, height) {
+    const box = await locator.boundingBox()
+    expect(box).not.toBeNull()
+    expect(box.y).toBeGreaterThanOrEqual(0)
+    expect(box.y + box.height).toBeLessThanOrEqual(height)
+  }
+
+  test('the page scrolls, the card rides the transcript, composer and strip stay put', async ({
     page,
   }) => {
     await page.goto(`/session/${SESSION_ID}`)
 
-    const card = page.getByTestId('check-card')
-    await expect(card).toBeVisible()
-
     const messages = page.getByTestId('session-messages')
     const send = page.getByTestId('session-send')
-    await expect(send).toBeVisible()
+    const disclosure = page.getByTestId('cue-disclosure')
+    await expect(page.getByTestId('check-card')).toBeVisible()
 
-    // The card scrolls with the transcript rather than sitting beside it.
+    // The card scrolls with the transcript rather than sitting in the foot.
     await expect(messages.getByTestId('check-card')).toHaveCount(1)
 
-    // Worst case: expand the cue strip so the profile is on screen too.
-    await page.getByTestId('cue-disclosure').click()
+    // The document is the scroller, not the .messages box.
+    expect(await messages.evaluate((el) => getComputedStyle(el).overflowY)).toBe('visible')
+    const before = await docHeight(page)
+    expect(before).toBeGreaterThan(VIEWPORT.height)
+
+    // Worst case: expand the cue strip so the profile is on screen too. The
+    // profile sheet overlays the thread, so the page must not grow (an
+    // escaping absolute box once added ~290px of phantom height, 2026-09-16).
+    await disclosure.click()
     await expect(page.getByTestId('cue-focus')).toBeVisible()
+    expect(await docHeight(page)).toBe(before)
 
-    const sendBox = await send.boundingBox()
-    expect(sendBox).not.toBeNull()
-    expect(sendBox.y + sendBox.height).toBeLessThanOrEqual(VIEWPORT.height)
+    for (const y of [0, before]) {
+      await scrollDoc(page, y)
+      await expectInViewport(send, VIEWPORT.height)
+      await expectInViewport(disclosure, VIEWPORT.height)
+    }
 
-    const scrollerHeight = await messages.evaluate((el) => el.clientHeight)
-    expect(scrollerHeight).toBeGreaterThanOrEqual(160)
+    // Fully scrolled, the card clears the sticky foot instead of hiding under it.
+    await disclosure.click()
+    const cardBox = await page.getByTestId('check-card').boundingBox()
+    const footBox = await page.locator('.notes-foot').boundingBox()
+    expect(cardBox).not.toBeNull()
+    expect(footBox).not.toBeNull()
+    expect(cardBox.y + cardBox.height).toBeLessThanOrEqual(footBox.y)
+  })
 
-    // The document itself must not grow past the fold: an absolutely
-    // positioned box escaping the .messages scroller once pushed
-    // scrollHeight to 1132 on an 844 viewport (2026-09-16).
-    const docHeight = await page.evaluate(() => document.documentElement.scrollHeight)
-    expect(docHeight).toBeLessThanOrEqual(VIEWPORT.height)
+  test('the desktop profile panel stays in view while the page scrolls', async ({ page }) => {
+    const desktop = { width: 1366, height: 768 }
+    await page.setViewportSize(desktop)
+    await page.goto(`/session/${SESSION_ID}`)
+    await expect(page.getByTestId('check-card')).toBeVisible()
+
+    const height = await docHeight(page)
+    expect(height).toBeGreaterThan(desktop.height)
+
+    await scrollDoc(page, 0)
+    await expectInViewport(page.getByTestId('session-send'), desktop.height)
+
+    await scrollDoc(page, height)
+    await expectInViewport(page.getByTestId('session-send'), desktop.height)
+    const cue = await page.locator('.cue').boundingBox()
+    expect(cue).not.toBeNull()
+    expect(cue.y).toBeGreaterThanOrEqual(0)
+    expect(cue.y).toBeLessThan(desktop.height / 2)
   })
 })

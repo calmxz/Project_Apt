@@ -78,7 +78,7 @@ const tabRefs = ref([])
 
 // The deep-desk ground must fill the whole routed pane, not just the
 // settings element, so it is painted on .page via a body class (same
-// mechanism SessionView uses for chat-locked).
+// mechanism SessionView uses for session-page).
 onMounted(() => document.body.classList.add('settings-page'))
 onUnmounted(() => document.body.classList.remove('settings-page'))
 
