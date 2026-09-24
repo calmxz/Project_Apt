@@ -70,6 +70,7 @@ def _build_prompt_state(
     quiz_cooldown,
     gap_accuracy: dict | None = None,
     prefetched_chunks=None,
+    learner_prefs: dict | None = None,
 ) -> dict:
     """Build the prompt_state dict consumed by prompts.build_system_prompt.
 
@@ -92,6 +93,7 @@ def _build_prompt_state(
         ),
         "quiz_cooldown": quiz_cooldown,
         "gap_accuracy": gap_accuracy or {},
+        "learner_prefs": learner_prefs or {},
     }
     if diagnostic_accepted and profile.knowledge_level is None:
         prompt_state["diagnostic_accepted"] = True
@@ -179,14 +181,25 @@ def _prepare_turn_guards(
     F-11: split out so the caller can run it via run_in_threadpool instead of
     blocking the event loop on psycopg. The guard ORDER inside this function
     is load-bearing -- see _prepare_turn's docstring -- and must not change.
-    Returns (session, ingestion_status); raises HTTPException on rejection
+    Returns (session, ingestion_status, learner_prefs); raises HTTPException on rejection
     (propagates through run_in_threadpool unchanged).
     """
-    # 1) Combined guard read: today's spend + user existence, one statement.
+    # 1) Combined guard read: today's spend + user existence + the learner
+    # preferences for the prompt (#356), one statement. A missing user reads
+    # all-NULL preferences, which the prompt renders as defaults.
     exists_subq = select(literal(True)).where(User.id == user_id).exists()
-    spend_raw, user_exists = db.execute(
-        select(cost_meter.spend_subquery(user_id), exists_subq)
+    pref_cols = (User.feedback_pref, User.check_ins, User.reply_length)
+    spend_raw, user_exists, *pref_values = db.execute(
+        select(
+            cost_meter.spend_subquery(user_id),
+            exists_subq,
+            *(
+                select(col).where(User.id == user_id).scalar_subquery()
+                for col in pref_cols
+            ),
+        )
     ).one()
+    learner_prefs = {col.key: value for col, value in zip(pref_cols, pref_values, strict=True)}
 
     cost_status = cost_meter.check_cap_from_spend(Decimal(str(spend_raw or 0)))
     if not cost_status.allowed:
@@ -273,7 +286,7 @@ def _prepare_turn_guards(
             },
         )
 
-    return session, ingestion_status
+    return session, ingestion_status, learner_prefs
 
 
 def _prepare_turn_context(req: ChatRequest, db: Session, session: SessionModel):
@@ -355,6 +368,7 @@ async def _prepare_turn_after_guards(
     db: Session,
     session: SessionModel,
     ingestion_status,
+    learner_prefs: dict,
 ) -> tuple[list[dict], str, ToolContext]:
     """Steps 6-7 of _prepare_turn: history -> prompt build -> user-message
     persist.
@@ -396,6 +410,7 @@ async def _prepare_turn_after_guards(
             quiz_cooldown=check_question_service.get_quiz_cooldown_from_row(session),
             gap_accuracy=gap_accuracy,
             prefetched_chunks=prefetched_chunks,
+            learner_prefs=learner_prefs,
         )
         system_prompt = prompts.build_system_prompt(prompt_state)
     except Exception:
@@ -455,7 +470,7 @@ async def _prepare_turn(
     if not req.message.strip():
         raise HTTPException(status_code=422, detail={"code": "empty_message"})
 
-    session, ingestion_status = await run_in_threadpool(
+    session, ingestion_status, learner_prefs = await run_in_threadpool(
         _prepare_turn_guards, req, user_id, db, accepted_terms
     )
 
@@ -464,7 +479,7 @@ async def _prepare_turn(
     # chat_stream has the context, its event_stream finally owns the release.
     try:
         return await _prepare_turn_after_guards(
-            req, user_id, db, session, ingestion_status
+            req, user_id, db, session, ingestion_status, learner_prefs
         )
     except BaseException:
         await run_in_threadpool(_release_reserve, db, user_id)

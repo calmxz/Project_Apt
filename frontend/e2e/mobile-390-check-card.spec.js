@@ -136,7 +136,7 @@ test.describe('mobile 390 check card', () => {
       if (path === '/me') {
         return json(route, {
           display_name: 'Eddy',
-          feedback_pref: 'balanced',
+          feedback_pref: 'hints',
           onboarding_complete: true,
         })
       }

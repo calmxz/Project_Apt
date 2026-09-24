@@ -35,19 +35,59 @@ def test_get_me_existing_row_does_not_commit(client, monkeypatch):
     assert calls == []
 
 
+def test_get_me_learner_preference_defaults(client):
+    # #356: a fresh account reports the effective defaults the tutor uses.
+    body = client.get("/api/me", headers=H).json()
+    assert body["feedback_pref"] == "hints"
+    assert body["check_ins"] == "sometimes"
+    assert body["reply_length"] == "balanced"
+
+
 def test_patch_me_roundtrip(client):
     resp = client.patch(
         "/api/me",
-        json={"display_name": "Ada", "feedback_pref": "direct",
+        json={"display_name": "Ada", "feedback_pref": "direct_answers",
+              "check_ins": "only_when_asked", "reply_length": "brief",
               "onboarding_complete": True},
         headers=H,
     )
     assert resp.status_code == 200
     body = resp.json()
-    assert body == {"display_name": "Ada", "feedback_pref": "direct",
+    assert body == {"display_name": "Ada", "feedback_pref": "direct_answers",
+                    "check_ins": "only_when_asked", "reply_length": "brief",
                     "onboarding_complete": True}
     again = client.get("/api/me", headers=H)
     assert again.json()["onboarding_complete"] is True
+    assert again.json()["check_ins"] == "only_when_asked"
+
+
+@pytest.mark.parametrize("field", ["check_ins", "reply_length"])
+def test_patch_me_single_preference_is_not_empty(client, field):
+    value = {"check_ins": "often", "reply_length": "thorough"}[field]
+    resp = client.patch("/api/me", json={field: value}, headers=H)
+    assert resp.status_code == 200
+    assert resp.json()[field] == value
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [("feedback_pref", "direct"), ("check_ins", "always"), ("reply_length", "long")],
+)
+def test_patch_me_rejects_values_outside_enum(client, field, value):
+    resp = client.patch("/api/me", json={field: value}, headers=H)
+    assert resp.status_code == 422
+
+
+def test_get_me_legacy_null_feedback_pref_reports_hints(client, db_session):
+    # Pre-0020 rows keep feedback_pref NULL ("never set"); the effective
+    # preference is still the default.
+    from db.models import User
+
+    client.get("/api/me", headers=H)
+    user = db_session.get(User, "me-user")
+    user.feedback_pref = None
+    db_session.commit()
+    assert client.get("/api/me", headers=H).json()["feedback_pref"] == "hints"
 
 
 def test_patch_me_partial_keeps_other_fields(client):

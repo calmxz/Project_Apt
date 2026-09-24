@@ -293,6 +293,43 @@ def _call_build_prompt_state(profile, review_gaps, review_gap=None):
     )
 
 
+def test_build_prompt_state_carries_learner_prefs():
+    prefs = {"feedback_pref": "direct_answers", "check_ins": "often",
+             "reply_length": "brief"}
+    state = _build_prompt_state(
+        session=_fake_session(),
+        profile=_fake_profile(),
+        ingestion_status="none",
+        retrieval_required=False,
+        review_gaps=False,
+        pending_check=None,
+        quiz_cooldown=None,
+        learner_prefs=prefs,
+    )
+    assert state["learner_prefs"] == prefs
+
+
+def test_prepare_turn_prompt_uses_users_row_preferences(db_session):
+    # #356: the prompt reads the learner's saved preferences, not defaults.
+    import asyncio
+
+    from contracts import ChatRequest
+    from routes.chat import _prepare_turn
+
+    user = db_session.get(User, USER_ID)
+    user.feedback_pref = "direct_answers"
+    user.check_ins = "only_when_asked"
+    user.reply_length = "thorough"
+    db_session.commit()
+
+    _, system_prompt, _ = asyncio.run(
+        _prepare_turn(ChatRequest(session_id=SESSION_ID, message="hi"), USER_ID, db_session)
+    )
+    assert "- feedback style: direct_answers" in system_prompt
+    assert "- check-ins: only_when_asked" in system_prompt
+    assert "- reply length: thorough" in system_prompt
+
+
 def test_build_prompt_state_review_gaps_picks_first_gap():
     profile = _fake_profile(confirmed_gaps=["photosynthesis", "krebs cycle"])
     state = _call_build_prompt_state(profile, review_gaps=True)

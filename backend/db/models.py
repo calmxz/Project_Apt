@@ -49,6 +49,15 @@ class User(Base):
     onboarding_complete: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false", default=False
     )
+    # #356: learner preferences injected into the tutor prompt. Values are
+    # enforced by the MePatchRequest enums; a NULL feedback_pref reads as
+    # "hints" (routes/me.py, agent/prompts.py).
+    check_ins: Mapped[str] = mapped_column(
+        String, nullable=False, server_default="sometimes", default="sometimes"
+    )
+    reply_length: Mapped[str] = mapped_column(
+        String, nullable=False, server_default="balanced", default="balanced"
+    )
 
     sessions: Mapped[list["Session"]] = relationship("Session", back_populates="user")
     usage_counters: Mapped[list["UsageCounter"]] = relationship("UsageCounter", back_populates="user")
