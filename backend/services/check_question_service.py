@@ -406,6 +406,7 @@ def stop_open_check(db: Session, session_id: str) -> str | None:
     if pc is None:
         cc = get_current_check(db, session_id)
         if cc is None:
+            db.commit()  # release the row lock
             return None
         set_current_check(db, session_id, None)
         return (

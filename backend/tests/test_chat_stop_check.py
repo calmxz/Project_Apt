@@ -57,6 +57,7 @@ def _send(client, monkeypatch):
     async def fake(messages, system_prompt, ctx):
         captured["messages"] = messages
         captured["system_prompt"] = system_prompt
+        captured["ctx"] = ctx
         msg = ChatMessage(session_id=SESSION_ID, role="assistant", content="Why stop?")
         ctx.db.add(msg)
         ctx.db.commit()
@@ -116,6 +117,30 @@ def test_chat_between_sets_records_where_the_learner_stopped(
     )
     db_session.expire_all()
     assert pcs.get_current_check(db_session, SESSION_ID) is None
+
+
+def test_stop_mid_diagnostic_prompts_from_the_graded_profile(
+    client, db_session, monkeypatch
+):
+    """The stop grades the diagnostic; the same turn must see the new level,
+    not the pre-stop row (else DIAGNOSTIC stays REQUIRED and a check posed in
+    the reply is mis-tagged diagnostic)."""
+    row = db_session.get(SessionModel, SESSION_ID)
+    row.topic_profile_json = TopicProfile().model_dump_json()
+    db_session.commit()
+    ctx = _ctx(db_session)
+    ctx.diagnostic_required = True
+    assert cq.register(db_session, ctx, AskCheckQuestionsArgs(
+        session_id=SESSION_ID, gap="glycolysis", set_index=1, set_total=3,
+        items=[{"question": "Q?", "options": ["a", "b"],
+                "correct_index": 0, "explanation": "e."}] * 2,
+    )).ok
+    cq.answer(db_session, SESSION_ID, 0, 0)
+
+    captured = _send(client, monkeypatch)
+
+    assert "DIAGNOSTIC: OFF" in captured["system_prompt"]
+    assert captured["ctx"].diagnostic_required is False
 
 
 def test_chat_without_a_check_is_untouched(client, db_session, monkeypatch):

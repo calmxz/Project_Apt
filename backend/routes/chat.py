@@ -323,19 +323,27 @@ def _prepare_turn_context(req: ChatRequest, db: Session, session: SessionModel):
 
 def _stop_open_check(
     req: ChatRequest, db: Session, session: SessionModel
-) -> tuple[str | None, dict | None]:
+) -> tuple[str | None, SessionModel]:
     """#340 early stop: a learner message while a check is in progress stops
     the check (see check_question_service.stop_open_check). Returns the
-    [check results] text and the post-stop quiz cooldown, or (None, None).
+    [check results] text (or None) and the session row the rest of the turn
+    should read.
 
     Gated on the guard-loaded (expunged) row so a turn with no check in
-    progress pays no extra statement or row lock."""
+    progress pays no extra statement or row lock. A stop rewrites the batch,
+    pointer, cooldown and, mid-diagnostic, the graded profile, so it hands
+    back a freshly loaded (again expunged) row instead of the stale one."""
     if not (session.pending_check_json or session.current_check_json):
-        return None, None
+        return None, session
     summary = check_question_service.stop_open_check(db, req.session_id)
     if summary is None:
-        return None, None
-    return summary, check_question_service.get_quiz_cooldown(db, req.session_id)
+        return None, session
+    fresh = db.get(SessionModel, req.session_id)
+    if fresh is None:  # deleted mid-turn; later steps fail on their own
+        return summary, session
+    db.refresh(fresh)
+    db.expunge(fresh)
+    return summary, fresh
 
 
 def _persist_user_turn(req: ChatRequest, db: Session) -> None:
@@ -379,7 +387,7 @@ async def _prepare_turn_after_guards(
     # statement.
     embed_cost_holder: list = []
     try:
-        stop_summary, stop_cooldown = await run_in_threadpool(
+        stop_summary, session = await run_in_threadpool(
             _stop_open_check, req, db, session
         )
         messages, profile, gap_accuracy, retrieval_required = await run_in_threadpool(
@@ -414,16 +422,8 @@ async def _prepare_turn_after_guards(
             review_gaps=getattr(req, "review_gaps", False),
             review_gap=getattr(req, "review_gap", None),
             diagnostic_accepted=getattr(req, "diagnostic_accepted", False),
-            # After a stop the expunged row is stale: the batch is closed and
-            # the cooldown was just rewritten.
-            pending_check=(
-                None if stop_summary is not None
-                else pending_check_store.get_pending_check_from_row(session)
-            ),
-            quiz_cooldown=(
-                stop_cooldown if stop_summary is not None
-                else check_question_service.get_quiz_cooldown_from_row(session)
-            ),
+            pending_check=pending_check_store.get_pending_check_from_row(session),
+            quiz_cooldown=check_question_service.get_quiz_cooldown_from_row(session),
             gap_accuracy=gap_accuracy,
             prefetched_chunks=prefetched_chunks,
         )
