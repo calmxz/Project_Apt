@@ -52,48 +52,6 @@ describe('UsagePanel', () => {
     expect(glance.find('.glance-week').text()).toBe('Last 7 days $0.70')
   })
 
-  it('lists the last 7 days as ledger rows, most recent first', () => {
-    const w = factory(
-      usage({
-        daily: [
-          { date_utc: '2026-07-03', cost_usd: 5.0 },
-          { date_utc: '2026-07-04', cost_usd: 0.1 },
-          { date_utc: '2026-07-05', cost_usd: 0.1 },
-          { date_utc: '2026-07-06', cost_usd: 0.1 },
-          { date_utc: '2026-07-07', cost_usd: 0.1 },
-          { date_utc: '2026-07-08', cost_usd: 0.1 },
-          { date_utc: '2026-07-09', cost_usd: 0.1 },
-          { date_utc: '2026-07-10', cost_usd: 0.1 },
-        ],
-        today_spend_usd: 0.1,
-      }),
-    )
-    const rows = w.findAll('[data-testid="usage-ledger-row"]')
-    expect(rows).toHaveLength(7)
-    expect(rows[0].text()).toContain('Jul 10')
-    expect(rows[0].text()).toContain('$0.10')
-    expect(rows.some((r) => r.text().includes('Jul 3'))).toBe(false)
-  })
-
-  it('sizes ledger bars proportionally to the max day, with no bar for zero-cost days', () => {
-    const w = factory(
-      usage({
-        daily: [
-          { date_utc: '2026-07-09', cost_usd: 0 },
-          { date_utc: '2026-07-10', cost_usd: 0.5 },
-          { date_utc: '2026-07-11', cost_usd: 1.0 },
-        ],
-      }),
-    )
-    const rows = w.findAll('[data-testid="usage-ledger-row"]')
-    // most recent first: Jul 11 (1.0, max) -> Jul 10 (0.5) -> Jul 9 (0)
-    expect(rows[0].find('.ledger-bar').attributes('style')).toContain('width: 100%')
-    expect(rows[1].find('.ledger-bar').attributes('style')).toContain('width: 50%')
-    expect(rows[2].find('.ledger-bar').attributes('style')).toContain('width: 0%')
-    expect(rows[2].find('.ledger-bar').classes()).not.toContain('ledger-bar--filled')
-    expect(rows[0].find('.ledger-bar').classes()).toContain('ledger-bar--filled')
-  })
-
   it('shows the meter tier labels with soft/urgent amounts and the cap in the glance caption', () => {
     const w = factory(usage({ hard_cap_usd: 4.0, soft_cap_usd: 1.0, urgent_cap_usd: 3.6 }))
     expect(w.find('.meter-label-soft').text()).toBe('soft $1.00')
@@ -147,127 +105,6 @@ describe('UsagePanel', () => {
     expect(w.find('.meter-fill').classes()).toContain('meter-fill--over-urgent')
   })
 
-  it('renders seven week columns padded to a full week, with today marked last', () => {
-    const w = factory(
-      usage({
-        daily: [
-          { date_utc: '2026-07-09', cost_usd: 0.5 },
-          { date_utc: '2026-07-10', cost_usd: 1.0 },
-        ],
-      }),
-    )
-    const cols = w.findAll('[data-testid="usage-week-col"]')
-    expect(cols).toHaveLength(7)
-    // 5 padded zero-cost columns, then the 2 real days; today is the last column.
-    expect(cols[6].attributes('data-today')).toBe('true')
-    for (let i = 0; i < 6; i++) {
-      expect(cols[i].attributes('data-today')).toBe('false')
-    }
-  })
-
-  it('makes the last column today, labelled with the newest date', () => {
-    const w = factory(
-      usage({
-        daily: [
-          { date_utc: '2026-07-09', cost_usd: 0.5 },
-          { date_utc: '2026-07-10', cost_usd: 1.0 },
-        ],
-      }),
-    )
-    const cols = w.findAll('[data-testid="usage-week-col"]')
-    const last = cols[cols.length - 1]
-    expect(last.attributes('data-today')).toBe('true')
-    expect(last.find('title').text()).toBe('Jul 10: $1.00')
-    const labels = w.findAll('.week-labels .week-label')
-    expect(labels).toHaveLength(7)
-    expect(labels[6].text()).toBe('Fri')
-  })
-
-  it('gives every day, zero included, a full-band hover target carrying its title', () => {
-    const w = factory()
-    const hits = w.findAll('[data-testid="usage-week-hit"]')
-    expect(hits).toHaveLength(7)
-    expect(hits[0].find('title').text()).toBe('No data: $0.00')
-    expect(Number(hits[0].attributes('height'))).toBeGreaterThan(0)
-  })
-
-  it('draws the cap line inside the plot, never at the clipped SVG edge', () => {
-    const under = factory()
-    const lineUnder = under.find('[data-testid="usage-cap-line"]')
-    expect(lineUnder.exists()).toBe(true)
-    expect(Number(lineUnder.attributes('y1'))).toBe(8)
-    expect(under.find('[data-testid="usage-cap-label"]').text()).toBe('cap $3.00')
-
-    const over = factory(
-      usage({
-        daily: [
-          { date_utc: '2026-07-09', cost_usd: 0.5 },
-          { date_utc: '2026-07-10', cost_usd: 6.0 },
-        ],
-      }),
-    )
-    const y = Number(over.find('[data-testid="usage-cap-line"]').attributes('y1'))
-    // Plot spans [8, 96]; cap 3.0 against a 6.0 max sits halfway down.
-    expect(y).toBeGreaterThan(8)
-    expect(y).toBeLessThan(96)
-    expect(y).toBe(52)
-  })
-
-  it('draws no hidden week table: the ledger rows are the accessible table for the chart', () => {
-    const w = factory()
-    expect(w.find('[data-testid="usage-week-table"]').exists()).toBe(false)
-    expect(w.find('[data-testid="usage-ledger"]').exists()).toBe(true)
-    expect(w.findAll('[data-testid="usage-ledger-row"]').length).toBeGreaterThan(0)
-    expect(w.find('svg.week-svg').attributes('aria-hidden')).toBe('true')
-    expect(w.find('[data-testid="usage-week"] .sub-title').text()).toBe('This week')
-  })
-
-  it('lists top sessions with links', () => {
-    const w = factory(
-      usage({
-        top_sessions: [{ session_id: 's9', topic: 'algebra', cost_usd: 0.42 }],
-      }),
-    )
-    const link = w.findComponent(RouterLinkStub)
-    expect(link.props('to')).toEqual({
-      name: 'session-profile',
-      params: { id: 's9' },
-    })
-    expect(w.text()).toContain('algebra')
-    expect(w.text()).toContain('$0.42')
-  })
-
-  it('ranks top sessions in order', () => {
-    const w = factory(
-      usage({
-        top_sessions: [
-          { session_id: 's9', topic: 'algebra', cost_usd: 0.42 },
-          { session_id: 's8', topic: 'geometry', cost_usd: 0.3 },
-        ],
-      }),
-    )
-    const ranks = w.findAll('.top-rank')
-    expect(ranks).toHaveLength(2)
-    expect(ranks[0].text()).toBe('1.')
-    expect(ranks[1].text()).toBe('2.')
-  })
-
-  it('sizes the top session bar proportionally to the max, longest at 100%', () => {
-    const w = factory(
-      usage({
-        top_sessions: [
-          { session_id: 's9', topic: 'algebra', cost_usd: 0.42 },
-          { session_id: 's8', topic: 'geometry', cost_usd: 0.21 },
-        ],
-      }),
-    )
-    const rows = w.findAll('[data-testid="usage-top-session"]')
-    expect(rows).toHaveLength(2)
-    const bars = w.findAll('[data-testid="usage-top-session-bar"]')
-    expect(bars[0].attributes('style')).toContain('width: 100%')
-    expect(bars[1].attributes('style')).toContain('width: 50%')
-  })
-
   it('shows empty state when there is no spend at all', () => {
     const w = factory(
       usage({
@@ -280,8 +117,6 @@ describe('UsagePanel', () => {
     )
     expect(w.find('[data-testid="usage-empty"]').exists()).toBe(true)
     expect(w.find('[data-testid="usage-glance"]').exists()).toBe(false)
-    expect(w.find('[data-testid="usage-ledger"]').exists()).toBe(false)
-    expect(w.find('svg.week-svg').exists()).toBe(false)
   })
 
   it('does not show the empty-state copy when top_sessions has rows', () => {
@@ -293,12 +128,26 @@ describe('UsagePanel', () => {
       }),
     )
     expect(w.find('[data-testid="usage-empty"]').exists()).toBe(false)
-    expect(w.text()).toContain('Most expensive sessions')
+    expect(w.find('[data-testid="usage-glance"]').exists()).toBe(true)
   })
 
   it('shows the empty-state copy only when there is no spend anywhere', () => {
     const w = factory(usage({ daily: [], today_spend_usd: 0, top_sessions: [] }))
     expect(w.find('[data-testid="usage-empty"]').exists()).toBe(true)
+  })
+
+  it('shows no week chart, day ledger, or top sessions', () => {
+    const w = factory(
+      usage({
+        top_sessions: [{ session_id: 's9', topic: 'algebra', cost_usd: 0.42 }],
+      }),
+    )
+    expect(w.find('[data-testid="usage-week"]').exists()).toBe(false)
+    expect(w.find('[data-testid="usage-ledger"]').exists()).toBe(false)
+    expect(w.find('[data-testid="usage-top-session"]').exists()).toBe(false)
+    expect(w.text()).not.toContain('This week')
     expect(w.text()).not.toContain('Most expensive sessions')
+    expect(w.text()).not.toContain('algebra')
+    expect(w.findComponent(RouterLinkStub).exists()).toBe(false)
   })
 })
