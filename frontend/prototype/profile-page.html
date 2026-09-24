@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PROTOTYPE: aggregate profile page (#358)</title>
+<!--
+  PROTOTYPE for wayfinder ticket #358. Standalone: open this file directly in
+  a browser, no dev server. Three variants of the aggregate learner profile
+  page, switched with the bar at the foot (or the left/right arrow keys),
+  ?variant=A|B|C in the URL, and a light/dark toggle. Fixture data is inline
+  and shaped exactly like AggregateProfileResponse (docs/api/openapi.yaml).
+  Throwaway: lives on branch prototype/profile-page and never merges.
+-->
+<style>
+@font-face { font-family: 'Atkinson Hyperlegible Next'; font-weight: 200 800; font-display: swap; src: url('../src/assets/fonts/atkinson-hyperlegible-next-latin.woff2') format('woff2'); }
+@font-face { font-family: 'Atkinson Hyperlegible Next'; font-style: italic; font-weight: 200 800; font-display: swap; src: url('../src/assets/fonts/atkinson-hyperlegible-next-latin-italic.woff2') format('woff2'); }
+@font-face { font-family: 'Familjen Grotesk'; font-weight: 400 700; font-display: swap; src: url('../src/assets/fonts/familjen-grotesk-latin.woff2') format('woff2'); }
+@font-face { font-family: 'JetBrains Mono'; font-weight: 400; font-display: swap; src: url('../src/assets/fonts/jetbrains-mono-latin.woff2') format('woff2'); }
+
+/* Tokens copied from frontend/src/assets/base.css (light and dark blocks). */
+:root {
+  --line-pitch: 28px;
+  --ink: #1b1b1a; --ink-learner: #1d4fc4; --ink-marker: #d8433a; --ink-marker-text: #b8352c;
+  --pencil: #63635e; --rule: #cbd6e3; --rule-strong: #aebccf;
+  --font-display: 'Familjen Grotesk', system-ui, sans-serif;
+  --font-sans: 'Atkinson Hyperlegible Next', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --fs-h1: 1.75rem; --fs-body: 1.0625rem; --fs-caption: 0.875rem; --fs-label: 0.8125rem;
+  --tracking-display: -0.01em; --lh-display: 1.15; --lh-body: 1.647;
+  --radius-sm: 4px; --radius-card: 6px;
+  --color-accent-hover: #173fa0;
+  --desk: #e6e8ec; --desk-deep: #dfe2e7; --card: #ffffff; --card-edge: #cfd3da; --card-drop: #c4c8d0;
+  --tab-focus: #b8352c; --tab-gaps: #8a5a00; --tab-mastered: #1f7a3f; --tab-level: #63635e; --tab-ink: #ffffff;
+}
+:root[data-theme='dark'] {
+  --ink: #ecebe6; --ink-learner: #8fb0ff; --ink-marker: #ff6a5e; --ink-marker-text: #ff6a5e;
+  --pencil: #a3a39c; --rule: #262a33; --rule-strong: #363b47;
+  --color-accent-hover: #a9c2ff;
+  --desk: #15171b; --desk-deep: #1b1d22; --card: #22252b; --card-edge: #2e323a; --card-drop: #0b0c0e;
+  --tab-focus: #ff6a5e; --tab-gaps: #e6b450; --tab-mastered: #5fcf8a; --tab-level: #a3a39c; --tab-ink: #141518;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--desk); color: var(--ink); font-family: var(--font-sans); font-size: 16px; }
+a { color: var(--ink-learner); text-decoration: none; }
+a:hover { text-decoration: underline; text-underline-offset: 3px; }
+ul, ol { list-style: none; margin: 0; padding: 0; }
+p, h1, h2 { margin: 0; }
+svg { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Shell mock: the real app's sidebar column and page inner, for density. */
+.shell { display: grid; grid-template-columns: 18rem 1fr; min-height: 100vh; }
+.sb { background: var(--desk-deep); border-right: 1px solid var(--card-edge); padding: 0.75rem 0.85rem; display: flex; flex-direction: column; gap: 0.75rem; position: sticky; top: 0; height: 100vh; }
+.sb-brand { display: flex; align-items: center; gap: 0.5rem; font-family: var(--font-display); font-weight: 600; font-size: 1.125rem; }
+.sb-line { font-size: 0.9375rem; font-weight: 700; color: var(--ink-learner); display: flex; gap: 0.5rem; align-items: center; }
+.sb-search { border-bottom: 1px solid var(--rule-strong); color: var(--pencil); font-size: 0.9375rem; padding: 0.25rem 0; }
+.sb-toggles { display: flex; gap: 1rem; font-size: var(--fs-caption); font-weight: 700; color: var(--ink-learner); border-bottom: 1px solid var(--rule); padding-bottom: 0.25rem; }
+.sb-toggles .on { color: var(--ink); box-shadow: inset 0 -2px 0 var(--ink); }
+.sb-row { font-size: 0.9375rem; padding: 0.25rem 0.75rem; border-radius: 6px; color: var(--ink); }
+.sb-row.cur { background: var(--card); border: 1px solid var(--card-edge); box-shadow: 0 1px 0 var(--card-drop); font-weight: 700; }
+.sb-row.ended { color: var(--pencil); }
+.sb-foot { margin-top: auto; display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.9375rem; }
+.sb-id { display: flex; align-items: center; gap: 0.5rem; }
+.sb-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--card); border: 1px solid var(--card-edge); display: inline-flex; align-items: center; justify-content: center; color: var(--ink-learner); font-weight: 700; font-size: var(--fs-label); }
+.page { padding: clamp(2rem, 6vw, 4.5rem) clamp(1rem, 3vw, 2.5rem) 6rem; }
+.page-inner { max-width: 72rem; margin: 0 auto; }
+@media (max-width: 900px) {
+  .shell { grid-template-columns: 1fr; }
+  .sb { position: sticky; height: 3rem; flex-direction: row; align-items: center; padding: 0 0.75rem; border-right: 0; border-bottom: 1px solid var(--card-edge); }
+  .sb > :not(.sb-brand) { display: none; }
+}
+
+/* Shared page furniture (the ProfileView grammar). */
+.prof { display: flex; flex-direction: column; gap: 1.5rem; }
+.head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1.5rem; flex-wrap: wrap; padding-bottom: 1.5rem; border-bottom: 1px solid var(--rule-strong); }
+.title { font-family: var(--font-display); font-size: var(--fs-h1); font-weight: 600; letter-spacing: var(--tracking-display); line-height: var(--lh-display); }
+.lede { font-size: var(--fs-caption); line-height: var(--lh-body); color: var(--pencil); }
+.sec { display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; padding: 1.25rem 1.5rem; background: var(--card); border: 1px solid var(--card-edge); border-radius: var(--radius-card); box-shadow: 0 1px 0 var(--card-drop); }
+.sec-title { font-size: var(--fs-caption); font-weight: 700; line-height: var(--lh-body); }
+.divider { display: flex; flex-direction: column; width: 100%; }
+.divider-tab { align-self: flex-start; padding: 0.375rem 1rem; border-radius: var(--radius-card) var(--radius-card) 0 0; color: var(--tab-ink); font-size: var(--fs-caption); font-weight: 700; line-height: var(--lh-body); }
+.divider-tab .n { font-weight: 400; margin-left: 0.35rem; }
+.tab-gaps { background: var(--tab-gaps); } .tab-mastered { background: var(--tab-mastered); } .tab-level { background: var(--tab-level); }
+.divider-body { flex: 1 1 auto; display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; width: 100%; padding: 1.25rem 1.5rem; background: var(--card); border: 1px solid var(--card-edge); border-radius: 0 var(--radius-card) var(--radius-card) var(--radius-card); box-shadow: 0 1px 0 var(--card-drop); }
+.two { display: grid; grid-template-columns: 1fr; gap: 1.5rem; }
+@media (min-width: 60rem) { .two { grid-template-columns: minmax(0,1fr) minmax(0,1fr); } }
+.cue { display: flex; align-items: baseline; gap: 0.5rem; min-height: 1.5rem; }
+.cue-word { font-size: var(--fs-body); line-height: var(--lh-body); color: var(--ink-learner); overflow-wrap: anywhere; }
+.mark { flex: 0 0 auto; align-self: center; stroke-width: 1.5; }
+.mark-gap { stroke: var(--pencil); } .mark-tick { stroke: var(--tab-mastered); } .mark-focus { stroke: var(--ink-marker); stroke-width: 2; } .mark-x { stroke: var(--ink-marker); }
+.level-mark { stroke: var(--ink); align-self: center; } .level-mark.unset { stroke: var(--pencil); }
+.level-word { font-size: var(--fs-caption); font-weight: 700; line-height: var(--lh-body); }
+.level-word.unset { font-weight: 400; color: var(--pencil); }
+.meta { font-size: var(--fs-label); line-height: var(--lh-body); color: var(--pencil); white-space: nowrap; }
+.none { font-size: var(--fs-body); line-height: var(--lh-body); color: var(--pencil); }
+.focus-word { font-weight: 700; color: var(--ink); text-decoration: underline; text-decoration-color: var(--ink-marker); text-decoration-thickness: 2px; text-underline-offset: 4px; }
+.text-btn { font-size: var(--fs-caption); font-weight: 700; color: var(--ink-learner); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; background: none; border: 0; padding: 0; font-family: inherit; }
+.text-btn:hover { color: var(--color-accent-hover); }
+.acc-list { width: 100%; }
+.acc-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.4rem 0.9rem; padding: 0.4rem 0; box-shadow: inset 0 -1px 0 var(--rule); }
+.acc-concept { flex: 1 1 auto; min-width: 6rem; font-size: var(--fs-caption); line-height: var(--lh-body); }
+.acc-marks { display: inline-flex; align-items: center; gap: 0.25rem; }
+.acc-label { font-size: var(--fs-label); line-height: var(--lh-body); color: var(--pencil); margin-bottom: 0.25rem; }
+.acc-group + .acc-group { margin-top: 0.75rem; }
+.wk { max-width: 20rem; width: 100%; }
+.wk svg { display: block; width: 100%; height: auto; overflow: visible; }
+.wk-base { stroke: var(--rule); stroke-width: 1; } .wk-bar { fill: var(--tab-mastered); }
+.wk-labels { display: flex; justify-content: space-between; margin-top: 0.25rem; }
+.wk-labels span { flex: 1 1 0; min-width: 0; font-size: var(--fs-label); line-height: var(--line-pitch); color: var(--pencil); text-align: center; white-space: nowrap; }
+
+/* Variant A */
+.a-cues { width: 100%; display: grid; grid-template-columns: 1fr; column-gap: 2rem; }
+@media (min-width: 60rem) { .a-cues { grid-template-columns: minmax(0,1fr) minmax(0,1fr); } }
+.a-topic { display: grid; grid-template-columns: minmax(0,2fr) minmax(0,1fr) minmax(0,1.5fr) auto auto; align-items: baseline; gap: 0.5rem 1rem; padding: 0.4rem 0; box-shadow: inset 0 -1px 0 var(--rule); width: 100%; }
+.a-topic .tl { font-size: var(--fs-body); line-height: var(--lh-body); overflow-wrap: anywhere; }
+.a-topic .lv { display: inline-flex; align-items: center; gap: 0.4rem; }
+.a-topic .fo { font-size: var(--fs-caption); line-height: var(--lh-body); }
+.a-topic .ma { display: inline-flex; align-items: center; gap: 0.35rem; }
+@media (max-width: 600px) { .a-topic { grid-template-columns: minmax(0,1fr) auto; } .a-topic .tl, .a-topic .fo { grid-column: 1 / -1; } }
+
+/* Variant B */
+.b-topics { display: grid; grid-template-columns: 1fr; gap: 0.75rem; }
+@media (min-width: 60rem) { .b-topics { grid-template-columns: minmax(0,1fr) minmax(0,1fr); } }
+.b-card { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.55rem 0.9rem 0.7rem; background: var(--card); border: 1px solid var(--card-edge); border-radius: var(--radius-card); box-shadow: 0 1px 0 var(--card-drop); }
+.b-head { display: flex; justify-content: space-between; font-size: var(--fs-label); line-height: var(--lh-body); color: var(--pencil); }
+.b-head b { font-weight: 700; }
+.b-name { font-family: var(--font-display); font-size: 1.25rem; font-weight: 600; letter-spacing: var(--tracking-display); line-height: var(--lh-display); color: var(--ink); }
+.b-name:hover { text-decoration: underline; text-decoration-color: var(--ink-marker); text-decoration-thickness: 2px; text-underline-offset: 4px; }
+.b-cues { display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; }
+.b-cues .cue { display: inline-flex; gap: 0.4rem; }
+.b-cues .cue .meta, .b-cues .cue .none { font-size: var(--fs-caption); }
+.b-sum { font-size: var(--fs-caption); line-height: var(--lh-body); color: var(--pencil); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.b-sum.prev { font-style: italic; }
+.b-actions { display: flex; gap: 1rem; margin-top: 0.25rem; }
+.b-foot { font-size: var(--fs-caption); line-height: var(--lh-body); color: var(--pencil); }
+.b-across .divider-body { padding: 1rem 1.25rem; }
+
+/* Variant C */
+.c-cols { display: grid; grid-template-columns: 1fr; gap: 1.5rem; align-items: start; }
+@media (min-width: 60rem) { .c-cols { grid-template-columns: minmax(0,1fr) 20rem; } }
+.c-ledger { display: flex; flex-direction: column; gap: 0.5rem; padding: 1.25rem 1.5rem; background: var(--card); border: 1px solid var(--card-edge); border-radius: var(--radius-card); box-shadow: 0 1px 0 var(--card-drop); }
+.c-lh { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+.c-filters { display: inline-flex; gap: 1rem; }
+.c-filter { padding: 0 0 2px; border: 0; background: transparent; font-family: inherit; font-size: var(--fs-caption); font-weight: 700; line-height: var(--lh-body); color: var(--ink-learner); cursor: pointer; }
+.c-filter.on { color: var(--ink); box-shadow: inset 0 -2px 0 var(--ink); }
+.c-row { display: grid; grid-template-columns: 12px minmax(0,1fr) auto auto; align-items: baseline; gap: 0.35rem 0.9rem; padding: 0.4rem 0; box-shadow: inset 0 -1px 0 var(--rule); }
+.c-row .rm { display: inline-flex; align-self: center; }
+.c-row .rc { font-size: var(--fs-body); line-height: var(--lh-body); overflow-wrap: anywhere; }
+.c-row .ra { display: inline-flex; align-items: baseline; gap: 0.6rem; justify-self: end; }
+@media (max-width: 600px) { .c-row { grid-template-columns: 12px minmax(0,1fr) auto; } .c-row .ra { grid-column: 2 / -1; justify-self: start; } }
+.c-aside { display: flex; flex-direction: column; gap: 1.5rem; }
+.c-aside .sec { padding: 1rem 1.25rem 1.25rem; width: 100%; }
+.c-line { display: grid; grid-template-columns: 18px minmax(0,1fr) auto; align-items: baseline; gap: 0.5rem; min-height: 1.5rem; width: 100%; }
+.c-line a { font-size: var(--fs-body); line-height: var(--lh-body); }
+
+/* Prototype furniture: deliberately alien so it never reads as the design. */
+.proto-bar { position: fixed; left: 50%; bottom: 1rem; z-index: 1000; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 0.75rem; padding: 0.35rem 0.6rem; border-radius: 999px; background: #111; color: #fff; font: 600 0.8125rem/1.4 ui-monospace, monospace; box-shadow: 0 8px 24px rgba(0,0,0,0.35); }
+.proto-btn { border: 0; background: #333; color: #fff; border-radius: 999px; min-width: 1.75rem; height: 1.75rem; padding: 0 0.5rem; cursor: pointer; font: inherit; }
+.proto-btn:hover { background: #555; }
+.proto-note { font: 0.75rem/1.4 ui-monospace, monospace; color: var(--pencil); margin-bottom: 1rem; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="sb" aria-hidden="true">
+    <div class="sb-brand">
+      <svg viewBox="0 0 32 32" width="22" height="22" aria-hidden="true"><rect x="3.5" y="9.5" width="25" height="19" rx="2" stroke="currentColor" stroke-width="2.5"/><rect x="3.5" y="9.5" width="11" height="6" fill="var(--tab-focus)" stroke="none"/><path d="M9 19h14M9 23h8" stroke="currentColor" stroke-width="2"/></svg>
+      Crux
+    </div>
+    <div class="sb-line">+ New session</div>
+    <div class="sb-line">Review <span class="meta">3</span></div>
+    <div class="sb-search">Search sessions</div>
+    <div class="sb-toggles"><span class="on">Active</span><span>Ended</span></div>
+    <div class="sb-row cur">Ordinary differential equations</div>
+    <div class="sb-row">Graph algorithms</div>
+    <div class="sb-row">Linear algebra</div>
+    <div class="sb-foot">
+      <div>Settings</div>
+      <div class="sb-id"><span class="sb-avatar">E</span><span>Edward</span></div>
+    </div>
+  </aside>
+  <main class="page">
+    <div class="page-inner">
+      <p class="proto-note" id="note"></p>
+      <div id="root"></div>
+    </div>
+  </main>
+</div>
+<div class="proto-bar" role="group" aria-label="Prototype controls">
+  <button class="proto-btn" id="prev" aria-label="Previous variant">&larr;</button>
+  <span id="label"></span>
+  <button class="proto-btn" id="next" aria-label="Next variant">&rarr;</button>
+  <button class="proto-btn" id="theme">dark</button>
+  <button class="proto-btn" id="empty">empty</button>
+</div>
+
+<script>
+// ---- fixture (shape: AggregateProfileResponse) ----
+const S = { ode: 'sess-ode-0001', graphs: 'sess-graphs-0002', thermo: 'sess-thermo-0003', linalg: 'sess-linalg-0004', prob: 'sess-prob-0005' }
+const ago = (d, h = 3) => new Date(Date.now() - d * 86400000 - h * 3600000).toISOString()
+function monday(n) { const d = new Date(); d.setUTCHours(0,0,0,0); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay()+6)%7) - n*7); return d.toISOString().slice(0,10) }
+const FULL = {
+  total_sessions: 9, active_sessions: 3, ended_sessions: 6, total_learning_events: 47, last_active_at: ago(0, 2),
+  combined_mastered_concepts: [
+    { concept: 'separable equations', count: 3, first_seen_session_id: S.ode },
+    { concept: 'matrix rank', count: 2, first_seen_session_id: S.linalg },
+    { concept: 'breadth-first search', count: 2, first_seen_session_id: S.graphs },
+    { concept: 'first law of thermodynamics', count: 1, first_seen_session_id: S.thermo },
+    { concept: 'conditional probability', count: 1, first_seen_session_id: S.prob },
+    { concept: 'eigenvalues', count: 1, first_seen_session_id: S.linalg },
+    { concept: 'Dijkstra', count: 1, first_seen_session_id: S.graphs },
+  ],
+  combined_confirmed_gaps: [
+    { concept: 'integrating factor', count: 2, first_seen_session_id: S.ode },
+    { concept: 'entropy', count: 2, first_seen_session_id: S.thermo },
+    { concept: 'Bayes theorem', count: 1, first_seen_session_id: S.prob },
+    { concept: 'topological sort', count: 1, first_seen_session_id: S.graphs },
+    { concept: 'diagonalisation', count: 1, first_seen_session_id: S.linalg },
+  ],
+  knowledge_level_distribution: { beginner: 2, intermediate: 4, advanced: 1, unknown: 2 },
+  recent_topics: [
+    { id: S.ode, topic: 'Ordinary differential equations', created_at: ago(1), ended_at: null, last_session_summary: null, message_count: 42, last_activity_at: ago(0, 2), last_message_preview: 'So the integrating factor is e to the integral of p?', progress: { focus_target_gap: 'integrating factor', level: 'intermediate', mastered_count: 4 } },
+    { id: S.graphs, topic: 'Graph algorithms', created_at: ago(3), ended_at: null, last_session_summary: null, message_count: 18, last_activity_at: ago(2), last_message_preview: 'Why does Dijkstra fail on negative edges?', progress: { focus_target_gap: 'topological sort', level: 'advanced', mastered_count: 3 } },
+    { id: S.thermo, topic: 'Thermodynamics', created_at: ago(6), ended_at: ago(4), last_session_summary: '[auto] Covered the first law and heat engines; entropy remains the open gap.', message_count: 31, last_activity_at: ago(4), last_message_preview: null, progress: { focus_target_gap: 'entropy', level: 'beginner', mastered_count: 1 } },
+    { id: S.linalg, topic: 'Linear algebra', created_at: ago(9), ended_at: null, last_session_summary: null, message_count: 7, last_activity_at: ago(9), last_message_preview: null, progress: { focus_target_gap: null, level: null, mastered_count: 0 } },
+    { id: S.prob, topic: 'Probability', created_at: ago(14), ended_at: ago(12), last_session_summary: '[auto] Conditional probability landed; Bayes still needs work.', message_count: 24, last_activity_at: ago(12), last_message_preview: null, progress: { focus_target_gap: 'Bayes theorem', level: 'intermediate', mastered_count: 2 } },
+  ],
+  concept_accuracy: [
+    { concept: 'entropy', correct_count: 1, total_count: 5, accuracy: 0.2, last_results: [false,false,true,false,false], first_seen_session_id: S.thermo },
+    { concept: 'integrating factor', correct_count: 1, total_count: 3, accuracy: 0.33, last_results: [false,true,false], first_seen_session_id: S.ode },
+    { concept: 'Bayes theorem', correct_count: 2, total_count: 4, accuracy: 0.5, last_results: [false,true,false,true], first_seen_session_id: S.prob },
+    { concept: 'topological sort', correct_count: 1, total_count: 2, accuracy: 0.5, last_results: [true,false], first_seen_session_id: S.graphs },
+    { concept: 'eigenvalues', correct_count: 2, total_count: 3, accuracy: 0.67, last_results: [false,true,true], first_seen_session_id: S.linalg },
+    { concept: 'matrix rank', correct_count: 3, total_count: 4, accuracy: 0.75, last_results: [true,false,true,true], first_seen_session_id: S.linalg },
+    { concept: 'breadth-first search', correct_count: 4, total_count: 5, accuracy: 0.8, last_results: [true,true,false,true,true], first_seen_session_id: S.graphs },
+    { concept: 'conditional probability', correct_count: 1, total_count: 1, accuracy: 1, last_results: [true], first_seen_session_id: S.prob },
+    { concept: 'separable equations', correct_count: 5, total_count: 5, accuracy: 1, last_results: [true,true,true,true,true], first_seen_session_id: S.ode },
+  ],
+  weekly_mastery: [0,1,0,3,2,0,0,4,1,5,2,3].map((count, i) => ({ week_start: monday(11 - i), count })),
+}
+const EMPTY = { total_sessions: 0, active_sessions: 0, ended_sessions: 0, total_learning_events: 0, last_active_at: null, combined_mastered_concepts: [], combined_confirmed_gaps: [], knowledge_level_distribution: { beginner: 0, intermediate: 0, advanced: 0, unknown: 0 }, recent_topics: [], concept_accuracy: [], weekly_mastery: Array.from({ length: 12 }, (_, i) => ({ week_start: monday(11 - i), count: 0 })) }
+
+// ---- helpers ----
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+const LEVEL_PATH = 'M2 17 L22 7'
+const LEVEL_W = { beginner: 1.5, intermediate: 2.25, advanced: 3 }
+const levelMark = (lvl) => `<svg class="mark level-mark${lvl ? '' : ' unset'}" viewBox="0 0 24 24" width="18" height="12" aria-hidden="true"><path d="${LEVEL_PATH}" stroke-width="${lvl ? LEVEL_W[lvl] : 0.75}"/></svg>`
+const tick = () => `<svg class="mark mark-tick" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M2 6.5 L4.8 9.2 L10 3.2"/></svg>`
+const circle = () => `<svg class="mark mark-gap" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="4"/></svg>`
+const dash = () => `<svg class="mark mark-focus" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M1 6 L11 6"/></svg>`
+const accMarks = (r) => `<span class="acc-marks">${r.map((x) => x
+  ? `<svg class="mark mark-x" viewBox="0 0 12 12" width="12" height="12" role="img" aria-label="correct"><path d="M2 6.5 L4.8 9.2 L10 3.2"/></svg>`
+  : `<svg class="mark mark-x" viewBox="0 0 12 12" width="12" height="12" role="img" aria-label="incorrect"><path d="M2.5 2.5 L9.5 9.5"/><path d="M9.5 2.5 L2.5 9.5"/></svg>`).join('')}</span>`
+const sp = (id) => `#/session/${id}/profile`
+const stripAuto = (s) => s.replace(/^\[auto\]\s*/, '')
+function rel(iso) {
+  if (!iso) return ''
+  const s = (Date.now() - new Date(iso)) / 1000
+  if (s < 3600) return 'just now'
+  if (s < 86400) return `${Math.round(s / 3600)} hours ago`
+  const d = Math.round(s / 86400)
+  if (d < 7) return `${d} days ago`
+  if (d < 14) return 'last week'
+  return `${Math.round(d / 7)} weeks ago`
+}
+const wkLabel = (iso) => new Date(iso + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+function weekly(points, bw = 16, gap = 8, h = 56) {
+  if (!points.some((w) => w.count > 0)) return `<p class="none">none yet</p>`
+  const max = Math.max(...points.map((w) => w.count), 1), n = points.length, W = n * bw + (n - 1) * gap
+  const bars = points.map((w, i) => { const bh = (w.count / max) * h; return `<rect class="wk-bar" x="${i * (bw + gap)}" y="${h - bh}" width="${bw}" height="${bh}" rx="4" ry="4"><title>Week of ${wkLabel(w.week_start)}: ${w.count} mastered</title></rect>` }).join('')
+  const labels = points.map((w, i) => `<span>${(i === 0 || i === n - 1 || (i % 4 === 0 && n - 1 - i >= 2)) ? wkLabel(w.week_start) : ''}</span>`).join('')
+  return `<div class="wk"><svg viewBox="0 0 ${W} ${h + 1}" preserveAspectRatio="xMidYMid meet" aria-hidden="true"><line class="wk-base" x1="0" x2="${W}" y1="${h}" y2="${h}"/>${bars}</svg><div class="wk-labels" aria-hidden="true">${labels}</div></div>`
+}
+const accRow = (c) => `<li class="acc-row"><a class="acc-concept" href="${sp(c.first_seen_session_id)}">${esc(c.concept)}</a><span class="meta">${c.correct_count} of ${c.total_count}</span>${accMarks(c.last_results)}</li>`
+function accGroups(all) {
+  const least = all.slice(0, 3), names = new Set(least.map((c) => c.concept))
+  const most = all.slice(-3).filter((c) => !names.has(c.concept)), lab = least.length && most.length
+  const g = (label, rows) => rows.length ? `<div class="acc-group">${lab ? `<p class="acc-label">${label}</p>` : ''}<ul class="acc-list">${rows.map(accRow).join('')}</ul></div>` : ''
+  return all.length ? g('Least accurate', least) + g('Most accurate', most) : `<p class="none">none yet</p>`
+}
+const LEVELS = ['beginner', 'intermediate', 'advanced']
+const sessionsWord = (n) => n === 1 ? 'in 1 session' : `in ${n} sessions`
+const headHtml = (lede, right = '') => `<header class="head"><div><h1 class="title">Your profile</h1><p class="lede">${lede}</p></div>${right}</header>`
+const lastStudied = (d) => d.last_active_at ? ` Last studied ${rel(d.last_active_at)}.` : ''
+
+// ---- Variant A: dividers across sessions ----
+function variantA(d) {
+  const dist = d.knowledge_level_distribution
+  const levelRows = LEVELS.map((l) => `<li class="cue">${levelMark(l)}<span class="level-word">${l}</span><span class="meta">${dist[l]} ${dist[l] === 1 ? 'topic' : 'topics'}</span></li>`).join('')
+    + (dist.unknown ? `<li class="cue">${levelMark(null)}<span class="level-word unset">level not set</span><span class="meta">${dist.unknown} ${dist.unknown === 1 ? 'topic' : 'topics'}</span></li>` : '')
+  const cueList = (rows, mark, empty) => rows.length ? `<ul class="a-cues">${rows.map((r) => `<li class="cue">${mark()}<a class="cue-word" href="${sp(r.first_seen_session_id)}">${esc(r.concept)}</a>${r.count > 1 ? `<span class="meta">${sessionsWord(r.count)}</span>` : ''}</li>`).join('')}</ul>` : `<p class="none">${empty}</p>`
+  const topics = d.recent_topics.map((t) => `<li class="a-topic">
+    <a class="tl" href="${sp(t.id)}">${esc(t.topic || 'Untitled')}</a>
+    <span class="lv">${levelMark(t.progress?.level)}<span class="level-word${t.progress?.level ? '' : ' unset'}">${t.progress?.level || 'level not set'}</span></span>
+    ${t.progress?.focus_target_gap ? `<span class="fo focus-word">${esc(t.progress.focus_target_gap)}</span>` : `<span class="fo none">no focus</span>`}
+    <span class="ma meta">${tick()} ${t.progress?.mastered_count || 0} mastered</span>
+    <span class="meta">${t.ended_at ? 'ended' : 'active'} ${rel(t.last_activity_at || t.created_at)}</span>
+  </li>`).join('')
+  return `<section class="prof">
+    ${headHtml(`${d.total_sessions} sessions, ${d.active_sessions} active.${lastStudied(d)}`, `<a class="text-btn" href="#/sessions">All sessions</a>`)}
+    <section class="divider"><h2 class="divider-tab tab-level">Level <span class="n">${d.total_sessions}</span></h2><div class="divider-body"><ul>${levelRows}</ul></div></section>
+    <section class="divider"><h2 class="divider-tab tab-gaps">Gaps <span class="n">${d.combined_confirmed_gaps.length}</span></h2><div class="divider-body">${cueList(d.combined_confirmed_gaps, circle, 'none open')}</div></section>
+    <section class="divider"><h2 class="divider-tab tab-mastered">Mastered <span class="n">${d.combined_mastered_concepts.length}</span></h2><div class="divider-body">${cueList(d.combined_mastered_concepts, tick, 'none yet')}</div></section>
+    <section class="sec"><h2 class="sec-title">Topics</h2><ul style="width:100%">${topics}</ul><a class="text-btn" href="#/sessions">See all topics</a></section>
+    <div class="two">
+      <section class="sec"><h2 class="sec-title">Mastered by week</h2>${weekly(d.weekly_mastery)}</section>
+      <section class="sec"><h2 class="sec-title">Check accuracy</h2>${accGroups(d.concept_accuracy)}</section>
+    </div>
+  </section>`
+}
+
+// ---- Variant B: topic ledger ----
+function variantB(d) {
+  const cards = d.recent_topics.map((t) => `<li class="b-card">
+    <p class="b-head"><b>${t.ended_at ? 'ended' : 'active'}</b><span>${rel(t.last_activity_at || t.created_at)}</span></p>
+    <a class="b-name" href="${sp(t.id)}">${esc(t.topic || 'Untitled')}</a>
+    <div class="b-cues">
+      <span class="cue">${levelMark(t.progress?.level)}<span class="level-word${t.progress?.level ? '' : ' unset'}">${t.progress?.level || 'level not set'}</span></span>
+      <span class="cue">${dash()}${t.progress?.focus_target_gap ? `<span class="level-word focus-word">${esc(t.progress.focus_target_gap)}</span>` : `<span class="none">no focus cue yet</span>`}</span>
+      <span class="cue">${tick()}<span class="meta">${t.progress?.mastered_count || 0} mastered</span></span>
+    </div>
+    ${t.last_session_summary ? `<p class="b-sum">${esc(stripAuto(t.last_session_summary))}</p>` : t.last_message_preview ? `<p class="b-sum prev">${esc(t.last_message_preview)}</p>` : ''}
+    <div class="b-actions"><a class="text-btn" href="#/session/${t.id}">${t.ended_at ? 'Resume' : 'Continue'}</a><a class="text-btn" href="${sp(t.id)}">Open profile</a></div>
+  </li>`).join('')
+  const list = (rows, mark, empty) => rows.length ? `<ul style="width:100%">${rows.slice(0, 6).map((r) => `<li class="cue">${mark()}<a class="cue-word" href="${sp(r.first_seen_session_id)}">${esc(r.concept)}</a>${r.count > 1 ? `<span class="meta">x${r.count}</span>` : ''}</li>`).join('')}</ul>` : `<p class="none">${empty}</p>`
+  const least = d.concept_accuracy.slice(0, 4)
+  return `<section class="prof">
+    ${headHtml(`What the tutor knows about you, topic by topic.${lastStudied(d)}`)}
+    <ol class="b-topics">${cards}</ol>
+    <p class="b-foot">Showing ${d.recent_topics.length} of ${d.total_sessions} topics. <a class="text-btn" href="#/sessions">See all topics</a></p>
+    <div class="two b-across">
+      <section class="divider"><h2 class="divider-tab tab-gaps">Gaps <span class="n">${d.combined_confirmed_gaps.length}</span></h2><div class="divider-body">${list(d.combined_confirmed_gaps, circle, 'none open')}</div></section>
+      <section class="divider"><h2 class="divider-tab tab-mastered">Mastered <span class="n">${d.combined_mastered_concepts.length}</span></h2><div class="divider-body">${list(d.combined_mastered_concepts, tick, 'none yet')}</div></section>
+    </div>
+    <div class="two">
+      <section class="sec"><h2 class="sec-title">Mastered by week</h2>${weekly(d.weekly_mastery)}</section>
+      <section class="sec"><h2 class="sec-title">Needs another pass</h2>${least.length ? `<ul class="acc-list">${least.map(accRow).join('')}</ul>` : `<p class="none">none yet</p>`}</section>
+    </div>
+  </section>`
+}
+
+// ---- Variant C: concept ledger ----
+let cFilter = 'all'
+function variantC(d) {
+  const acc = new Map(d.concept_accuracy.map((c) => [c.concept, c]))
+  const rows = [
+    ...d.combined_confirmed_gaps.map((g) => ({ ...g, status: 'gap', acc: acc.get(g.concept) || null })),
+    ...d.combined_mastered_concepts.map((m) => ({ ...m, status: 'mastered', acc: acc.get(m.concept) || null })),
+  ].sort((a, b) => {
+    if (a.status !== b.status) return a.status === 'gap' ? -1 : 1
+    const aa = a.acc ? a.acc.accuracy : 2, ba = b.acc ? b.acc.accuracy : 2
+    if (a.status === 'gap' && aa !== ba) return aa - ba
+    return b.count - a.count
+  })
+  const vis = cFilter === 'all' ? rows : rows.filter((r) => (cFilter === 'gaps' ? r.status === 'gap' : r.status === 'mastered'))
+  const ledger = vis.length ? `<ul>${vis.map((r) => `<li class="c-row">
+      <span class="rm">${r.status === 'gap' ? circle() : tick()}</span>
+      <a class="rc" href="${sp(r.first_seen_session_id)}">${esc(r.concept)}</a>
+      <span class="meta">${r.count === 1 ? '1 topic' : `${r.count} topics`}</span>
+      ${r.acc ? `<span class="ra"><span class="meta">${r.acc.correct_count} of ${r.acc.total_count}</span>${accMarks(r.acc.last_results)}</span>` : `<span class="ra meta">${r.status === 'gap' ? 'not yet checked' : 'declared'}</span>`}
+    </li>`).join('')}</ul>` : `<p class="none">none yet</p>`
+  const filters = [['all', 'All'], ['gaps', 'Gaps'], ['mastered', 'Mastered']].map(([k, l]) => `<button class="c-filter${cFilter === k ? ' on' : ''}" data-filter="${k}" aria-pressed="${cFilter === k}">${l}</button>`).join('')
+  const dist = d.knowledge_level_distribution
+  const topics = d.recent_topics.map((t) => `<li class="c-line">${levelMark(t.progress?.level)}<a href="${sp(t.id)}">${esc(t.topic || 'Untitled')}</a><span class="meta">${t.progress?.mastered_count || 0} mastered</span></li>`).join('')
+  const levels = LEVELS.map((l) => `<li class="c-line">${levelMark(l)}<span class="level-word">${l}</span><span class="meta">${dist[l]}</span></li>`).join('')
+    + (dist.unknown ? `<li class="c-line">${levelMark(null)}<span class="level-word unset">not set</span><span class="meta">${dist.unknown}</span></li>` : '')
+  return `<section class="prof">
+    ${headHtml(`${d.combined_confirmed_gaps.length} gaps open, ${d.combined_mastered_concepts.length} concepts mastered across ${d.total_sessions} topics.${lastStudied(d)}`)}
+    <div class="c-cols">
+      <section class="c-ledger"><div class="c-lh"><h2 class="sec-title">Concepts</h2><div class="c-filters" role="group" aria-label="Filter concepts">${filters}</div></div>${ledger}</section>
+      <aside class="c-aside">
+        <section class="sec"><h2 class="sec-title">Topics</h2><ul style="width:100%">${topics}</ul><a class="text-btn" href="#/sessions">See all topics</a></section>
+        <section class="sec"><h2 class="sec-title">Mastered by week</h2>${weekly(d.weekly_mastery, 12, 6, 44)}</section>
+        <section class="sec"><h2 class="sec-title">Level by topic</h2><ul style="width:100%">${levels}</ul></section>
+      </aside>
+    </div>
+  </section>`
+}
+
+// ---- switcher ----
+const VARIANTS = [
+  { key: 'A', name: 'Dividers across sessions', render: variantA },
+  { key: 'B', name: 'Topic ledger', render: variantB },
+  { key: 'C', name: 'Concept ledger', render: variantC },
+]
+const params = new URLSearchParams(location.search)
+let current = VARIANTS.findIndex((v) => v.key === (params.get('variant') || 'A').toUpperCase()); if (current < 0) current = 0
+let useEmpty = params.get('state') === 'empty'
+if (params.get('theme') === 'dark') document.documentElement.dataset.theme = 'dark'
+
+function render() {
+  const v = VARIANTS[current], data = useEmpty ? EMPTY : FULL
+  document.getElementById('label').textContent = `${v.key} - ${v.name}`
+  document.getElementById('note').textContent = `prototype: data = ${useEmpty ? 'fixture (empty)' : 'fixture'}`
+  document.getElementById('empty').textContent = useEmpty ? 'data' : 'empty'
+  document.getElementById('theme').textContent = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'
+  const root = document.getElementById('root')
+  root.innerHTML = data.total_sessions === 0
+    ? `<div class="sec" style="max-width:28rem;margin:0 auto;align-items:center;text-align:center;padding:2rem 1.75rem"><h2 class="title" style="font-size:1.375rem">No sessions yet</h2><p class="none">Start one. Your profile builds itself as you go.</p><a class="text-btn" href="#/">Start your first session</a></div>`
+    : v.render(data)
+  root.querySelectorAll('[data-filter]').forEach((b) => b.addEventListener('click', () => { cFilter = b.dataset.filter; render() }))
+  const p = new URLSearchParams(location.search); p.set('variant', v.key)
+  if (useEmpty) p.set('state', 'empty'); else p.delete('state')
+  if (document.documentElement.dataset.theme === 'dark') p.set('theme', 'dark'); else p.delete('theme')
+  history.replaceState(null, '', `?${p}`)
+}
+const go = (dlt) => { current = (current + dlt + VARIANTS.length) % VARIANTS.length; render() }
+document.getElementById('prev').onclick = () => go(-1)
+document.getElementById('next').onclick = () => go(1)
+document.getElementById('theme').onclick = () => { const h = document.documentElement; h.dataset.theme = h.dataset.theme === 'dark' ? 'light' : 'dark'; render() }
+document.getElementById('empty').onclick = () => { useEmpty = !useEmpty; render() }
+window.addEventListener('keydown', (e) => {
+  const t = e.target; if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+  if (e.key === 'ArrowLeft') go(-1); else if (e.key === 'ArrowRight') go(1)
+})
+render()
+</script>
+</body>
+</html>
