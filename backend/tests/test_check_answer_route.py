@@ -33,6 +33,7 @@ def _open_batch(db, session_id):
     ctx = ToolContext(db=db, session_id=session_id, user_id=USER_ID,
                       turn_started_at=datetime(2026, 1, 1, tzinfo=timezone.utc))
     check_question_service.register(db, ctx, AskCheckQuestionsArgs(
+        set_index=1, set_total=1,
         session_id=session_id, gap="atp",
         items=[
             {"question": "Q1?", "options": ["2 ATP", "36 ATP"],

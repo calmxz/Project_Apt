@@ -14,7 +14,7 @@ const props = defineProps({
   // Distinct from `busy`, which is about the follow-up stream.
   answering: { type: Boolean, default: false },
 })
-const emit = defineEmits(['answer', 'skip', 'next', 'done'])
+const emit = defineEmits(['answer', 'skip', 'next', 'done', 'stop'])
 
 const LETTERS = ['A', 'B', 'C', 'D', 'E']
 
@@ -23,6 +23,9 @@ const answered = computed(() => item.value.status === 'answered' || item.value.s
 const correct = computed(() => item.value.correct === true)
 const isLast = computed(() => props.check.viewIndex >= props.check.total - 1)
 const showProgress = computed(() => props.check.total > 1)
+// #340: the learner can end the check early while any item is unresolved;
+// once all are resolved, Done closes it. Chatting never ends a check.
+const canStop = computed(() => props.check.currentIndex < props.check.total)
 // Hidden-until-graded: the explanation is a raise, not a hint.
 const graded = computed(() => item.value.status === 'answered')
 
@@ -153,6 +156,17 @@ watch(answered, async (is) => {
         @click="emit('done')"
       >
         Done
+      </button>
+
+      <button
+        v-if="canStop"
+        type="button"
+        class="check-stop coarse-2x"
+        data-testid="check-stop"
+        :disabled="busy || answering"
+        @click="emit('stop')"
+      >
+        Stop check
       </button>
     </div>
   </section>
@@ -316,7 +330,8 @@ watch(answered, async (is) => {
 }
 
 .check-skip,
-.check-next {
+.check-next,
+.check-stop {
   align-self: flex-start;
   background: transparent;
   border: 0;
@@ -331,7 +346,8 @@ watch(answered, async (is) => {
 }
 
 .check-skip:disabled,
-.check-next:disabled {
+.check-next:disabled,
+.check-stop:disabled {
   color: var(--pencil);
   cursor: default;
   pointer-events: none;
@@ -339,9 +355,15 @@ watch(answered, async (is) => {
 }
 
 .check-skip:focus-visible,
-.check-next:focus-visible {
+.check-next:focus-visible,
+.check-stop:focus-visible {
   outline: 2px solid var(--color-accent-ring);
   outline-offset: 2px;
+}
+
+/* Ending the check is the quieter exit: pencil ink, not the learner blue. */
+.check-stop {
+  color: var(--pencil);
 }
 
 @media (prefers-reduced-motion: reduce) {

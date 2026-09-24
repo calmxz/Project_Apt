@@ -44,7 +44,7 @@ def ctx(db_session):
 def test_ask_sets_pending_check(db_session, session_row, ctx):
     args = {
         "session_id": ctx.session_id,
-        "gap": "calvin_cycle",
+        "set_index": 1, "set_total": 1, "gap": "calvin_cycle",
         "items": [
             {
                 "question": "Inputs?",
@@ -66,7 +66,7 @@ def test_ask_rejected_when_one_already_open(db_session, session_row, ctx):
         "ask_check_questions",
         {
             "session_id": ctx.session_id,
-            "gap": "g1",
+            "set_index": 1, "set_total": 1, "gap": "g1",
             "items": [
                 {"question": "q1?", "options": ["a", "b"], "correct_index": 0, "explanation": "a."}
             ],
@@ -77,7 +77,7 @@ def test_ask_rejected_when_one_already_open(db_session, session_row, ctx):
         "ask_check_questions",
         {
             "session_id": ctx.session_id,
-            "gap": "g2",
+            "set_index": 1, "set_total": 1, "gap": "g2",
             "items": [
                 {"question": "q2?", "options": ["a", "b"], "correct_index": 0, "explanation": "a."}
             ],

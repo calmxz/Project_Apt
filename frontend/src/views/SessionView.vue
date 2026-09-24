@@ -98,6 +98,7 @@
                 @skip="onSkipCheck"
                 @next="store.nextCheck"
                 @done="onDoneCheck"
+                @stop="onStopCheck"
               />
             </template>
           </div>
@@ -114,6 +115,7 @@
               @skip="onSkipCheck"
               @next="store.nextCheck"
               @done="onDoneCheck"
+              @stop="onStopCheck"
             />
 
             <DiagnosticConsentCard
@@ -1056,6 +1058,16 @@ async function onAnswerCheck(index) {
 async function onSkipCheck() {
   try {
     await store.skipCheck()
+  } catch (e) {
+    lastError.value = e
+  }
+}
+
+// #340: same settle path as Done -- the stream-state watcher refetches the
+// profile (a stopped diagnostic may just have set knowledge_level).
+async function onStopCheck() {
+  try {
+    await store.stopCheck()
   } catch (e) {
     lastError.value = e
   }

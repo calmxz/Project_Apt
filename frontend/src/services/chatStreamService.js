@@ -150,3 +150,17 @@ export async function streamCheckComplete({ sessionId, onEvent, signal }) {
     invalidateGetCache(`/sessions/${sessionId}`)
   }
 }
+
+// #340 Stop button: end the check early; streams the same follow-up
+// vocabulary as streamCheckComplete.
+export async function streamCheckStop({ sessionId, onEvent, signal }) {
+  try {
+    await _fetchSse(
+      `${BASE_URL}/sessions/${sessionId}/check/stop`,
+      {},
+      { onEvent, signal, path: '/check/stop' },
+    )
+  } finally {
+    invalidateGetCache(`/sessions/${sessionId}`)
+  }
+}

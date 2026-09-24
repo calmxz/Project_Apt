@@ -43,6 +43,7 @@ def test_record_from_answer_correct_adds_mastered_and_clears(session_row, db_ses
         turn_started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
     )
     cq.register(db_session, seed_ctx, AskCheckQuestionsArgs(
+        set_index=1, set_total=1,
         session_id=SESSION_ID, gap="atp",
         items=[{"question": "q?", "options": ["a", "b"],
                 "correct_index": 0, "explanation": "e"}],
@@ -65,6 +66,7 @@ def test_record_from_answer_incorrect_demotes_mastered(session_row, db_session):
         turn_started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
     )
     cq.register(db_session, seed_ctx, AskCheckQuestionsArgs(
+        set_index=1, set_total=1,
         session_id=SESSION_ID, gap="atp",
         items=[{"question": "q?", "options": ["a", "b"],
                 "correct_index": 0, "explanation": "e"}],
@@ -123,6 +125,7 @@ def test_record_from_answer_incorrect_non_mastered_is_noop_on_profile(session_ro
         turn_started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
     )
     cq.register(db_session, seed_ctx, AskCheckQuestionsArgs(
+        set_index=1, set_total=1,
         session_id=SESSION_ID, gap="krebs",
         items=[{"question": "q?", "options": ["a", "b"],
                 "correct_index": 0, "explanation": "e"}],
@@ -148,6 +151,7 @@ def test_record_from_answer_clear_pending_false_keeps_pending(session_row, db_se
                       user_id=session_row.user_id,
                       turn_started_at=datetime(2026, 1, 1, tzinfo=timezone.utc))
     cq.register(db_session, ctx, AskCheckQuestionsArgs(
+        set_index=1, set_total=1,
         session_id=session_row.id, gap="g",
         items=[{"question": "q", "options": ["a", "b"],
                 "correct_index": 0, "explanation": "e"}]))
@@ -169,6 +173,7 @@ def test_record_from_answer_defaults_still_clear(session_row, db_session):
                       user_id=session_row.user_id,
                       turn_started_at=datetime(2026, 1, 1, tzinfo=timezone.utc))
     cq.register(db_session, ctx, AskCheckQuestionsArgs(
+        set_index=1, set_total=1,
         session_id=session_row.id, gap="g",
         items=[{"question": "q", "options": ["a", "b"],
                 "correct_index": 0, "explanation": "e"}]))

@@ -95,6 +95,7 @@ def test_complete_check_uses_threadpool(
         db_session,
         ctx,
         AskCheckQuestionsArgs(
+            set_index=1, set_total=1,
             session_id=SESSION_ID,
             gap="atp",
             items=[
