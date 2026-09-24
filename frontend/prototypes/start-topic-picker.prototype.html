@@ -1,0 +1,292 @@
+<!doctype html>
+<!--
+  PROTOTYPE - throwaway. Answers wayfinder ticket #341:
+  "Where does the start flow surface topic suggestions, with what copy for
+  broad vs specific topics, and what feeds the card?"
+
+  Four structurally different variants on one page, switchable with the
+  floating bar (or Left/Right arrow keys). ?variant=A|B|C|D  ?topic=broad|specific
+
+  Static HTML rather than a route inside SessionView: mounting there needs a
+  live backend and one LLM turn per look. The surrounding session chrome
+  (first tutor card, level picker, composer) is reproduced from DESIGN.md
+  tokens and DiagnosticConsentCard.vue so the card is judged in context.
+
+  Run: open this file in a browser. No build.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>PROTOTYPE - start-flow topic card</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --desk: #e6e8ec; --desk-deep: #dfe2e7; --card: #ffffff; --card-edge: #cfd3da;
+    --card-drop: #c4c8d0; --card-learner: #dbe6fb; --card-learner-edge: #b9cdf5;
+    --ink: #1b1b1a; --ink-learner: #1d4fc4; --pencil: #63635e; --rule: #cbd6e3;
+    --rule-strong: #aebccf; --accent-strong: #1d4fc4; --accent-soft: #e0e7f4;
+    --accent-ring: rgba(29,79,196,.35); --tab-focus: #b8352c; --tab-ink: #fff;
+    --font-sans: "Atkinson Hyperlegible Next", system-ui, sans-serif;
+    --fs-body: .9375rem; --lh-body: 28px; --fs-caption: .875rem; --fs-label: .8125rem;
+    --radius-card: 6px; --radius-sm: 4px;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--desk); color: var(--ink); font-family: var(--font-sans); font-size: var(--fs-body); line-height: var(--lh-body); }
+  .stage { max-width: 760px; margin: 0 auto; padding: 2rem 1rem 8rem; }
+  .measure { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: .75rem; }
+
+  /* ---- reproduced session chrome ---- */
+  .card { background: var(--card); border: 1px solid var(--card-edge); border-radius: var(--radius-card); box-shadow: 0 1px 0 var(--card-drop); padding: .55rem .9rem .7rem; }
+  .card p { margin: 0; }
+  .learner { background: var(--card-learner); border-color: var(--card-learner-edge); color: var(--ink-learner); align-self: flex-end; max-width: 84%; }
+  .head { display: flex; justify-content: space-between; align-items: center; gap: .5rem; padding-bottom: .4rem; border-bottom: 3px solid var(--ink); }
+  .title { font-weight: 700; }
+  .sub { font-size: var(--fs-caption); color: var(--pencil); }
+  .dismiss { background: none; border: 0; color: var(--ink-learner); cursor: pointer; font-size: 1rem; }
+  ul.lines { list-style: none; margin: 0; padding: 0; }
+  .line { display: flex; align-items: baseline; gap: .625rem; width: 100%; text-align: left; background: transparent; border: 0; box-shadow: inset 0 -1px 0 var(--rule); padding: .4rem 0; font: inherit; color: var(--ink); cursor: pointer; }
+  .line:hover { text-decoration: underline; text-underline-offset: 3px; }
+  .letter { font-weight: 700; color: var(--ink-learner); flex: 0 0 auto; }
+  .line .tail { margin-left: auto; font-size: var(--fs-label); color: var(--pencil); }
+  .free { display: flex; gap: .5rem; align-items: center; padding-top: .5rem; }
+  .free input { flex: 1; font: inherit; border: 0; border-bottom: 1px solid var(--rule-strong); background: transparent; color: var(--ink-learner); padding: .2rem 0; outline: none; }
+  .free input::placeholder { color: var(--pencil); }
+  .nudge { font-size: var(--fs-caption); color: var(--pencil); padding-top: .35rem; }
+  .nudge b { color: var(--ink-learner); font-weight: 400; text-decoration: underline; text-underline-offset: 3px; }
+  .composer { display: flex; gap: .5rem; align-items: center; color: var(--ink-learner); }
+  .composer .clip { flex: 0 0 auto; color: var(--pencil); border: 1px dashed var(--rule-strong); border-radius: var(--radius-sm); padding: 0 .4rem; font-size: var(--fs-label); }
+  .composer span.ph { flex: 1; color: var(--pencil); }
+  .maxw { max-width: 84%; }
+  .chips { display: flex; flex-wrap: wrap; gap: .5rem; padding-top: .5rem; }
+  .chip { font: inherit; font-size: var(--fs-caption); line-height: 1.6; background: var(--card); border: 1px solid var(--rule-strong); border-radius: 999px; padding: .15rem .7rem; color: var(--ink); cursor: pointer; }
+  .chip:hover { border-color: var(--accent-strong); color: var(--accent-strong); }
+  .chip.ghost { border-style: dashed; color: var(--pencil); }
+  .cta { font: inherit; background: var(--accent-strong); color: #fff; border: 0; border-radius: var(--radius-sm); padding: .3rem 1rem; cursor: pointer; }
+  a.inl { color: var(--ink-learner); text-decoration: underline; text-underline-offset: 3px; }
+  .home { background: var(--card); border: 1px solid var(--card-edge); border-radius: var(--radius-card); box-shadow: 0 1px 0 var(--card-drop); padding: 1.5rem 2rem 2rem; }
+  .home h1 { font-size: 1.4rem; margin: 0 0 1rem; }
+  .home input.topic { width: 100%; font: inherit; font-size: 1.1rem; border: 0; border-bottom: 2px solid var(--rule-strong); padding: .3rem 0; color: var(--ink-learner); outline: none; }
+
+  /* ---- prototype-only chrome ---- */
+  .variant { display: none; } .variant.on { display: block; }
+  .plan { font-size: var(--fs-caption); color: var(--pencil); border-left: 3px solid var(--tab-focus); padding-left: .75rem; margin-bottom: 1.25rem; }
+  .plan b { color: var(--ink); }
+  .notes { margin-top: 2.5rem; font-size: var(--fs-caption); line-height: 1.647; background: var(--desk-deep); border-radius: var(--radius-card); padding: 1rem 1.25rem; }
+  .notes h2 { font-size: 1rem; margin: 0 0 .5rem; }
+  .notes h3 { font-size: .9rem; margin: .9rem 0 .2rem; }
+  .notes ul { margin: 0; padding-left: 1.1rem; }
+  .bar { position: fixed; left: 50%; bottom: 1.25rem; transform: translateX(-50%); display: flex; gap: .75rem; align-items: center; background: #111; color: #fff; border-radius: 999px; padding: .4rem .9rem; box-shadow: 0 6px 20px rgba(0,0,0,.35); font-size: .85rem; z-index: 9; white-space: nowrap; }
+  .bar button { font: inherit; background: #333; color: #fff; border: 0; border-radius: 999px; padding: .15rem .6rem; cursor: pointer; }
+  .bar button.on { background: #fff; color: #111; }
+  .bar .sep { opacity: .4; }
+</style>
+</head>
+<body>
+<div class="stage">
+  <p class="plan"><b>Plan:</b> four variants of the start-flow topic-suggestion card, switchable with the bar below. Toggle <b>broad</b> (learner typed "Thermodynamics") vs <b>specific</b> (learner typed "Carnot cycle") to compare copy. Level picker shown as it exists today.</p>
+
+  <!-- ================= A: stacked siblings, topic card first ================= -->
+  <section class="variant" data-v="A" data-name="Stacked: topic card above level picker">
+    <div class="measure">
+      <div class="card learner"><p class="t-broad">Thermodynamics</p><p class="t-spec">Carnot cycle</p></div>
+      <div class="card maxw">
+        <p class="t-broad">Thermodynamics is the study of how energy moves as heat and work, and what that motion can and cannot do. It rests on four laws, from the zeroth (temperature is well defined) to the third (absolute zero is unreachable). Most course material builds from the first two.</p>
+        <p class="t-spec">The Carnot cycle is the idealised heat engine: two isothermal and two adiabatic steps between a hot and a cold reservoir. No engine between the same two reservoirs can beat its efficiency, which depends only on the two temperatures. It is the yardstick for every real engine.</p>
+      </div>
+
+      <section class="card maxw">
+        <div class="head"><p class="title t-broad">Here is what we would cover. Where do you want to start?</p><p class="title t-spec">Nearby ground I can teach. Want to widen out?</p><button class="dismiss" aria-label="Dismiss">x</button></div>
+        <p class="sub t-broad">Pick a subtopic, or tell me something else.</p>
+        <p class="sub t-spec">Or stay on Carnot cycle and just keep asking.</p>
+        <ul class="lines t-broad">
+          <li><button class="line"><span class="letter">1.</span><span>Laws of thermodynamics</span></button></li>
+          <li><button class="line"><span class="letter">2.</span><span>Heat engines and efficiency</span></button></li>
+          <li><button class="line"><span class="letter">3.</span><span>Entropy and the second law</span></button></li>
+          <li><button class="line"><span class="letter">4.</span><span>Enthalpy and state functions</span></button></li>
+        </ul>
+        <ul class="lines t-spec">
+          <li><button class="line"><span class="letter">1.</span><span>Entropy and the second law</span><span class="tail">why Carnot is the ceiling</span></button></li>
+          <li><button class="line"><span class="letter">2.</span><span>Otto and Diesel cycles</span><span class="tail">real engines vs ideal</span></button></li>
+          <li><button class="line"><span class="letter">3.</span><span>Refrigerators and heat pumps</span><span class="tail">Carnot run backwards</span></button></li>
+        </ul>
+        <div class="free"><span class="letter">?</span><input placeholder="Something else..." /></div>
+        <p class="nudge">Studying from your own notes or slides? <b>Attach a file</b> with the clip in the composer and I will teach from that instead.</p>
+      </section>
+
+      <section class="card maxw">
+        <div class="head"><p class="title">Want me to pitch this at the right level?</p><button class="dismiss" aria-label="Dismiss">x</button></div>
+        <p class="sub">Take a quick 3-question check, or tell me where you are.</p>
+        <ul class="lines">
+          <li><button class="line"><span class="letter">Q.</span><span>Quiz me (3 quick questions)</span></button></li>
+          <li><button class="line"><span class="letter">A.</span><span>Beginner</span></button></li>
+          <li><button class="line"><span class="letter">B.</span><span>Intermediate</span></button></li>
+          <li><button class="line"><span class="letter">C.</span><span>Advanced</span></button></li>
+        </ul>
+      </section>
+
+      <div class="card composer"><span class="clip">clip</span><span class="ph">Ask, answer, or redirect...</span><span class="letter">Send</span></div>
+    </div>
+  </section>
+
+  <!-- ================= B: one merged card, two sections ================= -->
+  <section class="variant" data-v="B" data-name="Merged: one card, direction then level">
+    <div class="measure">
+      <div class="card learner"><p class="t-broad">Thermodynamics</p><p class="t-spec">Carnot cycle</p></div>
+      <div class="card maxw">
+        <p class="t-broad">Thermodynamics is the study of how energy moves as heat and work, and what that motion can and cannot do. It rests on four laws, from the zeroth (temperature is well defined) to the third (absolute zero is unreachable). Most course material builds from the first two.</p>
+        <p class="t-spec">The Carnot cycle is the idealised heat engine: two isothermal and two adiabatic steps between a hot and a cold reservoir. No engine between the same two reservoirs can beat its efficiency, which depends only on the two temperatures. It is the yardstick for every real engine.</p>
+      </div>
+
+      <section class="card maxw">
+        <div class="head"><p class="title">Before we go on</p><button class="dismiss" aria-label="Dismiss">x</button></div>
+
+        <p class="sub" style="padding-top:.4rem"><span class="t-broad">Where to start (or type your own):</span><span class="t-spec">Stay here, or widen to:</span></p>
+        <div class="chips t-broad">
+          <button class="chip">Laws of thermodynamics</button>
+          <button class="chip">Heat engines</button>
+          <button class="chip">Entropy</button>
+          <button class="chip">Enthalpy</button>
+          <button class="chip ghost">Something else...</button>
+        </div>
+        <div class="chips t-spec">
+          <button class="chip">Stay on Carnot</button>
+          <button class="chip">Entropy and the second law</button>
+          <button class="chip">Otto and Diesel cycles</button>
+          <button class="chip">Heat pumps</button>
+          <button class="chip ghost">Something else...</button>
+        </div>
+
+        <p class="sub" style="padding-top:.8rem">How much do you already know?</p>
+        <div class="chips">
+          <button class="chip">Quiz me (3 questions)</button>
+          <button class="chip">Beginner</button>
+          <button class="chip">Intermediate</button>
+          <button class="chip">Advanced</button>
+        </div>
+
+        <p class="nudge">Have the course PDF or slides? <b>Attach it</b> and I teach from your material.</p>
+      </section>
+
+      <div class="card composer"><span class="clip">clip</span><span class="ph">Ask, answer, or redirect...</span><span class="letter">Send</span></div>
+    </div>
+  </section>
+
+  <!-- ================= C: step on Home before the tutor speaks ================= -->
+  <section class="variant" data-v="C" data-name="Home step: suggestions before the session starts">
+    <div class="measure">
+      <p class="sub" style="text-align:center">(Home page. The session and the first tutor turn do not exist yet. /new already redirects here, so this is the "pre-session step" option reframed.)</p>
+      <div class="home">
+        <h1>What do you want to learn?</h1>
+        <input class="topic t-broad" value="Thermodynamics" />
+        <input class="topic t-spec" value="Carnot cycle" />
+
+        <p class="sub" style="padding-top:1rem"><span class="t-broad">Big topic. Narrow it, or start with the overview:</span><span class="t-spec">Got it. Related topics you might mean instead:</span></p>
+        <div class="chips t-broad">
+          <button class="chip">Laws of thermodynamics</button>
+          <button class="chip">Heat engines</button>
+          <button class="chip">Entropy</button>
+          <button class="chip">Enthalpy</button>
+          <button class="chip ghost">Keep it broad</button>
+        </div>
+        <div class="chips t-spec">
+          <button class="chip">Heat engines (wider)</button>
+          <button class="chip">Entropy and the second law</button>
+          <button class="chip">Otto cycle</button>
+          <button class="chip ghost">No, Carnot is right</button>
+        </div>
+
+        <p class="nudge">Or <b>drop a PDF or slides</b> here and I will pick the topic from it.</p>
+        <p style="padding-top:1rem"><button class="cta">Start &rarr;</button></p>
+      </div>
+      <p class="sub" style="text-align:center">Then the session opens, the tutor speaks, and the level picker appears under the first reply as today.</p>
+    </div>
+  </section>
+
+  <!-- ================= D: prose inside the first tutor turn ================= -->
+  <section class="variant" data-v="D" data-name="Prose: suggestions written into the first reply (baseline)">
+    <div class="measure">
+      <div class="card learner"><p class="t-broad">Thermodynamics</p><p class="t-spec">Carnot cycle</p></div>
+      <div class="card maxw">
+        <p class="t-broad">Thermodynamics is the study of how energy moves as heat and work, and what that motion can and cannot do. It rests on four laws; most course material builds from the first two. We could take the <a class="inl" href="#">laws in order</a>, go straight to <a class="inl" href="#">heat engines and efficiency</a>, or start from <a class="inl" href="#">entropy</a>. Or say what your course covers and I will follow that.</p>
+        <p class="t-spec">The Carnot cycle is the idealised heat engine: two isothermal and two adiabatic steps between a hot and a cold reservoir. No engine between the same reservoirs can beat its efficiency. Nearby, I can also teach <a class="inl" href="#">entropy and the second law</a>, <a class="inl" href="#">Otto and Diesel cycles</a>, or <a class="inl" href="#">refrigerators</a>, which are Carnot run backwards.</p>
+      </div>
+      <section class="card maxw">
+        <div class="head"><p class="title">Want me to pitch this at the right level?</p><button class="dismiss" aria-label="Dismiss">x</button></div>
+        <p class="sub">Take a quick 3-question check, or tell me where you are.</p>
+        <ul class="lines">
+          <li><button class="line"><span class="letter">Q.</span><span>Quiz me (3 quick questions)</span></button></li>
+          <li><button class="line"><span class="letter">A.</span><span>Beginner</span></button></li>
+          <li><button class="line"><span class="letter">B.</span><span>Intermediate</span></button></li>
+          <li><button class="line"><span class="letter">C.</span><span>Advanced</span></button></li>
+        </ul>
+      </section>
+      <div class="card composer"><span class="clip">clip</span><span class="ph">Ask, answer, or redirect...</span><span class="letter">Send</span></div>
+      <p class="sub">The links are drawn here for honesty; today markdown links in a tutor turn are not session actions, so this variant is really plain text unless the renderer learns a link scheme. It also collides with the prompt rule that the first turn is "answer then END".</p>
+    </div>
+  </section>
+
+  <!-- ================= feed-mechanism notes ================= -->
+  <div class="notes">
+    <h2>What feeds the card (decide after the surface)</h2>
+    <h3>(a) Prompt-only prose</h3>
+    <ul><li>Zero new code. Not clickable. Fights prompts.py: first turn must "answer then END", and prose must not duplicate a card.</li></ul>
+    <h3>(b) New tool: suggest_topics(mode, items[])</h3>
+    <ul>
+      <li>Same pattern as ask_check_questions: tool result persists on the message row, card survives reload, server owns the state.</li>
+      <li>Model decides broad vs specific and writes the items; the prompt has to say "call it in the first turn, still write the 2-4 sentence answer first" (never a tool-only turn).</li>
+      <li>Costs: openapi.yaml + gen_contracts, a tool handler, a stream event, a Vue card. Tap sends a learner message ("Let's start with Entropy") and optionally seeds subtopic_levels.</li>
+    </ul>
+    <h3>(c) Frontend-gated card, like showDiagnosticCard</h3>
+    <ul>
+      <li>Needs a one-shot endpoint (POST /api/sessions/{id}/suggestions or computed at create) that returns mode + items, then the card is a sibling of DiagnosticConsentCard gated on "no learner turn yet".</li>
+      <li>Nothing persists; dismiss is local. Cheapest for variant A/B; the only real option for variant C (there is no session yet).</li>
+    </ul>
+    <h3>Open after surface is chosen</h3>
+    <ul>
+      <li>What a tap does: send a message, seed subtopic_levels, or both.</li>
+      <li>Does the topic card and the level picker fire in the same turn, or is one deferred?</li>
+      <li>390px treatment stays in the map's fog.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="bar">
+  <button id="prev">&larr;</button>
+  <span id="label"></span>
+  <button id="next">&rarr;</button>
+  <span class="sep">|</span>
+  <button id="tb" data-t="broad">broad</button>
+  <button id="ts" data-t="specific">specific</button>
+</div>
+
+<script>
+  const VARS = ['A','B','C','D'];
+  const url = new URL(location.href);
+  let v = (url.searchParams.get('variant') || 'A').toUpperCase();
+  let t = url.searchParams.get('topic') || 'broad';
+  if (!VARS.includes(v)) v = 'A';
+
+  function apply() {
+    document.querySelectorAll('.variant').forEach(s => s.classList.toggle('on', s.dataset.v === v));
+    const name = document.querySelector(`.variant[data-v="${v}"]`).dataset.name;
+    document.getElementById('label').textContent = `${v} - ${name}`;
+    document.querySelectorAll('.t-broad').forEach(e => e.style.display = t === 'broad' ? '' : 'none');
+    document.querySelectorAll('.t-spec').forEach(e => e.style.display = t === 'specific' ? '' : 'none');
+    document.querySelectorAll('.bar [data-t]').forEach(b => b.classList.toggle('on', b.dataset.t === t));
+    url.searchParams.set('variant', v); url.searchParams.set('topic', t);
+    history.replaceState(null, '', url);
+  }
+  function step(d) { v = VARS[(VARS.indexOf(v) + d + VARS.length) % VARS.length]; apply(); }
+  document.getElementById('prev').onclick = () => step(-1);
+  document.getElementById('next').onclick = () => step(1);
+  document.querySelectorAll('.bar [data-t]').forEach(b => b.onclick = () => { t = b.dataset.t; apply(); });
+  document.addEventListener('keydown', e => {
+    const tag = document.activeElement && document.activeElement.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement.isContentEditable) return;
+    if (e.key === 'ArrowLeft') step(-1);
+    if (e.key === 'ArrowRight') step(1);
+  });
+  apply();
+</script>
+</body>
+</html>
