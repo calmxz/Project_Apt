@@ -46,7 +46,6 @@
            the panel is placed in column 2 by the grid. -->
       <div class="sheet-notes">
         <div
-          ref="messagesEl"
           class="messages"
           :class="{ 'is-empty': !store.messages.length }"
           data-testid="session-messages"
@@ -81,16 +80,13 @@
                 :landed="cuesLanded"
               />
 
-              <!-- R2: under 900px the check card scrolls with the transcript.
-                   Pinned in the foot it took a fixed ~420px out of a 844px
-                   viewport and starved .messages down to ~190px (0px with the
-                   cue expanded). The foot copy below is the >=900px form; the
-                   two are v-if/v-else on isNarrow, so exactly one instance of
-                   CheckQuestion exists at any width and an open batch can
-                   never double-render. -->
+              <!-- #346: the check batch and the level picker scroll with the
+                   page at every width. Pinned in the foot they took a fixed
+                   slab of the viewport (R2: ~420px of a 844px screen), and the
+                   foot is sticky now, so only the composer rides there. -->
               <CheckQuestion
-                v-if="isNarrow && store.pendingCheck"
-                class="check-inline"
+                v-if="store.pendingCheck"
+                class="transcript-card"
                 :check="store.pendingCheck"
                 :busy="store.streamState !== 'idle'"
                 :answering="store.checkAnswering"
@@ -100,33 +96,22 @@
                 @done="onDoneCheck"
                 @stop="onStopCheck"
               />
+
+              <DiagnosticConsentCard
+                v-if="showDiagnosticCard"
+                class="transcript-card"
+                :busy="store.streamState !== 'idle' || !canSend || diagLevelBusy"
+                :error="diagError"
+                @quiz="onDiagQuiz"
+                @level="onDiagLevel"
+                @dismiss="dismissDiag()"
+              />
             </template>
           </div>
         </div>
 
         <div class="notes-foot">
           <div class="notes-measure">
-            <CheckQuestion
-              v-if="!isNarrow && store.pendingCheck && !store.detailLoading"
-              :check="store.pendingCheck"
-              :busy="store.streamState !== 'idle'"
-              :answering="store.checkAnswering"
-              @answer="onAnswerCheck"
-              @skip="onSkipCheck"
-              @next="store.nextCheck"
-              @done="onDoneCheck"
-              @stop="onStopCheck"
-            />
-
-            <DiagnosticConsentCard
-              v-if="showDiagnosticCard"
-              :busy="store.streamState !== 'idle' || !canSend || diagLevelBusy"
-              :error="diagError"
-              @quiz="onDiagQuiz"
-              @level="onDiagLevel"
-              @dismiss="dismissDiag()"
-            />
-
             <!-- One status slot: persistent state (caps, send error) stays
                  mounted because the composer's aria-describedby points at it;
                  the transient captions below it land one at a time. -->
@@ -274,7 +259,6 @@ import { costBus } from '../services/costBus.js'
 import { getSessionProfile, patchProfile } from '../services/profileApi.js'
 import { uploadDocument, validateFile } from '../services/uploadApi.js'
 import { useReferencePoll } from '../composables/useReferencePoll.js'
-import { NARROW_QUERY, useMediaQuery } from '../composables/useMediaQuery.js'
 import { entryNames } from '../utils/conceptEntry.js'
 import { formatResetTime } from '../utils/formatDate.js'
 import {
@@ -304,7 +288,6 @@ const notFound = ref(false)
 const resuming = ref(false)
 const gapPickerOpen = ref(false)
 const sending = ref(false)
-const messagesEl = ref(null)
 const composerRef = ref(null)
 const uploading = ref(false)
 const uploadStatus = ref(null)
@@ -576,19 +559,14 @@ function onCostWarning(event) {
 onMounted(() => costBus.addEventListener('cost-warning', onCostWarning))
 onUnmounted(() => costBus.removeEventListener('cost-warning', onCostWarning))
 
-// R2: the check card's placement is width-dependent (see the template comment).
-// Driven by matchMedia rather than a CSS-only swap because the card has to move
-// between two different containers — the .messages scroller and the foot — which
-// CSS cannot do. NARROW_QUERY is kept in sync with the 899px breakpoint in
-// <style> below.
-const isNarrow = useMediaQuery(NARROW_QUERY)
-
-// App-shell lock: while in a session, the document itself must not scroll —
-// only the .messages box does. A body class drives the route-scoped overflow
-// lock and flex-height cascade (see <style>). Removed unconditionally on leave
-// so other routes regain normal document scroll.
-onMounted(() => document.body.classList.add('chat-locked'))
-onUnmounted(() => document.body.classList.remove('chat-locked'))
+// #346: the document is the scroller. A body class drives the route-scoped
+// flex-height cascade (see <style>) so a short transcript still puts the
+// composer at the foot of the viewport. Removed unconditionally on leave.
+onMounted(() => document.body.classList.add('session-page'))
+onUnmounted(() => document.body.classList.remove('session-page'))
+// There is no router scrollBehavior, so a long session scrolled to its foot
+// would hand the next route a scrolled-down document.
+onUnmounted(() => window.scrollTo(0, 0))
 
 // F-01: leaving the session view must not leave a stream running (and
 // billing) in the background, nor let it deliver into a later session.
@@ -603,12 +581,13 @@ const awaitingResponse = computed(() => {
   return !last || last.role === 'user'
 })
 
+// #346: the page scrolls, so every scroll read and write goes to the document.
+function docScrollHeight() {
+  return (document.scrollingElement || document.documentElement).scrollHeight
+}
+
 function scrollToBottom() {
-  // App-shell: the .messages box is the sole scroller, so drive it directly.
-  nextTick(() => {
-    const el = messagesEl.value
-    if (el) el.scrollTop = el.scrollHeight
-  })
+  nextTick(() => window.scrollTo(0, docScrollHeight()))
 }
 
 // True from the moment a "load earlier" click starts until its scroll-offset
@@ -621,14 +600,13 @@ function scrollToBottom() {
 let prepending = false
 
 async function onLoadEarlier() {
-  const el = messagesEl.value
-  const prevHeight = el ? el.scrollHeight : 0
-  const prevTop = el ? el.scrollTop : 0
+  const prevHeight = docScrollHeight()
+  const prevTop = window.scrollY
   prepending = true
   try {
     await store.loadEarlierMessages()
     await nextTick()
-    if (el) el.scrollTop = prevTop + (el.scrollHeight - prevHeight)
+    window.scrollTo(0, prevTop + (docScrollHeight() - prevHeight))
   } finally {
     prepending = false
   }
@@ -639,16 +617,13 @@ watch([() => store.messages.length, awaitingResponse], () => {
   scrollToBottom()
 })
 
-// R2: at narrow widths the card lives at the end of the scroller, so a newly
-// opened batch would otherwise land below the fold. Shallow watch — the store
-// assigns a fresh object per batch, so this fires once per batch, not per
-// answered item.
-watch(
-  () => store.pendingCheck,
-  (now) => {
-    if (now && isNarrow.value) scrollToBottom()
-  },
-)
+// The check batch and the level picker sit at the end of the transcript, so a
+// newly opened one would otherwise land below the fold. Shallow watch -- the
+// store assigns a fresh pendingCheck per batch, so this fires once per batch,
+// not per answered item.
+watch([() => store.pendingCheck, showDiagnosticCard], ([check, diag], [prevCheck, prevDiag]) => {
+  if ((check && check !== prevCheck) || (diag && !prevDiag)) scrollToBottom()
+})
 
 async function loadCurrent(id) {
   // Reset per-load so navigating away from a 404 session clears the state.
@@ -1093,41 +1068,44 @@ function goHome() {
 </script>
 
 <style scoped>
-/* App-shell: while in a session the document is locked to the viewport and the
-   .messages box is the only scroller. The body.chat-locked class (toggled on
-   mount/unmount) drives the overflow lock and the flex-height cascade — every
-   ancestor down to the scroller needs min-height: 0 so it can shrink instead of
-   overflowing. Scoped to this route; other routes keep normal document scroll. */
-:global(body.chat-locked) {
-  overflow: hidden;
-}
-:global(body.chat-locked #app) {
-  height: 100vh;
-  height: 100dvh;
-}
-:global(body.chat-locked .page) {
-  min-height: 0;
-}
-/* The sheet owns its own edges: no page padding, no measure cap. */
-:global(body.chat-locked .page-inner) {
+/* #346: the document is the scroller. The body.session-page class (toggled on
+   mount/unmount) only drives a flex-height cascade so the sheet is at least a
+   viewport tall: a short transcript still puts the composer at the foot of the
+   screen, a long one grows the page. The composer is pinned by the sticky
+   .notes-foot, not by locking the page. */
+:global(body.session-page .page) {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  min-height: 0;
+}
+/* The sheet owns its own edges: no page padding, no measure cap. width: 100%
+   because the shared margin: 0 auto would shrink-wrap a flex item. */
+:global(body.session-page .page-inner) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  width: 100%;
   padding: 0;
 }
 
 /* The desk: thread on the left, profile panel on the right, one header across.
    --panel-col is the panel's width; the collapsed value is the vertical tab
-   strip (CueColumn renders it, usePanel owns the state). */
+   strip (CueColumn renders it, usePanel owns the state). --sticky-top is where
+   sticky chrome parks: under the shell's mobile top strip below 1280px (the
+   useSidebar breakpoint), at the viewport edge above it. */
 .session.is-sheet {
   --panel-col: 17rem;
+  --sticky-top: 0px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) var(--panel-col);
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
   flex: 1;
-  min-height: 0;
   width: 100%;
+}
+
+@media (max-width: 1279px) {
+  .session.is-sheet {
+    --sticky-top: var(--sidebar-mobile-strip-height, 3rem);
+  }
 }
 
 .session.is-sheet.panel-collapsed {
@@ -1144,53 +1122,47 @@ function goHome() {
   grid-column: 2;
   grid-row: 2;
   display: flex;
-  min-height: 0;
+  align-items: flex-start;
   min-width: 0;
+}
+
+/* The profile panel stays in view while the page scrolls under it. Capped at
+   the lesser of its row and the visible viewport, so it fills a short page
+   without growing it and its own .cue-body scroll keeps long profiles
+   reachable on a tall one. Narrow widths pin the whole strip cell instead. */
+@media (min-width: 900px) {
+  .sheet-cue :deep(.cue) {
+    position: sticky;
+    top: var(--sticky-top);
+    height: min(100%, calc(100dvh - var(--sticky-top)));
+  }
 }
 
 .sheet-notes {
   grid-column: 1;
   grid-row: 2;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  min-height: 0;
+  grid-template-rows: 1fr auto;
   min-width: 0;
 }
 
 .messages {
-  /* Sole scroller in the app-shell. min-height: 0 lets it shrink within the
-     grid row instead of forcing the page to overflow. The cards are laid on the
-     desk: no ruled ground, the ground is what the turns sit on. */
-  /* position: relative makes the scroller the containing block for everything
-     inside it. Without it an absolutely positioned descendant with no offsets
-     (the check card's sr-only live region) resolves against the page, escapes
-     this box's overflow entirely, and is laid out at its static position deep
-     in the unscrolled transcript -- which grew document.scrollHeight to 1132px
-     on a 844px viewport and broke the "composer at the foot" promise. */
+  /* The cards are laid on the desk: no ruled ground, the ground is what the
+     turns sit on. The 1fr row stretches it so the foot sits at the bottom of
+     the viewport on a short transcript. */
+  /* position: relative makes the transcript the containing block for
+     everything inside it. Without it an absolutely positioned descendant with
+     no offsets (the check card's sr-only live region) resolves against the page
+     and is laid out at its static position, adding phantom height to the
+     document (1132px on a 844px viewport, 2026-09-16). */
   position: relative;
-  min-height: 0;
-  overflow-y: auto;
   background: var(--desk);
   padding: 1rem clamp(1rem, 3vw, 2rem);
-  scrollbar-width: thin;
-  scrollbar-color: var(--rule-strong) transparent;
 }
 
-.messages::-webkit-scrollbar {
-  width: 8px;
-}
-.messages::-webkit-scrollbar-button {
-  display: none;
-  height: 0;
-  width: 0;
-}
-.messages::-webkit-scrollbar-track {
-  background: transparent;
-}
-.messages::-webkit-scrollbar-thumb {
-  background: var(--rule-strong);
-  border: 2px solid transparent;
-  background-clip: padding-box;
+/* Cards opened in the transcript keep the spacing of the turns above them. */
+.transcript-card {
+  margin-top: 0.75rem;
 }
 
 /* The measure: a 72ch text column plus the card's own padding, centered in the
@@ -1202,10 +1174,16 @@ function goHome() {
   margin: 0 auto;
 }
 
-/* No top rule: the composer is a card on the desk, not a footer band. */
+/* No top rule: the composer is a card on the desk, not a footer band. Sticky
+   pins it to the bottom of the viewport while the page scrolls; the desk
+   ground keeps the transcript from showing through behind it. */
 .notes-foot {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
   padding: 0 clamp(1rem, 3vw, 2rem) 1rem;
   min-width: 0;
+  background: var(--desk);
 }
 
 .notes-foot .notes-measure {
@@ -1388,47 +1366,35 @@ function goHome() {
 }
 
 /* Under 900px the profile panel becomes a strip under the header: one column,
-   so --panel-col is unused at this width. Kept in sync with the NARROW_QUERY
-   matchMedia switch in <script> -- the check card has to move between two
-   different containers, which CSS alone cannot do. */
+   so --panel-col is unused at this width. */
 @media (max-width: 899px) {
   .session.is-sheet {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-rows: auto auto 1fr;
     /* clip, never hidden: hidden would make the grid a scroll container and
        change what the sticky strip and foot stick to. clip swallows the
-       sheet's dim overlay (which runs a viewport's worth past the strip) and
-       backstops anything else that tries to grow the page past the fold. */
+       sheet's dim overlay (which runs a viewport's worth past the strip) so
+       opening the profile never grows the page. */
     overflow: clip;
   }
 
-  /* R2: no scroller and no 50vh cap here — the expanded profile is bounded by
-     .cue-body's own 40vh cap in CueColumn, so the strip can never grow far
-     enough to push the notes column (and the composer with it) off-screen. */
+  /* The strip stays put while the page scrolls under it, so the disclosure
+     control is always reachable. Sticky lives on this grid cell, not on the
+     strip inside CueColumn: the cell's containing block is the whole sheet,
+     the strip's would only be the strip-tall panel. The expanded profile is
+     bounded by .cue-body's own 40vh cap in CueColumn. */
   .sheet-cue {
     grid-column: 1;
     grid-row: 2;
     display: block;
-    min-height: 0;
+    position: sticky;
+    top: var(--sticky-top);
+    z-index: 2;
   }
 
   .sheet-notes {
     grid-column: 1;
     grid-row: 3;
-  }
-
-  /* R2: the foot now carries only the status slot and the composer, so it is
-     short enough to stay in view. Sticky pins it to the bottom of the notes
-     column as a backstop if a status caption ever makes the column overflow. */
-  .notes-foot {
-    position: sticky;
-    bottom: 0;
-    background: var(--desk);
-  }
-
-  /* The inline card keeps the same spacing as the cards above it. */
-  .check-inline {
-    margin-bottom: 0.75rem;
   }
 }
 

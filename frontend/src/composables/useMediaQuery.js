@@ -1,9 +1,7 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 
 // The one breakpoint the chat shell switches on in JS as well as CSS. Kept in
-// sync with the 899px media blocks in SessionView.vue and CueColumn.vue --
-// the check card has to move between two different containers, which CSS
-// alone cannot do.
+// sync with the 899px media blocks in SessionView.vue and CueColumn.vue.
 export const NARROW_QUERY = '(max-width: 899px)'
 
 // Reactive matchMedia. Returns a ref that is false where matchMedia does not
