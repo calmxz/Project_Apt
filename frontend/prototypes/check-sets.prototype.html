@@ -1,22 +1,337 @@
 <!doctype html>
 <!--
-  PROTOTYPE - throwaway. Answers wayfinder ticket #353 without a signed-in
-  session: the real CheckQuestion / CheckRecap / MessageList components and
-  the real stylesheet, mounted on a bare desk with the same thread measure
-  and foot as SessionView. Same variants and fake data as ?variant= on the
-  real /session/:id route (src/prototype/checkSetsProto.js).
+  PROTOTYPE - throwaway. Answers wayfinder ticket #353:
+  "How does the check card show multi-set progress (Set N of M, per-set
+  recap, straight-through handoff) on desktop and at 390px?"
 
-  Run: `npm run dev` in frontend/, then open
-  http://localhost:5173/prototypes/check-sets.prototype.html?variant=A
+  Three structurally different variants, switchable with the floating bar
+  (or Left/Right arrow keys). ?variant=A|B|C
+
+    A  Written count. Head line right slot reads "set 2 of 3 . 1/3"; the
+       recap head carries "set 1 of 3". One tutor lead-in line between sets.
+    B  Ruled progress. The 3px head rule is cut into M segments: done sets
+       solid, the live set filling item by item. Recap ends with a pencil
+       signpost ("set 2 of 3 follows"); no prose between sets.
+    C  Card stack. Remaining sets as stacked card edges under the live card;
+       M drawn card marks in the head line; the gap name as a pencil line.
+       Nothing between sets.
+
+  Static HTML: the check and recap cards are reproduced from CheckQuestion.vue
+  and CheckRecap.vue with DESIGN.md tokens (light and dark). A fake 3 x 3
+  diagnostic is seeded with set 1 graded and set 2 live; answers grade
+  locally. Under 900px the card scrolls with the thread, as in the app.
+
+  Run: open this file in a browser. No build.
 -->
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>PROTOTYPE - multi-set check progress</title>
-  </head>
-  <body>
-    <div id="app"></div>
-    <script type="module" src="./check-sets.main.js"></script>
-  </body>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PROTOTYPE - multi-set check progress</title>
+<style>
+  :root {
+    --desk: #e6e8ec; --card: #ffffff; --card-edge: #cfd3da; --card-drop: #c4c8d0;
+    --card-learner: #dbe6fb; --card-learner-edge: #b9cdf5;
+    --ink: #1b1b1a; --ink-learner: #1d4fc4; --ink-marker: #d8433a; --ink-marker-text: #b8352c;
+    --pencil: #63635e; --rule: #cbd6e3; --rule-strong: #aebccf; --accent-ring: rgba(29,79,196,.35);
+    --font-sans: "Atkinson Hyperlegible Next", system-ui, sans-serif;
+    --font-display: "Familjen Grotesk", system-ui, sans-serif;
+    --fs-h2: 1.375rem; --fs-body: 1.0625rem; --lh-body: 1.647; --fs-caption: .875rem; --fs-label: .8125rem;
+    --radius-card: 6px; --motion-base: 240ms;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --desk: #15171b; --card: #22252b; --card-edge: #2e323a; --card-drop: #0b0c0e;
+      --card-learner: #1e2a44; --card-learner-edge: #2f4470;
+      --ink: #ecebe6; --ink-learner: #8fb0ff; --ink-marker: #ff6a5e; --ink-marker-text: #ff6a5e;
+      --pencil: #a3a39c; --rule: #262a33; --rule-strong: #363b47; --accent-ring: rgba(143,176,255,.45);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--desk); color: var(--ink); font-family: var(--font-sans); font-size: var(--fs-body); line-height: var(--lh-body); }
+  .stage { min-height: 100vh; display: flex; flex-direction: column; }
+  .thread { flex: 1 1 auto; padding: 1rem clamp(1rem, 3vw, 2rem); }
+  .measure { max-width: calc(72ch + 2rem); margin: 0 auto; display: flex; flex-direction: column; gap: .75rem; }
+  .foot { position: sticky; bottom: 0; background: var(--desk); padding: 0 clamp(1rem, 3vw, 2rem) 4.5rem; }
+  .foot .measure { padding-top: .75rem; }
+  .voice-change { margin-top: .75rem; }
+  p { margin: 0; }
+
+  /* ---- turns ---- */
+  .msg { max-width: 78%; display: flex; flex-direction: column; gap: .35rem; }
+  .msg.learner { align-self: flex-end; background: var(--card-learner); border: 1px solid var(--card-learner-edge); border-radius: var(--radius-card); box-shadow: 0 1px 0 var(--card-drop); padding: .55rem .9rem .7rem; color: var(--ink-learner); }
+  .head { display: flex; justify-content: space-between; align-items: baseline; font-size: var(--fs-label); color: var(--pencil); }
+  .head b { font-weight: 700; }
+  .msg.learner .head { color: var(--ink-learner); opacity: .75; }
+  .msg.tutor { max-width: 84%; }
+
+  /* ---- card grammar (check + recap) ---- */
+  .card { max-width: 84%; display: flex; flex-direction: column; gap: .5rem; background: var(--card); border: 1px solid var(--card-edge); border-radius: var(--radius-card); box-shadow: 0 1px 0 var(--card-drop); padding: .55rem .9rem .7rem; }
+  .gutter { display: flex; align-items: baseline; justify-content: space-between; gap: .5rem; padding-bottom: .4rem; border-bottom: 3px solid var(--ink); font-size: var(--fs-label); color: var(--pencil); }
+  .gutter.no-rule { border-bottom: 0; }
+  .progress { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .q { font-weight: 700; }
+  ul { list-style: none; margin: 0; padding: 0; }
+  .opt { display: flex; align-items: baseline; gap: .625rem; width: 100%; text-align: left; background: transparent; border: 0; box-shadow: inset 0 -1px 0 var(--rule); border-radius: 0; padding: .4rem 0; font: inherit; color: var(--ink); cursor: pointer; }
+  .opt[disabled] { cursor: default; }
+  .opt:not([disabled]):hover .t { text-decoration: underline; text-underline-offset: 3px; }
+  .opt:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: 2px; }
+  .letter { flex: 0 0 auto; color: var(--ink-learner); font-weight: 700; }
+  .t { flex: 1 1 auto; min-width: 0; }
+  .opt.wrong .t { color: var(--pencil); }
+  .mark { flex: 0 0 auto; align-self: center; fill: none; stroke: var(--ink-marker); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; animation: draw var(--motion-base) cubic-bezier(.16,1,.3,1) both; }
+  @keyframes draw { from { stroke-dashoffset: 1 } to { stroke-dashoffset: 0 } }
+  .verdict { font-weight: 700; }
+  .verdict.no { color: var(--ink-marker-text); }
+  .textbtn { align-self: flex-start; background: transparent; border: 0; padding: 0; font-family: inherit; font-size: var(--fs-caption); font-weight: 700; color: var(--ink-learner); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+  @media (pointer: coarse) { .opt { min-height: 3.5rem; align-items: center; } }
+
+  /* recap */
+  .recap .gutter { justify-content: flex-start; gap: .625rem; }
+  .score { font-family: var(--font-display); font-size: var(--fs-h2); font-weight: 600; color: var(--ink-marker-text); white-space: nowrap; line-height: 1.15; }
+  .gap { font-size: var(--fs-caption); color: var(--pencil); }
+  .ritem { display: flex; flex-direction: column; gap: .35rem; }
+  .ropt { display: flex; align-items: baseline; gap: .625rem; }
+  .ropt.wrong .t { color: var(--ink-learner); text-decoration: line-through; text-decoration-color: var(--ink-marker); }
+  .tag { flex-shrink: 0; align-self: flex-start; font-size: var(--fs-label); color: var(--pencil); }
+  .norec { font-size: var(--fs-caption); font-style: italic; color: var(--pencil); }
+  .expl { color: var(--pencil); }
+  .check .expl { color: var(--ink); }
+
+  /* ---- variant A ---- */
+  .setword { white-space: nowrap; margin-left: auto; }
+
+  /* ---- variant B: ruled progress ---- */
+  .rule { display: flex; gap: 4px; height: 3px; margin-top: -.5rem; }
+  .recap .rule { margin-top: -.6rem; }
+  .seg { position: relative; flex: 1 1 0; overflow: hidden; background: var(--rule-strong); }
+  .seg::after { content: ''; position: absolute; inset: 0; background: var(--ink); transform: scaleX(var(--fill, 0)); transform-origin: left; transition: transform var(--motion-base) cubic-bezier(.16,1,.3,1); }
+  .seg.done { --fill: 1; }
+  .signpost { font-size: var(--fs-label); color: var(--pencil); }
+  .nowrap { white-space: nowrap; }
+
+  /* ---- variant C: card stack ---- */
+  .setmarks { display: inline-flex; align-items: center; gap: 3px; margin-right: .5rem; vertical-align: -1px; }
+  .recap .setmarks { margin-left: auto; margin-right: 0; align-self: center; }
+  .setmark { fill: none; stroke: var(--pencil); stroke-width: 1.5; }
+  .setmark.live { stroke: var(--ink); stroke-width: 2; }
+  .setmark.done { fill: var(--ink); stroke: var(--ink); }
+  .setline { margin-top: -.15rem; font-size: var(--fs-label); color: var(--pencil); }
+
+  @media (max-width: 899px) { .foot { display: none; } }
+  @media (max-width: 599px) { .card, .msg { max-width: 92%; } }
+  @media (prefers-reduced-motion: reduce) { .mark { animation: none; stroke-dashoffset: 0; } .seg::after { transition: none; } }
+
+  /* ---- switcher ---- */
+  .bar { position: fixed; left: 50%; bottom: 1rem; transform: translateX(-50%); z-index: 9999; display: flex; align-items: center; gap: .75rem; padding: .4rem .75rem; border-radius: 999px; background: #111; color: #fff; font: 600 13px/1.2 system-ui, sans-serif; box-shadow: 0 6px 20px rgba(0,0,0,.35); white-space: nowrap; }
+  .bar em { font-weight: 400; opacity: .7; }
+  .bar button { border: 0; background: #333; color: #fff; border-radius: 999px; width: 28px; height: 28px; cursor: pointer; font-size: 15px; }
+  .bar button:hover { background: #555; }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="thread"><div class="measure" id="thread"></div></div>
+  <div class="foot"><div class="measure" id="foot"></div></div>
+</div>
+<div class="bar" role="group" aria-label="Prototype variant switcher">
+  <button type="button" aria-label="Previous variant" onclick="go(-1)">&larr;</button>
+  <span id="barlabel"></span>
+  <button type="button" aria-label="Next variant" onclick="go(1)">&rarr;</button>
+</div>
+
+<script>
+const VARIANTS = [['A','Written count'],['B','Ruled progress'],['C','Card stack']];
+const SET_TOTAL = 3;
+const SETS = [
+  { gap: 'photosynthesis inputs', items: [
+    { q: 'Which of these is not an input to photosynthesis?', o: ['Carbon dioxide','Water','Oxygen','Light'], c: 2, e: 'Oxygen is a product. Carbon dioxide, water and light go in.' },
+    { q: 'Where does the water used in photosynthesis mostly enter the plant?', o: ['Through the stomata','Through the roots','Through the cuticle'], c: 1, e: 'Roots take up water; stomata handle gas exchange.' },
+    { q: 'Which pigment absorbs most of the light that drives photosynthesis?', o: ['Chlorophyll a','Carotene','Anthocyanin','Xanthophyll'], c: 0, e: 'Chlorophyll a is the primary pigment; the others are accessory.' },
+  ]},
+  { gap: 'light-dependent reactions', items: [
+    { q: 'Where in the chloroplast do the light-dependent reactions happen?', o: ['The stroma','The thylakoid membranes','The outer membrane'], c: 1, e: 'The photosystems and electron transport chain sit in the thylakoid membranes.' },
+    { q: 'What is the direct source of the oxygen released during photosynthesis?', o: ['Carbon dioxide','Glucose','Water','ATP'], c: 2, e: 'Photolysis splits water; the oxygen atoms come from there.' },
+    { q: 'Which two products of the light-dependent reactions feed the Calvin cycle?', o: ['ATP and NADPH','Glucose and oxygen','ADP and NADP+','Water and CO2'], c: 0, e: 'ATP supplies energy and NADPH supplies reducing power for carbon fixation.' },
+  ]},
+  { gap: 'Calvin cycle', items: [
+    { q: 'Which enzyme fixes carbon dioxide in the Calvin cycle?', o: ['ATP synthase','RuBisCO','Amylase','Cytochrome b6f'], c: 1, e: 'RuBisCO attaches CO2 to RuBP; it is the most abundant enzyme on Earth.' },
+    { q: 'What three-carbon molecule is the first stable product of carbon fixation?', o: ['Pyruvate','G3P','3-PGA','Acetyl-CoA'], c: 2, e: '3-phosphoglycerate (3-PGA) forms when the unstable 6-carbon intermediate splits.' },
+    { q: 'How many turns of the Calvin cycle are needed to make one G3P for export?', o: ['One','Two','Three','Six'], c: 2, e: 'Three CO2 molecules fixed over three turns yield one exportable G3P.' },
+  ]},
+];
+const L = ['A','B','C','D','E'];
+const TICK = '<svg class="mark" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M2.5 8.5 L6.3 12.2 L13.5 4" pathLength="1"/></svg>';
+const CROSS = '<svg class="mark" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M4 4 L12 12" pathLength="1"/><path d="M12 4 L4 12" pathLength="1"/></svg>';
+const esc = (s) => String(s).replace(/[&<>"]/g, (ch) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+
+let variant = 'A';
+let picks = {};      // setIndex -> [pick|null]
+let live = null;     // { setIndex, picks: [], view: 0 }
+let closedProse = null;
+
+function seed() {
+  picks = { 1: [2, 0, 0] };
+  live = { setIndex: 2, picks: [], view: 0 };
+  closedProse = null;
+  render();
+}
+
+function setMarks(current, cls) {
+  let s = `<span class="setmarks" role="img" aria-label="Set ${current} of ${SET_TOTAL}">`;
+  for (let n = 1; n <= SET_TOTAL; n++) {
+    const st = n < current ? 'done' : n === current ? cls : 'todo';
+    s += `<svg class="setmark ${st}" viewBox="0 0 14 11" width="14" height="11" aria-hidden="true"><rect x="1" y="1" width="12" height="9" rx="1"/></svg>`;
+  }
+  return s + '</span>';
+}
+
+function recapHtml(setIndex) {
+  const set = SETS[setIndex - 1], p = picks[setIndex];
+  const graded = p.filter((x) => x != null).length;
+  const right = p.filter((x, i) => x === set.items[i].c).length;
+  let h = `<section class="card recap"><header class="gutter${variant === 'B' ? ' no-rule' : ''}">`;
+  h += `<span class="score">${right} / ${graded}</span><span class="gap">${esc(set.gap)}`;
+  if (variant === 'B') h += `<span class="nowrap"> &middot; set ${setIndex} of ${SET_TOTAL}</span>`;
+  h += '</span>';
+  if (variant === 'A') h += `<span class="setword">set ${setIndex} of ${SET_TOTAL}</span>`;
+  if (variant === 'C') h += setMarks(setIndex, 'done');
+  h += '</header>';
+  if (variant === 'B') {
+    h += '<div class="rule" aria-hidden="true">';
+    for (let n = 1; n <= SET_TOTAL; n++) h += `<span class="seg ${n <= setIndex ? 'done' : ''}"></span>`;
+    h += '</div>';
+  }
+  set.items.forEach((it, i) => {
+    h += `<div class="ritem"><p class="q">${esc(it.q)}</p><ul>`;
+    it.o.forEach((o, k) => {
+      const yours = p[i] != null && k === p[i];
+      const cls = k === it.c ? '' : yours ? 'wrong' : '';
+      h += `<li class="ropt ${cls}"><span class="letter" aria-hidden="true">${L[k]}.</span><span class="t">${esc(o)}</span>`;
+      if (yours) h += '<span class="tag">your answer</span>';
+      else if (k === it.c) h += '<span class="tag">correct</span>';
+      if (k === it.c) h += TICK;
+      h += '</li>';
+    });
+    h += '</ul>';
+    if (p[i] == null) h += '<p class="norec">Answer not recorded</p>';
+    h += `<p class="expl">${esc(it.e)}</p></div>`;
+  });
+  if (variant === 'B' && setIndex < SET_TOTAL) h += `<p class="signpost">set ${setIndex + 1} of ${SET_TOTAL} follows</p>`;
+  return h + '</section>';
+}
+
+function checkHtml() {
+  const set = SETS[live.setIndex - 1];
+  const i = live.view, it = set.items[i];
+  const answered = i < live.picks.length;
+  const pick = answered ? live.picks[i] : undefined;
+  const graded = answered && pick != null;
+  const correct = graded && pick === it.c;
+  const isLast = i >= set.items.length - 1;
+  const done = live.picks.length;
+  let style = '';
+  if (variant === 'C') {
+    const parts = ['0 1px 0 var(--card-drop)'];
+    for (let k = 1; k <= SET_TOTAL - live.setIndex; k++) { parts.push(`0 ${k*4}px 0 -${k}px var(--card)`); parts.push(`0 ${k*4+1}px 0 -${k}px var(--card-edge)`); }
+    style = ` style="box-shadow:${parts.join(',')}"`;
+  }
+  let h = `<section class="card check"${style}><div class="gutter${variant === 'B' ? ' no-rule' : ''}"><span>check${variant === 'B' ? ` &middot; set ${live.setIndex} of ${SET_TOTAL}` : ''}</span><p class="progress">`;
+  if (variant === 'A') h += `set ${live.setIndex} of ${SET_TOTAL} &middot; `;
+  if (variant === 'C') h += setMarks(live.setIndex, 'live');
+  h += `${i + 1}/${set.items.length}</p></div>`;
+  if (variant === 'B') {
+    h += '<div class="rule" aria-hidden="true">';
+    for (let n = 1; n <= SET_TOTAL; n++) {
+      const fill = n < live.setIndex ? 1 : n === live.setIndex ? done / set.items.length : 0;
+      h += `<span class="seg" style="--fill:${fill}"></span>`;
+    }
+    h += '</div>';
+  }
+  if (variant === 'C') h += `<p class="setline">${esc(set.gap)}</p>`;
+  h += `<p class="q">${esc(it.q)}</p><ul>`;
+  it.o.forEach((o, k) => {
+    const cls = graded ? (k === it.c ? 'right' : k === pick ? 'wrong' : '') : '';
+    h += `<li><button type="button" class="opt ${cls}" ${answered ? 'disabled' : `onclick="answer(${k})"`}><span class="letter" aria-hidden="true">${L[k]}.</span><span class="t">${esc(o)}</span>${cls === 'right' ? TICK : cls === 'wrong' ? CROSS : ''}</button></li>`;
+  });
+  h += '</ul>';
+  if (graded) h += `<p class="verdict ${correct ? '' : 'no'}">${correct ? 'Correct' : 'Not quite'}</p><p class="expl">${esc(it.e)}</p>`;
+  if (!answered) h += '<button type="button" class="textbtn" onclick="skip()">Skip this question</button>';
+  else if (!isLast) h += '<button type="button" class="textbtn" id="nextbtn" onclick="next()">Next</button>';
+  else h += '<button type="button" class="textbtn" id="donebtn" onclick="finish()">Done</button>';
+  return h + '</section>';
+}
+
+let clock = 0;
+function turn(role, body, cls = '') {
+  const who = role === 'learner' ? 'you' : 'tutor';
+  clock += 1;
+  return `<article class="msg ${role} ${cls}"><div class="head"><b>${who}</b><span>3:5${clock} PM</span></div>${body}</article>`;
+}
+
+function render() {
+  const narrow = window.matchMedia('(max-width: 899px)').matches;
+  clock = 0;
+  let t = turn('learner', '<p>Can we start with photosynthesis? I know the basics but not the detail.</p>');
+  t += turn('tutor', '<p>Good place to start. Photosynthesis has two halves: the light-dependent reactions, which capture energy, and the Calvin cycle, which spends it fixing carbon.</p>', 'voice-change');
+  t += turn('tutor', "<p>Let's see where you stand: three short sets, three questions each.</p>");
+  const closed = Object.keys(picks).map(Number).sort();
+  closed.forEach((n) => {
+    let body = recapHtml(n);
+    if (n < SET_TOTAL && variant === 'A') body += `<p>Next, the ${esc(SETS[n].gap)}.</p>`;
+    if (n === SET_TOTAL && closedProse) body += `<p>${closedProse}</p>`;
+    t += turn('tutor', body);
+  });
+  if (live && narrow) t += checkHtml();
+  document.getElementById('thread').innerHTML = t;
+  document.getElementById('foot').innerHTML = live && !narrow ? checkHtml() : '';
+  document.getElementById('barlabel').innerHTML = `${variant} &mdash; ${VARIANTS.find((v) => v[0] === variant)[1]} <em>(fake check data)</em>`;
+  const focus = document.getElementById('nextbtn') || document.getElementById('donebtn');
+  if (focus) focus.focus();
+}
+
+function answer(k) { live.picks.push(k); render(); }
+function skip() {
+  live.picks.push(null);
+  if (live.picks.length >= SETS[live.setIndex - 1].items.length) finish();
+  else { live.view = live.picks.length; render(); }
+}
+function next() { live.view = live.picks.length; render(); }
+function finish() {
+  picks[live.setIndex] = live.picks;
+  const closedIdx = live.setIndex;
+  if (closedIdx >= SET_TOTAL) {
+    let right = 0;
+    Object.keys(picks).forEach((n) => picks[n].forEach((p, i) => { if (p === SETS[n - 1].items[i].c) right++; }));
+    closedProse = `That's the whole check: ${right} of 9 across the three sets. The Calvin cycle is where the gaps cluster, so we start there.`;
+    live = null;
+  } else {
+    live = { setIndex: closedIdx + 1, picks: [], view: 0 };
+  }
+  render();
+  requestAnimationFrame(() => window.scrollTo(0, document.body.scrollHeight));
+}
+
+function setVariant(v) {
+  variant = v;
+  const u = new URL(location.href); u.searchParams.set('variant', v); history.replaceState(null, '', u);
+  seed();
+}
+function go(d) {
+  const i = VARIANTS.findIndex((v) => v[0] === variant);
+  setVariant(VARIANTS[(i + d + VARIANTS.length) % VARIANTS.length][0]);
+}
+window.addEventListener('keydown', (e) => {
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+  if (e.key === 'ArrowLeft') go(-1);
+  if (e.key === 'ArrowRight') go(1);
+});
+window.matchMedia('(max-width: 899px)').addEventListener('change', render);
+
+const q = new URLSearchParams(location.search).get('variant');
+variant = VARIANTS.some((v) => v[0] === q) ? q : 'A';
+seed();
+</script>
+</body>
 </html>
