@@ -11,35 +11,9 @@ vi.mock('../composables/useToast.js', () => ({
 }))
 
 const getUsageSummary = vi.fn()
-const getAggregateProfile = vi.fn()
 vi.mock('../services/profileApi.js', () => ({
   getUsageSummary: (...a) => getUsageSummary(...a),
-  getAggregateProfile: (...a) => getAggregateProfile(...a),
 }))
-
-function minimalAggregateFixture() {
-  return {
-    total_sessions: 1,
-    active_sessions: 1,
-    ended_sessions: 0,
-    total_learning_events: 0,
-    combined_mastered_concepts: [],
-    combined_confirmed_gaps: [],
-    knowledge_level_distribution: { beginner: 1, intermediate: 0, advanced: 0, unknown: 0 },
-    recent_topics: [
-      {
-        id: 's1',
-        topic: 'sql joins',
-        created_at: '2026-09-10T10:00:00Z',
-        ended_at: null,
-        last_activity_at: '2026-09-10T11:00:00Z',
-        progress: { focus_target_gap: null, level: 'beginner', mastered_count: 0 },
-      },
-    ],
-    concept_accuracy: [],
-    weekly_mastery: [],
-  }
-}
 
 function minimalUsageFixture() {
   return {
@@ -61,17 +35,7 @@ const stubs = {
 function makeRouter() {
   return createRouter({
     history: createMemoryHistory(),
-    routes: [
-      { path: '/settings/:tab', name: 'settings', component: SettingsView, props: true },
-      // LearningTab's topic rows link here; without the route vue-router
-      // throws an unhandled "No match" while resolving the link.
-      {
-        path: '/sessions/:id/profile',
-        name: 'session-profile',
-        component: { template: '<div />' },
-      },
-      { path: '/new', name: 'new-session', component: { template: '<div />' } },
-    ],
+    routes: [{ path: '/settings/:tab', name: 'settings', component: SettingsView, props: true }],
   })
 }
 
@@ -154,13 +118,12 @@ describe('SettingsView shell', () => {
     w.unmount()
   })
 
-  it('KeepAlive prevents LearningTab refetch when navigating learning -> usage -> learning', async () => {
+  it('KeepAlive prevents UsageTab refetch when navigating usage -> learning -> usage', async () => {
     setActivePinia(createPinia())
-    getAggregateProfile.mockReset().mockResolvedValue(minimalAggregateFixture())
     getUsageSummary.mockReset().mockResolvedValue(minimalUsageFixture())
 
     const router = makeRouter()
-    await router.push('/settings/learning')
+    await router.push('/settings/usage')
 
     const Root = { template: '<router-view />' }
     const w = mount(Root, {
@@ -170,15 +133,13 @@ describe('SettingsView shell', () => {
       },
     })
     await flushPromises()
-    expect(getAggregateProfile).toHaveBeenCalledTimes(1)
-
-    await w.find('[data-testid="settings-tab-usage"]').trigger('click')
-    await flushPromises()
     expect(getUsageSummary).toHaveBeenCalledTimes(1)
 
     await w.find('[data-testid="settings-tab-learning"]').trigger('click')
     await flushPromises()
-    expect(getAggregateProfile).toHaveBeenCalledTimes(1)
+    await w.find('[data-testid="settings-tab-usage"]').trigger('click')
+    await flushPromises()
+    expect(getUsageSummary).toHaveBeenCalledTimes(1)
 
     w.unmount()
   })
