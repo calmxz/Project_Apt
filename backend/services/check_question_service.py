@@ -50,8 +50,8 @@ from db.models import Session as SessionModel
 from services.pending_check_store import (
     _save,
     clear_pending_check,
-    get_current_check,
     diagnostic_tally,
+    get_current_check,
     get_pending_check,
     is_done,
     is_final_set,
