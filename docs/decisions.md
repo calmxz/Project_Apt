@@ -3,6 +3,28 @@
 Durable "why": decisions, findings, tradeoffs. Newest first. Technical
 how-it-works lookup belongs in `docs/reference.md` instead.
 
+## 2026-09-24 - Check-question sets: diagnostic grading and learner stop (#340)
+
+Departs from two points of the #339 resolution, decided while reviewing
+PR #366.
+
+- **Diagnostic is 1-3 sets, tutor's choice.** #339 point 5 fixed the
+  diagnostic at 3 sets of 3. The tutor now picks `set_total`: 1 for a narrow
+  topic, up to 3 when the topic has distinct subtopics worth sampling.
+- **Diagnostic level graded once, over every set.** #339 point 4 keeps
+  grading per batch. Grading the level from set 1 alone would have placed
+  the learner on one subtopic's 3 items, while sets 2-3 ran as ordinary
+  checks and wrote mastered/gap entries for subtopics never taught. Now the
+  current-check pointer carries `purpose`, so later sets stay diagnostic (no
+  mastery effects), and a running `diag` score. The level is written when
+  the final set resolves, or from the answered items when the learner stops
+  or the session ends mid-check. An all-skip diagnostic still leaves the
+  level unset (F-25).
+- **A chat message during a check ends it.** The composer stays enabled
+  during a check, and the frontend already clears the card on send, so the
+  server treats any message as the #339 point 8 "learner stop" (remaining
+  items skipped, results line folded into the turn).
+
 ## 2026-09-23 - Shell, chat and settings redesign
 
 Replaced the broken half-tab sidebar toggle, the identity-less sidebar foot,

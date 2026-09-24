@@ -51,8 +51,10 @@ from services.pending_check_store import (
     _save,
     clear_pending_check,
     get_current_check,
+    diagnostic_tally,
     get_pending_check,
     is_done,
+    is_final_set,
     set_current_check,
 )
 
@@ -200,19 +202,24 @@ def register(db: Session, ctx: "ToolContext", args: AskCheckQuestionsArgs) -> To
         )
 
     if args.set_index == 1:
+        # F-59: purpose is the turn's prepared decision, not a re-read of live
+        # knowledge_level (which races with grading and misclassifies review
+        # quizzes posed while level is None).
+        purpose = "diagnostic" if ctx.diagnostic_required else "check"
         # Set 1 always starts a fresh check; any stale pointer is replaced.
-        cc = {"set_total": args.set_total, "last_set_index": 1, "gaps": [args.gap]}
+        cc = {
+            "set_total": args.set_total, "last_set_index": 1, "gaps": [args.gap],
+            "purpose": purpose,
+        }
     else:
         cc = get_current_check(db, ctx.session_id)
         err = _set_order_error(args, cc)
         if cc is None or err is not None:
             return ToolResult(ok=False, status="failed", error=err)
+        # Later sets inherit set 1's purpose: a diagnostic stays a diagnostic
+        # whatever the follow-up turn's own ctx says.
+        purpose = cc.get("purpose", "check")
         cc = {**cc, "last_set_index": args.set_index, "gaps": [*cc.get("gaps", []), args.gap]}
-
-    # F-59: purpose is the turn's prepared decision, not a re-read of live
-    # knowledge_level (which races with grading and misclassifies review
-    # quizzes posed while level is None).
-    purpose = "diagnostic" if ctx.diagnostic_required else "check"
 
     pc = {
         "gap": args.gap,
@@ -329,8 +336,11 @@ def skip(db: Session, session_id: str, index: int) -> dict:
 def abandon_open_batch(db: Session, session_id: str, commit: bool = True) -> bool:
     """Clear any lingering pending check batch: mark still-pending items
     "skipped", freeze the batch onto its message for honest history, and clear
-    the pending pointer. Side-effect free -- logs no learning events and does
-    not mutate the profile. Returns True when a batch was cleared.
+    the pending pointer. Logs no learning events and applies no mastery
+    effects; the one profile write is grading an in-progress diagnostic
+    check from its answered items, so a learner who ends the session between
+    diagnostic sets keeps the level they earned. Returns True when a batch
+    was cleared.
 
     Called on session end so a later review-gaps resume can pose a fresh check
     instead of hitting the "a batch is already open" guard. That guard blocks on
@@ -343,11 +353,16 @@ def abandon_open_batch(db: Session, session_id: str, commit: bool = True) -> boo
 
     commit=False defers all writes to the caller's single commit (F-33).
     """
-    set_current_check(db, session_id, None, commit=commit)
+    from services import diagnostic_service  # local import avoids circular
+
     pc = get_pending_check(db, session_id)
+    if pc is not None:
+        _skip_remaining(pc)
+        _save(db, session_id, pc, commit=False)
+    diagnostic_service.grade_if_diagnostic(db, session_id, force=True, commit=False)
+    set_current_check(db, session_id, None, commit=commit)
     if pc is None:
         return False
-    _skip_remaining(pc)
     write_check_batch(db, pc, commit=commit)
     clear_pending_check(db, session_id, commit=commit)
     return True
@@ -360,16 +375,12 @@ def _skip_remaining(pc: dict) -> None:
     pc["current_index"] = len(pc.get("items", []))
 
 
-def is_final_set(pc: dict) -> bool:
-    """True when pc is the last set of its check. Pre-#340 batches carry no
-    set fields and count as a 1-set check."""
-    return pc.get("set_index", 1) >= pc.get("set_total", 1)
-
-
 def close_set(db: Session, session_id: str, pc: dict) -> dict | None:
     """Close a resolved set in one commit: freeze it onto its asking message,
     clear the pending batch, record the quiz cooldown, and drop the
     current-check pointer once the final set has closed. Returns the cooldown.
+    A non-final diagnostic set's score is folded into the pointer so the level
+    can be graded over the whole check.
 
     Callers hold the session row lock and have already graded a diagnostic
     (diagnostic_service.grade_if_diagnostic reads the still-pending batch)."""
@@ -379,6 +390,11 @@ def close_set(db: Session, session_id: str, pc: dict) -> dict | None:
     set_quiz_cooldown(db, session_id, cooldown, commit=False)
     if is_final_set(pc):
         set_current_check(db, session_id, None, commit=False)
+    else:
+        cc = get_current_check(db, session_id)
+        if cc is not None and cc.get("purpose") == "diagnostic":
+            cc["diag"] = diagnostic_tally(pc, cc.get("diag"))
+            set_current_check(db, session_id, cc, commit=False)
     db.commit()
     return cooldown
 
@@ -393,7 +409,8 @@ def stop_open_check(db: Session, session_id: str) -> str | None:
 
     Between sets (no open batch, pointer still short of set_total) there is
     nothing to grade; the summary only records where the learner stopped so
-    the untested gaps are not mistaken for tested ones."""
+    the untested gaps are not mistaken for tested ones. Either way a
+    diagnostic check is graded from whatever was answered."""
     from services import diagnostic_service, profile_service  # local import avoids circular
 
     profile_service.lock_session_row(db, session_id)
@@ -403,6 +420,7 @@ def stop_open_check(db: Session, session_id: str) -> str | None:
         if cc is None:
             db.commit()  # release the row lock
             return None
+        diagnostic_service.grade_if_diagnostic(db, session_id, force=True, commit=False)
         set_current_check(db, session_id, None)
         return (
             f"[check results] learner stopped at set {cc['last_set_index']} "
@@ -417,7 +435,7 @@ def stop_open_check(db: Session, session_id: str) -> str | None:
     _skip_remaining(pc)
     _save(db, session_id, pc, commit=False)
     summary = build_results_summary(pc, stopped=True)
-    diagnostic_service.grade_if_diagnostic(db, session_id)
+    diagnostic_service.grade_if_diagnostic(db, session_id, force=True, commit=False)
     # A stop ends the check even when this set was not the final one;
     # close_set only drops the pointer after the final set.
     set_current_check(db, session_id, None, commit=False)

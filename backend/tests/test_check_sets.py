@@ -71,6 +71,7 @@ def test_valid_three_set_sequence(db):
     _run_set(db, 1, 3, gap="glycolysis")
     assert pcs.get_current_check(db, SESSION_ID) == {
         "set_total": 3, "last_set_index": 1, "gaps": ["glycolysis"],
+        "purpose": "check",
     }
     _run_set(db, 2, 3, gap="krebs", suppress=True)
     assert pcs.get_current_check(db, SESSION_ID)["last_set_index"] == 2
@@ -113,6 +114,7 @@ def test_set_one_starts_a_fresh_check_over_a_stale_pointer(db):
     assert res.ok
     assert pcs.get_current_check(db, SESSION_ID) == {
         "set_total": 2, "last_set_index": 1, "gaps": ["new"],
+        "purpose": "check",
     }
 
 
@@ -210,3 +212,103 @@ def test_abandon_on_session_end_clears_the_pointer(db):
     cq.register(db, _ctx(db, suppress=True), _args(2, 3))
     assert cq.abandon_open_batch(db, SESSION_ID)
     assert pcs.get_current_check(db, SESSION_ID) is None
+
+
+# --- diagnostic across sets (#340 follow-up: level graded over every set) ---
+
+from services import diagnostic_service, profile_service  # noqa: E402
+
+
+@pytest.fixture
+def fresh_db(db):
+    """Level unknown -> the tutor is running the diagnostic."""
+    row = db.get(SessionModel, SESSION_ID)
+    row.topic_profile_json = TopicProfile().model_dump_json()
+    db.commit()
+    return db
+
+
+def _diag_ctx(db, suppress=False, diagnostic=True):
+    ctx = _ctx(db, suppress=suppress)
+    ctx.diagnostic_required = diagnostic
+    return ctx
+
+
+def _diag_set(db, set_index, set_total, n_right, n_items=2, gap="g", ctx=None):
+    """Register, answer (first n_right correct), grade the way the answer
+    route does after each item, then close the way /check/complete does."""
+    ctx = ctx or _diag_ctx(db, suppress=set_index > 1)
+    assert cq.register(db, ctx, _args(set_index, set_total, gap, n_items)).ok
+    for i in range(n_items):
+        cq.answer(db, SESSION_ID, i, 0 if i < n_right else 1)
+        diagnostic_service.grade_if_diagnostic(db, SESSION_ID)
+    pc = cq.get_pending_check(db, SESSION_ID)
+    diagnostic_service.grade_if_diagnostic(db, SESSION_ID)
+    cq.close_set(db, SESSION_ID, pc)
+
+
+def _level(db):
+    return profile_service.load_profile(db, SESSION_ID).knowledge_level
+
+
+def test_diagnostic_level_is_graded_over_every_set(fresh_db):
+    db = fresh_db
+    _diag_set(db, 1, 3, n_right=2, gap="glycolysis")
+    assert _level(db) is None  # not graded until the final set
+    _diag_set(db, 2, 3, n_right=2, gap="krebs")
+    assert _level(db) is None
+    _diag_set(db, 3, 3, n_right=0, gap="etc")
+    # 4/6 overall -> intermediate (set 1 alone, 2/2, would say advanced).
+    assert _level(db) == "intermediate"
+    assert pcs.get_current_check(db, SESSION_ID) is None
+
+
+def test_later_diagnostic_sets_inherit_purpose_and_skip_profile_effects(fresh_db):
+    db = fresh_db
+    _diag_set(db, 1, 2, n_right=2, gap="glycolysis")
+    # The follow-up turn's ctx may not flag the diagnostic; the pointer does.
+    ctx = _diag_ctx(db, suppress=True, diagnostic=False)
+    assert cq.register(db, ctx, _args(2, 2, "krebs")).ok
+    assert cq.get_pending_check(db, SESSION_ID)["purpose"] == "diagnostic"
+    cq.answer(db, SESSION_ID, 0, 0)
+    assert profile_service.load_profile(db, SESSION_ID).mastered_concepts == []
+
+
+def test_single_set_diagnostic_grades_on_its_last_answer(fresh_db):
+    db = fresh_db
+    assert cq.register(db, _diag_ctx(db), _args(1, 1, n_items=3)).ok
+    for i in range(3):
+        cq.answer(db, SESSION_ID, i, 0)
+        diagnostic_service.grade_if_diagnostic(db, SESSION_ID)
+    assert _level(db) == "advanced"
+
+
+def test_stop_between_diagnostic_sets_grades_completed_sets(fresh_db):
+    db = fresh_db
+    _diag_set(db, 1, 3, n_right=1, gap="glycolysis")
+    cq.stop_open_check(db, SESSION_ID)
+    assert _level(db) == "beginner"  # 1/2
+
+
+def test_stop_mid_diagnostic_set_grades_answered_items(fresh_db):
+    db = fresh_db
+    _diag_set(db, 1, 2, n_right=2, gap="glycolysis")
+    assert cq.register(db, _diag_ctx(db, suppress=True), _args(2, 2, "krebs")).ok
+    cq.answer(db, SESSION_ID, 0, 0)
+    cq.stop_open_check(db, SESSION_ID)
+    # 3 right of 4 posed (the skipped item counts in the total) -> intermediate.
+    assert _level(db) == "intermediate"
+
+
+def test_session_end_between_diagnostic_sets_grades_completed_sets(fresh_db):
+    db = fresh_db
+    _diag_set(db, 1, 3, n_right=2, gap="glycolysis")
+    cq.abandon_open_batch(db, SESSION_ID)
+    assert _level(db) == "advanced"
+
+
+def test_all_skipped_diagnostic_stays_ungraded(fresh_db):
+    db = fresh_db
+    assert cq.register(db, _diag_ctx(db), _args(1, 2)).ok
+    cq.stop_open_check(db, SESSION_ID)
+    assert _level(db) is None
