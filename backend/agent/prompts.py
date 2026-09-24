@@ -6,7 +6,9 @@ seed mode, last session summary). build_system_prompt concatenates them.
 
 v1 simplified profile model: declared/tested -> mastered_concepts directly;
 inferred mastery ignored; no mastered_candidates; no asymmetric promotion.
-Interaction preferences (guidance/engagement) are v2 scope and not surfaced.
+Learner preferences (feedback style, check-ins, reply length; #342/#356) are
+rendered per request in the LEARNER PREFERENCES block, never in the cached
+IMMUTABLE_RULES prefix.
 """
 
 import json
@@ -293,6 +295,46 @@ def _gap_accuracy_label(profile_dict: dict, gap_accuracy: dict) -> str:
     return label
 
 
+# #356: (label, default, value -> guidance). Only these fixed strings reach the
+# prompt; a stored value outside the enum renders as the default, so the raw
+# column text is never echoed (G-03).
+_LEARNER_PREFS = (
+    ("feedback_pref", "feedback style", "hints", {
+        "hints": "nudge the learner toward the answer (a hint or guiding "
+                 "question) before giving it.",
+        "direct_answers": "when the learner asks, explain the answer outright "
+                          "instead of hinting first.",
+    }),
+    ("check_ins", "check-ins", "sometimes", {
+        "often": "pose a check set (ask_check_questions) after most "
+                 "explanations.",
+        "sometimes": "use your judgement on when to pose a check set.",
+        "only_when_asked": "never call ask_check_questions unprompted outside "
+                           "DIAGNOSTIC and REVIEW-GAPS modes; check only when "
+                           "the learner asks. Finishing the sets of a check "
+                           "already under way is not unprompted.",
+    }),
+    ("reply_length", "reply length", "balanced", {
+        "brief": "keep replies short: the key point and little else.",
+        "balanced": "the key point plus the explanation it needs.",
+        "thorough": "fuller replies with more worked detail and examples "
+                    "(this overrides \"Be concise\").",
+    }),
+)
+
+
+def _learner_prefs_block(prefs: dict | None) -> str:
+    prefs = prefs or {}
+    lines = ["LEARNER PREFERENCES:"]
+    for key, label, default, guidance in _LEARNER_PREFS:
+        value = prefs.get(key)
+        if value not in guidance:
+            value = default
+        lines.append(f"- {label}: {value} -- {guidance[value]}")
+    lines.append("- Reply length is guidance only, not a hard limit.")
+    return "\n".join(lines)
+
+
 def build_dynamic_context(state: dict) -> str:
     topic = state.get("topic", "") or ""
     profile_dict = _profile_to_dict(state.get("profile"))
@@ -387,6 +429,7 @@ def build_dynamic_context(state: dict) -> str:
     out = (
         f"TOPIC: {topic}\n"
         f"CURRENT TOPIC PROFILE: {json.dumps(profile_dict)}\n"
+        f"{_learner_prefs_block(state.get('learner_prefs'))}\n"
         f"INGESTION_STATUS: {ingestion_status}\n"
         f"RETRIEVAL: {retrieval_label}\n"
         f"DIAGNOSTIC: {diagnostic_label}\n"

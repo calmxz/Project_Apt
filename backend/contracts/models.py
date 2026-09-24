@@ -591,7 +591,9 @@ class MeResponse(BaseModel):
         extra="forbid",
     )
     display_name: constr(max_length=120) | None = None
-    feedback_pref: constr(max_length=40) | None = None
+    feedback_pref: Literal["hints", "direct_answers"]
+    check_ins: Literal["often", "sometimes", "only_when_asked"]
+    reply_length: Literal["brief", "balanced", "thorough"]
     onboarding_complete: bool
 
 
@@ -600,7 +602,9 @@ class MePatchRequest(BaseModel):
         extra="forbid",
     )
     display_name: constr(max_length=120) | None = None
-    feedback_pref: constr(max_length=40) | None = None
+    feedback_pref: Literal["hints", "direct_answers"] | None = None
+    check_ins: Literal["often", "sometimes", "only_when_asked"] | None = None
+    reply_length: Literal["brief", "balanced", "thorough"] | None = None
     onboarding_complete: bool | None = None
 
 

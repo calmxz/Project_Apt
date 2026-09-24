@@ -233,6 +233,21 @@ def test_chat_messages_role_check_allows_every_live_value(role):
         conn.commit()
 
 
+def test_0030_chains_onto_0029():
+    mod = _load_versions_module("0030_learner_preferences.py", "migration_0030")
+    assert mod.revision == "0030_learner_preferences"
+    assert mod.down_revision == "0029_current_check"
+
+
+def test_learner_preference_columns_default_on_bare_insert(db_session):
+    """#356: a users row created without preferences gets the defaults."""
+    db_session.add(User(id="pref-defaults"))
+    db_session.commit()
+    user = db_session.get(User, "pref-defaults")
+    assert user.check_ins == "sometimes"
+    assert user.reply_length == "balanced"
+
+
 def test_0027_chains_onto_0026():
     mod = _load_versions_module(
         "0027_chat_messages_sid_id_desc.py", "migration_0027"

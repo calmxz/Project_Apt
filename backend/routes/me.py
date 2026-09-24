@@ -23,7 +23,11 @@ router = APIRouter(prefix="/api")
 def _to_response(user) -> MeResponse:
     return MeResponse(
         display_name=user.display_name,
-        feedback_pref=user.feedback_pref,
+        # NULL = never set on the server; the effective preference is the
+        # default the tutor prompt also falls back to.
+        feedback_pref=user.feedback_pref or "hints",
+        check_ins=user.check_ins,
+        reply_length=user.reply_length,
         onboarding_complete=bool(user.onboarding_complete),
     )
 
@@ -58,6 +62,8 @@ def patch_me(
     if (
         req.display_name is None
         and req.feedback_pref is None
+        and req.check_ins is None
+        and req.reply_length is None
         and req.onboarding_complete is None
     ):
         raise HTTPException(status_code=422, detail="empty patch")
@@ -69,6 +75,10 @@ def patch_me(
         user.display_name = req.display_name.strip() or None
     if req.feedback_pref is not None:
         user.feedback_pref = req.feedback_pref
+    if req.check_ins is not None:
+        user.check_ins = req.check_ins
+    if req.reply_length is not None:
+        user.reply_length = req.reply_length
     if req.onboarding_complete is not None:
         user.onboarding_complete = req.onboarding_complete
     db.commit()
