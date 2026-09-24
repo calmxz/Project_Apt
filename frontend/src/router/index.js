@@ -128,6 +128,21 @@ const router = createRouter({
       component: () => import('../views/ProfileView.vue'),
       props: true,
     },
+    // PROTOTYPE (wayfinder #358): throwaway variants of the aggregate
+    // profile page. Dev-only; in a production build the path falls through
+    // to not-found. Lives on branch prototype/profile-page, never merges.
+    ...(import.meta.env.DEV
+      ? [
+          {
+            path: '/prototype/profile',
+            name: 'prototype-profile',
+            component: () => import('../views/prototype/ProfileAggregatePrototype.vue'),
+            // public so the fixture renders without a session (headless
+            // screenshots); the shell still draws because sidebar is not false.
+            meta: { public: true },
+          },
+        ]
+      : []),
     {
       // Catch-all, last by definition. Public so a logged-out visitor lands on
       // the page rather than a login redirect. Like every other public route it
