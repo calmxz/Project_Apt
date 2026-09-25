@@ -30,6 +30,11 @@ const lines = computed(() => {
   return [{ label: keep, hint: '', message: keep }, ...items]
 })
 
+// A. / B. / C. -- the lettered-line grammar (DESIGN.md), as on every check.
+function letter(i) {
+  return String.fromCharCode(65 + i)
+}
+
 const other = ref('')
 
 function sendOther() {
@@ -72,7 +77,7 @@ function sendOther() {
           :disabled="busy"
           @click="emit('pick', line.message)"
         >
-          <span class="topic-letter" aria-hidden="true">{{ i + 1 }}.</span>
+          <span class="topic-letter" aria-hidden="true">{{ letter(i) }}.</span>
           <span class="topic-label">{{ line.label }}</span>
           <span v-if="line.hint" class="topic-hint">{{ line.hint }}</span>
         </button>

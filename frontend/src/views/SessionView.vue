@@ -399,6 +399,7 @@ async function onTopicPick(text) {
   if (!canSend.value) return
   lastError.value = null
   cuesLanded.value = false
+  sending.value = true
   try {
     await store.sendMessageStreaming({ text })
   } catch (e) {
@@ -406,6 +407,8 @@ async function onTopicPick(text) {
     if (e instanceof StreamAbortedError) return
     lastSentText.value = text
     lastError.value = e
+  } finally {
+    sending.value = false
   }
 }
 

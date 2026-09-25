@@ -144,3 +144,29 @@ def test_from_tool_calls_reads_the_ok_call():
 ])
 def test_from_tool_calls_none_without_a_valid_ok_call(raw):
     assert ts.from_tool_calls(raw) is None
+
+
+# --- tool registration -----------------------------------------------------
+
+
+def test_suggest_topics_is_registered_with_its_contract_schema():
+    from agent import tools
+
+    fn = next(t["function"] for t in tools.TOOLS if t["function"]["name"] == "suggest_topics")
+    params = fn["parameters"]
+    assert set(params["required"]) == {"session_id", "mode", "topic", "items"}
+    assert params["properties"]["mode"]["enum"] == ["broad", "specific"]
+    items = params["properties"]["items"]
+    assert (items["minItems"], items["maxItems"]) == (2, 5)
+    assert "ends the turn" in fn["description"]
+
+
+def test_dispatch_routes_suggest_topics_and_injects_session_id(db_session):
+    from agent import tools
+
+    _make_session(db_session, level="beginner")
+    args = _args().model_dump()
+    args["session_id"] = "hallucinated"
+    res = tools.dispatch("suggest_topics", args, _ctx(db_session))
+    assert res.ok, res.error
+    assert res.data["mode"] == "broad"

@@ -30,9 +30,9 @@ describe('TopicSuggestCard', () => {
     const w = mount(TopicSuggestCard, { props: { card: BROAD } })
     expect(w.text()).toContain('Here is what we would cover. Where do you want to start?')
     expect(lineTexts(w)).toEqual([
-      '1.Laws of thermodynamics',
-      '2.Heat enginesefficiency limits',
-      '3.Entropy',
+      'A.Laws of thermodynamics',
+      'B.Heat enginesefficiency limits',
+      'C.Entropy',
     ])
   })
 
@@ -40,9 +40,9 @@ describe('TopicSuggestCard', () => {
     const w = mount(TopicSuggestCard, { props: { card: SPECIFIC } })
     expect(w.text()).toContain('Nearby ground I can teach. Want to widen out?')
     expect(lineTexts(w)).toEqual([
-      '1.Keep going on Carnot cycle',
-      '2.Entropy and the second lawwhy Carnot is the ceiling',
-      '3.Otto and Diesel cycles',
+      'A.Keep going on Carnot cycle',
+      'B.Entropy and the second lawwhy Carnot is the ceiling',
+      'C.Otto and Diesel cycles',
     ])
   })
 
