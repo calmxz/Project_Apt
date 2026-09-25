@@ -13,6 +13,7 @@ const summary = () => ({
   urgent_cap_usd: 2.5,
   hard_cap_usd: 3,
   top_sessions: [],
+  resets_at: '2026-09-20T00:00:00Z',
 })
 
 // E-10: a failed read is recoverable in place, and it also has to recover when
