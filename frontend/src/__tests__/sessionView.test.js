@@ -1952,6 +1952,122 @@ describe('SessionView', () => {
       expect(scrollSpy).toHaveBeenCalledTimes(1)
       expect(scrollSpy).toHaveBeenCalledWith(0, 800)
     })
+
+    // #347: follow the stream, stop the moment the learner scrolls up, resume
+    // when they return to the bottom. jsdom's innerHeight is 768, so with a
+    // 1500px document the bottom is scrollY 732.
+    describe('follow-the-stream autoscroll', () => {
+      const realMatchMedia = window.matchMedia
+
+      afterEach(() => {
+        window.matchMedia = realMatchMedia
+      })
+
+      function setScrollY(y) {
+        Object.defineProperty(window, 'scrollY', { configurable: true, value: y })
+        window.dispatchEvent(new Event('scroll'))
+      }
+
+      async function mountStreaming() {
+        stubDocHeight(() => 1500)
+        const store = useSessionStore()
+        vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+          setupSession({ messages: [{ role: 'user', content: 'hi', message_id: 9 }] })
+        })
+        mountView()
+        await flushPromises()
+        store.streamingMessage = { role: 'assistant', content: '', tool_calls: [], citations: [] }
+        await flushPromises()
+        scrollSpy.mockClear()
+        return store
+      }
+
+      async function growStream(store) {
+        store.streamingMessage.content += 'more tokens '
+        await flushPromises()
+      }
+
+      it('scrolls to the bottom as streamed text grows', async () => {
+        const store = await mountStreaming()
+        await growStream(store)
+        expect(scrollSpy).toHaveBeenCalledWith(expect.objectContaining({ top: 1500 }))
+      })
+
+      it('follows tool calls appended mid-stream', async () => {
+        const store = await mountStreaming()
+        store.streamingMessage.tool_calls.push({ id: 't1', name: 'search', state: 'running' })
+        await flushPromises()
+        expect(scrollSpy).toHaveBeenCalledWith(expect.objectContaining({ top: 1500 }))
+      })
+
+      it('stops following once the learner scrolls up', async () => {
+        const store = await mountStreaming()
+        setScrollY(732)
+        setScrollY(300)
+        scrollSpy.mockClear()
+        await growStream(store)
+        expect(scrollSpy).not.toHaveBeenCalled()
+      })
+
+      it('resumes following when the learner returns to the bottom', async () => {
+        const store = await mountStreaming()
+        setScrollY(732)
+        setScrollY(300)
+        setScrollY(732)
+        scrollSpy.mockClear()
+        await growStream(store)
+        expect(scrollSpy).toHaveBeenCalledWith(expect.objectContaining({ top: 1500 }))
+      })
+
+      it('does not cancel on downward scrolling short of the bottom', async () => {
+        const store = await mountStreaming()
+        setScrollY(100)
+        setScrollY(400)
+        scrollSpy.mockClear()
+        await growStream(store)
+        expect(scrollSpy).toHaveBeenCalledWith(expect.objectContaining({ top: 1500 }))
+      })
+
+      it('does not yank a scrolled-up learner down when the reply lands', async () => {
+        const store = await mountStreaming()
+        setScrollY(732)
+        setScrollY(300)
+        scrollSpy.mockClear()
+        store.streamingMessage = null
+        store.messages = [...store.messages, { role: 'assistant', content: 'yo', message_id: 10 }]
+        await flushPromises()
+        expect(scrollSpy).not.toHaveBeenCalled()
+      })
+
+      it('re-arms following when the learner sends a message', async () => {
+        const store = await mountStreaming()
+        store.streamingMessage = null
+        setScrollY(732)
+        setScrollY(300)
+        scrollSpy.mockClear()
+        store.messages = [...store.messages, { role: 'user', content: 'next', message_id: 11 }]
+        await flushPromises()
+        expect(scrollSpy).toHaveBeenCalledWith(0, 1500)
+        scrollSpy.mockClear()
+        store.streamingMessage = { role: 'assistant', content: 'a', tool_calls: [], citations: [] }
+        await flushPromises()
+        expect(scrollSpy).toHaveBeenCalledWith(expect.objectContaining({ top: 1500 }))
+      })
+
+      it.each([
+        ['smooth by default', false, 'smooth'],
+        ['instant under prefers-reduced-motion', true, 'instant'],
+      ])('scrolls %s', async (_label, reduce, behavior) => {
+        window.matchMedia = vi.fn((query) => ({
+          matches: reduce && query === '(prefers-reduced-motion: reduce)',
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+        }))
+        const store = await mountStreaming()
+        await growStream(store)
+        expect(scrollSpy).toHaveBeenCalledWith({ top: 1500, behavior })
+      })
+    })
   })
 
   // D-21: SessionHeader's h1 is gated on a resolved topic, so before the detail
