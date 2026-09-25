@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 
 import { useSessionStore } from './session.js'
 import { apiGet, apiPatch } from '../services/apiClient.js'
+import { TUTOR_PREFERENCES } from '../lib/tutorPreferences.js'
 
 // Phase 7+: identity comes from `useAuthStore` (Supabase JWT). This store
 // only persists local UX preferences -- name + tutor preferences (feedback
@@ -12,13 +13,11 @@ import { apiGet, apiPatch } from '../services/apiClient.js'
 
 const STORAGE_PREFIX = 'crux:user:v1'
 
-// interactionPreferences key -> /api/me field. Hydration and updateProfile
-// both read this, so a new tutor preference is one line here.
-const PREF_FIELDS = {
-  feedback: 'feedback_pref',
-  checkIns: 'check_ins',
-  replyLength: 'reply_length',
-}
+// interactionPreferences key -> /api/me field, from the shared tutor
+// preferences. Hydration and updateProfile both read this.
+const PREF_FIELDS = Object.fromEntries(
+  Object.entries(TUTOR_PREFERENCES).map(([key, { field }]) => [key, field]),
+)
 
 export const useUserStore = defineStore('user', () => {
   const name = ref(null)

@@ -30,7 +30,7 @@
       <p v-if="control.help" class="sec-help" :data-testid="`learning-${control.key}-help`">
         {{ control.help }}
       </p>
-      <FeedbackStylePicker
+      <LetteredLinesPicker
         :model-value="control.state.value"
         :options="control.options"
         :legend="control.title"
@@ -44,8 +44,9 @@
 <script setup>
 import { reactive, ref, watch } from 'vue'
 
-import FeedbackStylePicker from '../FeedbackStylePicker.vue'
+import LetteredLinesPicker from '../LetteredLinesPicker.vue'
 import { friendlyError } from '../../lib/errors.js'
+import { TUTOR_PREFERENCES, preferenceValue } from '../../lib/tutorPreferences.js'
 import { useUserStore } from '../../stores/user.js'
 import { useToast } from '../../composables/useToast.js'
 
@@ -57,8 +58,8 @@ const { showError } = useToast()
 // the server in the order the learner made them and the last choice sticks.
 // A failed write puts the control back on the value the store (and so the
 // server) still holds.
-function autosaved(field, fallback) {
-  const stored = () => user.interactionPreferences?.[field] || fallback
+function autosaved(key) {
+  const stored = () => preferenceValue(user.interactionPreferences, key)
   const value = ref(stored())
   const saved = ref(false)
   let queue = Promise.resolve()
@@ -78,7 +79,7 @@ function autosaved(field, fallback) {
     pending++
     queue = queue.then(async () => {
       try {
-        await user.updateProfile({ [field]: next })
+        await user.updateProfile({ [key]: next })
         if (seq === latest) saved.value = true
       } catch (e) {
         showError(friendlyError(e))
@@ -92,40 +93,29 @@ function autosaved(field, fallback) {
   return reactive({ value, saved, change })
 }
 
-// Fallbacks match the MeResponse defaults in docs/api/openapi.yaml.
+// Options and fallbacks come from lib/tutorPreferences.js.
 const controls = [
   {
     key: 'feedback',
     title: 'Feedback style',
     testidPrefix: 'feedback-style',
-    options: [
-      { value: 'hints', label: 'Hints', sub: 'Nudge me toward the answer.' },
-      { value: 'direct_answers', label: 'Direct answers', sub: 'Explain outright when I ask.' },
-    ],
-    state: autosaved('feedback', 'hints'),
+    options: TUTOR_PREFERENCES.feedback.options,
+    state: autosaved('feedback'),
   },
   {
     key: 'check-ins',
     title: 'Check-ins',
     help: 'How often the tutor runs a quick check without being asked.',
     testidPrefix: 'check-ins',
-    options: [
-      { value: 'often', label: 'Often' },
-      { value: 'sometimes', label: 'Sometimes' },
-      { value: 'only_when_asked', label: 'Only when I ask' },
-    ],
-    state: autosaved('checkIns', 'sometimes'),
+    options: TUTOR_PREFERENCES.checkIns.options,
+    state: autosaved('checkIns'),
   },
   {
     key: 'reply-length',
     title: 'Reply length',
     testidPrefix: 'reply-length',
-    options: [
-      { value: 'brief', label: 'Brief' },
-      { value: 'balanced', label: 'Balanced' },
-      { value: 'thorough', label: 'Thorough' },
-    ],
-    state: autosaved('replyLength', 'balanced'),
+    options: TUTOR_PREFERENCES.replyLength.options,
+    state: autosaved('replyLength'),
   },
 ]
 </script>

@@ -21,10 +21,12 @@
       <div class="field stagger" style="--delay: 60ms">
         <div class="choice" data-testid="onboarding-feedback">
           <p class="field-label">When you get stuck</p>
-          <FeedbackStylePicker
+          <LetteredLinesPicker
             v-model="feedback"
             :options="feedbackOptions"
             name="feedback-style"
+            legend="Feedback style"
+            testid-prefix="feedback-style"
           />
         </div>
         <p class="help">
@@ -81,8 +83,9 @@ import { useRouter } from 'vue-router'
 import InputText from 'primevue/inputtext'
 
 import AuthCover from '../components/auth/AuthCover.vue'
-import FeedbackStylePicker from '../components/FeedbackStylePicker.vue'
+import LetteredLinesPicker from '../components/LetteredLinesPicker.vue'
 import { friendlyError } from '@/lib/errors.js'
+import { TUTOR_PREFERENCES, preferenceValue } from '@/lib/tutorPreferences.js'
 import { useUserStore } from '../stores/user.js'
 import { useAuthStore } from '../stores/auth.js'
 import { useToast } from '../composables/useToast.js'
@@ -92,11 +95,13 @@ const userStore = useUserStore()
 const authStore = useAuthStore()
 
 const displayName = ref(userStore.name || '')
-const feedbackOptions = [
-  { label: 'Hints', value: 'hints' },
-  { label: 'Direct answers', value: 'direct_answers' },
-]
-const feedback = ref(userStore.interactionPreferences?.feedback || 'hints')
+// Labels only: the help line below the picker carries the explanation here,
+// so the Settings sub copy is left off.
+const feedbackOptions = TUTOR_PREFERENCES.feedback.options.map(({ value, label }) => ({
+  value,
+  label,
+}))
+const feedback = ref(preferenceValue(userStore.interactionPreferences, 'feedback'))
 
 const submitting = ref(false)
 const submitError = ref(null)
@@ -140,7 +145,7 @@ async function signOut() {
   padding: 0;
 }
 
-/* The lettered lines come from the shared FeedbackStylePicker, so the
+/* The lettered lines come from the shared LetteredLinesPicker, so the
    grammar has one source; this wrapper only carries the pencil label. */
 .choice {
   min-width: 0;
