@@ -1,8 +1,9 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
 import SettingsView from '../views/SettingsView.vue'
+import { useAuthStore } from '../stores/auth.js'
 
 const showSuccess = vi.fn()
 const showError = vi.fn()
@@ -35,7 +36,11 @@ const stubs = {
 function makeRouter() {
   return createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: '/settings/:tab', name: 'settings', component: SettingsView, props: true }],
+    routes: [
+      { path: '/settings/:tab', name: 'settings', component: SettingsView, props: true },
+      { path: '/account', name: 'account', component: { template: '<div />' } },
+      { path: '/login', name: 'login', component: { template: '<div />' } },
+    ],
   })
 }
 
@@ -50,6 +55,8 @@ async function mountAt(tab) {
 }
 
 describe('SettingsView shell', () => {
+  beforeEach(() => setActivePinia(createPinia()))
+
   it('renders three rail tabs with testids', async () => {
     const { w } = await mountAt('learning')
     for (const slug of ['learning', 'usage', 'appearance']) {
@@ -142,5 +149,46 @@ describe('SettingsView shell', () => {
     expect(getUsageSummary).toHaveBeenCalledTimes(1)
 
     w.unmount()
+  })
+})
+
+// The sidebar identity row now opens Settings directly, so the old user
+// menu's Account and Sign out entries live here instead.
+describe('SettingsView account links', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    showError.mockClear()
+    useAuthStore().session = { user: { id: 'u-1', email: 'ada@example.com' }, access_token: 't' }
+  })
+
+  it('links to the Account page', async () => {
+    const { w, router } = await mountAt('learning')
+    const link = w.get('[data-testid="settings-account-link"]')
+    expect(link.text()).toBe('Account')
+    await link.trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.name).toBe('account')
+  })
+
+  it('signs out and redirects to /login', async () => {
+    const { w, router } = await mountAt('learning')
+    await w.get('[data-testid="settings-sign-out"]').trigger('click')
+    await flushPromises()
+    expect(globalThis.__supabaseAuthStub.signOut).toHaveBeenCalled()
+    expect(router.currentRoute.value.path).toBe('/login')
+  })
+
+  it('surfaces an error toast and still leaves the protected route on failure', async () => {
+    globalThis.__supabaseAuthStub.signOut.mockResolvedValueOnce({
+      error: new Error('network down'),
+    })
+    const { w, router } = await mountAt('learning')
+    await w.get('[data-testid="settings-sign-out"]').trigger('click')
+    await flushPromises()
+    expect(showError).toHaveBeenCalledWith('network down')
+    // The store clears the local session in its finally, so the shell is
+    // already signed out; staying on a protected route would strand the
+    // learner behind a toast.
+    expect(router.currentRoute.value.path).toBe('/login')
   })
 })
