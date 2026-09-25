@@ -523,7 +523,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          description: Session already ended (code session_ended), or the batch is in a conflicting state -- no open batch, out-of-order index, already-resolved item, or an out-of-range selection (code check_conflict).
+          description: Session already ended (code session_ended), or the batch is in a conflicting state -- no open batch, out-of-range index, already-resolved item, or an out-of-range selection (code check_conflict).
           content:
             application/json:
               schema:
@@ -556,7 +556,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          description: Session already ended (code session_ended), or the batch is in a conflicting state -- no open batch, out-of-order index, or already-resolved item (code check_conflict).
+          description: Session already ended (code session_ended), or the batch is in a conflicting state -- no open batch, out-of-range index, or already-resolved item (code check_conflict).
           content:
             application/json:
               schema:
