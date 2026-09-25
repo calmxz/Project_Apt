@@ -5,7 +5,7 @@ const props = defineProps({
   /** Display name; empty when the learner has not set one. */
   name: { type: String, default: '' },
   email: { type: String, default: '' },
-  /** Folded rail: the circle alone, and the menu lifts out to the rail's right. */
+  /** Folded rail: the circle alone; the menu lifts out of the clipped rail but opens where it does unfolded. */
   collapsed: { type: Boolean, default: false },
 })
 
@@ -70,17 +70,15 @@ function menuItems() {
 }
 
 // The sidebar clips its overflow, and the folded rail is narrower than the
-// card. Folded, the popover is teleported to <body> and pinned beside the
-// rail's right edge, bottom-aligned with the trigger.
+// card. Folded, the popover is teleported to <body> and pinned where it sits
+// unfolded: 0.25rem above the trigger, its left edge on the avatar's.
 function placeFixed() {
   const trigger = triggerEl.value
   if (!trigger) return
   const rect = trigger.getBoundingClientRect()
-  const rail = trigger.closest('aside')?.getBoundingClientRect()
-  const left = (rail ? rail.right : rect.right) + 4
   fixedStyle.value = {
-    left: `${left}px`,
-    bottom: `${Math.max(0, window.innerHeight - rect.bottom)}px`,
+    left: `${rect.left}px`,
+    bottom: `${Math.max(0, window.innerHeight - rect.top + 4)}px`,
   }
 }
 

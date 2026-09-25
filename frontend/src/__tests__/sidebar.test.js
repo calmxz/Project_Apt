@@ -1066,22 +1066,22 @@ describe('Sidebar.vue — footer rail labels', () => {
   })
   afterEach(() => wrapper?.unmount())
 
-  it('footer shows text labels when expanded', async () => {
+  // Settings is reached through the identity row's account menu; the foot
+  // carries no Settings link of its own in either state.
+  it.each([
+    ['expanded', true],
+    ['collapsed', false],
+  ])('footer carries no Settings link when %s', async (_state, expanded) => {
+    sidebarTest._setExpanded(expanded)
+    const auth = useAuthStore()
+    auth.session = { user: { id: 'u-1', email: 'ada@example.com' }, access_token: 't' }
     wrapper = mount(Sidebar)
     await flushPromises()
-    const footer = wrapper.find('[data-testid="sidebar-settings"]')
-    expect(footer.exists()).toBe(true)
-    expect(wrapper.find('[data-testid="sidebar-settings"]').text()).toContain('Settings')
-  })
-
-  it('footer hides text labels when collapsed', async () => {
-    sidebarTest._setExpanded(false)
-    wrapper = mount(Sidebar)
-    await flushPromises()
-    // collapsed: footer carries sb-rail--column class
-    expect(wrapper.find('footer.sb-rail').classes()).toContain('sb-rail--column')
-    // no label text visible
-    expect(wrapper.find('[data-testid="sidebar-settings"]').text()).not.toContain('Settings')
+    const footer = wrapper.get('footer.sb-rail')
+    expect(footer.find('[data-testid="sidebar-settings"]').exists()).toBe(false)
+    expect(footer.find('a').exists()).toBe(false)
+    expect(footer.find('[data-testid="sidebar-user-trigger"]').exists()).toBe(true)
+    expect(footer.classes().includes('sb-rail--column')).toBe(!expanded)
   })
 
   it('footer rail no longer renders a theme control', async () => {
@@ -1090,14 +1090,12 @@ describe('Sidebar.vue — footer rail labels', () => {
     wrapper = mount(Sidebar)
     await flushPromises()
     expect(wrapper.find('[data-testid="sidebar-theme-toggle"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="sidebar-settings"]').exists()).toBe(true)
   })
 
-  it('footer has a single Settings entry and no Profile entry', async () => {
+  it('footer has no Profile entry', async () => {
     wrapper = mount(Sidebar)
     await flushPromises()
     expect(wrapper.find('[data-testid="sidebar-profile"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="sidebar-settings"]').exists()).toBe(true)
   })
 })
 
@@ -1421,6 +1419,30 @@ describe('Sidebar.vue — identity row and account menu', () => {
     expect(document.activeElement).toBe(
       menu.querySelector('[data-testid="sidebar-user-menu-settings"]'),
     )
+  })
+
+  // Folded, the menu opens where it does unfolded: directly above the avatar,
+  // its left edge on the avatar's, not out beside the rail.
+  it('the folded menu opens above the avatar, left-aligned with it', async () => {
+    sidebarTest._setExpanded(false)
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 })
+    signIn()
+    wrapper = mount(Sidebar, { attachTo: document.body })
+    await flushPromises()
+    const trigger = wrapper.get('[data-testid="sidebar-user-trigger"]').element
+    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue({
+      left: 6,
+      right: 42,
+      top: 700,
+      bottom: 736,
+      width: 36,
+      height: 36,
+    })
+    await openMenu()
+    const menu = document.querySelector('[data-testid="sidebar-user-menu"]')
+    expect(menu.style.left).toBe('6px')
+    // 0.25rem (4px) gap above the trigger's top edge, as unfolded.
+    expect(menu.style.bottom).toBe('104px')
   })
 
   it('the mobile drawer shows the identity row with the name', async () => {

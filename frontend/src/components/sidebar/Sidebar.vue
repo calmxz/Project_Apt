@@ -715,35 +715,6 @@ async function onSignOut() {
     </nav>
 
     <footer class="sb-rail" :class="{ 'sb-rail--column': !isExpanded }">
-      <RouterLink
-        to="/settings"
-        class="sb-icon hit-44 coarse-2x"
-        :class="{ 'sb-icon--row': isExpanded }"
-        aria-label="Settings"
-        title="Settings"
-        data-testid="sidebar-settings"
-        @click="closeDrawer"
-      >
-        <svg
-          class="sb-inline-icon"
-          viewBox="0 0 20 20"
-          width="16"
-          height="16"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.5"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-          focusable="false"
-        >
-          <circle cx="10" cy="10" r="2.5" />
-          <path
-            d="M10 3.5 V5.5 M10 14.5 V16.5 M16.5 10 H14.5 M5.5 10 H3.5 M14.7 5.3 L13.3 6.7 M6.7 13.3 L5.3 14.7 M14.7 14.7 L13.3 13.3 M6.7 6.7 L5.3 5.3"
-          />
-        </svg>
-        <span v-if="isExpanded" class="sb-icon-label">Settings</span>
-      </RouterLink>
       <SidebarUserMenu
         v-if="isAuthenticated"
         :name="identityName"
@@ -1099,15 +1070,6 @@ async function onSignOut() {
   transition: color var(--motion-fast) ease;
 }
 
-.sb-icon.sb-icon--row {
-  width: 100%;
-  height: var(--line-pitch);
-  justify-content: flex-start;
-  gap: 0.625rem;
-  padding: 0;
-  border-radius: 0;
-}
-
 /* Rail Search is a button, not a link; strip the UA chrome so it reads as the
    same drawn mark as the links around it. */
 .sb-icon-btn {
@@ -1115,11 +1077,6 @@ async function onSignOut() {
   border: 0;
   font: inherit;
   text-align: left;
-}
-
-.sb-icon-label {
-  font-family: var(--font-sans);
-  font-size: 0.9375rem;
 }
 
 .sb-icon:hover {
