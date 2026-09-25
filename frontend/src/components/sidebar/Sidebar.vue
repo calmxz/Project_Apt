@@ -989,6 +989,12 @@ async function onSignOut() {
   border-top: 1px solid var(--rule-strong);
 }
 
+/* Folded, the list is empty space above the foot; a rule under the actions
+   would close off nothing. */
+.sidebar--collapsed .sb-list-wrap {
+  border-top: 0;
+}
+
 .sb-section {
   margin: 0;
 }
