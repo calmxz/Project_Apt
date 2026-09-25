@@ -64,7 +64,7 @@
 
       <!-- E-09: onboarding must not be a dead end for a learner who cannot
            or does not want to complete it right now (e.g. force-landed here
-           after a failed hydrate). Mirrors Sidebar.vue's onSignOut. -->
+           after a failed hydrate). Same sign-out as SettingsView's. -->
       <p class="line">
         <button type="button" class="linkbtn" data-testid="onboarding-signout" @click="signOut">
           Sign out
@@ -120,7 +120,7 @@ async function submit() {
   }
 }
 
-// Mirrors Sidebar.vue's onSignOut exactly: sign out, then route to /login.
+// Same sign-out as SettingsView's, except a failure keeps the learner here.
 async function signOut() {
   try {
     await authStore.signOut()

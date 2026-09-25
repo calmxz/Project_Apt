@@ -93,7 +93,7 @@ describe('OnboardingView', () => {
 
   // E-09: onboarding used to be a dead end for a learner who cannot or does
   // not want to complete it (e.g. hydrate failed and force-routed them here
-  // with no local snapshot). Mirrors Sidebar.vue's onSignOut exactly: call
+  // with no local snapshot). Same sign-out as SettingsView's: call
   // authStore.signOut(), then push to /login.
   it('sign-out button calls authStore.signOut and routes to login (E-09)', async () => {
     const auth = useAuthStore()

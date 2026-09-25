@@ -2,6 +2,16 @@
   <section class="settings" data-testid="settings">
     <header class="head">
       <h1 class="title">Settings</h1>
+      <!-- The sidebar identity row opens Settings directly, so the old user
+           menu's entries live here: Account is its own route, Sign out an act. -->
+      <p v-if="authStore.isAuthenticated" class="head-links" data-testid="settings-account-links">
+        <RouterLink :to="{ name: 'account' }" class="head-link" data-testid="settings-account-link"
+          >Account</RouterLink
+        >
+        <button type="button" class="head-link" data-testid="settings-sign-out" @click="signOut">
+          Sign out
+        </button>
+      </p>
     </header>
 
     <div class="layout">
@@ -49,18 +59,21 @@
 
 <script setup>
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 
 import '@/assets/sheet.css'
 import LearningTab from '../components/settings/LearningTab.vue'
 import UsageTab from '../components/settings/UsageTab.vue'
 import AppearanceTab from '../components/settings/AppearanceTab.vue'
+import { useAuthStore } from '../stores/auth.js'
+import { useToast } from '../composables/useToast.js'
 
 const props = defineProps({
   tab: { type: String, default: 'learning' },
 })
 
 const router = useRouter()
+const authStore = useAuthStore()
 
 // The rail is the contents list of this section: one row per page, no icons.
 // Account moved to its own route (/account); it is no longer a Settings tab.
@@ -89,6 +102,18 @@ async function activate(i) {
   }
   await nextTick()
   tabRefs.value[i]?.focus()
+}
+
+async function signOut() {
+  try {
+    await authStore.signOut()
+  } catch (err) {
+    // The store clears the local session even when the SDK throws, so the
+    // shell is already signed out; say so and still leave the protected
+    // route rather than stranding the learner on it.
+    useToast().showError(err?.message || 'Sign out failed')
+  }
+  router.push('/login')
 }
 
 function onKeydown(e, i) {
@@ -126,6 +151,35 @@ function onKeydown(e, i) {
   line-height: var(--lh-display);
   color: var(--ink);
   margin: 0;
+}
+
+/* Account and Sign out: text buttons under the title, not tabs. */
+.head-links {
+  display: flex;
+  gap: 1.25rem;
+  margin: 0.5rem 0 0;
+}
+
+.head-link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-learner);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.head-link:hover {
+  color: var(--accent-hover);
+}
+
+.head-link:focus-visible {
+  outline: 2px solid var(--ink-learner);
+  outline-offset: 2px;
 }
 
 /* The page uses the full width: title on a strong rule, one pitch, then the
