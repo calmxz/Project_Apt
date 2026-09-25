@@ -415,7 +415,7 @@ Footer (both states): the identity row alone (Settings is reached through its ac
 - **Field on a rule** (sidebar search, row rename, Home topic, library search, auth fields, profile add-row): transparent, no box, one 1px bottom rule (`rule-strong`, or `card-edge` on the auth cover) that turns `ink-learner` on focus; text and caret in `ink-learner`, placeholder pencil; a pencil label above it where it needs a name.
 - **Boxed field** (PrimeVue InputText / Textarea / Select in overlays): `card` ground, 1px `rule-strong`, 4px; focus is a blue border plus a 2px solid blue outline at 1px offset, no glow.
 - **Written select** (library sort): a native select with `appearance: none`, caption 700 blue, a drawn 1.5px chevron at the right edge.
-- **Lettered lines** (FeedbackStylePicker, check options): a blue 700 letter, graphite text (700 when selected), a painted `rule` separator, a drawn blue tick when chosen.
+- **Lettered lines** (LetteredLinesPicker, check options): a blue 700 letter, graphite text (700 when selected), a painted `rule` separator, a drawn blue tick when chosen.
 - **Auth status box**: `card` stock, 1px full border, 4px, `0.4rem 0.75rem`; the border is `tab-focus` for an alert (copy in text-safe red) or `tab-mastered` when done.
 
 ### Review Row
