@@ -92,6 +92,7 @@
                 :answering="store.checkAnswering"
                 @answer="onAnswerCheck"
                 @skip="onSkipCheck"
+                @back="store.prevCheck"
                 @next="store.nextCheck"
                 @done="onDoneCheck"
                 @stop="onStopCheck"

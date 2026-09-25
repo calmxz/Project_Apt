@@ -70,9 +70,22 @@ def test_answer_last_item_done(client, db_session, seeded_session):
     assert r.json()["done"] is True
 
 
-def test_answer_out_of_order_is_409(client, db_session, seeded_session):
+def test_answer_later_item_first(client, db_session, seeded_session):
+    # #348: free navigation, any pending item may be answered first.
     sid = seeded_session.id
     _open_batch(db_session, sid)
+    r = client.post(f"/api/sessions/{sid}/check/answer",
+                    json={"index": 1, "selected_index": 0, "user_id": USER_ID})
+    assert r.status_code == 200
+    assert r.json()["current_index"] == 0
+    assert r.json()["done"] is False
+
+
+def test_answer_resolved_item_is_409(client, db_session, seeded_session):
+    sid = seeded_session.id
+    _open_batch(db_session, sid)
+    client.post(f"/api/sessions/{sid}/check/answer",
+                json={"index": 1, "selected_index": 0, "user_id": USER_ID})
     r = client.post(f"/api/sessions/{sid}/check/answer",
                     json={"index": 1, "selected_index": 0, "user_id": USER_ID})
     assert r.status_code == 409

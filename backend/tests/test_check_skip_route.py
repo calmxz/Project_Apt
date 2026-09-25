@@ -49,11 +49,23 @@ def test_skip_advances(client, db_session, seeded_session):
     assert body["done"] is False
 
 
-def test_skip_out_of_order_is_409(client, db_session, seeded_session):
+def test_skip_later_item_first(client, db_session, seeded_session):
+    # #348: free navigation, any pending item may be skipped first.
     sid = seeded_session.id
     _open_batch(db_session, sid)
     r = client.post(f"/api/sessions/{sid}/check/skip",
                     json={"index": 1, "user_id": USER_ID})
+    assert r.status_code == 200
+    assert r.json()["current_index"] == 0
+
+
+def test_skip_resolved_item_is_409(client, db_session, seeded_session):
+    sid = seeded_session.id
+    _open_batch(db_session, sid)
+    client.post(f"/api/sessions/{sid}/check/skip",
+                json={"index": 0, "user_id": USER_ID})
+    r = client.post(f"/api/sessions/{sid}/check/skip",
+                    json={"index": 0, "user_id": USER_ID})
     assert r.status_code == 409
 
 

@@ -6,7 +6,7 @@ const props = defineProps({
   //   { question, options, status, selectedIndex, correctIndex, correct, explanation } ] }
   // setIndex / setTotal (1-based, #340) may be null; null means one set.
   check: { type: Object, required: true },
-  // F-04: true while a stream is live; Skip/Next/Done are disabled so the
+  // F-04: true while a stream is live; Skip/Back/Next/Done are disabled so the
   // follow-up stream cannot be started on top of an active one.
   busy: { type: Boolean, default: false },
   // E-17: true while this item's answer POST is in flight. `answered` only
@@ -15,14 +15,24 @@ const props = defineProps({
   // Distinct from `busy`, which is about the follow-up stream.
   answering: { type: Boolean, default: false },
 })
-const emit = defineEmits(['answer', 'skip', 'next', 'done', 'stop'])
+const emit = defineEmits(['answer', 'skip', 'back', 'next', 'done', 'stop'])
 
 const LETTERS = ['A', 'B', 'C', 'D', 'E']
 
 const item = computed(() => props.check.items[props.check.viewIndex] || {})
 const answered = computed(() => item.value.status === 'answered' || item.value.status === 'skipped')
 const correct = computed(() => item.value.correct === true)
+const isFirst = computed(() => props.check.viewIndex <= 0)
 const isLast = computed(() => props.check.viewIndex >= props.check.total - 1)
+// #348: free navigation within one set. Next and Back move between items
+// answered or not; Done waits until every item is answered or skipped (a skip
+// is the explicit "don't know", #339), and once it is, Done shows on any item.
+const resolvedCount = computed(
+  () =>
+    props.check.items.filter((it) => it.status === 'answered' || it.status === 'skipped').length,
+)
+const allResolved = computed(() => resolvedCount.value >= props.check.total)
+const showDone = computed(() => isLast.value || allResolved.value)
 const showProgress = computed(() => props.check.total > 1)
 // #340: the learner can end the check early while any item is unresolved;
 // once all are resolved, Done closes it. Chatting never ends a check.
@@ -31,9 +41,9 @@ const canStop = computed(() => props.check.currentIndex < props.check.total)
 const graded = computed(() => item.value.status === 'answered')
 
 // #364: a check of M sets cuts the head rule into M segments. Done sets are
-// full, the live set fills as its items resolve (currentIndex is the resolved
-// pointer, so a skip counts), upcoming sets are empty. One set keeps today's
-// single solid rule and no set words.
+// full, the live set fills as its items resolve (a skip counts; counted from
+// item status since #348 lets items resolve in any order), upcoming sets are
+// empty. One set keeps today's single solid rule and no set words.
 const setIndex = computed(() => props.check.setIndex ?? 1)
 const setTotal = computed(() => props.check.setTotal ?? 1)
 const multiSet = computed(() => setTotal.value > 1)
@@ -42,7 +52,7 @@ const segments = computed(() =>
     const n = k + 1
     if (n < setIndex.value) return { state: 'is-done', fill: 1 }
     if (n > setIndex.value) return { state: 'is-todo', fill: 0 }
-    return { state: 'is-live', fill: props.check.currentIndex / props.check.total || 0 }
+    return { state: 'is-live', fill: resolvedCount.value / props.check.total || 0 }
   }),
 )
 
@@ -53,15 +63,29 @@ function optionClass(i) {
   return ''
 }
 
+const backBtn = ref(null)
 const nextBtn = ref(null)
 const doneBtn = ref(null)
 
-watch(answered, async (is) => {
-  if (!is) return
+// Focus the way on once the viewed item resolves -- not when Back/Next land
+// on an item that was already answered.
+watch([() => props.check.viewIndex, answered], async ([view, is], [prevView, was]) => {
+  if (view !== prevView || !is || was) return
   await nextTick()
-  const target = nextBtn.value ?? doneBtn.value
+  const target = allResolved.value ? doneBtn.value : (nextBtn.value ?? doneBtn.value)
   target?.focus()
 })
+
+// Back vanishes on the first item and Next on the last; keep keyboard focus
+// on the card instead of dropping it to the page.
+async function go(dir) {
+  emit(dir)
+  await nextTick()
+  const kept = dir === 'back' ? backBtn.value : nextBtn.value
+  if (kept) return
+  const other = dir === 'back' ? nextBtn.value : (backBtn.value ?? doneBtn.value)
+  other?.focus()
+}
 </script>
 
 <template>
@@ -167,28 +191,41 @@ watch(answered, async (is) => {
         Skip this question
       </button>
 
-      <button
-        v-if="answered && !isLast"
-        ref="nextBtn"
-        type="button"
-        class="check-next"
-        data-testid="check-next"
-        :disabled="busy"
-        @click="emit('next')"
-      >
-        Next
-      </button>
-      <button
-        v-if="answered && isLast"
-        ref="doneBtn"
-        type="button"
-        class="check-next"
-        data-testid="check-done"
-        :disabled="busy"
-        @click="emit('done')"
-      >
-        Done
-      </button>
+      <div class="check-nav">
+        <button
+          v-if="!isFirst"
+          ref="backBtn"
+          type="button"
+          class="check-next"
+          data-testid="check-back"
+          :disabled="busy"
+          @click="go('back')"
+        >
+          Back
+        </button>
+        <button
+          v-if="!isLast"
+          ref="nextBtn"
+          type="button"
+          class="check-next"
+          data-testid="check-next"
+          :disabled="busy"
+          @click="go('next')"
+        >
+          Next
+        </button>
+        <button
+          v-if="showDone"
+          ref="doneBtn"
+          type="button"
+          class="check-next"
+          data-testid="check-done"
+          :disabled="busy || !allResolved"
+          @click="emit('done')"
+        >
+          Done
+        </button>
+      </div>
 
       <button
         v-if="canStop"
@@ -396,6 +433,14 @@ watch(answered, async (is) => {
   font-size: var(--fs-body);
   line-height: var(--lh-body);
   color: var(--ink);
+}
+
+/* #348: Back, Next and Done share one line, in reading order. */
+.check-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 1.25rem;
 }
 
 .check-skip,

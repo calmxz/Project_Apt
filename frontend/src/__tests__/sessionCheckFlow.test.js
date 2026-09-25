@@ -93,6 +93,73 @@ describe('multi-check store', () => {
     expect(s.pendingCheck.viewIndex).toBe(1)
   })
 
+  // #348: free navigation within one set.
+  it('#348 nextCheck / prevCheck move the view without answering, clamped', () => {
+    const s = useSessionStore()
+    s.currentSessionId = 'sid'
+    s.handleCheckQuestion(batchEvent())
+    s.prevCheck()
+    expect(s.pendingCheck.viewIndex).toBe(0)
+    s.nextCheck()
+    expect(s.pendingCheck.viewIndex).toBe(1)
+    s.nextCheck()
+    expect(s.pendingCheck.viewIndex).toBe(1)
+    s.prevCheck()
+    expect(s.pendingCheck.viewIndex).toBe(0)
+    expect(s.pendingCheck.items.every((it) => it.status === 'pending')).toBe(true)
+  })
+
+  it('#348 answerCheck grades the viewed item, not the first unresolved one', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 'sid'
+    s.handleCheckQuestion(batchEvent())
+    sessionsApi.answerCheck.mockResolvedValue({
+      correct: false,
+      explanation: 'b.',
+      correct_index: 0,
+      current_index: 0,
+      total: 2,
+      has_next: true,
+      done: false,
+    })
+    s.nextCheck()
+    await s.answerCheck(1)
+    expect(sessionsApi.answerCheck).toHaveBeenCalledWith('sid', 1, 1)
+    expect(s.pendingCheck.items[1].status).toBe('answered')
+    expect(s.pendingCheck.items[0].status).toBe('pending')
+    expect(s.pendingCheck.currentIndex).toBe(0)
+    expect(s.pendingCheck.viewIndex).toBe(1)
+  })
+
+  it('#348 skipCheck skips the viewed item and lands on the next unresolved one, wrapping', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 'sid'
+    s.handleCheckQuestion({
+      gap: 'atp',
+      total: 3,
+      items: [
+        { question: 'Q1', options: ['a', 'b'] },
+        { question: 'Q2', options: ['a', 'b'] },
+        { question: 'Q3', options: ['a', 'b'] },
+      ],
+    })
+    sessionsApi.skipCheck.mockResolvedValue({
+      current_index: 0,
+      total: 3,
+      has_next: true,
+      done: false,
+    })
+    s.nextCheck()
+    await s.skipCheck()
+    expect(sessionsApi.skipCheck).toHaveBeenCalledWith('sid', 1)
+    expect(s.pendingCheck.items[1].status).toBe('skipped')
+    expect(s.pendingCheck.viewIndex).toBe(2)
+    await s.skipCheck()
+    expect(sessionsApi.skipCheck).toHaveBeenLastCalledWith('sid', 2)
+    expect(s.pendingCheck.viewIndex).toBe(0)
+    expect(streamSvc.streamCheckComplete).not.toHaveBeenCalled()
+  })
+
   it('answering the last item marks done; completeCheck fires once', async () => {
     const s = useSessionStore()
     s.currentSessionId = 'sid'
