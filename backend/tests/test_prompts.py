@@ -641,3 +641,13 @@ def test_immutable_rules_topic_suggestion_protocol():
     assert "do not list or restate" in block
     assert '"broad"' in block and '"specific"' in block
     assert "AFTER_LEVEL" in block and "OFF" in block
+
+
+def test_immutable_rules_map_level_wording_and_clarify_when_unsure():
+    rules = prompts.IMMUTABLE_RULES
+    assert "LEVEL WORDING" in rules
+    assert "nearest level" in rules
+    # Unsure -> no level recorded, one clarifying question, explicit override.
+    assert "do NOT record a level" in rules
+    assert "ONE\n  short clarifying question" in rules
+    assert "overrides the rules below" in rules

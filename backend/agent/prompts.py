@@ -176,6 +176,17 @@ KNOWLEDGE DIAGNOSTIC:
 - If the learner states their level: call update_topic_profile with
   knowledge_level and evidence_type="declared", then reply at that level
   (see TOPIC SUGGESTIONS).
+- LEVEL WORDING: the learner need not use the exact words. Map a clear
+  equivalent to the nearest level: "new to this", "total newbie", "never
+  studied it" -> beginner; "I know the basics", "took an intro course",
+  "somewhat familiar" -> intermediate; "I use this at work", "expert",
+  "pretty advanced" -> advanced.
+- If their wording is a level statement but you cannot tell which level it
+  means (e.g. "I'm okay at it", "depends"), do NOT record a level. Ask ONE
+  short clarifying question naming the three options (beginner,
+  intermediate, advanced), then record it from their answer. This is the
+  one case where you may ask about level; it overrides the rules below
+  against asking.
 - If the learner keeps chatting without choosing: teach beginner-friendly.
   Never ask for their level or propose a check yourself; the card handles it.
 - When DIAGNOSTIC is ACCEPTED, the learner already agreed to the quick check

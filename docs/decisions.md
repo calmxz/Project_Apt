@@ -19,6 +19,12 @@ reply).
 - **The prompt sees `TOPIC_SUGGEST: DUE | AFTER_LEVEL | OFF`.** AFTER_LEVEL
   lets the model call it in the same turn it records a declared level; the
   handler re-reads the profile and refuses while the level is still unknown.
+- **A dismissed level picker does not cancel the card** (owner call). If the
+  learner later states a level in chat, the reply that records it carries
+  the card. Level wording is mapped to the nearest level ("I know the
+  basics" -> intermediate); when the model cannot tell, it records nothing
+  and asks one clarifying question, the only case where asking about level
+  is allowed.
 - **No second column for the card.** The ok `suggest_topics` call already
   persists in the message's `tool_calls_json`; the transcript reads it back
   from there (the `reconstruct_check_batch` precedent).
