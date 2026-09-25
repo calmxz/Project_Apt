@@ -192,13 +192,10 @@ describe('Sidebar — collapse toggle touch target', () => {
   })
 
   // D-17: the drawer footer is the one place the rail's 28px pitch leaves a
-  // control well under 44px, so both footer controls take the utility plus
-  // coarse-2x (the row layout has the width to spare).
-  it('the footer Settings link and identity row trigger carry hit-44 and coarse-2x', () => {
+  // control well under 44px, so the footer's identity row takes the utility
+  // plus coarse-2x (the row layout has the width to spare).
+  it('the footer identity row trigger carries hit-44 and coarse-2x', () => {
     const w = mount(Sidebar)
-    const settings = w.get('[data-testid="sidebar-settings"]')
-    expect(settings.classes()).toContain('hit-44')
-    expect(settings.classes()).toContain('coarse-2x')
     const identity = w.get('[data-testid="sidebar-user-trigger"]')
     expect(identity.classes()).toContain('hit-44')
     expect(identity.classes()).toContain('coarse-2x')

@@ -5,6 +5,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useSidebar } from '@/composables/useSidebar.js'
+import { useToast } from '@/composables/useToast.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useSessionStore } from '@/stores/session.js'
 import { useUserStore } from '@/stores/user.js'
@@ -288,6 +289,27 @@ async function onRailSearch() {
 function onNewSession() {
   closeDrawer()
   router.push({ name: 'new-session' })
+}
+
+// The account menu's Settings, Usage and Account items.
+function onMenuNavigate(to) {
+  closeDrawer()
+  router.push(to)
+}
+
+// Sign out lives in the identity row's account menu at the sidebar foot:
+// it is a navigation act, not a setting.
+async function onSignOut() {
+  closeDrawer()
+  try {
+    await authStore.signOut()
+  } catch (err) {
+    // The store clears the local session even when the SDK throws, so the
+    // shell is already signed out; say so and still leave the protected
+    // route rather than stranding the learner on it.
+    useToast().showError(err?.message || 'Sign out failed')
+  }
+  router.push('/login')
 }
 </script>
 
@@ -692,42 +714,13 @@ function onNewSession() {
       </template>
     </nav>
 
-    <footer class="sb-rail" :class="{ 'sb-rail--column': !isExpanded }">
-      <RouterLink
-        to="/settings"
-        class="sb-icon hit-44 coarse-2x"
-        :class="{ 'sb-icon--row': isExpanded }"
-        aria-label="Settings"
-        title="Settings"
-        data-testid="sidebar-settings"
-        @click="closeDrawer"
-      >
-        <svg
-          class="sb-inline-icon"
-          viewBox="0 0 20 20"
-          width="16"
-          height="16"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.5"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-          focusable="false"
-        >
-          <circle cx="10" cy="10" r="2.5" />
-          <path
-            d="M10 3.5 V5.5 M10 14.5 V16.5 M16.5 10 H14.5 M5.5 10 H3.5 M14.7 5.3 L13.3 6.7 M6.7 13.3 L5.3 14.7 M14.7 14.7 L13.3 13.3 M6.7 6.7 L5.3 5.3"
-          />
-        </svg>
-        <span v-if="isExpanded" class="sb-icon-label">Settings</span>
-      </RouterLink>
+    <footer v-if="isAuthenticated" class="sb-rail" :class="{ 'sb-rail--column': !isExpanded }">
       <SidebarUserMenu
-        v-if="isAuthenticated"
         :name="identityName"
         :email="userEmail || ''"
         :collapsed="isRail"
-        @click="closeDrawer"
+        @navigate="onMenuNavigate"
+        @sign-out="onSignOut"
       />
     </footer>
   </aside>
@@ -1076,15 +1069,6 @@ function onNewSession() {
   transition: color var(--motion-fast) ease;
 }
 
-.sb-icon.sb-icon--row {
-  width: 100%;
-  height: var(--line-pitch);
-  justify-content: flex-start;
-  gap: 0.625rem;
-  padding: 0;
-  border-radius: 0;
-}
-
 /* Rail Search is a button, not a link; strip the UA chrome so it reads as the
    same drawn mark as the links around it. */
 .sb-icon-btn {
@@ -1092,11 +1076,6 @@ function onNewSession() {
   border: 0;
   font: inherit;
   text-align: left;
-}
-
-.sb-icon-label {
-  font-family: var(--font-sans);
-  font-size: 0.9375rem;
 }
 
 .sb-icon:hover {
