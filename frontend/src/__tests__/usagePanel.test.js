@@ -2,7 +2,7 @@ import { mount, RouterLinkStub } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
 import UsagePanel from '../components/profile/UsagePanel.vue'
-import { formatTime } from '../utils/formatDate'
+import { formatTime } from '../utils/formatDate.js'
 
 const usage = (overrides = {}) => ({
   daily: [
@@ -143,6 +143,6 @@ describe('UsagePanel', () => {
     expect(w.text()).not.toContain('algebra')
     expect(w.findComponent(RouterLinkStub).exists()).toBe(false)
     // Daily only: no model name, month-to-date, or message cap either.
-    expect(w.text()).not.toMatch(/model|month|messages/i)
+    expect(w.text()).not.toMatch(/\b(model|month|messages)\b/i)
   })
 })

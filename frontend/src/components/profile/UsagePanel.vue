@@ -74,7 +74,7 @@
 <script setup>
 import { computed } from 'vue'
 
-import { formatTime } from '../../utils/formatDate'
+import { formatTime } from '../../utils/formatDate.js'
 
 const props = defineProps({
   usage: { type: Object, required: true },
@@ -91,6 +91,7 @@ const noSpend = computed(
 )
 
 // resets_at is the next UTC midnight; the learner reads it in their own zone.
+// Time only, unlike formatResetTime: the reset is always within a day.
 const resetTime = computed(() => formatTime(props.usage.resets_at))
 
 const pctOfHard = (v) => `${Math.min(100, Math.round((v / props.usage.hard_cap_usd) * 100))}%`
