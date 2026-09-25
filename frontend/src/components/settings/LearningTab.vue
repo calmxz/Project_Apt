@@ -42,7 +42,7 @@
 </template>
 
 <script setup>
-import { reactive, ref } from 'vue'
+import { reactive, ref, watch } from 'vue'
 
 import FeedbackStylePicker from '../FeedbackStylePicker.vue'
 import { friendlyError } from '../../lib/errors.js'
@@ -63,11 +63,19 @@ function autosaved(field, fallback) {
   const saved = ref(false)
   let queue = Promise.resolve()
   let latest = 0
+  let pending = 0
+
+  // The router hydrates /me in the background, so the tab can mount on a
+  // stale local snapshot; follow the store unless a save of ours is queued.
+  watch(stored, (next) => {
+    if (!pending) value.value = next
+  })
 
   function change(next) {
     value.value = next
     saved.value = false
     const seq = ++latest
+    pending++
     queue = queue.then(async () => {
       try {
         await user.updateProfile({ [field]: next })
@@ -75,6 +83,8 @@ function autosaved(field, fallback) {
       } catch (e) {
         showError(friendlyError(e))
         if (seq === latest) value.value = stored()
+      } finally {
+        pending--
       }
     })
   }
@@ -95,7 +105,7 @@ const controls = [
     state: autosaved('feedback', 'hints'),
   },
   {
-    key: 'checkins',
+    key: 'check-ins',
     title: 'Check-ins',
     help: 'How often the tutor runs a quick check without being asked.',
     testidPrefix: 'check-ins',

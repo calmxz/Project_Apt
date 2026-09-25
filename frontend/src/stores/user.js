@@ -6,10 +6,19 @@ import { apiGet, apiPatch } from '../services/apiClient.js'
 
 // Phase 7+: identity comes from `useAuthStore` (Supabase JWT). This store
 // only persists local UX preferences -- name + tutor preferences (feedback
-// style, check-ins, reply length) + onboarding completion -- in a localStorage entry namespaced by Supabase userId so two
-// accounts on one browser never share prefs (F-08).
+// style, check-ins, reply length) + onboarding completion -- in a
+// localStorage entry namespaced by Supabase userId so two accounts on one
+// browser never share prefs (F-08).
 
 const STORAGE_PREFIX = 'crux:user:v1'
+
+// interactionPreferences key -> /api/me field. Hydration and updateProfile
+// both read this, so a new tutor preference is one line here.
+const PREF_FIELDS = {
+  feedback: 'feedback_pref',
+  checkIns: 'check_ins',
+  replyLength: 'reply_length',
+}
 
 export const useUserStore = defineStore('user', () => {
   const name = ref(null)
@@ -89,9 +98,9 @@ export const useUserStore = defineStore('user', () => {
       if (me) {
         if (me.display_name != null) name.value = me.display_name
         const prefs = {}
-        if (me.feedback_pref != null) prefs.feedback = me.feedback_pref
-        if (me.check_ins != null) prefs.checkIns = me.check_ins
-        if (me.reply_length != null) prefs.replyLength = me.reply_length
+        for (const [key, field] of Object.entries(PREF_FIELDS)) {
+          if (me[field] != null) prefs[key] = me[field]
+        }
         if (Object.keys(prefs).length) {
           interactionPreferences.value = { ...interactionPreferences.value, ...prefs }
         }
@@ -143,21 +152,15 @@ export const useUserStore = defineStore('user', () => {
 
   // Sends only the fields given, so each Learning-tab control's autosave is a
   // single-field PATCH that never overwrites the others (#357).
-  async function updateProfile({ name: displayName, feedback, checkIns, replyLength }) {
+  async function updateProfile({ name: displayName, ...changes }) {
     const body = {}
     const prefs = {}
     if (displayName != null) body.display_name = displayName.trim() || 'Learner'
-    if (feedback != null) {
-      body.feedback_pref = feedback
-      prefs.feedback = feedback
-    }
-    if (checkIns != null) {
-      body.check_ins = checkIns
-      prefs.checkIns = checkIns
-    }
-    if (replyLength != null) {
-      body.reply_length = replyLength
-      prefs.replyLength = replyLength
+    for (const [key, field] of Object.entries(PREF_FIELDS)) {
+      if (changes[key] != null) {
+        body[field] = changes[key]
+        prefs[key] = changes[key]
+      }
     }
     if (Object.keys(body).length) {
       await apiPatch('/me', body)

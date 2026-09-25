@@ -34,12 +34,12 @@ const CONTROLS = [
     flash: 'learning-feedback-saved',
   },
   {
-    section: 'learning-checkins',
+    section: 'learning-check-ins',
     prefix: 'check-ins',
     field: 'checkIns',
     next: 'often',
     other: 'only_when_asked',
-    flash: 'learning-checkins-saved',
+    flash: 'learning-check-ins-saved',
   },
   {
     section: 'learning-reply-length',
@@ -92,13 +92,13 @@ describe('LearningTab', () => {
     expect(feedback).toContain('Direct answers')
     expect(feedback).toContain('Explain outright when I ask.')
 
-    const checkIns = wrapper.get('[data-testid="learning-checkins"]')
+    const checkIns = wrapper.get('[data-testid="learning-check-ins"]')
     expect(checkIns.findAll('.radio-label').map((l) => l.text())).toEqual([
       'Often',
       'Sometimes',
       'Only when I ask',
     ])
-    expect(checkIns.get('[data-testid="learning-checkins-help"]').text()).toMatch(/quick check/)
+    expect(checkIns.get('[data-testid="learning-check-ins-help"]').text()).toMatch(/quick check/)
 
     const reply = wrapper.get('[data-testid="learning-reply-length"]')
     expect(reply.findAll('.radio-label').map((l) => l.text())).toEqual([
@@ -116,6 +116,46 @@ describe('LearningTab', () => {
     expect(wrapper.get('[data-testid="feedback-style-direct_answers"]').element.checked).toBe(true)
     expect(wrapper.get('[data-testid="check-ins-sometimes"]').element.checked).toBe(true)
     expect(wrapper.get('[data-testid="reply-length-balanced"]').element.checked).toBe(true)
+  })
+
+  // The router runs hydrateFromServer in the background, so the tab can mount
+  // on a stale local snapshot; it must follow the store when /me lands.
+  it('follows the store when a background hydrate lands after mount', async () => {
+    const user = seedUser()
+    const wrapper = mount(LearningTab)
+    await flushPromises()
+
+    user.interactionPreferences = {
+      feedback: 'direct_answers',
+      checkIns: 'often',
+      replyLength: 'brief',
+    }
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="feedback-style-direct_answers"]').element.checked).toBe(true)
+    expect(wrapper.get('[data-testid="check-ins-often"]').element.checked).toBe(true)
+    expect(wrapper.get('[data-testid="reply-length-brief"]').element.checked).toBe(true)
+  })
+
+  it('a hydrate landing mid-save does not undo the pending choice', async () => {
+    const user = seedUser()
+    let resolveSave
+    vi.spyOn(user, 'updateProfile').mockReturnValue(
+      new Promise((resolve) => {
+        resolveSave = resolve
+      }),
+    )
+    const wrapper = mount(LearningTab)
+    await flushPromises()
+    await wrapper.get('[data-testid="check-ins-often"]').setValue(true)
+
+    user.interactionPreferences = { ...user.interactionPreferences, replyLength: 'thorough' }
+    await flushPromises()
+    expect(wrapper.get('[data-testid="check-ins-often"]').element.checked).toBe(true)
+    expect(wrapper.get('[data-testid="reply-length-thorough"]').element.checked).toBe(true)
+
+    resolveSave()
+    await flushPromises()
   })
 
   it('has no save button: changes autosave', async () => {
