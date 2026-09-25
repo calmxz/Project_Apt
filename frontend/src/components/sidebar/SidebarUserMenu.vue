@@ -76,8 +76,12 @@ function placeFixed() {
   const trigger = triggerEl.value
   if (!trigger) return
   const rect = trigger.getBoundingClientRect()
+  // Folded, the avatar is centred in a wider trigger, so align to the avatar
+  // itself rather than the trigger's edge.
+  const avatar = trigger.querySelector('.sb-avatar')?.getBoundingClientRect() ?? rect
   fixedStyle.value = {
-    left: `${rect.left}px`,
+    left: `${avatar.left}px`,
+    // 4px mirrors the unfolded card's `bottom: calc(100% + 0.25rem)`.
     bottom: `${Math.max(0, window.innerHeight - rect.top + 4)}px`,
   }
 }
@@ -306,7 +310,7 @@ defineExpose({ focusTrigger })
   justify-content: center;
 }
 
-/* The identity row: a written line in the foot, the same measure as Settings. */
+/* The identity row: a written line in the foot, one line pitch tall. */
 .sb-user-trigger {
   display: inline-flex;
   align-items: center;

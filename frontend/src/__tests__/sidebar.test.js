@@ -1053,7 +1053,7 @@ describe('Sidebar.vue — row interactions', () => {
   })
 })
 
-describe('Sidebar.vue — footer rail labels', () => {
+describe('Sidebar.vue — footer', () => {
   let wrapper
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -1071,17 +1071,25 @@ describe('Sidebar.vue — footer rail labels', () => {
   it.each([
     ['expanded', true],
     ['collapsed', false],
-  ])('footer carries no Settings link when %s', async (_state, expanded) => {
+  ])('footer carries the identity row alone, no Settings link, when %s', async (_s, expanded) => {
     sidebarTest._setExpanded(expanded)
     const auth = useAuthStore()
     auth.session = { user: { id: 'u-1', email: 'ada@example.com' }, access_token: 't' }
     wrapper = mount(Sidebar)
     await flushPromises()
     const footer = wrapper.get('footer.sb-rail')
-    expect(footer.find('[data-testid="sidebar-settings"]').exists()).toBe(false)
     expect(footer.find('a').exists()).toBe(false)
-    expect(footer.find('[data-testid="sidebar-user-trigger"]').exists()).toBe(true)
+    expect(footer.findAll('button').map((b) => b.attributes('data-testid'))).toEqual([
+      'sidebar-user-trigger',
+    ])
     expect(footer.classes().includes('sb-rail--column')).toBe(!expanded)
+  })
+
+  // With no identity row to hold, the ruled foot would be an empty strip.
+  it('renders no footer when unauthenticated', async () => {
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(wrapper.find('footer.sb-rail').exists()).toBe(false)
   })
 
   it('footer rail no longer renders a theme control', async () => {
@@ -1425,24 +1433,39 @@ describe('Sidebar.vue — identity row and account menu', () => {
   // its left edge on the avatar's, not out beside the rail.
   it('the folded menu opens above the avatar, left-aligned with it', async () => {
     sidebarTest._setExpanded(false)
+    const savedHeight = window.innerHeight
     Object.defineProperty(window, 'innerHeight', { configurable: true, value: 800 })
-    signIn()
-    wrapper = mount(Sidebar, { attachTo: document.body })
-    await flushPromises()
-    const trigger = wrapper.get('[data-testid="sidebar-user-trigger"]').element
-    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue({
-      left: 6,
-      right: 42,
-      top: 700,
-      bottom: 736,
-      width: 36,
-      height: 36,
-    })
-    await openMenu()
-    const menu = document.querySelector('[data-testid="sidebar-user-menu"]')
-    expect(menu.style.left).toBe('6px')
-    // 0.25rem (4px) gap above the trigger's top edge, as unfolded.
-    expect(menu.style.bottom).toBe('104px')
+    try {
+      signIn()
+      wrapper = mount(Sidebar, { attachTo: document.body })
+      await flushPromises()
+      // Folded, the 36px trigger centres the 28px avatar, 4px in from its edge.
+      const trigger = wrapper.get('[data-testid="sidebar-user-trigger"]').element
+      const avatar = wrapper.get('[data-testid="sidebar-user-initial"]').element
+      vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue({
+        left: 6,
+        right: 42,
+        top: 700,
+        bottom: 736,
+        width: 36,
+        height: 36,
+      })
+      vi.spyOn(avatar, 'getBoundingClientRect').mockReturnValue({
+        left: 10,
+        right: 38,
+        top: 704,
+        bottom: 732,
+        width: 28,
+        height: 28,
+      })
+      await openMenu()
+      const menu = document.querySelector('[data-testid="sidebar-user-menu"]')
+      expect(menu.style.left).toBe('10px')
+      // 0.25rem (4px) gap above the trigger's top edge, as unfolded.
+      expect(menu.style.bottom).toBe('104px')
+    } finally {
+      Object.defineProperty(window, 'innerHeight', { configurable: true, value: savedHeight })
+    }
   })
 
   it('the mobile drawer shows the identity row with the name', async () => {

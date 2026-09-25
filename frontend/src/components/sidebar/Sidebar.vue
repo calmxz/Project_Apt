@@ -714,9 +714,8 @@ async function onSignOut() {
       </template>
     </nav>
 
-    <footer class="sb-rail" :class="{ 'sb-rail--column': !isExpanded }">
+    <footer v-if="isAuthenticated" class="sb-rail" :class="{ 'sb-rail--column': !isExpanded }">
       <SidebarUserMenu
-        v-if="isAuthenticated"
         :name="identityName"
         :email="userEmail || ''"
         :collapsed="isRail"
