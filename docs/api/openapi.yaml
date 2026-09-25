@@ -58,8 +58,8 @@ paths:
       summary: Streaming tutor turn (SSE over POST).
       description: |
         Emits text/event-stream events: assistant_delta, tool_call_start,
-        tool_call_done, citations, check_question, cost_warning, done,
-        error, cancelled. Terminal events are done | error | cancelled.
+        tool_call_done, citations, check_question, topic_suggestions,
+        cost_warning, done, error, cancelled. Terminal events are done | error | cancelled.
         See the x-sse-events vendor extension below for per-event data shapes.
       operationId: chatStream
       requestBody:
@@ -575,8 +575,8 @@ paths:
         synthetic user turn, clears the batch, and streams the tutor's
         reaction. Emits the same text/event-stream vocabulary as
         POST /api/chat/stream (assistant_delta, tool_call_start,
-        tool_call_done, citations, check_question, cost_warning, done,
-        error, cancelled), plus a followup_skipped event when the daily
+        tool_call_done, citations, check_question, topic_suggestions,
+        cost_warning, done, error, cancelled), plus a followup_skipped event when the daily
         message cap blocks the reaction (data: {reason: "daily_cap"}).
         Terminal events are done | error | cancelled | followup_skipped.
       operationId: completeCheck
@@ -1301,6 +1301,66 @@ components:
                   One sentence shown to the learner after they answer, whether
                   right or wrong.
 
+    SuggestTopicsArgs:
+      type: object
+      additionalProperties: false
+      required: [session_id, mode, topic, items]
+      description: |
+        Offer the learner a topic card under this reply, once per session,
+        after their level becomes known (#354). Ends the turn. broad: items are
+        3-5 subtopics of the session topic. specific: items are 2-4 adjacent
+        topics; the card itself adds the "Keep going on <topic>" line. The
+        per-mode item counts are enforced in topic_suggest_service, not here.
+      properties:
+        session_id:
+          type: string
+          maxLength: 64
+          description: Ignored; the server injects the authoritative session id.
+        mode:
+          type: string
+          enum: [broad, specific]
+          description: >-
+            broad when the topic spans several subtopics; specific when it is
+            already one narrow concept.
+        topic:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: The session topic as a short noun phrase.
+        items:
+          type: array
+          minItems: 2
+          maxItems: 5
+          items: { $ref: "#/components/schemas/TopicSuggestionItem" }
+
+    TopicSuggestionItem:
+      type: object
+      additionalProperties: false
+      required: [label]
+      properties:
+        label:
+          type: string
+          minLength: 1
+          maxLength: 80
+          description: Short noun phrase naming the subtopic or adjacent topic.
+        hint:
+          type: [string, "null"]
+          maxLength: 80
+          default: null
+          description: Optional one-line note shown beside the label.
+
+    TopicSuggestions:
+      type: object
+      additionalProperties: false
+      required: [mode, topic, items]
+      description: A suggest_topics card as persisted on its assistant message.
+      properties:
+        mode:  { type: string, enum: [broad, specific] }
+        topic: { type: string }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/TopicSuggestionItem" }
+
     PendingCheck:
       type: object
       additionalProperties: false
@@ -1508,6 +1568,12 @@ components:
             - $ref: "#/components/schemas/PendingCheck"
             - type: "null"
           default: null
+        topic_suggestions:
+          oneOf:
+            - $ref: "#/components/schemas/TopicSuggestions"
+            - type: "null"
+          default: null
+          description: The topic card this assistant turn offered (#354), else null.
         status:
           type: [string, "null"]
           default: null
@@ -2047,6 +2113,22 @@ x-sse-events:
               options:
                 type: array
                 items: { type: string }
+
+  topic_suggestions:
+    data:
+      type: object
+      required: [mode, topic, items]
+      properties:
+        mode:  { type: string, enum: [broad, specific] }
+        topic: { type: string }
+        items:
+          type: array
+          items:
+            type: object
+            required: [label]
+            properties:
+              label: { type: string }
+              hint:  { type: [string, "null"] }
 
   followup_skipped:
     data:

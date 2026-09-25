@@ -89,6 +89,12 @@ class Session(Base):
     quiz_cooldown_json: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     # #340: check-level pointer across sets; see services/pending_check_store.py.
     current_check_json: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+    # #354: the once-per-session topic card. "awaiting_level" when the session
+    # started without a level, "done" once suggest_topics ran, NULL otherwise.
+    # See services/topic_suggest_service.py.
+    topic_suggest_state: Mapped[str | None] = mapped_column(
+        String(16), nullable=True, default=None
+    )
     # C-16: see User.created_at.
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(), default=_utcnow

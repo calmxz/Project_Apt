@@ -1316,6 +1316,76 @@ describe('SessionView', () => {
       expect(sendSpy).toHaveBeenCalledWith({ text: "I'd say my level is advanced." })
     })
 
+    // #354: the topic card under the first at-level reply.
+    const TOPIC_CARD = {
+      mode: 'broad',
+      topic: 'Calculus',
+      items: [
+        { label: 'Limits', hint: null },
+        { label: 'Derivatives', hint: null },
+        { label: 'Integrals', hint: null },
+      ],
+    }
+    const withCard = (extra = []) => [
+      { role: 'assistant', content: 'Calculus studies change.', topic_suggestions: TOPIC_CARD },
+      ...extra,
+    ]
+    const levelSet = () =>
+      getSessionProfile.mockResolvedValue({ profile: { knowledge_level: 'beginner' }, etag: 't1' })
+
+    it('renders the topic card under the latest tutor reply that carries one', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession({ messages: withCard() })
+      })
+      levelSet()
+      const wrapper = mountView()
+      await flushPromises()
+      expect(wrapper.find('[data-testid="topic-suggest-card"]').exists()).toBe(true)
+      expect(wrapper.find('[data-testid="diagnostic-consent-card"]').exists()).toBe(false)
+    })
+
+    it('a tapped topic line sends a learner message', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession({ messages: withCard() })
+      })
+      const sendSpy = vi.spyOn(store, 'sendMessageStreaming').mockResolvedValue()
+      levelSet()
+      const wrapper = mountView()
+      await flushPromises()
+      await wrapper.get('[data-testid="topic-line-1"]').trigger('click')
+      await flushPromises()
+      expect(sendSpy).toHaveBeenCalledWith({ text: "Let's start with Derivatives" })
+    })
+
+    it('closes once a learner turn follows the card (reload or tap)', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession({ messages: withCard([{ role: 'user', content: 'Limits please' }]) })
+      })
+      levelSet()
+      const wrapper = mountView()
+      await flushPromises()
+      expect(wrapper.find('[data-testid="topic-suggest-card"]').exists()).toBe(false)
+    })
+
+    it('dismiss hides the card and survives a reload of the session', async () => {
+      const store = useSessionStore()
+      vi.spyOn(store, 'loadSession').mockImplementation(async () => {
+        setupSession({ messages: withCard() })
+      })
+      levelSet()
+      const wrapper = mountView()
+      await flushPromises()
+      await wrapper.get('[data-testid="topic-dismiss"]').trigger('click')
+      expect(wrapper.find('[data-testid="topic-suggest-card"]').exists()).toBe(false)
+      wrapper.unmount()
+      const again = mountView()
+      await flushPromises()
+      expect(again.find('[data-testid="topic-suggest-card"]').exists()).toBe(false)
+    })
+
     it('level button does not send a declaration message when the PATCH fails', async () => {
       const store = useSessionStore()
       vi.spyOn(store, 'loadSession').mockImplementation(async () => {

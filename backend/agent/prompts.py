@@ -174,7 +174,8 @@ KNOWLEDGE DIAGNOSTIC:
   phrasing): start the diagnostic check immediately and call
   ask_check_questions now with set 1 (see DIAGNOSTIC SETS).
 - If the learner states their level: call update_topic_profile with
-  knowledge_level and evidence_type="declared".
+  knowledge_level and evidence_type="declared", then reply at that level
+  (see TOPIC SUGGESTIONS).
 - If the learner keeps chatting without choosing: teach beginner-friendly.
   Never ask for their level or propose a check yourself; the card handles it.
 - When DIAGNOSTIC is ACCEPTED, the learner already agreed to the quick check
@@ -192,6 +193,30 @@ KNOWLEDGE DIAGNOSTIC:
   already established. Pitch your answer at the profile level immediately. This applies especially to openers like "where should I
   start?": answer with a starting point for that level, do not respond with a
   level interview. Follow the normal check-question protocol above.
+
+TOPIC SUGGESTIONS:
+- Once per session, the first reply at the learner's level carries a topic
+  card: call suggest_topics(mode, topic, items) at the end of that turn.
+- TOPIC_SUGGEST: DUE means the level is now known (declared, picked on the
+  level card, or graded by the diagnostic check): this turn is that first
+  at-level reply. Answer the learner at their level (after a diagnostic,
+  address the results as usual), then call suggest_topics.
+- TOPIC_SUGGEST: AFTER_LEVEL means the level is still unknown. Call
+  suggest_topics only in a turn where you record the learner's declared
+  level with update_topic_profile, after that patch and after your reply.
+  If you start a diagnostic check instead, do not call it; the card comes
+  after grading.
+- TOPIC_SUGGEST: OFF means never call suggest_topics.
+- Write your reply first; never a turn that is only the tool call. The card
+  renders the items, so do not list or restate them in your prose.
+- Choose the mode: "broad" when the TOPIC spans several subtopics; items are
+  3-5 subtopics you would teach, in a sensible order. "specific" when the
+  TOPIC is already one narrow concept; items are 2-4 adjacent topics you can
+  teach (the card adds a "Keep going on <topic>" line itself). topic is the
+  session TOPIC as a short noun phrase. Each item label is a short noun
+  phrase; hint is optional, one short line.
+- Calling suggest_topics ends your turn. The learner taps a line to send it
+  as their next message, or just keeps talking.
 
 REVIEW-GAPS MODE:
 - When REVIEW_GAPS names a gap (not OFF), the learner reopened this session to
@@ -426,6 +451,15 @@ def build_dynamic_context(state: dict) -> str:
     else:
         review_gaps_label = "OFF"
 
+    # #354: "awaiting_level" is set at create only for a session that started
+    # without a level (topic_suggest_service), so seeded sessions stay OFF.
+    if state.get("topic_suggest_state") != "awaiting_level" or review_gaps_target:
+        topic_suggest_label = "OFF"
+    elif profile_dict.get("knowledge_level"):
+        topic_suggest_label = "DUE"
+    else:
+        topic_suggest_label = "AFTER_LEVEL"
+
     out = (
         f"TOPIC: {topic}\n"
         f"CURRENT TOPIC PROFILE: {json.dumps(profile_dict)}\n"
@@ -439,7 +473,8 @@ def build_dynamic_context(state: dict) -> str:
         f"PENDING_CHECK: {pc_label}\n"
         f"GAP_ACCURACY: {_gap_accuracy_label(profile_dict, state.get('gap_accuracy') or {})}\n"
         f"QUIZ_READINESS: {qr_label}\n"
-        f"REVIEW_GAPS: {review_gaps_label}"
+        f"REVIEW_GAPS: {review_gaps_label}\n"
+        f"TOPIC_SUGGEST: {topic_suggest_label}"
     )
     if prefetched:
         out += "\nPREFETCHED_EXCERPTS:\n" + "\n".join(prefetched)

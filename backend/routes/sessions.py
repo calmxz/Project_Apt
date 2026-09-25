@@ -52,6 +52,7 @@ from services import (
     profile_service,
     rate_limit,
     summary_service,
+    topic_suggest_service,
     velocity_limit,
 )
 from services.auth import accepted_terms_from_request, current_user_id
@@ -229,6 +230,10 @@ def _create_session_finish(
         topic=req.topic.strip(),
         topic_profile_json=profile_json,
     )
+    # #354: only a session that starts without a level earns the topic card.
+    new_session.topic_suggest_state = topic_suggest_service.initial_state(
+        profile_service.profile_from_row(new_session).knowledge_level
+    )
     db.add(new_session)
     try:
         db.commit()
@@ -316,6 +321,7 @@ def _load_messages(
                 citations=citations,
                 tool_calls=tool_calls,
                 check_batch=check_batch,
+                topic_suggestions=topic_suggest_service.from_tool_calls(m.tool_calls_json),
                 status=m.status,
             )
         )
@@ -876,6 +882,9 @@ def _followup_context(
         "last_session_summary": profile.last_session_summary,
         "pending_check": None,
         "quiz_cooldown": cooldown,
+        # #354: a graded diagnostic makes this follow-up the first at-level
+        # reply, so it is where the topic card falls due.
+        "topic_suggest_state": row.topic_suggest_state,
     }
     system_prompt = prompts.build_system_prompt(prompt_state)
     ctx = ToolContext(

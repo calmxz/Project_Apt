@@ -720,6 +720,62 @@ describe('session store — streaming', () => {
     expect(s.messages.at(-1)).toMatchObject({ message_id: 'm1' })
   })
 
+  // #354: live stream and reload converge on the same message field.
+  const TOPIC_CARD = {
+    mode: 'broad',
+    topic: 'Thermodynamics',
+    items: [{ label: 'Entropy', hint: null }],
+  }
+
+  it('carries a topic_suggestions event onto the finalized message', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 's1'
+    vi.spyOn(streamSvc, 'streamChat').mockImplementation(async ({ onEvent }) => {
+      onEvent({ event: 'assistant_delta', data: { text: 'Energy moves.' } })
+      onEvent({ event: 'topic_suggestions', data: TOPIC_CARD })
+      onEvent({ event: 'done', data: { message_id: 'm1' } })
+    })
+    await s.sendMessageStreaming({ text: 'I am a beginner' })
+    expect(s.messages.at(-1)).toMatchObject({
+      role: 'assistant',
+      message_id: 'm1',
+      topic_suggestions: TOPIC_CARD,
+    })
+  })
+
+  it('carries a topic_suggestions event from the check follow-up stream', async () => {
+    const s = useSessionStore()
+    s.currentSessionId = 's1'
+    s.handleCheckQuestion({ gap: 'g', total: 1, items: [{ question: 'Q', options: ['a'] }] })
+    vi.spyOn(streamSvc, 'streamCheckComplete').mockImplementation(async ({ onEvent }) => {
+      onEvent({ event: 'assistant_delta', data: { text: 'You are intermediate.' } })
+      onEvent({ event: 'topic_suggestions', data: TOPIC_CARD })
+      onEvent({ event: 'done', data: { message_id: 'm2' } })
+    })
+    await s.completeCheck()
+    expect(s.messages.at(-1)).toMatchObject({ message_id: 'm2', topic_suggestions: TOPIC_CARD })
+  })
+
+  it('maps topic_suggestions from session detail on reload', async () => {
+    sessionsApi.getSession.mockResolvedValueOnce({
+      id: 's1',
+      messages: [
+        {
+          id: 'm1',
+          role: 'assistant',
+          content: 'Energy moves.',
+          created_at: '2026-01-01',
+          topic_suggestions: TOPIC_CARD,
+        },
+        { id: 'm2', role: 'user', content: 'hi', created_at: '2026-01-02' },
+      ],
+    })
+    const s = useSessionStore()
+    await s.loadSession('s1')
+    expect(s.messages[0].topic_suggestions).toEqual(TOPIC_CARD)
+    expect(s.messages[1].topic_suggestions).toBeNull()
+  })
+
   it('forwards reviewGaps to streamChat as review_gaps', async () => {
     const s = useSessionStore()
     s.currentSessionId = 's1'

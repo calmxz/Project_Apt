@@ -40,6 +40,8 @@ function toUiMessage(m) {
           })),
         }
       : null,
+    // #354: the topic card this turn offered; same shape live and on reload.
+    topic_suggestions: m.topic_suggestions || null,
   }
 }
 
@@ -711,6 +713,9 @@ export const useSessionStore = defineStore('session', () => {
             case 'check_question':
               handleCheckQuestion(data)
               break
+            case 'topic_suggestions':
+              setTopicSuggestions(data)
+              break
             case 'done':
               sawTerminal = true
               finalizeMessage(data.message_id)
@@ -822,6 +827,13 @@ export const useSessionStore = defineStore('session', () => {
   function setCitations(citations) {
     if (!streamingMessage.value) return
     streamingMessage.value.citations = citations
+  }
+
+  // #354: rides on the streaming message so finalizeMessage/handleCancelled
+  // carry it into the transcript, the same field a reload maps.
+  function setTopicSuggestions(card) {
+    if (!streamingMessage.value) return
+    streamingMessage.value.topic_suggestions = card
   }
 
   function finalizeMessage(message_id) {
@@ -956,6 +968,9 @@ export const useSessionStore = defineStore('session', () => {
               break
             case 'check_question':
               handleCheckQuestion(data)
+              break
+            case 'topic_suggestions':
+              setTopicSuggestions(data)
               break
             case 'done':
               sawTerminal = true
