@@ -238,6 +238,77 @@ describe('multi-check store', () => {
     expect(cb.items[0].correct).toBe(true)
   })
 
+  // #364: set_index / set_total ride every path the card and recap read from.
+  it('#364 stream check_question carries set_index / set_total', () => {
+    const s = useSessionStore()
+    s.handleCheckQuestion({ ...batchEvent(), set_index: 2, set_total: 3 })
+    expect(s.pendingCheck.setIndex).toBe(2)
+    expect(s.pendingCheck.setTotal).toBe(3)
+  })
+
+  it('#364 a pre-set stream event maps set fields to null', () => {
+    const s = useSessionStore()
+    s.handleCheckQuestion(batchEvent())
+    expect(s.pendingCheck.setIndex).toBeNull()
+    expect(s.pendingCheck.setTotal).toBeNull()
+  })
+
+  it('#364 set_index / set_total survive reload on pending_check and check_batch', async () => {
+    const s = useSessionStore()
+    const item = {
+      question: 'Q1',
+      options: ['a', 'b'],
+      status: 'answered',
+      selected_index: 0,
+      correct_index: 0,
+      correct: true,
+      explanation: 'a.',
+    }
+    sessionsApi.getSession.mockResolvedValue({
+      id: 'sid',
+      messages: [
+        {
+          id: 1,
+          role: 'assistant',
+          content: '',
+          created_at: '2026-06-07T00:00:00Z',
+          citations: [],
+          check_batch: {
+            gap: 'atp',
+            current_index: 1,
+            total: 1,
+            set_index: 1,
+            set_total: 3,
+            items: [item],
+          },
+        },
+        {
+          id: 2,
+          role: 'assistant',
+          content: '',
+          created_at: '2026-06-07T00:00:00Z',
+          citations: [],
+          check_batch: { gap: 'old', current_index: 1, total: 1, items: [item] },
+        },
+      ],
+      pending_check: {
+        gap: 'atp',
+        current_index: 0,
+        total: 1,
+        set_index: 2,
+        set_total: 3,
+        items: [{ question: 'Q2', options: ['a', 'b'], status: 'pending' }],
+      },
+    })
+    await s.loadSession('sid')
+    expect(s.pendingCheck.setIndex).toBe(2)
+    expect(s.pendingCheck.setTotal).toBe(3)
+    expect(s.messages[0].check_batch.setIndex).toBe(1)
+    expect(s.messages[0].check_batch.setTotal).toBe(3)
+    expect(s.messages[1].check_batch.setIndex).toBeNull()
+    expect(s.messages[1].check_batch.setTotal).toBeNull()
+  })
+
   it('restores pendingCheck when the completion stream fails before any event', async () => {
     const store = useSessionStore()
     store.currentSessionId = 'sid'

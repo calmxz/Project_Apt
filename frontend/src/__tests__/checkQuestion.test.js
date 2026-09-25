@@ -1,6 +1,10 @@
 import { mount } from '@vue/test-utils'
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import CheckQuestion from '../components/chat/CheckQuestion.vue'
+
+/* global process */
 
 function batch(overrides = {}) {
   return {
@@ -262,6 +266,68 @@ describe('CheckQuestion accessibility (D-01)', () => {
     const wrapper = mountAnswered({})
     await wrapper.find('[data-testid="check-option"]').trigger('click')
     expect(wrapper.emitted('answer')).toBeUndefined()
+  })
+})
+
+// #364: a check of M sets shows `set N of M` and a head rule cut into M
+// segments. A single-set check keeps today's one solid rule and no set words.
+describe('CheckQuestion set progress (#364)', () => {
+  const segs = (w) => w.findAll('[data-testid="check-rule-seg"]')
+
+  it.each([
+    ['absent', {}],
+    ['null', { setIndex: null, setTotal: null }],
+    ['1 of 1', { setIndex: 1, setTotal: 1 }],
+  ])('single-set (%s) renders unchanged', (_, sets) => {
+    const w = mount(CheckQuestion, { props: { check: batch(sets) } })
+    expect(w.find('.role-tag').text()).toBe('check')
+    expect(w.text()).not.toMatch(/set \d/)
+    expect(w.find('[data-testid="check-set-rule"]').exists()).toBe(false)
+    expect(w.find('.check-gutter').classes()).not.toContain('is-segmented')
+    expect(w.get('.check-progress').text()).toBe('1/2')
+  })
+
+  it('multi-set head line reads check · set N of M, count stays right', () => {
+    const w = mount(CheckQuestion, { props: { check: batch({ setIndex: 2, setTotal: 3 }) } })
+    expect(w.find('.role-tag').text().replace(/\s+/g, ' ')).toBe('check · set 2 of 3')
+    expect(w.get('.check-progress').text()).toBe('1/2')
+    expect(w.find('.check-gutter').classes()).toContain('is-segmented')
+  })
+
+  it('segment count equals set_total', () => {
+    const w = mount(CheckQuestion, { props: { check: batch({ setIndex: 1, setTotal: 3 }) } })
+    expect(segs(w)).toHaveLength(3)
+  })
+
+  it('done sets full, live set filled by resolved items, upcoming empty', () => {
+    const b = batch({ setIndex: 2, setTotal: 3, currentIndex: 1 })
+    b.items[0] = { ...b.items[0], status: 'answered', correct: true, correctIndex: 0 }
+    const w = mount(CheckQuestion, { props: { check: b } })
+    const [done, live, todo] = segs(w)
+    expect(done.classes()).toContain('is-done')
+    expect(live.classes()).toContain('is-live')
+    expect(todo.classes()).toContain('is-todo')
+    expect(done.attributes('data-fill')).toBe('1')
+    expect(live.attributes('data-fill')).toBe('0.5')
+    expect(todo.attributes('data-fill')).toBe('0')
+  })
+
+  it('live segment fills as answers land', async () => {
+    const b = batch({ setIndex: 1, setTotal: 2 })
+    const w = mount(CheckQuestion, { props: { check: b } })
+    expect(segs(w)[0].attributes('data-fill')).toBe('0')
+    await w.setProps({ check: { ...b, currentIndex: 2 } })
+    expect(segs(w)[0].attributes('data-fill')).toBe('1')
+  })
+
+  it('reduced motion drops the fill transition, so the final state shows', () => {
+    const src = readFileSync(
+      resolve(process.cwd(), 'src/components/chat/CheckQuestion.vue'),
+      'utf8',
+    )
+    const block = src.match(/@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/)
+    expect(block).not.toBeNull()
+    expect(block[1]).toMatch(/\.check-rule-seg::after\s*\{\s*transition:\s*none;/)
   })
 })
 
