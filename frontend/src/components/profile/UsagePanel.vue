@@ -12,7 +12,6 @@
           <span class="glance-figure">${{ usage.today_spend_usd.toFixed(2) }}</span>
           <span class="glance-caption">today · ${{ usage.hard_cap_usd.toFixed(2) }} daily cap</span>
         </div>
-        <span class="glance-week">Last 7 days ${{ last7.toFixed(2) }}</span>
       </div>
 
       <div class="meter-wrap">
@@ -64,12 +63,18 @@
           >
         </div>
       </div>
+
+      <p class="muted" data-testid="usage-reset">
+        Resets at {{ resetTime }}. At the limit, chat pauses until then.
+      </p>
     </template>
   </div>
 </template>
 
 <script setup>
 import { computed } from 'vue'
+
+import { formatTime } from '../../utils/formatDate'
 
 const props = defineProps({
   usage: { type: Object, required: true },
@@ -85,7 +90,8 @@ const noSpend = computed(
   () => maxDay.value === 0 && props.usage.today_spend_usd === 0 && !hasPastSessions.value,
 )
 
-const last7 = computed(() => props.usage.daily.slice(-7).reduce((acc, d) => acc + d.cost_usd, 0))
+// resets_at is the next UTC midnight; the learner reads it in their own zone.
+const resetTime = computed(() => formatTime(props.usage.resets_at))
 
 const pctOfHard = (v) => `${Math.min(100, Math.round((v / props.usage.hard_cap_usd) * 100))}%`
 
@@ -153,13 +159,6 @@ const meterPctLabel = computed(() => {
 .glance-caption {
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
-  line-height: var(--line-pitch);
-  color: var(--pencil);
-}
-
-.glance-week {
-  font-family: var(--font-sans);
-  font-size: var(--fs-label);
   line-height: var(--line-pitch);
   color: var(--pencil);
 }

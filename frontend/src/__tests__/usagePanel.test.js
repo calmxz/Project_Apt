@@ -2,6 +2,7 @@ import { mount, RouterLinkStub } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
 import UsagePanel from '../components/profile/UsagePanel.vue'
+import { formatTime } from '../utils/formatDate'
 
 const usage = (overrides = {}) => ({
   daily: [
@@ -13,6 +14,7 @@ const usage = (overrides = {}) => ({
   urgent_cap_usd: 2.7,
   hard_cap_usd: 3.0,
   top_sessions: [],
+  resets_at: '2026-07-11T00:00:00Z',
   ...overrides,
 })
 
@@ -23,33 +25,24 @@ const factory = (u = usage()) =>
   })
 
 describe('UsagePanel', () => {
-  it('renders the today figure, daily cap caption, and last-7-days line', () => {
+  it("renders only today's figure and the daily cap in the glance", () => {
     const w = factory()
     const glance = w.find('[data-testid="usage-glance"]')
     expect(glance.find('.glance-figure').text()).toBe('$1.00')
     expect(glance.find('.glance-caption').text()).toBe('today · $3.00 daily cap')
-    expect(glance.find('.glance-week').text()).toBe('Last 7 days $1.50')
+    expect(glance.element.children).toHaveLength(1)
+    expect(w.text()).not.toContain('Last 7 days')
   })
 
-  it('sums only the last 7 daily entries', () => {
-    const w = factory(
-      usage({
-        daily: [
-          { date_utc: '2026-07-03', cost_usd: 5.0 },
-          { date_utc: '2026-07-04', cost_usd: 0.1 },
-          { date_utc: '2026-07-05', cost_usd: 0.1 },
-          { date_utc: '2026-07-06', cost_usd: 0.1 },
-          { date_utc: '2026-07-07', cost_usd: 0.1 },
-          { date_utc: '2026-07-08', cost_usd: 0.1 },
-          { date_utc: '2026-07-09', cost_usd: 0.1 },
-          { date_utc: '2026-07-10', cost_usd: 0.1 },
-        ],
-        today_spend_usd: 0.1,
-      }),
+  it('says when the cap resets, in local time, under the meter', () => {
+    // formatTime uses the runner's zone and locale, so the expected hour is
+    // derived the same way rather than hardcoded.
+    const w = factory(usage({ resets_at: '2026-07-11T00:00:00Z' }))
+    const note = w.find('[data-testid="usage-reset"]')
+    expect(note.text()).toBe(
+      `Resets at ${formatTime('2026-07-11T00:00:00Z')}. At the limit, chat pauses until then.`,
     )
-    const glance = w.find('[data-testid="usage-glance"]')
-    expect(glance.find('.glance-figure').text()).toBe('$0.10')
-    expect(glance.find('.glance-week').text()).toBe('Last 7 days $0.70')
+    expect(w.find('.meter-wrap + [data-testid="usage-reset"]').exists()).toBe(true)
   })
 
   it('shows the meter tier labels with soft/urgent amounts and the cap in the glance caption', () => {
@@ -149,5 +142,7 @@ describe('UsagePanel', () => {
     expect(w.text()).not.toContain('Most expensive sessions')
     expect(w.text()).not.toContain('algebra')
     expect(w.findComponent(RouterLinkStub).exists()).toBe(false)
+    // Daily only: no model name, month-to-date, or message cap either.
+    expect(w.text()).not.toMatch(/model|month|messages/i)
   })
 })
