@@ -450,7 +450,7 @@ async function onSignOut() {
       </button>
     </div>
 
-    <!-- Folded rail: Search and Review stay one click away without unfolding. -->
+    <!-- Folded rail: Search and Recall stay one click away without unfolding. -->
     <div v-if="isDesktop && !isExpanded" class="sb-rail-actions">
       <button
         type="button"
@@ -479,11 +479,11 @@ async function onSignOut() {
       </button>
       <RouterLink
         v-if="reviewTotal > 0"
-        to="/review"
+        to="/recall"
         class="sb-icon sb-rail-review hit-44"
-        data-testid="sidebar-review"
-        :aria-label="`Review: ${reviewTotal} ${reviewTotal === 1 ? 'concept' : 'concepts'} due`"
-        title="Review"
+        data-testid="sidebar-recall"
+        :aria-label="`Recall: ${reviewTotal} ${reviewTotal === 1 ? 'concept' : 'concepts'} due`"
+        title="Recall"
       >
         <svg
           class="sb-inline-icon"
@@ -507,10 +507,10 @@ async function onSignOut() {
 
     <RouterLink
       v-if="isExpanded && reviewTotal > 0"
-      to="/review"
+      to="/recall"
       class="sb-review"
-      data-testid="sidebar-review"
-      :aria-label="`Review: ${reviewTotal} ${reviewTotal === 1 ? 'concept' : 'concepts'} due`"
+      data-testid="sidebar-recall"
+      :aria-label="`Recall: ${reviewTotal} ${reviewTotal === 1 ? 'concept' : 'concepts'} due`"
       @click="closeDrawer"
     >
       <svg
@@ -529,7 +529,7 @@ async function onSignOut() {
         <circle cx="10" cy="10.5" r="7" />
         <path d="M10 6.5 L10 10.5 L13 12.5" />
       </svg>
-      <span>Review</span>
+      <span>Recall</span>
       <span class="sb-review-count" aria-hidden="true">{{ reviewTotal }}</span>
     </RouterLink>
 
@@ -938,7 +938,7 @@ async function onSignOut() {
   margin-left: 0;
 }
 
-/* Folded rail rows: Search and Review, centred under New session. */
+/* Folded rail rows: Search and Recall, centred under New session. */
 .sb-rail-actions {
   display: flex;
   flex-direction: column;

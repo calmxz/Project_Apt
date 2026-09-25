@@ -1422,7 +1422,7 @@ describe('Sidebar.vue — mount fetch', () => {
   })
 })
 
-describe('Sidebar.vue — review entry', () => {
+describe('Sidebar.vue — recall entry', () => {
   let wrapper
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -1455,46 +1455,46 @@ describe('Sidebar.vue — review entry', () => {
     delete globalThis.cancelIdleCallback
   })
 
-  it('shows the review entry with a count when concepts are due', async () => {
+  it('shows the recall entry with a count when concepts are due', async () => {
     apiReviewQueue.mockResolvedValue({ items: [], total: 13, limit: 1, offset: 0 })
     wrapper = mount(Sidebar)
     await flushPromises()
-    const entry = wrapper.get('[data-testid="sidebar-review"]')
-    expect(entry.text()).toContain('Review')
+    const entry = wrapper.get('[data-testid="sidebar-recall"]')
+    expect(entry.text()).toContain('Recall')
     expect(entry.text()).toContain('13')
     expect(apiReviewQueue).toHaveBeenCalledWith({ limit: 1, offset: 0 }, { silent: true })
   })
 
-  it('hides the review entry when nothing is due', async () => {
+  it('hides the recall entry when nothing is due', async () => {
     apiReviewQueue.mockResolvedValue({ items: [], total: 0, limit: 1, offset: 0 })
     wrapper = mount(Sidebar)
     await flushPromises()
-    expect(wrapper.find('[data-testid="sidebar-review"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="sidebar-recall"]').exists()).toBe(false)
   })
 
-  it('hides the review entry when the fetch fails', async () => {
+  it('hides the recall entry when the fetch fails', async () => {
     apiReviewQueue.mockRejectedValue(new Error('boom'))
     wrapper = mount(Sidebar)
     await flushPromises()
-    expect(wrapper.find('[data-testid="sidebar-review"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="sidebar-recall"]').exists()).toBe(false)
   })
 
-  it('keeps the review entry in the icon rail (collapsed) with the due count', async () => {
+  it('keeps the recall entry in the icon rail (collapsed) with the due count', async () => {
     sidebarTest._setExpanded(false)
     apiReviewQueue.mockResolvedValue({ items: [], total: 13, limit: 1, offset: 0 })
     wrapper = mount(Sidebar)
     await flushPromises()
-    const entry = wrapper.get('[data-testid="sidebar-review"]')
+    const entry = wrapper.get('[data-testid="sidebar-recall"]')
     expect(entry.text()).toContain('13')
-    expect(entry.attributes('aria-label')).toBe('Review: 13 concepts due')
+    expect(entry.attributes('aria-label')).toBe('Recall: 13 concepts due')
   })
 
-  it('hides the rail review entry when nothing is due', async () => {
+  it('hides the rail recall entry when nothing is due', async () => {
     sidebarTest._setExpanded(false)
     apiReviewQueue.mockResolvedValue({ items: [], total: 0, limit: 1, offset: 0 })
     wrapper = mount(Sidebar)
     await flushPromises()
-    expect(wrapper.find('[data-testid="sidebar-review"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="sidebar-recall"]').exists()).toBe(false)
   })
 
   it('does not fetch the badge before the idle callback runs', async () => {

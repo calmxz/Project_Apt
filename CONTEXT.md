@@ -8,7 +8,7 @@ Glossary for Crux's Card Box design vocabulary (see `DESIGN.md`), alphabetical.
 - **Half-tab** — the 22x28px edge toggle that folds or unfolds a column. Only the profile panel keeps one; the sidebar's half-tab was replaced by the rail's drawn sidebar icon.
 - **Head line** — the pencil label-size line that opens every card: role and time on a turn, role and count on a check, section name and count on a divider tab.
 - **Identity row** — the sidebar foot's initial circle plus display name (the sign-in email when no name is set), the trigger for the user menu.
-- **Rail** — the sidebar folded to a 3rem strip of icons: the sidebar toggle, New session, Search, Review, one dot per session, then Settings and the identity initial.
+- **Rail** — the sidebar folded to a 3rem strip of icons: the sidebar toggle, New session, Search, Recall, one dot per session, then Settings and the identity initial.
 - **Session action bar** — the 56px bar under the session head, topic/level/started on the left, Rename/Pin/End-or-Resume and the reference-file status on the right.
 - **Sheet** — the white card a Settings or Account tab rail is joined to.
 - **Stock** — the card material that tells a voice apart: white for the tutor's check, recap and summary cards, blue for the learner's card. The tutor's own turn carries no stock; it writes flat on the desk.

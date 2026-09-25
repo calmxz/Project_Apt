@@ -104,9 +104,14 @@ const router = createRouter({
       redirect: { name: 'home' },
     },
     {
+      path: '/recall',
+      name: 'recall',
+      component: () => import('../views/RecallView.vue'),
+    },
+    {
+      // Renamed to Recall (#352). Redirect kept so old links keep working.
       path: '/review',
-      name: 'review',
-      component: () => import('../views/ReviewView.vue'),
+      redirect: { name: 'recall' },
     },
     {
       path: '/sessions',
