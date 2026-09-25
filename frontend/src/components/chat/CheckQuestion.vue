@@ -2,8 +2,9 @@
 import { computed, nextTick, ref, watch } from 'vue'
 
 const props = defineProps({
-  // Batch: { gap, total, currentIndex, viewIndex, items: [
+  // Batch: { gap, total, currentIndex, viewIndex, setIndex, setTotal, items: [
   //   { question, options, status, selectedIndex, correctIndex, correct, explanation } ] }
+  // setIndex / setTotal (1-based, #340) may be null; null means one set.
   check: { type: Object, required: true },
   // F-04: true while a stream is live; Skip/Next/Done are disabled so the
   // follow-up stream cannot be started on top of an active one.
@@ -29,6 +30,22 @@ const canStop = computed(() => props.check.currentIndex < props.check.total)
 // Hidden-until-graded: the explanation is a raise, not a hint.
 const graded = computed(() => item.value.status === 'answered')
 
+// #364: a check of M sets cuts the head rule into M segments. Done sets are
+// full, the live set fills as its items resolve (currentIndex is the resolved
+// pointer, so a skip counts), upcoming sets are empty. One set keeps today's
+// single solid rule and no set words.
+const setIndex = computed(() => props.check.setIndex ?? 1)
+const setTotal = computed(() => props.check.setTotal ?? 1)
+const multiSet = computed(() => setTotal.value > 1)
+const segments = computed(() =>
+  Array.from({ length: setTotal.value }, (_, k) => {
+    const n = k + 1
+    if (n < setIndex.value) return { state: 'is-done', fill: 1 }
+    if (n > setIndex.value) return { state: 'is-todo', fill: 0 }
+    return { state: 'is-live', fill: props.check.currentIndex / props.check.total || 0 }
+  }),
+)
+
 function optionClass(i) {
   if (item.value.status !== 'answered') return ''
   if (i === item.value.correctIndex) return 'is-correct'
@@ -53,11 +70,26 @@ watch(answered, async (is) => {
     :class="{ answered, correct, incorrect: answered && !correct }"
     data-testid="check-card"
   >
-    <div class="check-gutter">
-      <span class="role-tag">check</span>
+    <div class="check-gutter" :class="{ 'is-segmented': multiSet }">
+      <span class="role-tag"
+        >check<span v-if="multiSet" class="check-set" data-testid="check-set">
+          &middot; set {{ setIndex }} of {{ setTotal }}</span
+        ></span
+      >
       <p v-if="showProgress" class="check-progress" data-tabular>
         {{ check.viewIndex + 1 }}/{{ check.total }}
       </p>
+    </div>
+    <div v-if="multiSet" class="check-rule" data-testid="check-set-rule" aria-hidden="true">
+      <span
+        v-for="(s, k) in segments"
+        :key="k"
+        class="check-rule-seg"
+        :class="s.state"
+        :style="{ '--fill': s.fill }"
+        :data-fill="s.fill"
+        data-testid="check-rule-seg"
+      ></span>
     </div>
     <div class="check-box">
       <p class="check-question">{{ item.question }}</p>
@@ -226,6 +258,43 @@ watch(answered, async (is) => {
   color: var(--pencil);
 }
 
+/* 390px: the set phrase never breaks, so the head line holds one baseline. */
+.check-set {
+  white-space: nowrap;
+}
+
+/* #364: with more than one set the head rule is the progress. The gutter
+   drops its border and a 3px rule of M segments takes its place; the
+   negative margin cancels the card's flex gap so it sits where the border
+   was. */
+.check-gutter.is-segmented {
+  border-bottom: 0;
+}
+
+.check-rule {
+  display: flex;
+  gap: 4px;
+  height: 3px;
+  margin-top: -0.5rem;
+}
+
+.check-rule-seg {
+  position: relative;
+  flex: 1 1 0;
+  overflow: hidden;
+  background: var(--rule-strong);
+}
+
+.check-rule-seg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--ink);
+  transform: scaleX(var(--fill, 0));
+  transform-origin: left;
+  transition: transform var(--motion-base) cubic-bezier(0.16, 1, 0.3, 1);
+}
+
 .check-question {
   margin: 0;
   font-size: var(--fs-body);
@@ -370,6 +439,10 @@ watch(answered, async (is) => {
   .check-mark {
     animation: none;
     stroke-dashoffset: 0;
+  }
+
+  .check-rule-seg::after {
+    transition: none;
   }
 }
 

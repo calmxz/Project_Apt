@@ -2,11 +2,7 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import * as sessionsApi from '../services/sessionsApi.js'
-import {
-  streamChat,
-  streamCheckComplete,
-  streamCheckStop,
-} from '../services/chatStreamService.js'
+import { streamChat, streamCheckComplete, streamCheckStop } from '../services/chatStreamService.js'
 import { reportCostWarning } from '../services/costBus.js'
 import {
   friendlyError,
@@ -30,6 +26,9 @@ function toUiMessage(m) {
       ? {
           gap: m.check_batch.gap,
           total: m.check_batch.total,
+          // #340: 1-based set within the check; null for pre-set batches.
+          setIndex: m.check_batch.set_index ?? null,
+          setTotal: m.check_batch.set_total ?? null,
           items: (m.check_batch.items || []).map((it) => ({
             question: it.question,
             options: it.options || [],
@@ -275,6 +274,8 @@ export const useSessionStore = defineStore('session', () => {
               total: s.pending_check.total,
               currentIndex: s.pending_check.current_index,
               viewIndex: s.pending_check.current_index,
+              setIndex: s.pending_check.set_index ?? null,
+              setTotal: s.pending_check.set_total ?? null,
               items: (s.pending_check.items || []).map((it) => ({
                 question: it.question,
                 options: it.options || [],
@@ -547,8 +548,9 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  // Batch shape: { gap, total, currentIndex, viewIndex, items: [
+  // Batch shape: { gap, total, currentIndex, viewIndex, setIndex, setTotal, items: [
   //   { question, options, status, selectedIndex, correctIndex, correct, explanation } ] }
+  // setIndex / setTotal (#340) are null for pre-set batches.
   const pendingCheck = ref(null)
   // E-17: true while an answer/skip POST for the open batch is in flight. The
   // card reads it so the options stop accepting clicks in that window instead
@@ -556,12 +558,14 @@ export const useSessionStore = defineStore('session', () => {
   const checkAnswering = ref(false)
   const checkCompleting = ref(false)
 
-  function handleCheckQuestion({ gap, items, total }) {
+  function handleCheckQuestion({ gap, items, total, set_index, set_total }) {
     pendingCheck.value = {
       gap,
       total: total ?? (items || []).length,
       currentIndex: 0,
       viewIndex: 0,
+      setIndex: set_index ?? null,
+      setTotal: set_total ?? null,
       items: (items || []).map((it) => ({
         question: it.question,
         options: it.options || [],

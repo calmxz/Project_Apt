@@ -51,17 +51,45 @@ const MESSAGES = Array.from({ length: 12 }, (_, i) => ({
   status: 'complete',
 }))
 
+// #364: the last tutor turn carries the recap of set 1 of a three-set check,
+// so both cards show set progress on the same screen.
+MESSAGES[11].check_batch = {
+  gap: 'proton gradient coupling',
+  total: 1,
+  current_index: 1,
+  set_index: 1,
+  set_total: 3,
+  items: [
+    {
+      question: 'What drives ATP synthase?',
+      options: ['the proton gradient', 'NADH directly'],
+      status: 'answered',
+      selected_index: 0,
+      correct_index: 0,
+      correct: true,
+      explanation: 'Protons flow back through it.',
+    },
+  ],
+}
+
 // loadSession seeds store.pendingCheck straight from this payload, so no SSE
-// stubbing is needed to get an open batch on screen.
+// stubbing is needed to get an open batch on screen. It is set 2 of 3 with one
+// of its three items already answered, so the live segment is a third full.
 const PENDING_CHECK = {
   gap: 'ATP yield per glucose',
   total: 3,
-  current_index: 0,
+  current_index: 1,
+  set_index: 2,
+  set_total: 3,
   items: [
     {
       question: 'How many ATP does one glucose yield through aerobic respiration?',
       options: ['2', '18', '30-32', '100'],
-      status: 'pending',
+      status: 'answered',
+      selected_index: 2,
+      correct_index: 2,
+      correct: true,
+      explanation: 'About 30-32 once shuttle costs are counted.',
     },
     {
       question: 'Where does the Krebs cycle run?',
@@ -209,6 +237,83 @@ test.describe('mobile 390 check card', () => {
     expect(footBox).not.toBeNull()
     expect(cardBox.y + cardBox.height).toBeLessThanOrEqual(footBox.y)
   })
+
+  // #364: `set N of M` never breaks, so each head line holds one baseline at
+  // 390px, and the head rule is cut into one segment per set.
+  test('set progress holds one baseline on the check and recap head lines', async ({ page }) => {
+    await page.goto(`/session/${SESSION_ID}`)
+    const card = page.getByTestId('check-card')
+    const recap = page.getByTestId('check-recap')
+    await expect(card).toBeVisible()
+    await expect(card.getByTestId('check-set')).toHaveText(/set 2 of 3/)
+    await expect(recap.getByTestId('recap-set')).toHaveText(/set 1 of 3/)
+    await expect(card.getByTestId('check-rule-seg')).toHaveCount(3)
+    await expect(recap.getByTestId('recap-rule-seg')).toHaveCount(3)
+
+    // One line each: no taller than two font sizes. The recap card is narrow at
+    // 390, so its long gap name must give way rather than wrap the head line.
+    const oneLine = (loc) =>
+      loc.evaluate((el) => {
+        const fs = parseFloat(getComputedStyle(el).fontSize)
+        return el.getBoundingClientRect().height < fs * 2
+      })
+    expect(await oneLine(card.locator('.role-tag'))).toBe(true)
+    expect(await oneLine(recap.locator('.recap-gap'))).toBe(true)
+    expect(await oneLine(recap.getByTestId('recap-score'))).toBe(true)
+    // The set phrase is whole: it ends inside the head line, not clipped past it.
+    const set = await recap.getByTestId('recap-set').boundingBox()
+    const head = await recap.locator('.recap-header').boundingBox()
+    expect(set.x + set.width).toBeLessThanOrEqual(head.x + head.width + 0.5)
+    // Left and right of the check head line share a baseline.
+    const tag = await card.locator('.role-tag').boundingBox()
+    const count = await card.locator('.check-progress').boundingBox()
+    expect(Math.abs(tag.y + tag.height - (count.y + count.height))).toBeLessThanOrEqual(1)
+  })
+
+  test('reduced motion shows the live segment at its final fill', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    await page.goto(`/session/${SESSION_ID}`)
+    const live = page.getByTestId('check-card').locator('.check-rule-seg.is-live')
+    await expect(live).toBeVisible()
+    const fill = await live.evaluate((el) => {
+      const after = getComputedStyle(el, '::after')
+      return { duration: after.transitionDuration, transform: after.transform }
+    })
+    expect(fill.duration).toBe('0s')
+    // scaleX(1/3): one of three items resolved.
+    const scaleX = parseFloat(fill.transform.match(/matrix\(([^,]+)/)[1])
+    expect(scaleX).toBeCloseTo(1 / 3, 3)
+  })
+
+  for (const colorScheme of ['light', 'dark']) {
+    test(`segments paint ink and rule-strong, no tab colour (${colorScheme})`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme })
+      await page.goto(`/session/${SESSION_ID}`)
+      const card = page.getByTestId('check-card')
+      await expect(card).toBeVisible()
+      const colors = await card.evaluate((el) => {
+        const probe = (v) => {
+          const s = document.createElement('span')
+          s.style.color = `var(${v})`
+          el.appendChild(s)
+          const c = getComputedStyle(s).color
+          s.remove()
+          return c
+        }
+        const done = el.querySelector('.check-rule-seg.is-done')
+        const todo = el.querySelector('.check-rule-seg.is-todo')
+        return {
+          ink: probe('--ink'),
+          ruleStrong: probe('--rule-strong'),
+          doneFill: getComputedStyle(done, '::after').backgroundColor,
+          todoTrack: getComputedStyle(todo).backgroundColor,
+        }
+      })
+      expect(colors.doneFill).toBe(colors.ink)
+      expect(colors.todoTrack).toBe(colors.ruleStrong)
+      expect(colors.ink).not.toBe(colors.ruleStrong)
+    })
+  }
 
   test('the desktop profile panel stays in view while the page scrolls', async ({ page }) => {
     const desktop = { width: 1366, height: 768 }
