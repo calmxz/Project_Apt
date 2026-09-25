@@ -116,14 +116,16 @@ describe('AccountView', () => {
     expect(w.find('[data-testid="settings-save"]').attributes('disabled')).toBeUndefined()
   })
 
-  it('save sends name plus current stored feedback', async () => {
+  // #357: tutor preferences autosave on the Learning tab; Save name sends
+  // the name alone and never re-writes them.
+  it('save sends the name alone', async () => {
     const user = useUserStore()
     const updateProfile = vi.spyOn(user, 'updateProfile').mockResolvedValue()
     const w = mount(AccountView, { global: { stubs } })
     await w.find('[data-testid="settings-name"]').setValue('New Name')
     await w.find('form').trigger('submit.prevent')
     await flushPromises()
-    expect(updateProfile).toHaveBeenCalledWith({ name: 'New Name', feedback: 'hints' })
+    expect(updateProfile).toHaveBeenCalledExactlyOnceWith({ name: 'New Name' })
     expect(w.find('[data-testid="settings-saved"]').exists()).toBe(true)
   })
 

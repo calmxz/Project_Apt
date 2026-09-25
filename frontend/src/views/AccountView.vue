@@ -239,10 +239,7 @@ async function save() {
   saving.value = true
   saveError.value = null
   try {
-    await user.updateProfile({
-      name: displayName.value,
-      feedback: user.interactionPreferences?.feedback || 'hints',
-    })
+    await user.updateProfile({ name: displayName.value })
     savedFlash.value = true
     showSuccess('Name saved.')
   } catch (e) {

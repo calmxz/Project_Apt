@@ -14,6 +14,10 @@ const props = defineProps({
   // "1 of N"). Defaults to a per-instance unique id so two pickers mounted on
   // different views never collide; callers may override.
   name: { type: String, default: '' },
+  // The Learning tab reuses this control for Check-ins and Reply length
+  // (#357); these keep each group's accessible name and test ids distinct.
+  legend: { type: String, default: 'Feedback style' },
+  testidPrefix: { type: String, default: 'feedback-style' },
 })
 
 const emit = defineEmits(['update:modelValue'])
@@ -33,7 +37,7 @@ function select(value) {
 
 <template>
   <fieldset class="radio-group">
-    <legend class="sr-only">Feedback style</legend>
+    <legend class="sr-only">{{ legend }}</legend>
     <label
       v-for="(opt, i) in options"
       :key="opt.value"
@@ -44,7 +48,7 @@ function select(value) {
         :name="groupName"
         :value="opt.value"
         :checked="modelValue === opt.value"
-        :data-testid="`feedback-style-${opt.value}`"
+        :data-testid="`${testidPrefix}-${opt.value}`"
         class="radio-input"
         @change="select(opt.value)"
       />
@@ -69,7 +73,7 @@ function select(value) {
 </template>
 
 <style scoped>
-/* Two lettered lines, each on the pitch, separated by a painted feint rule so
+/* Lettered lines, each on the pitch, separated by a painted feint rule so
    the line stays 28px tall. No card, no dot, no fill. */
 .radio-group {
   border: 0;

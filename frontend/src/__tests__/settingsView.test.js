@@ -126,6 +126,29 @@ describe('SettingsView shell', () => {
     w.unmount()
   })
 
+  // #357: the real Learning tab mounts under the shell with its three
+  // autosaving tutor preferences and no save button.
+  it('the Learning tab holds Feedback style, Check-ins and Reply length', async () => {
+    const router = makeRouter()
+    await router.push('/settings/learning')
+    const w = mount(SettingsView, {
+      props: { tab: 'learning' },
+      global: {
+        plugins: [router],
+        stubs: { UsageTab: stubs.UsageTab, AppearanceTab: stubs.AppearanceTab },
+      },
+    })
+    await flushPromises()
+
+    const learning = w.get('[data-testid="agg-learning"]')
+    expect(learning.findAll('.sec-title').map((t) => t.text())).toEqual([
+      'Feedback style',
+      'Check-ins',
+      'Reply length',
+    ])
+    expect(learning.find('button').exists()).toBe(false)
+  })
+
   it('KeepAlive prevents UsageTab refetch when navigating usage -> learning -> usage', async () => {
     setActivePinia(createPinia())
     getUsageSummary.mockReset().mockResolvedValue(minimalUsageFixture())
