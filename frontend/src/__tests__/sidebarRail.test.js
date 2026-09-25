@@ -141,20 +141,20 @@ describe('Sidebar.vue -- folded icon rail', () => {
     expect(search.attributes('title')).toBe('Search sessions')
   })
 
-  it('shows Review with the due count when concepts are due', async () => {
+  it('shows Recall with the due count when concepts are due', async () => {
     apiReviewQueue.mockResolvedValue({ items: [], total: 4, limit: 1, offset: 0 })
     wrapper = mount(Sidebar)
     await flushPromises()
-    const review = wrapper.get('[data-testid="sidebar-review"]')
-    expect(review.attributes('aria-label')).toBe('Review: 4 concepts due')
-    expect(review.attributes('title')).toBe('Review')
-    expect(review.get('.sb-rail-badge').text()).toBe('4')
+    const recall = wrapper.get('[data-testid="sidebar-recall"]')
+    expect(recall.attributes('aria-label')).toBe('Recall: 4 concepts due')
+    expect(recall.attributes('title')).toBe('Recall')
+    expect(recall.get('.sb-rail-badge').text()).toBe('4')
   })
 
-  it('omits Review when nothing is due', async () => {
+  it('omits Recall when nothing is due', async () => {
     wrapper = mount(Sidebar)
     await flushPromises()
-    expect(wrapper.find('[data-testid="sidebar-review"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="sidebar-recall"]').exists()).toBe(false)
   })
 
   it('Search unfolds the sidebar and focuses the search field', async () => {

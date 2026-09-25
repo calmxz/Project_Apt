@@ -28,6 +28,7 @@ describe('router', () => {
         'account',
         'profile-aggregate',
         'new-session',
+        'recall',
         'session',
         'session-profile',
         'login',
@@ -41,6 +42,14 @@ describe('router', () => {
     expect(names).not.toContain('subject-new')
     expect(names).not.toContain('subject-overview')
     expect(names).not.toContain('subject-mastery')
+  })
+
+  it('redirects the old /review path to /recall', async () => {
+    const user = useUserStore()
+    user.onboardingComplete = true
+    await router.push('/review')
+    expect(router.currentRoute.value.path).toBe('/recall')
+    expect(router.currentRoute.value.name).toBe('recall')
   })
 
   it('redirects unauthenticated user to /login', async () => {

@@ -2,8 +2,8 @@
   <section class="review">
     <BackButton label="Back" fallback="/" />
     <header class="head">
-      <h1 class="title">Review</h1>
-      <p class="lede">Concepts due for a quick check.</p>
+      <h1 class="title">Recall</h1>
+      <p class="lede">Concepts due for a quick recall check.</p>
       <p class="lede">Each check that you get right extends the gap before the next one.</p>
     </header>
 
@@ -19,7 +19,7 @@
     <span v-if="showSkeleton" class="sr-only" role="status">Loading</span>
 
     <template v-else-if="error">
-      <p class="error" data-testid="review-error">Could not load your review queue.</p>
+      <p class="error" data-testid="review-error">Could not load your recall queue.</p>
       <button type="button" class="review-more" data-testid="review-retry" @click="retry">
         Retry
       </button>

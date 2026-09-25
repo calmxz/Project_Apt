@@ -210,7 +210,7 @@ describe('Sidebar a11y — inert when closed (D-03)', () => {
   })
 })
 
-describe('Sidebar a11y — review badge unit', () => {
+describe('Sidebar a11y — recall badge unit', () => {
   let wrapper
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -224,10 +224,10 @@ describe('Sidebar a11y — review badge unit', () => {
     delete globalThis.cancelIdleCallback
   })
 
-  it('review link exposes the count with a unit', async () => {
+  it('recall link exposes the count with a unit', async () => {
     wrapper = await mountSidebarWithReview(20)
-    const link = wrapper.get('[data-testid="sidebar-review"]')
-    expect(link.attributes('aria-label')).toBe('Review: 20 concepts due')
+    const link = wrapper.get('[data-testid="sidebar-recall"]')
+    expect(link.attributes('aria-label')).toBe('Recall: 20 concepts due')
   })
 })
 

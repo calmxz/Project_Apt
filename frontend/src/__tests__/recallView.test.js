@@ -3,7 +3,7 @@ import { nextTick } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
-import ReviewView from '@/views/ReviewView.vue'
+import RecallView from '@/views/RecallView.vue'
 import { useSessionStore } from '@/stores/session.js'
 
 const push = vi.fn()
@@ -35,12 +35,12 @@ const stubs = {
 }
 
 function mountView() {
-  return mount(ReviewView, {
+  return mount(RecallView, {
     global: { stubs },
   })
 }
 
-describe('ReviewView', () => {
+describe('RecallView', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     push.mockClear()
@@ -52,6 +52,13 @@ describe('ReviewView', () => {
     mountView()
     await flushPromises()
     expect(apiReviewQueue).toHaveBeenCalledWith({ limit: 3, offset: 0 }, { silent: true })
+  })
+
+  it('titles the page Recall', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.get('h1').text()).toBe('Recall')
+    expect(wrapper.get('.lede').text()).toContain('recall')
   })
 
   it('shows the empty state when nothing is due', async () => {
@@ -69,7 +76,7 @@ describe('ReviewView', () => {
     await flushPromises()
     expect(wrapper.find('[data-testid="review-empty"]').exists()).toBe(false)
     expect(wrapper.get('[data-testid="review-error"]').text()).toContain(
-      'Could not load your review queue.',
+      'Could not load your recall queue.',
     )
     expect(wrapper.find('[data-testid="review-retry"]').exists()).toBe(true)
   })
@@ -220,7 +227,7 @@ describe('ReviewView', () => {
       total: 1,
       items: [makeReviewItem('ATP yield', { streak: 2 })],
     })
-    const w = mount(ReviewView, { global: { stubs } })
+    const w = mount(RecallView, { global: { stubs } })
     await flushPromises()
     // Redesign C1: the row is a Cornell recitation pair -- the cue button
     // (review-item) carries the concept, and the streak sits in the covered
