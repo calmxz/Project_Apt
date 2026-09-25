@@ -19,6 +19,11 @@ export const TOOL_LABELS = {
     done: 'Check questions ready',
     error: 'Could not ask questions',
   },
+  suggest_topics: {
+    running: 'Picking topics…',
+    done: 'Topics ready',
+    error: 'Topic card skipped',
+  },
 }
 
 export function labelFor(toolName, state) {

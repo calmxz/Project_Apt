@@ -107,6 +107,15 @@
                 @level="onDiagLevel"
                 @dismiss="dismissDiag()"
               />
+
+              <TopicSuggestCard
+                v-if="topicCard"
+                class="transcript-card"
+                :card="topicCard"
+                :busy="store.streamState !== 'idle' || !canSend"
+                @pick="onTopicPick"
+                @dismiss="dismissTopicCard()"
+              />
             </template>
           </div>
         </div>
@@ -250,6 +259,7 @@ import MessageList from '../components/chat/MessageList.vue'
 import MessageListSkeleton from '../components/chat/MessageListSkeleton.vue'
 import SessionHeader from '../components/chat/SessionHeader.vue'
 import SessionEndedBanner from '../components/SessionEndedBanner.vue'
+import TopicSuggestCard from '../components/TopicSuggestCard.vue'
 import ReferenceStatusBanner from '../components/chat/ReferenceStatusBanner.vue'
 import UploadStatus from '../components/chat/UploadStatus.vue'
 import { friendlyError, StreamAbortedError } from '../lib/errors.js'
@@ -352,6 +362,55 @@ const showDiagnosticCard = computed(() =>
     !store.detailLoading,
   ),
 )
+
+// #354 topic card: offered once per session, under the tutor's first reply at
+// the learner's level. It lives only while that reply is the latest message:
+// a tap (or anything the learner writes) appends a learner turn and closes it.
+// A dismissal persists per session, like the level picker's.
+const topicDismissed = ref(false)
+
+function topicDismissKey(id) {
+  return `crux:topic-dismissed:${id}`
+}
+
+function dismissTopicCard() {
+  topicDismissed.value = true
+  storageSet(sessionStorageThunk, topicDismissKey(props.id), '1')
+}
+
+const topicCard = computed(() => {
+  const last = store.messages.at(-1)
+  if (last?.role !== 'assistant' || !last.topic_suggestions) return null
+  if (
+    topicDismissed.value ||
+    store.streamingMessage ||
+    store.pendingCheck ||
+    showDiagnosticCard.value ||
+    isEnded.value ||
+    resuming.value ||
+    notFound.value ||
+    store.detailLoading
+  )
+    return null
+  return last.topic_suggestions
+})
+
+async function onTopicPick(text) {
+  if (!canSend.value) return
+  lastError.value = null
+  cuesLanded.value = false
+  sending.value = true
+  try {
+    await store.sendMessageStreaming({ text })
+  } catch (e) {
+    // The store already surfaced an aborted stream (ended banner / login).
+    if (e instanceof StreamAbortedError) return
+    lastSentText.value = text
+    lastError.value = e
+  } finally {
+    sending.value = false
+  }
+}
 
 async function loadDiagProfile(id) {
   try {
@@ -687,9 +746,13 @@ watch([() => store.messages.length, awaitingResponse], () => {
 // newly opened one would otherwise land below the fold. Shallow watch -- the
 // store assigns a fresh pendingCheck per batch, so this fires once per batch,
 // not per answered item.
-watch([() => store.pendingCheck, showDiagnosticCard], ([check, diag], [prevCheck, prevDiag]) => {
-  if ((check && check !== prevCheck) || (diag && !prevDiag)) scrollToBottom()
-})
+watch(
+  [() => store.pendingCheck, showDiagnosticCard, topicCard],
+  ([check, diag, topic], [prevCheck, prevDiag, prevTopic]) => {
+    if ((check && check !== prevCheck) || (diag && !prevDiag) || (topic && !prevTopic))
+      scrollToBottom()
+  },
+)
 
 async function loadCurrent(id) {
   // Reset per-load so navigating away from a 404 session clears the state.
@@ -705,6 +768,7 @@ async function loadCurrent(id) {
   diagProfile.value = null
   diagNullTurns = 0
   diagDismissed.value = storageGet(sessionStorageThunk, diagDismissKey(id)) === '1'
+  topicDismissed.value = storageGet(sessionStorageThunk, topicDismissKey(id)) === '1'
   diagError.value = ''
   diagLevelBusy.value = false
   loadDiagProfile(id) // deliberately not awaited: card is best-effort

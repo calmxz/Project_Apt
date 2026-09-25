@@ -595,3 +595,59 @@ def test_learner_preferences_stay_out_of_cached_prefix():
     n = len(prompts.IMMUTABLE_RULES)
     assert a[:n] == b[:n] == prompts.IMMUTABLE_RULES
     assert "LEARNER PREFERENCES" not in prompts.IMMUTABLE_RULES
+
+
+# --- #354 topic card -------------------------------------------------------
+
+
+def _topic_line(state):
+    return next(
+        ln for ln in prompts.build_dynamic_context(state).splitlines()
+        if ln.startswith("TOPIC_SUGGEST:")
+    )
+
+
+def test_topic_suggest_due_once_level_known():
+    state = {
+        "topic": "Thermodynamics",
+        "profile": TopicProfile(knowledge_level="beginner"),
+        "topic_suggest_state": "awaiting_level",
+    }
+    assert _topic_line(state) == "TOPIC_SUGGEST: DUE"
+
+
+def test_topic_suggest_after_level_while_level_unknown():
+    state = {"topic": "x", "profile": {}, "topic_suggest_state": "awaiting_level"}
+    assert _topic_line(state) == "TOPIC_SUGGEST: AFTER_LEVEL"
+
+
+def test_topic_suggest_off_for_done_seeded_and_review_sessions():
+    lvl = TopicProfile(knowledge_level="advanced")
+    assert _topic_line({"topic": "x", "profile": lvl, "topic_suggest_state": "done"}) == "TOPIC_SUGGEST: OFF"
+    # Seeded/resumed sessions start with a level and a NULL state.
+    assert _topic_line({"topic": "x", "profile": lvl}) == "TOPIC_SUGGEST: OFF"
+    assert _topic_line({
+        "topic": "x", "profile": lvl, "topic_suggest_state": "awaiting_level",
+        "review_gaps_target": "entropy",
+    }) == "TOPIC_SUGGEST: OFF"
+
+
+def test_immutable_rules_topic_suggestion_protocol():
+    rules = prompts.IMMUTABLE_RULES
+    assert "suggest_topics" in rules
+    block = rules.split("TOPIC SUGGESTIONS:")[1].split("\n\n")[0]
+    # prose first, never a tool-only turn; the card owns the items.
+    assert "never a turn that is only the tool call" in block
+    assert "do not list or restate" in block
+    assert '"broad"' in block and '"specific"' in block
+    assert "AFTER_LEVEL" in block and "OFF" in block
+
+
+def test_immutable_rules_map_level_wording_and_clarify_when_unsure():
+    rules = prompts.IMMUTABLE_RULES
+    assert "LEVEL WORDING" in rules
+    assert "nearest level" in rules
+    # Unsure -> no level recorded, one clarifying question, explicit override.
+    assert "do NOT record a level" in rules
+    assert "ONE\n  short clarifying question" in rules
+    assert "overrides the rules below" in rules

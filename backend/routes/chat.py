@@ -94,6 +94,8 @@ def _build_prompt_state(
         "quiz_cooldown": quiz_cooldown,
         "gap_accuracy": gap_accuracy or {},
         "learner_prefs": learner_prefs or {},
+        # #354: gates the once-per-session topic card.
+        "topic_suggest_state": getattr(session, "topic_suggest_state", None),
     }
     if diagnostic_accepted and profile.knowledge_level is None:
         prompt_state["diagnostic_accepted"] = True

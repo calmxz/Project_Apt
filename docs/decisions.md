@@ -3,6 +3,36 @@
 Durable "why": decisions, findings, tradeoffs. Newest first. Technical
 how-it-works lookup belongs in `docs/reference.md` instead.
 
+## 2026-09-25 - Topic card gating lives on the session row (#354)
+
+Builds the #341 resolution (a `suggest_topics` card under the first at-level
+reply).
+
+- **"Level became known this session" is recorded at create, not inferred.**
+  The level picker's PATCH leaves no trace, a chat-declared level lands
+  mid-turn, and a graded diagnostic lands in the follow-up turn, so no single
+  turn can tell. `sessions.topic_suggest_state` (migration 0031) is
+  `awaiting_level` only when a session starts without a level and flips to
+  `done` when the tool runs. Seeded, resumed-with-level, and
+  declared-at-create sessions stay NULL and never get the card; so do rows
+  created before the migration.
+- **The prompt sees `TOPIC_SUGGEST: DUE | AFTER_LEVEL | OFF`.** AFTER_LEVEL
+  lets the model call it in the same turn it records a declared level; the
+  handler re-reads the profile and refuses while the level is still unknown.
+- **A dismissed level picker does not cancel the card** (owner call). If the
+  learner later states a level in chat, the reply that records it carries
+  the card. Level wording is mapped to the nearest level ("I know the
+  basics" -> intermediate); when the model cannot tell, it records nothing
+  and asks one clarifying question, the only case where asking about level
+  is allowed.
+- **No second column for the card.** The ok `suggest_topics` call already
+  persists in the message's `tool_calls_json`; the transcript reads it back
+  from there (the `reconstruct_check_batch` precedent).
+- **Prose first is enforced, not just prompted.** A call made before any reply
+  text fails, so the model writes the reply and calls again. When a check and
+  a topic card are bundled, the first terminal tool wins and the card stays
+  owed.
+
 ## 2026-09-25 - Check items resolve in any order within a set (#348)
 
 Follows the multi-set decision in #339: Skip survives as the explicit "don't

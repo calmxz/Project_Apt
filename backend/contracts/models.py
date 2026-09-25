@@ -232,6 +232,33 @@ class AskCheckQuestionsArgs(BaseModel):
     """
 
 
+class TopicSuggestionItem(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    label: constr(min_length=1, max_length=80)
+    """
+    Short noun phrase naming the subtopic or adjacent topic.
+    """
+    hint: constr(max_length=80) | None = None
+    """
+    Optional one-line note shown beside the label.
+    """
+
+
+class TopicSuggestions(BaseModel):
+    """
+    A suggest_topics card as persisted on its assistant message.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    mode: Literal["broad", "specific"]
+    topic: str
+    items: list[TopicSuggestionItem]
+
+
 class Item1(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -429,6 +456,10 @@ class Message(BaseModel):
     citations: list[Citation] | None = Field([], validate_default=True)
     tool_calls: list[ToolCallRecord] | None = Field([], validate_default=True)
     check_batch: PendingCheck | None = None
+    topic_suggestions: TopicSuggestions | None = None
+    """
+    The topic card this assistant turn offered (#354), else null.
+    """
     status: str | None = None
     """
     Persistence status for assistant turns: complete, cancelled, error, or partial (streamed text kept after a mid-turn abort). Null for rows persisted before this field existed.
@@ -782,6 +813,34 @@ class ErrorResponse(BaseModel):
         extra="forbid",
     )
     detail: str | CodedErrorDetail
+
+
+class SuggestTopicsArgs(BaseModel):
+    """
+    Offer the learner a topic card under this reply, once per session,
+    after their level becomes known (#354). Ends the turn. broad: items are
+    3-5 subtopics of the session topic. specific: items are 2-4 adjacent
+    topics; the card itself adds the "Keep going on <topic>" line. The
+    per-mode item counts are enforced in topic_suggest_service, not here.
+
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    session_id: constr(max_length=64)
+    """
+    Ignored; the server injects the authoritative session id.
+    """
+    mode: Literal["broad", "specific"]
+    """
+    broad when the topic spans several subtopics; specific when it is already one narrow concept.
+    """
+    topic: constr(min_length=1, max_length=200)
+    """
+    The session topic as a short noun phrase.
+    """
+    items: list[TopicSuggestionItem] = Field(..., max_length=5, min_length=2)
 
 
 class AggregateProfileResponse(BaseModel):
