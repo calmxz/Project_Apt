@@ -562,8 +562,9 @@ async function onSignOut() {
     </div>
 
     <!-- Folded, the rail shows actions only; the list returns on unfold. The
-         nav itself stays as the spacer that holds the identity foot down. -->
-    <nav ref="listEl" class="sb-list-wrap" aria-label="Sessions">
+         nav itself stays as the spacer that holds the identity foot down (and
+         the fit-to-height target), hidden so it is not an empty landmark. -->
+    <nav ref="listEl" class="sb-list-wrap" aria-label="Sessions" :aria-hidden="isRail || null">
       <template v-if="isExpanded">
         <template v-if="searching">
           <p
@@ -856,7 +857,6 @@ async function onSignOut() {
 
 .sidebar--collapsed .sb-header {
   flex-direction: column;
-  gap: 0.75rem;
   padding: 0.75rem 0;
 }
 

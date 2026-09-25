@@ -125,10 +125,12 @@ describe('Sidebar.vue -- folded icon rail', () => {
       'sidebar-rail-search',
     ])
     expect(wrapper.find('[data-session-id]').exists()).toBe(false)
+    // The empty list column is layout only, not a landmark.
+    expect(wrapper.get('nav.sb-list-wrap').attributes('aria-hidden')).toBe('true')
   })
 
-  // Folding re-orders the head, which moves the toggle node; a keyboard user
-  // must not lose focus to <body> when they fold or unfold.
+  // Unfolding inserts the wordmark ahead of the toggle; a keyboard user must
+  // not lose focus to <body> when they fold or unfold.
   it('keeps focus on the head toggle across folding and unfolding', async () => {
     wrapper = mount(Sidebar, { attachTo: document.body })
     await flushPromises()

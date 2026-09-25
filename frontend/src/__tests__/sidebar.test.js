@@ -1533,7 +1533,7 @@ describe('Sidebar.vue — recall entry', () => {
 // The desktop collapse toggle is a drawn sidebar icon in the head (the old
 // right-edge half-tab overlapped the mark in the rail), and the collapsed rail
 // marks sessions as dots instead of strokes.
-describe('Sidebar.vue — collapse toggle and collapsed dots', () => {
+describe('Sidebar.vue — collapse toggle and empty rail', () => {
   let wrapper
   beforeEach(() => {
     setActivePinia(createPinia())
