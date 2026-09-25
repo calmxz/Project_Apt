@@ -3,6 +3,25 @@
 Durable "why": decisions, findings, tradeoffs. Newest first. Technical
 how-it-works lookup belongs in `docs/reference.md` instead.
 
+## 2026-09-25 - Check items resolve in any order within a set (#348)
+
+Follows the multi-set decision in #339: Skip survives as the explicit "don't
+know", a skipped item satisfies Done, free navigation applies within one set,
+and sets stay sequential batches.
+
+- **The server dropped its linear guard.** `answer()` / `skip()` accept any
+  still-pending index; a resolved or out-of-range index is still a 409, which
+  also keeps the F-24 double-submit loser rejected.
+- **`current_index` now means "first unresolved item"** (`len(items)` once
+  every item is resolved). The response shape is unchanged, so `is_done`,
+  Stop, and resume-on-reload keep working; the card counts its set-rule fill
+  from item status instead, because the pointer no longer equals the resolved
+  count.
+- **Card:** Next shows on every item but the last, Back on every item but the
+  first, and Done shows on the last item (or any item once all resolve) but
+  stays disabled until every item is answered or skipped. A skip lands on the
+  next unresolved item, wrapping; skipping the final one still ends the set.
+
 ## 2026-09-24 - Session view scrolls the page, not the messages box (#346)
 
 Reverses the app-shell lock from PR #24 (`body.chat-locked`, `.messages` as the

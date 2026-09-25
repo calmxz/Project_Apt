@@ -273,7 +273,9 @@ export const useSessionStore = defineStore('session', () => {
               gap: s.pending_check.gap,
               total: s.pending_check.total,
               currentIndex: s.pending_check.current_index,
-              viewIndex: s.pending_check.current_index,
+              // A fully resolved batch reports current_index == total; view
+              // its last item so Done has a question to sit under.
+              viewIndex: Math.min(s.pending_check.current_index, s.pending_check.total - 1),
               setIndex: s.pending_check.set_index ?? null,
               setTotal: s.pending_check.set_total ?? null,
               items: (s.pending_check.items || []).map((it) => ({
@@ -582,7 +584,8 @@ export const useSessionStore = defineStore('session', () => {
     const id = currentSessionId.value
     const pc = pendingCheck.value
     if (!id || !pc) return
-    const i = pc.currentIndex
+    // #348: free navigation -- grade the item on screen, in any order.
+    const i = pc.viewIndex
     const item = pc.items[i]
     if (!item || item.status !== 'pending') return
     if (checkAnswering.value) return
@@ -600,21 +603,37 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
+  // #348: Next and Back move the view one item either way, answered or not.
+  // currentIndex stays the server's first-unresolved pointer.
   function nextCheck() {
     const pc = pendingCheck.value
-    if (pc) pc.viewIndex = pc.currentIndex
+    if (pc) pc.viewIndex = Math.min(pc.viewIndex + 1, pc.total - 1)
+  }
+
+  function prevCheck() {
+    const pc = pendingCheck.value
+    if (pc) pc.viewIndex = Math.max(pc.viewIndex - 1, 0)
+  }
+
+  // The first unresolved item after `from`, wrapping; `from` itself if none.
+  function nextPendingIndex(pc, from) {
+    for (let k = 1; k <= pc.total; k++) {
+      const n = (from + k) % pc.total
+      if (pc.items[n]?.status === 'pending') return n
+    }
+    return from
   }
 
   async function skipCheck() {
     const id = currentSessionId.value
     const pc = pendingCheck.value
     if (!id || !pc) return
-    const i = pc.currentIndex
+    const i = pc.viewIndex
     const item = pc.items[i]
     if (!item || item.status !== 'pending') return
     // Same in-flight guard as answerCheck: a rapid double-skip would otherwise
-    // double-POST, and the second hits a 409 (out-of-order) since currentIndex
-    // already advanced.
+    // double-POST, and the second hits a 409 since the item is already
+    // resolved.
     if (checkAnswering.value) return
     checkAnswering.value = true
     let resp
@@ -628,7 +647,7 @@ export const useSessionStore = defineStore('session', () => {
     if (resp.done) {
       await completeCheck()
     } else {
-      pc.viewIndex = pc.currentIndex
+      pc.viewIndex = nextPendingIndex(pc, i)
     }
   }
 
@@ -1074,6 +1093,7 @@ export const useSessionStore = defineStore('session', () => {
     handleCheckQuestion,
     answerCheck,
     nextCheck,
+    prevCheck,
     skipCheck,
     completeCheck,
     stopCheck,

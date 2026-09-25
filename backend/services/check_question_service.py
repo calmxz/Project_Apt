@@ -5,7 +5,7 @@ A pending_check lives on the Session row as JSON:
         "gap": str,
         "set_index": int,              # 1-based set within the check (#340)
         "set_total": int,              # sets in the check, fixed on set 1
-        "current_index": int,          # next unanswered item
+        "current_index": int,          # first unresolved item, len(items) when done
         "asked_at_turn": iso8601,
         "items": [
             {"question": str, "options": [str], "correct_index": int,
@@ -19,7 +19,8 @@ Anti-cheat: public_view() reveals correct_index / explanation / selected_index /
 correct ONLY for items whose status != "pending". Pending items leak only
 question + options.
 
-State machine is linear: answer()/skip() require index == current_index.
+Items resolve in any order (#348): answer()/skip() take any still-pending
+index, and current_index tracks the first unresolved item.
 
 A CHECK is 1..3 sets, one set (batch) per turn. The pending_check above is the
 open set only; the check-level pointer that survives between sets lives in
@@ -264,25 +265,41 @@ def _progress(pc: dict) -> dict:
     return {"current_index": ci, "total": total, "has_next": not done, "done": done}
 
 
+def _pending_item(pc: dict, index: int) -> dict:
+    """The still-pending item at `index`, else CheckStateError (#348: any
+    pending item may be resolved, in any order)."""
+    items = pc["items"]
+    if not (0 <= index < len(items)):
+        raise CheckStateError(f"index {index} out of range for {len(items)} items")
+    if items[index].get("status", "pending") != "pending":
+        raise CheckStateError(f"item {index} already resolved")
+    return items[index]
+
+
+def _advance(pc: dict) -> None:
+    """Point current_index at the first unresolved item, or len(items) once
+    every item is resolved (is_done keys off that)."""
+    items = pc["items"]
+    pc["current_index"] = next(
+        (n for n, it in enumerate(items) if it.get("status", "pending") == "pending"),
+        len(items),
+    )
+
+
 def answer(db: Session, session_id: str, index: int, selected_index: int) -> dict:
-    """Grade item `index` (must equal current_index), record the LearningEvent
-    + profile effect, mark the item answered, advance current_index, persist -
-    all in ONE commit. Does NOT clear the batch."""
+    """Grade pending item `index`, record the LearningEvent + profile effect,
+    mark the item answered, move current_index to the first unresolved item,
+    persist - all in ONE commit. Does NOT clear the batch."""
     from services import learning_event_service, profile_service  # local import avoids circular
 
     # F-24: serialize concurrent submits on the session row; the loser then
-    # sees the advanced current_index and raises CheckStateError -> 409.
+    # sees the item already resolved and raises CheckStateError -> 409.
     profile_service.lock_session_row(db, session_id)
 
     pc = get_pending_check(db, session_id)
     if pc is None:
         raise CheckStateError("no open check-question batch")
-    ci = pc["current_index"]
-    if index != ci:
-        raise CheckStateError(f"out-of-order answer: index={index} current_index={ci}")
-    if ci >= len(pc["items"]):
-        raise CheckStateError("batch already resolved")
-    item = pc["items"][ci]
+    item = _pending_item(pc, index)
     if not (0 <= selected_index < len(item["options"])):
         raise CheckStateError("selected_index out of range")
 
@@ -300,7 +317,7 @@ def answer(db: Session, session_id: str, index: int, selected_index: int) -> dic
     item["status"] = "answered"
     item["selected_index"] = selected_index
     item["correct"] = correct
-    pc["current_index"] = ci + 1
+    _advance(pc)
     _save(db, session_id, pc, commit=False)
     db.commit()
 
@@ -317,19 +334,15 @@ def skip(db: Session, session_id: str, index: int) -> dict:
     from services import profile_service  # local import avoids circular
 
     # F-24: serialize concurrent submits on the session row; the loser then
-    # sees the advanced current_index and raises CheckStateError -> 409.
+    # sees the item already resolved and raises CheckStateError -> 409.
     profile_service.lock_session_row(db, session_id)
 
     pc = get_pending_check(db, session_id)
     if pc is None:
         raise CheckStateError("no open check-question batch")
-    ci = pc["current_index"]
-    if index != ci:
-        raise CheckStateError(f"out-of-order skip: index={index} current_index={ci}")
-    if ci >= len(pc["items"]):
-        raise CheckStateError("batch already resolved")
-    pc["items"][ci]["status"] = "skipped"
-    pc["current_index"] = ci + 1
+    item = _pending_item(pc, index)
+    item["status"] = "skipped"
+    _advance(pc)
     _save(db, session_id, pc)
     return _progress(pc)
 
