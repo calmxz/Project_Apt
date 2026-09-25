@@ -251,6 +251,32 @@ describe('multi-check store', () => {
     expect(s.pendingCheck.items[0].correct).toBe(true)
   })
 
+  it('#348 loadSession of a fully resolved batch views the last item, not past it', async () => {
+    const s = useSessionStore()
+    const resolved = (q) => ({
+      question: q,
+      options: ['a', 'b'],
+      status: 'skipped',
+      selected_index: null,
+      correct_index: 0,
+      correct: null,
+      explanation: null,
+    })
+    sessionsApi.getSession.mockResolvedValue({
+      id: 'sid',
+      messages: [],
+      pending_check: {
+        gap: 'atp',
+        current_index: 2,
+        total: 2,
+        items: [resolved('Q1'), resolved('Q2')],
+      },
+    })
+    await s.loadSession('sid')
+    expect(s.pendingCheck.currentIndex).toBe(2)
+    expect(s.pendingCheck.viewIndex).toBe(1)
+  })
+
   it('followup_skipped clears stream state and sets a quiet notice', async () => {
     const s = useSessionStore()
     s.currentSessionId = 'sid'

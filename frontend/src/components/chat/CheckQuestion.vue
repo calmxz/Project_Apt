@@ -19,18 +19,17 @@ const emit = defineEmits(['answer', 'skip', 'back', 'next', 'done', 'stop'])
 
 const LETTERS = ['A', 'B', 'C', 'D', 'E']
 
+const isResolved = (it) => it.status === 'answered' || it.status === 'skipped'
+
 const item = computed(() => props.check.items[props.check.viewIndex] || {})
-const answered = computed(() => item.value.status === 'answered' || item.value.status === 'skipped')
+const answered = computed(() => isResolved(item.value))
 const correct = computed(() => item.value.correct === true)
 const isFirst = computed(() => props.check.viewIndex <= 0)
 const isLast = computed(() => props.check.viewIndex >= props.check.total - 1)
 // #348: free navigation within one set. Next and Back move between items
 // answered or not; Done waits until every item is answered or skipped (a skip
 // is the explicit "don't know", #339), and once it is, Done shows on any item.
-const resolvedCount = computed(
-  () =>
-    props.check.items.filter((it) => it.status === 'answered' || it.status === 'skipped').length,
-)
+const resolvedCount = computed(() => props.check.items.filter(isResolved).length)
 const allResolved = computed(() => resolvedCount.value >= props.check.total)
 const showDone = computed(() => isLast.value || allResolved.value)
 const showProgress = computed(() => props.check.total > 1)
@@ -69,12 +68,15 @@ const doneBtn = ref(null)
 
 // Focus the way on once the viewed item resolves -- not when Back/Next land
 // on an item that was already answered.
-watch([() => props.check.viewIndex, answered], async ([view, is], [prevView, was]) => {
-  if (view !== prevView || !is || was) return
-  await nextTick()
-  const target = allResolved.value ? doneBtn.value : (nextBtn.value ?? doneBtn.value)
-  target?.focus()
-})
+watch(
+  [() => props.check.viewIndex, answered],
+  async ([view, resolved], [prevView, wasResolved]) => {
+    if (view !== prevView || !resolved || wasResolved) return
+    await nextTick()
+    const target = allResolved.value ? doneBtn.value : (nextBtn.value ?? doneBtn.value)
+    target?.focus()
+  },
+)
 
 // Back vanishes on the first item and Next on the last; keep keyboard focus
 // on the card instead of dropping it to the page.

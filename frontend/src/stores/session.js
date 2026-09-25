@@ -273,7 +273,9 @@ export const useSessionStore = defineStore('session', () => {
               gap: s.pending_check.gap,
               total: s.pending_check.total,
               currentIndex: s.pending_check.current_index,
-              viewIndex: s.pending_check.current_index,
+              // A fully resolved batch reports current_index == total; view
+              // its last item so Done has a question to sit under.
+              viewIndex: Math.min(s.pending_check.current_index, s.pending_check.total - 1),
               setIndex: s.pending_check.set_index ?? null,
               setTotal: s.pending_check.set_total ?? null,
               items: (s.pending_check.items || []).map((it) => ({
