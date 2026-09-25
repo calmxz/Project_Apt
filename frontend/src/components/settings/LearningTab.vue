@@ -58,8 +58,8 @@ const { showError } = useToast()
 // the server in the order the learner made them and the last choice sticks.
 // A failed write puts the control back on the value the store (and so the
 // server) still holds.
-function autosaved(field) {
-  const stored = () => preferenceValue(user.interactionPreferences, field)
+function autosaved(key) {
+  const stored = () => preferenceValue(user.interactionPreferences, key)
   const value = ref(stored())
   const saved = ref(false)
   let queue = Promise.resolve()
@@ -79,7 +79,7 @@ function autosaved(field) {
     pending++
     queue = queue.then(async () => {
       try {
-        await user.updateProfile({ [field]: next })
+        await user.updateProfile({ [key]: next })
         if (seq === latest) saved.value = true
       } catch (e) {
         showError(friendlyError(e))

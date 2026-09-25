@@ -2,8 +2,8 @@
 // key, its /api/me field, the fallback used before the server answers, and
 // the choices offered. Fallbacks mirror the MeResponse defaults and option
 // values mirror the enums in docs/api/openapi.yaml; tutorPreferences.test.js
-// reads the contract so the two cannot drift. A new tutor preference is one
-// entry here.
+// reads the contract so the two cannot drift. A new tutor preference is an
+// entry here plus its control (title, test ids) in settings/LearningTab.vue.
 export const TUTOR_PREFERENCES = {
   feedback: {
     field: 'feedback_pref',
