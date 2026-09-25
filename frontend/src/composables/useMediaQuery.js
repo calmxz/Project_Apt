@@ -4,6 +4,10 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 // sync with the 899px media blocks in SessionView.vue and CueColumn.vue.
 export const NARROW_QUERY = '(max-width: 899px)'
 
+// JS-driven motion (e.g. window.scrollTo behavior) has no CSS media block to
+// fall back on, so it reads the preference through this query.
+export const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)'
+
 // Reactive matchMedia. Returns a ref that is false where matchMedia does not
 // exist (jsdom, SSR) and otherwise tracks the query for the component's life.
 export function useMediaQuery(query) {

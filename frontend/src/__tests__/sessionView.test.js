@@ -9,6 +9,7 @@ import SessionEndedBanner from '@/components/SessionEndedBanner.vue'
 import CheckQuestion from '@/components/chat/CheckQuestion.vue'
 import Composer from '@/components/chat/Composer.vue'
 import { StreamAbortedError } from '@/lib/errors.js'
+import { REDUCED_MOTION_QUERY } from '@/composables/useMediaQuery.js'
 import { WATCH_CEILING_MS } from '@/composables/useReferencePoll.js'
 import { useSessionStore } from '@/stores/session.js'
 import { getSessionProfile, patchProfile } from '@/services/profileApi.js'
@@ -1963,9 +1964,16 @@ describe('SessionView', () => {
         window.matchMedia = realMatchMedia
       })
 
+      const BOTTOM_Y = 1500 - 768
+
       function setScrollY(y) {
         Object.defineProperty(window, 'scrollY', { configurable: true, value: y })
         window.dispatchEvent(new Event('scroll'))
+      }
+
+      function scrollUpFromBottom(to = 300) {
+        setScrollY(BOTTOM_Y)
+        setScrollY(to)
       }
 
       async function mountStreaming() {
@@ -2000,10 +2008,49 @@ describe('SessionView', () => {
         expect(scrollSpy).toHaveBeenCalledWith(expect.objectContaining({ top: 1500 }))
       })
 
+      it('follows a tool call settling from running to done', async () => {
+        const store = await mountStreaming()
+        store.streamingMessage.tool_calls.push({ id: 't1', name: 'search', state: 'running' })
+        await flushPromises()
+        scrollSpy.mockClear()
+        store.streamingMessage.tool_calls[0].state = 'done'
+        await flushPromises()
+        expect(scrollSpy).toHaveBeenCalledWith(expect.objectContaining({ top: 1500 }))
+      })
+
+      it('stops following on a small upward nudge within the bottom slack', async () => {
+        const store = await mountStreaming()
+        scrollUpFromBottom(BOTTOM_Y - 10)
+        scrollSpy.mockClear()
+        await growStream(store)
+        expect(scrollSpy).not.toHaveBeenCalled()
+      })
+
+      it('stops following on an upward wheel before the scroll event lands', async () => {
+        const store = await mountStreaming()
+        setScrollY(BOTTOM_Y)
+        window.dispatchEvent(new WheelEvent('wheel', { deltaY: -40 }))
+        scrollSpy.mockClear()
+        await growStream(store)
+        expect(scrollSpy).not.toHaveBeenCalled()
+      })
+
+      it('keeps following when a shrink clamps the view to the bottom', async () => {
+        let height = 1500
+        stubDocHeight(() => height)
+        const store = await mountStreaming()
+        stubDocHeight(() => height)
+        setScrollY(BOTTOM_Y)
+        height = 1400
+        setScrollY(BOTTOM_Y - 100)
+        scrollSpy.mockClear()
+        await growStream(store)
+        expect(scrollSpy).toHaveBeenCalledWith(expect.objectContaining({ top: 1400 }))
+      })
+
       it('stops following once the learner scrolls up', async () => {
         const store = await mountStreaming()
-        setScrollY(732)
-        setScrollY(300)
+        scrollUpFromBottom()
         scrollSpy.mockClear()
         await growStream(store)
         expect(scrollSpy).not.toHaveBeenCalled()
@@ -2011,9 +2058,8 @@ describe('SessionView', () => {
 
       it('resumes following when the learner returns to the bottom', async () => {
         const store = await mountStreaming()
-        setScrollY(732)
-        setScrollY(300)
-        setScrollY(732)
+        scrollUpFromBottom()
+        setScrollY(BOTTOM_Y)
         scrollSpy.mockClear()
         await growStream(store)
         expect(scrollSpy).toHaveBeenCalledWith(expect.objectContaining({ top: 1500 }))
@@ -2030,8 +2076,7 @@ describe('SessionView', () => {
 
       it('does not yank a scrolled-up learner down when the reply lands', async () => {
         const store = await mountStreaming()
-        setScrollY(732)
-        setScrollY(300)
+        scrollUpFromBottom()
         scrollSpy.mockClear()
         store.streamingMessage = null
         store.messages = [...store.messages, { role: 'assistant', content: 'yo', message_id: 10 }]
@@ -2042,8 +2087,7 @@ describe('SessionView', () => {
       it('re-arms following when the learner sends a message', async () => {
         const store = await mountStreaming()
         store.streamingMessage = null
-        setScrollY(732)
-        setScrollY(300)
+        scrollUpFromBottom()
         scrollSpy.mockClear()
         store.messages = [...store.messages, { role: 'user', content: 'next', message_id: 11 }]
         await flushPromises()
@@ -2059,7 +2103,7 @@ describe('SessionView', () => {
         ['instant under prefers-reduced-motion', true, 'instant'],
       ])('scrolls %s', async (_label, reduce, behavior) => {
         window.matchMedia = vi.fn((query) => ({
-          matches: reduce && query === '(prefers-reduced-motion: reduce)',
+          matches: reduce && query === REDUCED_MOTION_QUERY,
           addEventListener: vi.fn(),
           removeEventListener: vi.fn(),
         }))
