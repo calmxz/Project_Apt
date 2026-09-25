@@ -13,8 +13,9 @@ const props = defineProps({
 // mobile drawer.
 const emit = defineEmits(['navigate', 'sign-out'])
 
-// Drawn 20-unit icons in the sidebar's stroke grammar, one per destination.
-const NAV_ITEMS = [
+// Drawn 20-unit icons in the sidebar's stroke grammar, one per item. An item
+// with `to` navigates; Sign out, set apart by a rule, has none.
+const ITEMS = [
   {
     slug: 'settings',
     label: 'Settings',
@@ -37,9 +38,14 @@ const NAV_ITEMS = [
     paths: ['M4 16.5 C4 13.5 6.7 12 10 12 C13.3 12 16 13.5 16 16.5'],
     circle: { cx: 10, cy: 7, r: 3 },
   },
+  {
+    slug: 'sign-out',
+    label: 'Sign out',
+    testid: 'sidebar-sign-out',
+    ruleBefore: true,
+    paths: ['M8 3.5 H4.5 V16.5 H8', 'M11.5 6.5 L15 10 L11.5 13.5 M15 10 H8'],
+  },
 ]
-
-const SIGN_OUT_PATHS = ['M8 3.5 H4.5 V16.5 H8', 'M11.5 6.5 L15 10 L11.5 13.5 M15 10 H8']
 
 const open = ref(false)
 const triggerEl = ref(null)
@@ -144,14 +150,10 @@ function onMenuKeydown(e) {
   }
 }
 
-function onNavigate(to) {
+function onItem(item) {
   closeAndReturn()
-  emit('navigate', to)
-}
-
-function onSignOut() {
-  closeAndReturn()
-  emit('sign-out')
+  if (item.to) emit('navigate', item.to)
+  else emit('sign-out')
 }
 
 function onDocPointerDown(e) {
@@ -261,60 +263,35 @@ defineExpose({ focusTrigger })
           class="sb-user-menu-list"
           data-testid="sidebar-user-menu-list"
         >
-          <button
-            v-for="item in NAV_ITEMS"
-            :key="item.slug"
-            type="button"
-            role="menuitem"
-            tabindex="-1"
-            class="sb-user-menu-item"
-            :data-testid="`sidebar-user-menu-${item.slug}`"
-            @click="onNavigate(item.to)"
-          >
-            <svg
-              class="sb-user-menu-icon"
-              viewBox="0 0 20 20"
-              width="16"
-              height="16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-              focusable="false"
+          <template v-for="item in ITEMS" :key="item.slug">
+            <div v-if="item.ruleBefore" class="sb-user-menu-rule" role="separator" />
+            <button
+              type="button"
+              role="menuitem"
+              tabindex="-1"
+              class="sb-user-menu-item"
+              :data-testid="item.testid || `sidebar-user-menu-${item.slug}`"
+              @click="onItem(item)"
             >
-              <circle v-if="item.circle" v-bind="item.circle" />
-              <path v-for="d in item.paths" :key="d" :d="d" />
-            </svg>
-            {{ item.label }}
-          </button>
-          <div class="sb-user-menu-rule" role="separator" />
-          <button
-            type="button"
-            role="menuitem"
-            tabindex="-1"
-            class="sb-user-menu-item"
-            data-testid="sidebar-sign-out"
-            @click="onSignOut"
-          >
-            <svg
-              class="sb-user-menu-icon"
-              viewBox="0 0 20 20"
-              width="16"
-              height="16"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-              focusable="false"
-            >
-              <path v-for="d in SIGN_OUT_PATHS" :key="d" :d="d" />
-            </svg>
-            Sign out
-          </button>
+              <svg
+                class="sb-user-menu-icon"
+                viewBox="0 0 20 20"
+                width="16"
+                height="16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <circle v-if="item.circle" v-bind="item.circle" />
+                <path v-for="d in item.paths" :key="d" :d="d" />
+              </svg>
+              {{ item.label }}
+            </button>
+          </template>
         </div>
       </div>
     </Teleport>
@@ -459,7 +436,7 @@ defineExpose({ focusTrigger })
 }
 
 .sb-user-menu-item:hover {
-  background: var(--color-surface-soft);
+  background: var(--desk-deep);
 }
 
 .sb-user-menu-icon {

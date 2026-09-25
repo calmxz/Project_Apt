@@ -297,8 +297,8 @@ function onMenuNavigate(to) {
   router.push(to)
 }
 
-// Sign out lives in the identity row's account menu at the foot of the
-// contents page: it is a navigation act, not a setting.
+// Sign out lives in the identity row's account menu at the sidebar foot:
+// it is a navigation act, not a setting.
 async function onSignOut() {
   closeDrawer()
   try {
