@@ -193,13 +193,6 @@ const cappedActiveFlat = computed(() =>
 )
 const cappedEndedRows = computed(() => endedRows.value.slice(0, renderCap.value))
 
-// Collapsed icon rail: one flat spine of every row the expanded view would draw.
-const railRows = computed(() => [
-  ...cappedPinnedActive.value,
-  ...cappedActiveFlat.value,
-  ...cappedEndedRows.value,
-])
-
 const activeRendered = computed(
   () => cappedPinnedActive.value.length + cappedActiveFlat.value.length,
 )
@@ -271,10 +264,6 @@ const isExpanded = computed(() => mode.value === 'expanded' || mode.value === 'd
 const showDrawerClose = computed(() => !isDesktop.value && mode.value === 'drawer-open')
 const isRail = computed(() => isDesktop.value && !isExpanded.value)
 
-// Folded, the fold control is drawn above the mark, so it must also come
-// first in the DOM or Tab would reach the mark before it (WCAG 2.4.3).
-const headOrder = computed(() => (isRail.value ? ['toggle', 'brand'] : ['brand', 'toggle']))
-
 // Identity row: the display name, else the sign-in email. stores/user.js
 // writes the literal 'Learner' when the learner leaves the name blank, so
 // that placeholder counts as unset here.
@@ -283,21 +272,11 @@ const identityName = computed(() => {
   return n && n !== 'Learner' ? n : userEmail.value || ''
 })
 
-// Clear search when collapsing so the icon rail is never gated empty.
+// Clear search when collapsing: the field folds away with the list, so a
+// query left behind would silently filter the list on the next unfold.
 watch(isExpanded, (expanded) => {
   if (!expanded) searchQuery.value = ''
 })
-
-// Folding moves the toggle node within the head (headOrder), which drops a
-// keyboard user's focus to <body>; put it back on the toggle.
-async function onHeadToggle(e) {
-  const hadFocus = document.activeElement === e.currentTarget
-  toggleDesktop()
-  await nextTick()
-  if (hadFocus) {
-    asideEl.value?.querySelector('[data-testid="sidebar-collapse-toggle"]')?.focus()
-  }
-}
 
 // Rail Search unfolds the sidebar, then hands the caret to the search field
 // once the expanded body has rendered.
@@ -356,44 +335,43 @@ async function onSignOut() {
     aria-label="App navigation"
   >
     <div class="sb-header">
-      <template v-for="part in headOrder" :key="part">
-        <RouterLink
-          v-if="part === 'brand'"
-          to="/"
-          class="sb-brand"
-          aria-label="Crux home"
-          @click="closeDrawer"
+      <!-- Folded, the rail starts at the toggle: no mark above it. -->
+      <RouterLink
+        v-if="!isRail"
+        to="/"
+        class="sb-brand"
+        aria-label="Crux home"
+        @click="closeDrawer"
+      >
+        <Logo size="md" variant="full" />
+      </RouterLink>
+      <button
+        v-if="isDesktop"
+        type="button"
+        class="sb-toggle sb-toggle--head hit-44"
+        :aria-label="isExpanded ? 'Collapse sidebar' : 'Expand sidebar'"
+        :title="isExpanded ? 'Collapse sidebar' : 'Expand sidebar'"
+        data-testid="sidebar-collapse-toggle"
+        @click="toggleDesktop"
+      >
+        <!-- The drawn "sidebar" glyph: a page with a narrow left pane. -->
+        <svg
+          class="sb-toggle-icon"
+          viewBox="0 0 20 20"
+          width="20"
+          height="20"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          focusable="false"
         >
-          <Logo :size="isExpanded ? 'md' : 'sm'" :variant="isExpanded ? 'full' : 'mark-only'" />
-        </RouterLink>
-        <button
-          v-else-if="isDesktop"
-          type="button"
-          class="sb-toggle sb-toggle--head hit-44"
-          :aria-label="isExpanded ? 'Collapse sidebar' : 'Expand sidebar'"
-          :title="isExpanded ? 'Collapse sidebar' : 'Expand sidebar'"
-          data-testid="sidebar-collapse-toggle"
-          @click="onHeadToggle"
-        >
-          <!-- The drawn "sidebar" glyph: a page with a narrow left pane. -->
-          <svg
-            class="sb-toggle-icon"
-            viewBox="0 0 20 20"
-            width="20"
-            height="20"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.5"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            aria-hidden="true"
-            focusable="false"
-          >
-            <rect x="3" y="4" width="14" height="12" rx="2" />
-            <path d="M8 4 L8 16" />
-          </svg>
-        </button>
-      </template>
+          <rect x="3" y="4" width="14" height="12" rx="2" />
+          <path d="M8 4 L8 16" />
+        </svg>
+      </button>
       <button
         v-if="showDrawerClose"
         type="button"
@@ -583,6 +561,8 @@ async function onSignOut() {
       </button>
     </div>
 
+    <!-- Folded, the rail shows actions only; the list returns on unfold. The
+         nav itself stays as the spacer that holds the identity foot down. -->
     <nav ref="listEl" class="sb-list-wrap" aria-label="Sessions">
       <template v-if="isExpanded">
         <template v-if="searching">
@@ -729,18 +709,6 @@ async function onSignOut() {
             </RouterLink>
           </section>
         </template>
-      </template>
-
-      <!-- Collapsed icon rail: compact row markers without sections -->
-      <template v-else>
-        <ul v-if="sessions.length" class="sb-session-list sb-session-list--collapsed">
-          <SidebarSessionRow
-            v-for="s in railRows"
-            :key="s.id"
-            :session="s"
-            :state="s.ended_at ? 'ended' : 'active'"
-          />
-        </ul>
       </template>
     </nav>
 
@@ -927,7 +895,7 @@ async function onSignOut() {
 }
 
 /* The fold control is a drawn icon in the head: right of the wordmark when
-   open, alone above the mark when folded, so it never sits on the mark. */
+   open, alone at the top of the rail when folded. */
 .sb-toggle--head {
   margin-left: auto;
   width: 2rem;
@@ -1069,10 +1037,6 @@ async function onSignOut() {
   padding: 0.25rem 0;
   display: flex;
   flex-direction: column;
-}
-
-.sb-session-list--collapsed {
-  align-items: stretch;
 }
 
 .sb-empty-hint {
