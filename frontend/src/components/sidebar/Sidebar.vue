@@ -5,6 +5,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useSidebar } from '@/composables/useSidebar.js'
+import { useToast } from '@/composables/useToast.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useSessionStore } from '@/stores/session.js'
 import { useUserStore } from '@/stores/user.js'
@@ -288,6 +289,27 @@ async function onRailSearch() {
 function onNewSession() {
   closeDrawer()
   router.push({ name: 'new-session' })
+}
+
+// The account menu's Settings, Usage and Account items.
+function onMenuNavigate(to) {
+  closeDrawer()
+  router.push(to)
+}
+
+// Sign out lives in the identity row's account menu at the foot of the
+// contents page: it is a navigation act, not a setting.
+async function onSignOut() {
+  closeDrawer()
+  try {
+    await authStore.signOut()
+  } catch (err) {
+    // The store clears the local session even when the SDK throws, so the
+    // shell is already signed out; say so and still leave the protected
+    // route rather than stranding the learner on it.
+    useToast().showError(err?.message || 'Sign out failed')
+  }
+  router.push('/login')
 }
 </script>
 
@@ -727,7 +749,8 @@ function onNewSession() {
         :name="identityName"
         :email="userEmail || ''"
         :collapsed="isRail"
-        @click="closeDrawer"
+        @navigate="onMenuNavigate"
+        @sign-out="onSignOut"
       />
     </footer>
   </aside>
