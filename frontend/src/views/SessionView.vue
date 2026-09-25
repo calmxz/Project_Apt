@@ -254,6 +254,7 @@ import ReferenceStatusBanner from '../components/chat/ReferenceStatusBanner.vue'
 import UploadStatus from '../components/chat/UploadStatus.vue'
 import { friendlyError, StreamAbortedError } from '../lib/errors.js'
 import { useSessionStore } from '../stores/session.js'
+import { REDUCED_MOTION_QUERY, useMediaQuery } from '../composables/useMediaQuery.js'
 import { usePanel } from '../composables/usePanel.js'
 import { useToast } from '../composables/useToast.js'
 import { costBus } from '../services/costBus.js'
@@ -591,6 +592,67 @@ function scrollToBottom() {
   nextTick(() => window.scrollTo(0, docScrollHeight()))
 }
 
+// #347: follow the stream. Autoscroll is on until the learner scrolls up and
+// back on once they return to the bottom. Cancel keys on scroll *direction*,
+// not on "not at the bottom": content growth and an in-flight smooth scroll
+// both leave the view short of the bottom without the learner doing anything,
+// and neither ever moves scrollY up. Any upward move short of the exact bottom
+// cancels (a small nudge counts); a shrink that clamps the view to the bottom
+// does not. Re-arming takes FOLLOW_SLACK_PX so sub-pixel rounding still
+// counts as "back at the bottom". Never read by the template, so plain lets.
+const FOLLOW_SLACK_PX = 40
+let following = true
+let lastScrollY = 0
+const reducedMotion = useMediaQuery(REDUCED_MOTION_QUERY)
+
+function distanceFromBottom() {
+  return docScrollHeight() - window.scrollY - window.innerHeight
+}
+
+function onWindowScroll() {
+  const distance = distanceFromBottom()
+  if (window.scrollY < lastScrollY && distance > 1) following = false
+  else if (distance <= FOLLOW_SLACK_PX) following = true
+  lastScrollY = window.scrollY
+}
+// The scroll event lags the gesture by a frame, long enough for a token to
+// land and a programmatic scroll to swallow the learner's first flick. A wheel
+// turned upward is intent itself, so cancel on it directly.
+function onWindowWheel(event) {
+  if (event.deltaY < 0 && window.scrollY > 0) following = false
+}
+onMounted(() => {
+  window.addEventListener('scroll', onWindowScroll, { passive: true })
+  window.addEventListener('wheel', onWindowWheel, { passive: true })
+})
+onUnmounted(() => {
+  window.removeEventListener('scroll', onWindowScroll)
+  window.removeEventListener('wheel', onWindowWheel)
+})
+
+function followStream() {
+  if (!following) return
+  nextTick(() =>
+    window.scrollTo({
+      top: docScrollHeight(),
+      behavior: reducedMotion.value ? 'instant' : 'smooth',
+    }),
+  )
+}
+
+// content grows in place (streamingMessage.content += text), so messages.length
+// never moves while a reply streams -- watch the parts that add height. A tool
+// call settling from running to done relabels its chip, which can wrap.
+watch(
+  () => {
+    const s = store.streamingMessage
+    return s && [s.content.length, s.tool_calls.map((t) => t.state).join(), s.citations.length]
+  },
+  (streamSize) => {
+    if (streamSize) followStream()
+  },
+)
+
 // True from the moment a "load earlier" click starts until its scroll-offset
 // restore lands. The autoscroll watcher below fires when store.messages.length
 // changes (prepend included) - without this guard it would yank the view back
@@ -615,7 +677,10 @@ async function onLoadEarlier() {
 
 watch([() => store.messages.length, awaitingResponse], () => {
   if (prepending) return
-  scrollToBottom()
+  // A learner who just sent expects to see the reply, wherever they were; a
+  // reply landing while they read history above must not yank them down.
+  if (awaitingResponse.value || store.messages.at(-1)?.role === 'user') following = true
+  if (following) scrollToBottom()
 })
 
 // The check batch and the level picker sit at the end of the transcript, so a
@@ -634,6 +699,8 @@ async function loadCurrent(id) {
   // loadSession entry. loadCurrent only runs on mount + id-change, so a same-
   // session send-error stays retryable.
   lastError.value = null
+  following = true
+  lastScrollY = window.scrollY
   cuesLanded.value = false
   diagProfile.value = null
   diagNullTurns = 0
