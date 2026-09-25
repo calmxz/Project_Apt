@@ -5,8 +5,8 @@ import { useSessionStore } from './session.js'
 import { apiGet, apiPatch } from '../services/apiClient.js'
 
 // Phase 7+: identity comes from `useAuthStore` (Supabase JWT). This store
-// only persists local UX preferences -- name + feedback style + onboarding
-// completion -- in a localStorage entry namespaced by Supabase userId so two
+// only persists local UX preferences -- name + tutor preferences (feedback
+// style, check-ins, reply length) + onboarding completion -- in a localStorage entry namespaced by Supabase userId so two
 // accounts on one browser never share prefs (F-08).
 
 const STORAGE_PREFIX = 'crux:user:v1'
@@ -88,11 +88,12 @@ export const useUserStore = defineStore('user', () => {
       const me = await apiGet('/me', undefined, { silent: true })
       if (me) {
         if (me.display_name != null) name.value = me.display_name
-        if (me.feedback_pref != null) {
-          interactionPreferences.value = {
-            ...interactionPreferences.value,
-            feedback: me.feedback_pref,
-          }
+        const prefs = {}
+        if (me.feedback_pref != null) prefs.feedback = me.feedback_pref
+        if (me.check_ins != null) prefs.checkIns = me.check_ins
+        if (me.reply_length != null) prefs.replyLength = me.reply_length
+        if (Object.keys(prefs).length) {
+          interactionPreferences.value = { ...interactionPreferences.value, ...prefs }
         }
         onboardingComplete.value = Boolean(me.onboarding_complete)
         persist()
@@ -113,7 +114,8 @@ export const useUserStore = defineStore('user', () => {
       onboarding_complete: true,
     })
     name.value = finalName
-    interactionPreferences.value = { feedback }
+    // Merge, not replace: a hydrated check-ins / reply-length choice survives.
+    interactionPreferences.value = { ...interactionPreferences.value, feedback }
     onboardingComplete.value = true
     persist()
   }
@@ -139,16 +141,30 @@ export const useUserStore = defineStore('user', () => {
     resetOnboarding()
   }
 
-  async function updateProfile({ name: displayName, feedback }) {
+  // Sends only the fields given, so each Learning-tab control's autosave is a
+  // single-field PATCH that never overwrites the others (#357).
+  async function updateProfile({ name: displayName, feedback, checkIns, replyLength }) {
     const body = {}
+    const prefs = {}
     if (displayName != null) body.display_name = displayName.trim() || 'Learner'
-    if (feedback != null) body.feedback_pref = feedback
+    if (feedback != null) {
+      body.feedback_pref = feedback
+      prefs.feedback = feedback
+    }
+    if (checkIns != null) {
+      body.check_ins = checkIns
+      prefs.checkIns = checkIns
+    }
+    if (replyLength != null) {
+      body.reply_length = replyLength
+      prefs.replyLength = replyLength
+    }
     if (Object.keys(body).length) {
       await apiPatch('/me', body)
     }
     if (displayName != null) name.value = displayName.trim() || 'Learner'
-    if (feedback != null) {
-      interactionPreferences.value = { ...interactionPreferences.value, feedback }
+    if (Object.keys(prefs).length) {
+      interactionPreferences.value = { ...interactionPreferences.value, ...prefs }
     }
     persist()
   }

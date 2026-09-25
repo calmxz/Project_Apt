@@ -127,6 +127,53 @@ describe('user store', () => {
     expect(u.interactionPreferences.feedback).toBe('direct_answers')
   })
 
+  // #357: each Learning-tab control autosaves on its own, so one change is one
+  // PATCH carrying only that field.
+  it('updateProfile sends check_ins alone and merges it into preferences', async () => {
+    const u = useUserStore()
+    u.setActiveUser('u1')
+    await u.completeOnboarding({ name: 'A', feedback: 'hints' })
+    fetchMock.mockClear()
+    await u.updateProfile({ checkIns: 'often' })
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ check_ins: 'often' })
+    expect(u.interactionPreferences).toEqual({ feedback: 'hints', checkIns: 'often' })
+    expect(JSON.parse(localStorage.getItem(key('u1'))).interactionPreferences.checkIns).toBe(
+      'often',
+    )
+  })
+
+  it('updateProfile sends reply_length alone and merges it into preferences', async () => {
+    const u = useUserStore()
+    u.setActiveUser('u1')
+    await u.completeOnboarding({ name: 'A', feedback: 'hints' })
+    fetchMock.mockClear()
+    await u.updateProfile({ replyLength: 'thorough' })
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ reply_length: 'thorough' })
+    expect(u.interactionPreferences.replyLength).toBe('thorough')
+    expect(u.interactionPreferences.feedback).toBe('hints')
+  })
+
+  it('completeOnboarding keeps hydrated check-ins and reply length', async () => {
+    fetchMock.mockReturnValue(
+      ok({
+        feedback_pref: 'hints',
+        check_ins: 'often',
+        reply_length: 'brief',
+        onboarding_complete: false,
+      }),
+    )
+    const u = useUserStore()
+    u.setActiveUser('u1')
+    await u.hydrateFromServer()
+    await u.completeOnboarding({ name: 'A', feedback: 'direct_answers' })
+    expect(u.interactionPreferences).toEqual({
+      feedback: 'direct_answers',
+      checkIns: 'often',
+      replyLength: 'brief',
+    })
+  })
+
   it('updateProfile trims and falls back to "Learner"', async () => {
     const u = useUserStore()
     u.setActiveUser('u1')
@@ -216,6 +263,26 @@ describe('user store', () => {
     expect(u.name).toBe('Ada')
     expect(u.interactionPreferences.feedback).toBe('direct')
     expect(u.hydrated).toBe(true)
+  })
+
+  it('hydrateFromServer carries check_ins and reply_length', async () => {
+    fetchMock.mockReturnValue(
+      ok({
+        display_name: 'Ada',
+        feedback_pref: 'hints',
+        check_ins: 'only_when_asked',
+        reply_length: 'brief',
+        onboarding_complete: true,
+      }),
+    )
+    const u = useUserStore()
+    u.setActiveUser('u1')
+    await u.hydrateFromServer()
+    expect(u.interactionPreferences).toEqual({
+      feedback: 'hints',
+      checkIns: 'only_when_asked',
+      replyLength: 'brief',
+    })
   })
 
   it('hydrateFromServer failure keeps local snapshot and still sets hydrated', async () => {
