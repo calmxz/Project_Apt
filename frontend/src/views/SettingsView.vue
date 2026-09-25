@@ -153,7 +153,7 @@ function onKeydown(e, i) {
   margin: 0;
 }
 
-/* Account and Sign out: quiet written links under the title, not tabs. */
+/* Account and Sign out: text buttons under the title, not tabs. */
 .head-links {
   display: flex;
   gap: 1.25rem;
@@ -164,16 +164,17 @@ function onKeydown(e, i) {
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--pencil);
+  color: var(--ink-learner);
   font-family: var(--font-sans);
   font-size: var(--fs-caption);
   font-weight: 700;
-  text-decoration: none;
+  text-decoration: underline;
+  text-underline-offset: 3px;
   cursor: pointer;
 }
 
 .head-link:hover {
-  color: var(--ink-learner);
+  color: var(--accent-hover);
 }
 
 .head-link:focus-visible {
