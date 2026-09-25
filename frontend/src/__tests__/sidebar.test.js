@@ -42,6 +42,7 @@ vi.mock('@/services/sessionsApi.js', async (importOriginal) => {
 })
 
 import Sidebar from '@/components/sidebar/Sidebar.vue'
+import Logo from '@/components/Logo.vue'
 import { useSessionStore } from '@/stores/session.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { useUserStore } from '@/stores/user.js'
@@ -193,7 +194,7 @@ describe('Sidebar.vue — session list rendering', () => {
     expect(btn.attributes('aria-current')).toBe('page')
   })
 
-  it('collapsed tooltip is the plain session topic', async () => {
+  it('the collapsed rail renders no session rows; they return on unfold', async () => {
     sidebarTest._setExpanded(false)
     const store = useSessionStore()
     store.sessions = [
@@ -207,8 +208,11 @@ describe('Sidebar.vue — session list rendering', () => {
     ]
     wrapper = mount(Sidebar)
     await flushPromises()
-    const btn = wrapper.get('[data-testid="sidebar-row-a1"] [data-testid="sidebar-row-open"]')
-    expect(btn.attributes('title')).toBe('Glycolysis')
+    expect(wrapper.find('[data-session-id]').exists()).toBe(false)
+
+    await wrapper.get('[data-testid="sidebar-collapse-toggle"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sidebar-row-a1"]').exists()).toBe(true)
   })
 
   it('highlights the current session row', async () => {
@@ -317,7 +321,7 @@ describe('Sidebar.vue — session list rendering', () => {
     ).toBe(true)
   })
 
-  it('clears the search query when the sidebar collapses so the rail is not blank', async () => {
+  it('clears the search query when the sidebar collapses so unfolding shows the full list', async () => {
     const store = useSessionStore()
     store.sessions = [
       { id: 'a1', topic: 'Photosynthesis', created_at: new Date().toISOString(), ended_at: null },
@@ -331,7 +335,11 @@ describe('Sidebar.vue — session list rendering', () => {
     await flushPromises()
     // search input is gone (v-if on isExpanded)
     expect(wrapper.find('[data-testid="sidebar-search"]').exists()).toBe(false)
-    // collapsed rail must show the session row — fails before Fix 1 because searching stays true
+    // unfold: the query is gone and the plain list is back, not a stale search
+    await wrapper.find('[data-testid="sidebar-collapse-toggle"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="sidebar-search"]').element.value).toBe('')
+    expect(wrapper.find('[data-testid="sidebar-search-count"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="sidebar-row-a1"]').exists()).toBe(true)
   })
 })
@@ -1525,7 +1533,7 @@ describe('Sidebar.vue — recall entry', () => {
 // The desktop collapse toggle is a drawn sidebar icon in the head (the old
 // right-edge half-tab overlapped the mark in the rail), and the collapsed rail
 // marks sessions as dots instead of strokes.
-describe('Sidebar.vue — collapse toggle and collapsed dots', () => {
+describe('Sidebar.vue — collapse toggle and empty rail', () => {
   let wrapper
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -1555,7 +1563,7 @@ describe('Sidebar.vue — collapse toggle and collapsed dots', () => {
     )
   })
 
-  it('renders one dot per session in the collapsed rail, current session marked', async () => {
+  it('the collapsed rail draws no session markers, even for the current session', async () => {
     sidebarTest._setExpanded(false)
     routeRef.params = { id: 'a1' }
     const store = useSessionStore()
@@ -1565,9 +1573,9 @@ describe('Sidebar.vue — collapse toggle and collapsed dots', () => {
     ]
     wrapper = mount(Sidebar)
     await flushPromises()
-    const marks = wrapper.findAll('.sb-session-list--collapsed .sb-row-mark')
-    expect(marks).toHaveLength(2)
-    expect(wrapper.find('[data-session-id="a1"]').classes()).toContain('sb-row--current')
+    expect(wrapper.find('.sb-row-mark').exists()).toBe(false)
+    expect(wrapper.find('.sb-session-list').exists()).toBe(false)
+    expect(wrapper.find('[data-session-id]').exists()).toBe(false)
   })
 })
 
@@ -1672,15 +1680,13 @@ describe('Sidebar.vue — header states', () => {
     expect(toggle.attributes('aria-label')).toBe('Collapse sidebar')
   })
 
-  // The collapsed rail carries the page mark (mark-only logo, no wordmark)
-  // above the expand toggle, so .sb-brand is present but "Crux" is not.
-  it('collapsed desktop header shows the page mark and the expand toggle', async () => {
+  // The collapsed rail carries no logo: it starts at the expand toggle.
+  it('collapsed desktop header shows only the expand toggle, no logo', async () => {
     sidebarTest._setExpanded(false)
     wrapper = mount(Sidebar)
     await flushPromises()
-    const brand = wrapper.find('.sb-brand')
-    expect(brand.exists()).toBe(true)
-    expect(brand.text()).not.toContain('Crux')
+    expect(wrapper.find('.sb-brand').exists()).toBe(false)
+    expect(wrapper.find('.sb-header').findComponent(Logo).exists()).toBe(false)
     const toggle = wrapper.find('[data-testid="sidebar-collapse-toggle"]')
     expect(toggle.exists()).toBe(true)
     expect(toggle.attributes('aria-label')).toBe('Expand sidebar')
@@ -1793,16 +1799,6 @@ describe('sidebar row cap and View all links', () => {
       wrapper.findAll('[data-testid="sidebar-section-pinned"] [data-session-id]'),
     ).toHaveLength(15)
     expect(wrapper.findAll('[data-testid="sidebar-quick-group"] [data-session-id]')).toHaveLength(0)
-  })
-
-  it('caps the collapsed icon rail at 15 pinned rows too', async () => {
-    sidebarTest._setExpanded(false)
-    const store = useSessionStore()
-    store.sessions = makeActiveSessions(25, { pinned: true, prefix: 'p' })
-    store.activeTotal = 25
-    wrapper = mount(Sidebar)
-    await flushPromises()
-    expect(wrapper.findAll('.sb-session-list--collapsed [data-session-id]')).toHaveLength(15)
   })
 
   it('caps the ended tab at 15 and links with status=ended', async () => {

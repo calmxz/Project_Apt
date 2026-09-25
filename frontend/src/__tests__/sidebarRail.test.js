@@ -82,38 +82,55 @@ describe('Sidebar.vue -- folded icon rail', () => {
     expect(open.attributes('title')).toBe('Collapse sidebar')
   })
 
-  it('the folded head draws the toggle and the mark as separate controls', async () => {
+  // The rail starts at the toggle: no logo above or below it.
+  it('the folded head draws the toggle alone, without the mark', async () => {
     wrapper = mount(Sidebar)
     await flushPromises()
     const header = wrapper.get('.sb-header')
-    const toggle = header.get('[data-testid="sidebar-collapse-toggle"]')
-    const brand = header.get('.sb-brand')
-    expect(brand.element.contains(toggle.element)).toBe(false)
-    expect(toggle.element.contains(brand.element)).toBe(false)
+    expect(header.find('[data-testid="sidebar-collapse-toggle"]').exists()).toBe(true)
+    expect(header.find('.sb-brand').exists()).toBe(false)
   })
 
-  // WCAG 2.4.3: the toggle is drawn above the mark when folded, so it must
-  // also precede it in the DOM; open, it follows the wordmark.
-  it('the head toggle precedes the mark in DOM order only when folded', async () => {
+  // WCAG 2.4.3: open, the toggle follows the wordmark in DOM order, matching
+  // how it is drawn.
+  it('the head toggle follows the wordmark in DOM order when open', async () => {
     const precedes = (a, b) =>
       Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
     wrapper = mount(Sidebar)
     await flushPromises()
-    let header = wrapper.get('.sb-header')
-    let toggle = header.get('[data-testid="sidebar-collapse-toggle"]').element
-    let brand = header.get('.sb-brand').element
-    expect(precedes(toggle, brand)).toBe(true)
-
     await wrapper.get('[data-testid="sidebar-collapse-toggle"]').trigger('click')
     await flushPromises()
-    header = wrapper.get('.sb-header')
-    toggle = header.get('[data-testid="sidebar-collapse-toggle"]').element
-    brand = header.get('.sb-brand').element
+    const header = wrapper.get('.sb-header')
+    const toggle = header.get('[data-testid="sidebar-collapse-toggle"]').element
+    const brand = header.get('.sb-brand').element
     expect(precedes(brand, toggle)).toBe(true)
   })
 
-  // Folding re-orders the head, which moves the toggle node; a keyboard user
-  // must not lose focus to <body> when they fold or unfold.
+  // Rail order: toggle, New session, Search, then the identity foot. No
+  // session row sits between the actions and the foot.
+  it('the folded rail exposes only its actions, in order', async () => {
+    const store = useSessionStore()
+    store.sessions = [
+      { id: 'a1', topic: 'Big-O', created_at: new Date().toISOString(), ended_at: null },
+    ]
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    const ids = wrapper
+      .findAll('button, a')
+      .map((w) => w.attributes('data-testid'))
+      .filter(Boolean)
+    expect(ids.slice(0, 3)).toEqual([
+      'sidebar-collapse-toggle',
+      'sidebar-new-session',
+      'sidebar-rail-search',
+    ])
+    expect(wrapper.find('[data-session-id]').exists()).toBe(false)
+    // The empty list column is layout only, not a landmark.
+    expect(wrapper.get('nav.sb-list-wrap').attributes('aria-hidden')).toBe('true')
+  })
+
+  // Unfolding inserts the wordmark ahead of the toggle; a keyboard user must
+  // not lose focus to <body> when they fold or unfold.
   it('keeps focus on the head toggle across folding and unfolding', async () => {
     wrapper = mount(Sidebar, { attachTo: document.body })
     await flushPromises()

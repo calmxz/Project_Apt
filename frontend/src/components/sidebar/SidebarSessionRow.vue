@@ -13,7 +13,7 @@ const props = defineProps({
 
 const route = useRoute()
 const router = useRouter()
-const { mode, closeDrawer } = useSidebar()
+const { closeDrawer } = useSidebar()
 const actions = useSessionActions()
 const { busy } = actions
 
@@ -23,9 +23,6 @@ const inputEl = ref(null)
 const menuEl = ref(null)
 
 const isCurrent = computed(() => route.params.id === props.session.id)
-const isCollapsed = computed(() => mode.value === 'collapsed')
-
-const tooltip = computed(() => props.session.topic || 'Untitled')
 
 // Row label cells. SessionListItem.progress carries focus_target_gap, level,
 // and mastered_count. Only the topic is shown on the row; the rest still feed
@@ -119,7 +116,6 @@ function commitRenameFromKey() {
     :class="{
       'sb-row--current': isCurrent,
       'sb-row--ended': state === 'ended',
-      'sb-row--collapsed': isCollapsed,
     }"
     :data-session-id="session.id"
     :data-testid="`sidebar-row-${session.id}`"
@@ -129,13 +125,11 @@ function commitRenameFromKey() {
       class="sb-row-button hit-44"
       :aria-current="isCurrent ? 'page' : undefined"
       :aria-label="rowLabel"
-      :title="isCollapsed ? tooltip : ''"
       data-testid="sidebar-row-open"
       @click="openSession"
     >
-      <span v-if="isCollapsed" class="sb-row-mark" aria-hidden="true" />
       <input
-        v-else-if="renaming"
+        v-if="renaming"
         ref="inputEl"
         v-model="draft"
         type="text"
@@ -168,7 +162,6 @@ function commitRenameFromKey() {
       </span>
     </button>
     <SidebarRowMenu
-      v-if="!isCollapsed"
       ref="menuEl"
       :state="state"
       :busy="busy"
@@ -202,16 +195,15 @@ function commitRenameFromKey() {
 }
 
 /* The current session sits on its own white card, the one row on the
-   contents page that is allowed to lift off the ground. Collapsed rail rows
-   stay dots only (below), so the card treatment is expanded-only. */
-.sb-row--current:not(.sb-row--collapsed) {
+   contents page that is allowed to lift off the ground. */
+.sb-row--current {
   background: var(--card);
   border: 1px solid var(--card-edge);
   box-shadow: 0 1px 0 var(--card-drop);
 }
 
-.sb-row--current:not(.sb-row--collapsed):hover,
-.sb-row--current:not(.sb-row--collapsed):focus-within {
+.sb-row--current:hover,
+.sb-row--current:focus-within {
   background: var(--card);
 }
 
@@ -264,36 +256,6 @@ function commitRenameFromKey() {
 
 .sb-row--current .sb-row-topic {
   font-weight: 700;
-}
-
-/* Collapsed rail: the row is a short pencil stroke; current turns blue. */
-.sb-row--collapsed {
-  justify-content: center;
-}
-
-.sb-row--collapsed .sb-row-button {
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-}
-
-/* Collapsed spine: one dot per session, current turns blue. */
-.sb-row-mark {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--pencil);
-  opacity: 0.6;
-}
-
-.sb-row--ended .sb-row-mark {
-  background: var(--rule-strong);
-  opacity: 1;
-}
-
-.sb-row--current .sb-row-mark {
-  background: var(--color-accent);
-  opacity: 1;
 }
 
 /* Renaming writes on the same rule the row sits on. */
