@@ -20,7 +20,7 @@
     "format": "prettier --write --experimental-cli src/"
   },
   "dependencies": {
-    "@mdit/plugin-katex": "^1.1.0",
+    "@mdit/plugin-katex": "^1.1.1",
     "@primeuix/themes": "^2.0.3",
     "@supabase/supabase-js": "^2.112.3",
     "dompurify": "^3.4.14",
