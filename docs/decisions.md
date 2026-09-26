@@ -20,7 +20,10 @@ attachment`, and a "Download my data" section directly above Delete account.
 - **Same tables as delete, minus internal state.** Chunk embeddings, the
   open-check pointers, `rolling_summary`, `kw_index_json` and the per-call
   LLM log are left out: none of it is the learner's own content, and the
-  LLM log names internal models. Usage is exported per day (message count
+  LLM log names internal models. `check_batch_json` is left out too:
+  answered checks are already in `check_answers`, and rebuilding a batch
+  that was shown but never answered would pull in the transcript's
+  `load_check_batch` reconstruction. Usage is exported per day (message count
   plus cost, merged from `usage_counters` and `daily_cost_ledger`).
 - **Pure read.** Unlike `GET /me`, the export never creates the users row;
   a caller without one gets `account: null` and empty lists.

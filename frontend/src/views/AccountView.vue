@@ -138,16 +138,18 @@
           Download your sessions, messages, check answers, topic profiles, upload list, and
           preferences as one JSON file. Uploaded PDFs are not included.
         </p>
-        <button
-          type="button"
-          class="btn-fill"
-          :class="{ 'btn-fill--busy': exportBusy }"
-          data-testid="account-export-btn"
-          :disabled="exportBusy"
-          @click="downloadExport"
-        >
-          {{ exportBusy ? 'Preparing…' : 'Download my data' }}
-        </button>
+        <div class="btn-fill-row">
+          <button
+            type="button"
+            class="btn-fill"
+            :class="{ 'btn-fill--busy': exportBusy }"
+            data-testid="account-export-btn"
+            :disabled="exportBusy"
+            @click="downloadExport"
+          >
+            {{ exportBusy ? 'Preparing…' : 'Download my data' }}
+          </button>
+        </div>
         <p v-if="exportError" class="error" role="alert" data-testid="account-export-error">
           {{ exportError }}
         </p>
@@ -327,7 +329,8 @@ async function downloadExport() {
   exportError.value = ''
   try {
     const data = await exportData()
-    const day = new Date().toLocaleDateString('en-CA') // YYYY-MM-DD, local day
+    // The server's UTC exported_at, so the name matches its Content-Disposition.
+    const day = String(data?.exported_at ?? new Date().toISOString()).slice(0, 10)
     downloadJson(data, `crux-export-${day}.json`)
     showSuccess('Your data was downloaded.')
   } catch {

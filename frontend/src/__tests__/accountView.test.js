@@ -288,7 +288,7 @@ describe('AccountView', () => {
     })
 
     it('downloads the export as a dated JSON file', async () => {
-      const payload = { format_version: 1, sessions: [] }
+      const payload = { format_version: 1, exported_at: '2026-09-26T23:59:30Z', sessions: [] }
       exportData.mockResolvedValue(payload)
       const w = mountAuthed()
       await flushPromises()
@@ -302,7 +302,8 @@ describe('AccountView', () => {
       expect(JSON.parse(await blob.text())).toEqual(payload)
       expect(clickSpy).toHaveBeenCalledOnce()
       const anchor = clickSpy.mock.contexts[0]
-      expect(anchor.download).toMatch(/^crux-export-\d{4}-\d{2}-\d{2}\.json$/)
+      // Same UTC day the server stamps into Content-Disposition, whatever the local zone.
+      expect(anchor.download).toBe('crux-export-2026-09-26.json')
       expect(anchor.href).toBe('blob:export')
       expect(connectedAtClick).toBe(true)
       expect(anchor.isConnected).toBe(false)
