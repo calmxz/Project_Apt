@@ -1100,10 +1100,12 @@ describe('Sidebar.vue — footer', () => {
     expect(wrapper.find('[data-testid="sidebar-theme-toggle"]').exists()).toBe(false)
   })
 
+  // Profile lives beside Recall at the top (#362); the foot stays identity only.
   it('footer has no Profile entry', async () => {
+    useAuthStore().session = { user: { id: 'u-1', email: 'a@b.c' }, access_token: 't' }
     wrapper = mount(Sidebar)
     await flushPromises()
-    expect(wrapper.find('[data-testid="sidebar-profile"]').exists()).toBe(false)
+    expect(wrapper.get('footer').find('[data-testid="sidebar-profile"]').exists()).toBe(false)
   })
 })
 
@@ -2045,5 +2047,80 @@ describe('sidebar row cap and View all links', () => {
     await wrapper.find('[data-testid="sidebar-status-ended"]').trigger('click')
     expect(wrapper.find('[data-testid="sidebar-ended-empty"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="sidebar-view-all-ended"]').exists()).toBe(false)
+  })
+})
+
+describe('Sidebar.vue — profile entry (#362)', () => {
+  let wrapper
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    routerPush.mockClear()
+    localStorage.clear()
+    setViewport(1400)
+    sidebarTest._setExpanded(true)
+    routeRef.params = {}
+    routeRef.fullPath = '/'
+    const auth = useAuthStore()
+    auth.session = { user: { id: 'u-1' }, access_token: 't' }
+    const store = useSessionStore()
+    vi.spyOn(store, 'listSessions').mockResolvedValue([])
+    globalThis.requestIdleCallback = (cb) => {
+      cb()
+      return 1
+    }
+    globalThis.cancelIdleCallback = () => {}
+  })
+  afterEach(() => {
+    wrapper?.unmount()
+    delete globalThis.requestIdleCallback
+    delete globalThis.cancelIdleCallback
+  })
+
+  const profileLink = () =>
+    wrapper
+      .findAllComponents(MockRouterLink)
+      .find((l) => l.attributes('data-testid') === 'sidebar-profile')
+
+  it('shows a Profile line to /profile even when nothing is due for recall', async () => {
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="sidebar-recall"]').exists()).toBe(false)
+    const link = profileLink()
+    expect(link).toBeTruthy()
+    expect(link.props('to')).toEqual({ name: 'profile-aggregate' })
+    expect(link.text()).toContain('Profile')
+    expect(link.find('svg').exists()).toBe(true)
+  })
+
+  it('sits directly beside Recall when Recall is shown', async () => {
+    apiReviewQueue.mockResolvedValue({ items: [], total: 2, limit: 1, offset: 0 })
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    const profile = wrapper.get('[data-testid="sidebar-profile"]').element
+    expect(profile.nextElementSibling?.getAttribute('data-testid')).toBe('sidebar-recall')
+  })
+
+  it('keeps Profile in the folded rail as a titled icon, beside Recall', async () => {
+    sidebarTest._setExpanded(false)
+    apiReviewQueue.mockResolvedValue({ items: [], total: 2, limit: 1, offset: 0 })
+    wrapper = mount(Sidebar)
+    await flushPromises()
+    const el = wrapper.get('[data-testid="sidebar-profile"]')
+    expect(el.attributes('title')).toBe('Profile')
+    expect(el.attributes('aria-label')).toBe('Profile')
+    expect(el.text()).toBe('')
+    expect(el.element.nextElementSibling?.getAttribute('data-testid')).toBe('sidebar-recall')
+  })
+
+  it('shows Profile in the mobile drawer and closes the drawer on click', async () => {
+    setViewport(390)
+    wrapper = mount(Sidebar, { attachTo: document.body })
+    await flushPromises()
+    useSidebar().openDrawer()
+    await flushPromises()
+    const el = wrapper.get('[data-testid="sidebar-profile"]')
+    expect(el.text()).toContain('Profile')
+    await el.trigger('click')
+    expect(useSidebar().mode.value).not.toBe('drawer-open')
   })
 })

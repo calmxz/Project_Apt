@@ -28,9 +28,11 @@ describe('unified settings routing', () => {
     expect(router.currentRoute.value.fullPath).toBe('/settings/learning')
   })
 
-  it('/profile redirects to /settings/learning and keeps its route name usable', async () => {
+  it('/profile is its own page now, not a redirect to Settings (#362)', async () => {
     await router.push({ name: 'profile-aggregate' })
-    expect(router.currentRoute.value.fullPath).toBe('/settings/learning')
+    expect(router.currentRoute.value.fullPath).toBe('/profile')
+    expect(router.currentRoute.value.name).toBe('profile-aggregate')
+    expect(router.currentRoute.value.matched.at(-1).components.default).toBeTruthy()
   })
 
   it('invalid tab slug redirects to /settings/learning', async () => {

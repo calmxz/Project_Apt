@@ -82,12 +82,11 @@ const router = createRouter({
       },
     },
     {
-      // Unified into Settings (2026-08-02). The Learning tab no longer shows
-      // the aggregate profile (#350); this redirect stands until the /profile
-      // page (#358) ships, so old links and router.push({name}) keep working.
+      // The aggregate learner profile across every session (#362, shaped in
+      // #358). Replaces the interim redirect to the Learning tab.
       path: '/profile',
       name: 'profile-aggregate',
-      redirect: { name: 'settings', params: { tab: 'learning' } },
+      component: () => import('../views/AggregateProfileView.vue'),
     },
     {
       // Account moved out of Settings and into its own page (2026-09-23):
