@@ -1,6 +1,8 @@
 <script setup>
 import { computed, useId } from 'vue'
 
+import { TICK_PATH } from './chat/levelMark.js'
+
 // Single-choice control drawn as lettered lines, the same grammar as the
 // check-question options on the sheet. Used for every tutor preference in
 // Settings and for Feedback style in Onboarding. Native radios (not a PrimeVue
@@ -67,7 +69,7 @@ function select(value) {
         aria-hidden="true"
         focusable="false"
       >
-        <path d="M2 6.5 L4.8 9.2 L10 3.2" />
+        <path :d="TICK_PATH" />
       </svg>
     </label>
   </fieldset>

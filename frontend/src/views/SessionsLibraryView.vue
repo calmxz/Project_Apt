@@ -6,6 +6,7 @@ import { friendlyError } from '@/lib/errors.js'
 import { cardStory, cardChips, cardMeta } from '@/utils/sessionCard.js'
 import EmptyState from '@/components/EmptyState.vue'
 import SessionChips from '@/components/SessionChips.vue'
+import { TICK_PATH } from '@/components/chat/levelMark.js'
 import LibrarySkeletonGrid from '@/components/LibrarySkeletonGrid.vue'
 
 const router = useRouter()
@@ -330,7 +331,7 @@ onUnmounted(() => {
                 stroke-linejoin="round"
                 focusable="false"
               >
-                <path d="M2 6.5 L4.8 9.2 L10 3.2" />
+                <path :d="TICK_PATH" />
               </svg>
               {{ mastered }}
             </span>

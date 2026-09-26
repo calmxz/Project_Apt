@@ -22,7 +22,7 @@
             aria-hidden="true"
             focusable="false"
           >
-            <path d="M2 6.5 L4.8 9.2 L10 3.2" />
+            <path :d="TICK_PATH" />
           </svg>
           Saved.
         </span>
@@ -45,6 +45,7 @@
 import { reactive, ref, watch } from 'vue'
 
 import LetteredLinesPicker from '../LetteredLinesPicker.vue'
+import { TICK_PATH } from '../chat/levelMark.js'
 import { friendlyError } from '../../lib/errors.js'
 import { TUTOR_PREFERENCES, preferenceValue } from '../../lib/tutorPreferences.js'
 import { useUserStore } from '../../stores/user.js'

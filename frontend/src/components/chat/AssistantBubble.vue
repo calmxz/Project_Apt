@@ -4,6 +4,7 @@ import MarkdownContent from './MarkdownContent.vue'
 import ToolCallChip from './ToolCallChip.vue'
 import CitationsList from './CitationsList.vue'
 import CheckRecap from './CheckRecap.vue'
+import { TICK_PATH } from './levelMark.js'
 import { formatTime } from '../../utils/formatDate.js'
 
 const props = defineProps({
@@ -45,7 +46,7 @@ const timeLabel = computed(() => formatTime(props.message.created_at))
         focusable="false"
         data-testid="msg-landed-tick"
       >
-        <path d="M2 6.5 L4.8 9.2 L10 3.2" pathLength="1" />
+        <path :d="TICK_PATH" pathLength="1" />
       </svg>
     </div>
     <div class="msg-body">

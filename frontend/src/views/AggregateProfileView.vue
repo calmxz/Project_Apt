@@ -1,5 +1,5 @@
 <template>
-  <section class="aprof" data-testid="aggregate-profile">
+  <section class="aprof profile-page" data-testid="aggregate-profile">
     <header class="head" data-section="head">
       <h1 class="title">Your profile</h1>
       <p class="lede" data-testid="aprof-lede">
@@ -288,13 +288,13 @@
 import { computed, onMounted, ref } from 'vue'
 
 import EmptyState from '../components/EmptyState.vue'
-import { LEVEL_MARK_PATH, levelStroke } from '../components/chat/levelMark.js'
+import { LEVEL_MARK_PATH, TICK_PATH, levelStroke } from '../components/chat/levelMark.js'
 import { friendlyError } from '../lib/errors.js'
 import { getAggregateProfile } from '../services/profileApi.js'
 import { formatRelative } from '../utils/formatDate.js'
 import { cleanPreview, stripAutoPrefix } from '../utils/sessionCard.js'
+import '@/assets/profile.css'
 
-const TICK_PATH = 'M2 6.5 L4.8 9.2 L10 3.2'
 const LEVELS = ['beginner', 'intermediate', 'advanced']
 
 // Gaps and Mastered are the same divider over a different list; the tab
@@ -442,7 +442,9 @@ const accuracyGroupList = computed(() => {
 /* The aggregate profile: a 72rem stack of full-width cards 1.5rem apart, the
    same grammar as the per-session profile page. Topic cards first (the
    learner comes back over weeks), then the Level, Gaps and Mastered dividers
-   across every session, then the two figures. */
+   across every session, then the two figures. The dividers, cue marks,
+   .sec/.sec-title, .cue-none, .text-btn and the skeleton rule come from
+   assets/profile.css (shared with ProfileView); only what differs is here. */
 .aprof {
   max-width: 72rem;
   margin: 0 auto;
@@ -597,9 +599,6 @@ const accuracyGroupList = computed(() => {
 }
 
 .cue-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
   width: 100%;
 }
 
@@ -631,25 +630,7 @@ const accuracyGroupList = computed(() => {
 }
 
 .cue-mark {
-  flex: 0 0 auto;
   align-self: center;
-  fill: none;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.5;
-}
-
-.cue-mark--focus {
-  stroke: var(--ink-marker);
-  stroke-width: 2;
-}
-
-.cue-mark--gap {
-  stroke: var(--pencil);
-}
-
-.cue-mark--tick {
-  stroke: var(--tab-mastered);
 }
 
 .level-mark {
@@ -710,62 +691,11 @@ const accuracyGroupList = computed(() => {
   font-size: var(--fs-caption);
 }
 
-.cue-none {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-size: var(--fs-body);
-  line-height: var(--lh-body);
-  color: var(--pencil);
-}
-
-/* Dividers: a coloured tab joined to a white body (law: amber only Gaps,
-   green only Mastered, Level stays neutral pencil). */
-.divider {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-}
-
-.divider-tab {
-  align-self: flex-start;
-  margin: 0;
-  padding: 0.375rem 1rem;
-  border-radius: var(--radius-card) var(--radius-card) 0 0;
-  color: var(--tab-ink);
-  font-family: var(--font-sans);
-  font-size: var(--fs-caption);
-  font-weight: 700;
-  line-height: var(--lh-body);
-}
-
+/* The dividers' tab count: the tab and body themselves come from
+   assets/profile.css. */
 .tab-count {
   font-weight: 400;
   margin-left: 0.2rem;
-}
-
-.divider-tab--gaps {
-  background: var(--tab-gaps);
-}
-
-.divider-tab--mastered {
-  background: var(--tab-mastered);
-}
-
-.divider-tab--level {
-  background: var(--tab-level);
-}
-
-.divider-body {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.5rem;
-  width: 100%;
-  padding: 1.25rem 1.5rem;
-  background: var(--card);
-  border: 1px solid var(--card-edge);
-  border-radius: 0 var(--radius-card) var(--radius-card) var(--radius-card);
-  box-shadow: 0 1px 0 var(--card-drop);
 }
 
 /* Figures: two cards side by side from 60rem. */
@@ -776,25 +706,8 @@ const accuracyGroupList = computed(() => {
 }
 
 .sec {
-  display: flex;
-  flex-direction: column;
   align-items: stretch;
-  gap: 0.5rem;
   min-width: 0;
-  padding: 1.25rem 1.5rem;
-  background: var(--card);
-  border: 1px solid var(--card-edge);
-  border-radius: var(--radius-card);
-  box-shadow: 0 1px 0 var(--card-drop);
-}
-
-.sec-title {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-size: var(--fs-caption);
-  font-weight: 700;
-  line-height: var(--lh-body);
-  color: var(--ink);
 }
 
 /* Capped measure: the chart must not scale with the card. */
@@ -900,30 +813,6 @@ const accuracyGroupList = computed(() => {
   stroke-linejoin: round;
 }
 
-/* Written controls: blue text, underlined. */
-.text-btn {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--ink-learner);
-  font-family: var(--font-sans);
-  font-size: var(--fs-caption);
-  font-weight: 700;
-  line-height: var(--lh-body);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  cursor: pointer;
-}
-
-.text-btn:hover {
-  color: var(--color-accent-hover);
-}
-
-.text-btn:focus-visible {
-  outline: 2px solid var(--color-accent-ring);
-  outline-offset: 2px;
-}
-
 .error {
   display: flex;
   align-items: baseline;
@@ -936,22 +825,6 @@ const accuracyGroupList = computed(() => {
   font-size: var(--fs-body);
   line-height: var(--lh-body);
   color: var(--ink-marker-text);
-}
-
-/* Skeleton: pencil-weight rules on the pitch, no shimmer. */
-.skel {
-  display: flex;
-  flex-direction: column;
-}
-
-.skel-block {
-  display: block;
-  height: 1.75rem;
-  border-bottom: 1px solid var(--rule-strong);
-}
-
-.skel-short {
-  width: 55%;
 }
 
 @media (min-width: 60rem) {
