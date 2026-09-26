@@ -65,6 +65,33 @@
           </button>
         </div>
       </section>
+
+      <!-- D-11 again: a failed next page keeps what is loaded and retries
+           that page alone; it never blanks the dividers above. -->
+      <div v-if="moreError" class="more">
+        <p class="error" data-testid="recall-more-error">
+          Could not load more of your recall queue.
+        </p>
+        <button
+          type="button"
+          class="retry coarse-2x"
+          data-testid="recall-more-retry"
+          :disabled="moreLoading"
+          @click="loadMore"
+        >
+          Retry
+        </button>
+      </div>
+      <button
+        v-else-if="hasMore"
+        type="button"
+        class="retry coarse-2x"
+        data-testid="recall-load-more"
+        :disabled="moreLoading"
+        @click="loadMore"
+      >
+        Load more
+      </button>
     </div>
 
     <section v-else-if="loaded" class="divider" data-testid="recall-empty">
@@ -90,7 +117,8 @@ import { useSessionStore } from '../stores/session.js'
 import { getReviewQueue } from '../services/reviewApi.js'
 import { dueSince, groupBySource, streakLabel } from '../utils/recallQueue.js'
 
-// The whole queue on one page (#363): no 3-row preview, no "View all".
+// The whole queue on one page (#363): no 3-row preview, no "View all". Pages
+// past the route's cap of 100 come in by "Load more" (#385).
 const QUEUE_LIMIT = 100
 
 const router = useRouter()
@@ -108,7 +136,19 @@ const error = ref(false)
 // the queue, so a retry after an error blanks to the skeleton again.
 const showSkeleton = computed(() => loading.value && !queue.value.items.length)
 
+// The next page's own state, apart from the first load's: its failure leaves
+// the loaded cards up.
+const moreLoading = ref(false)
+const moreError = ref(false)
+// Where the next page starts on the server, counted from what each page
+// returned, not from cards shown (a dropped duplicate still moved it on).
+const nextOffset = ref(0)
+
+// Appended pages regroup with the rest, so a later page can add cards to an
+// earlier divider. Tab counts cover loaded items; the count line stays total.
 const groups = computed(() => groupBySource(queue.value.items))
+
+const hasMore = computed(() => queue.value.total > nextOffset.value)
 
 function tabId(g) {
   return `recall-tab-${g}`
@@ -121,10 +161,12 @@ onMounted(() => {
 async function load() {
   loading.value = true
   error.value = false
+  moreError.value = false
   try {
     // Silent: the inline error row is the surface on this page, so a toast on
     // top of it would say the same thing twice. Retry goes through here too.
     queue.value = await getReviewQueue({ limit: QUEUE_LIMIT, offset: 0 }, { silent: true })
+    nextOffset.value = queue.value.items.length
   } catch {
     // The recall page must never block; it says it could not load and offers
     // a retry instead of pretending nothing is due.
@@ -133,6 +175,29 @@ async function load() {
   } finally {
     loading.value = false
     loaded.value = true
+  }
+}
+
+async function loadMore() {
+  if (moreLoading.value) return
+  moreLoading.value = true
+  moreError.value = false
+  try {
+    const page = await getReviewQueue(
+      { limit: QUEUE_LIMIT, offset: nextOffset.value },
+      { silent: true },
+    )
+    // An empty page means the queue shrank under us; stop offering more.
+    nextOffset.value = page.items.length ? nextOffset.value + page.items.length : page.total
+    // The queue can shift between pages (a check lands, a concept falls due),
+    // so a concept already on screen is not filed twice.
+    const seen = new Set(queue.value.items.map((item) => item.concept))
+    const fresh = page.items.filter((item) => !seen.has(item.concept))
+    queue.value = { ...page, items: [...queue.value.items, ...fresh] }
+  } catch {
+    moreError.value = true
+  } finally {
+    moreLoading.value = false
   }
 }
 
@@ -440,8 +505,19 @@ async function startReview(item) {
   cursor: pointer;
 }
 
-.retry:hover {
+.retry:hover:not(:disabled) {
   color: var(--color-accent-hover);
+}
+
+.retry:disabled {
+  color: var(--pencil);
+  cursor: default;
+}
+
+.more {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 .retry:focus-visible {
