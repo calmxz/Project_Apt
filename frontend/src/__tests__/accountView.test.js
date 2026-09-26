@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
@@ -7,10 +7,11 @@ import { AUTH_CODE_COPY } from '@/lib/authErrors.js'
 import { useUserStore } from '@/stores/user.js'
 import { useAuthStore } from '@/stores/auth.js'
 import { ApiError } from '@/services/apiClient.js'
-import { deleteAccount } from '@/services/meApi.js'
+import { deleteAccount, exportData } from '@/services/meApi.js'
 
 vi.mock('@/services/meApi.js', () => ({
   deleteAccount: vi.fn(),
+  exportData: vi.fn(),
 }))
 
 const showSuccess = vi.fn()
@@ -59,6 +60,7 @@ describe('AccountView', () => {
     showError.mockClear()
     routerPush.mockClear()
     deleteAccount.mockReset()
+    exportData.mockReset()
     globalThis.fetch = vi.fn().mockReturnValue(ok({}))
     const user = useUserStore()
     user.userId = 'u_test'
@@ -240,6 +242,111 @@ describe('AccountView', () => {
   it('falls back to "No email" when the auth store has none', () => {
     const w = mount(AccountView, { global: { stubs } })
     expect(w.get('[data-testid="account-email"]').text()).toContain('No email')
+  })
+
+  // #361: "take it or destroy it" -- the export sits right above Delete.
+  describe('export data', () => {
+    let createObjectURL
+    let revokeObjectURL
+    let clickSpy
+    let connectedAtClick
+
+    function mountAuthed() {
+      const auth = useAuthStore()
+      auth.session = { user: { id: 'u-1', email: 'learner@example.com' }, access_token: 't' }
+      return mount(AccountView, { global: { stubs } })
+    }
+
+    beforeEach(() => {
+      // jsdom has no object URLs and does not implement anchor navigation.
+      createObjectURL = vi.fn(() => 'blob:export')
+      revokeObjectURL = vi.fn()
+      URL.createObjectURL = createObjectURL
+      URL.revokeObjectURL = revokeObjectURL
+      connectedAtClick = null
+      clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function () {
+        connectedAtClick = this.isConnected
+      })
+    })
+
+    afterEach(() => {
+      clickSpy.mockRestore()
+      delete URL.createObjectURL
+      delete URL.revokeObjectURL
+    })
+
+    it('is hidden when unauthenticated', () => {
+      const w = mount(AccountView, { global: { stubs } })
+      expect(w.find('[data-testid="account-export"]').exists()).toBe(false)
+    })
+
+    it('sits directly above the delete section', async () => {
+      const w = mountAuthed()
+      await flushPromises()
+      const exportSec = w.get('[data-testid="account-export"]').element
+      expect(exportSec.nextElementSibling).toBe(w.get('[data-testid="account-danger"]').element)
+    })
+
+    it('downloads the export as a dated JSON file', async () => {
+      const payload = { format_version: 1, exported_at: '2026-09-26T23:59:30Z', sessions: [] }
+      exportData.mockResolvedValue(payload)
+      const w = mountAuthed()
+      await flushPromises()
+
+      await w.get('[data-testid="account-export-btn"]').trigger('click')
+      await flushPromises()
+
+      expect(exportData).toHaveBeenCalledOnce()
+      const blob = createObjectURL.mock.calls[0][0]
+      expect(blob.type).toBe('application/json')
+      expect(JSON.parse(await blob.text())).toEqual(payload)
+      expect(clickSpy).toHaveBeenCalledOnce()
+      const anchor = clickSpy.mock.contexts[0]
+      // Same UTC day the server stamps into Content-Disposition, whatever the local zone.
+      expect(anchor.download).toBe('crux-export-2026-09-26.json')
+      expect(anchor.href).toBe('blob:export')
+      expect(connectedAtClick).toBe(true)
+      expect(anchor.isConnected).toBe(false)
+      await new Promise((r) => setTimeout(r, 0))
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:export')
+      expect(showSuccess).toHaveBeenCalledWith('Your data was downloaded.')
+      expect(w.find('[data-testid="account-export-error"]').exists()).toBe(false)
+    })
+
+    it('disables the button while the export is in flight', async () => {
+      let resolveExport
+      exportData.mockReturnValue(new Promise((r) => (resolveExport = r)))
+      const w = mountAuthed()
+      await flushPromises()
+
+      await w.get('[data-testid="account-export-btn"]').trigger('click')
+      const btn = w.get('[data-testid="account-export-btn"]')
+      expect(btn.attributes('disabled')).toBeDefined()
+      expect(btn.text()).toBe('Preparing…')
+
+      await w.get('[data-testid="account-export-btn"]').trigger('click')
+      expect(exportData).toHaveBeenCalledOnce()
+
+      resolveExport({})
+      await flushPromises()
+      expect(w.get('[data-testid="account-export-btn"]').attributes('disabled')).toBeUndefined()
+    })
+
+    it('shows an inline error and downloads nothing when the export fails', async () => {
+      exportData.mockRejectedValue(new ApiError(503, { detail: 'x' }, '/me/export'))
+      const w = mountAuthed()
+      await flushPromises()
+
+      await w.get('[data-testid="account-export-btn"]').trigger('click')
+      await flushPromises()
+
+      expect(w.get('[data-testid="account-export-error"]').text()).toBe(
+        'Could not prepare your export. Try again.',
+      )
+      expect(createObjectURL).not.toHaveBeenCalled()
+      expect(clickSpy).not.toHaveBeenCalled()
+      expect(showSuccess).not.toHaveBeenCalled()
+    })
   })
 
   // R2-22 through R2-25: the delete-account section and its confirm dialog.

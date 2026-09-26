@@ -7,11 +7,12 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from contracts import MePatchRequest, MeResponse
+from contracts import DataExport, MePatchRequest, MeResponse
 from db.database import get_db
 from db.models import User
 from services import object_store
 from services.auth import accepted_terms_from_request, current_user_id
+from services.export_service import build_export
 from services.supabase_admin import AuthAdminError, admin_configured, delete_auth_user
 from services.user_service import delete_user_account, ensure_user
 
@@ -84,6 +85,23 @@ def patch_me(
     db.commit()
     db.refresh(user)
     return _to_response(user)
+
+
+@router.get("/me/export", response_model=DataExport)
+def export_me(
+    response: Response,
+    user_id: str = Depends(current_user_id),
+    db: Session = Depends(get_db),
+):
+    # #361: pure read -- unlike GET /me this never creates the users row; a
+    # caller without one gets a null account and empty lists. The filename
+    # takes exported_at's UTC day, the same value the frontend names it by.
+    export = build_export(db, user_id)
+    stamp = export.exported_at.date().isoformat()
+    response.headers["Content-Disposition"] = (
+        f'attachment; filename="crux-export-{stamp}.json"'
+    )
+    return export
 
 
 @router.delete("/me", status_code=204)

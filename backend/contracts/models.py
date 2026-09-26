@@ -639,6 +639,73 @@ class MePatchRequest(BaseModel):
     onboarding_complete: bool | None = None
 
 
+class ExportAccount(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    user_id: str
+    created_at: datetime
+    display_name: str | None = None
+    feedback_pref: Literal["hints", "direct_answers"]
+    check_ins: Literal["often", "sometimes", "only_when_asked"]
+    reply_length: Literal["brief", "balanced", "thorough"]
+    onboarding_complete: bool
+    accepted_terms_at: datetime | None = None
+    terms_version: str | None = None
+
+
+class ExportMessage(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    id: int
+    role: str
+    content: str
+    created_at: datetime
+    status: str | None = None
+    citations: list[Citation] | None = Field([], validate_default=True)
+
+
+class ExportCheckAnswer(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    id: int
+    gap_tested: str
+    question: str
+    correct: bool
+    created_at: datetime
+    options: list[str] | None = []
+    selected_index: int | None = None
+    correct_index: int | None = None
+    purpose: str | None = None
+
+
+class ExportDocument(BaseModel):
+    """
+    Upload metadata only; the file itself is not in the export.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    id: int
+    filename: str
+    status: str | None = None
+    error: str | None = None
+    page_count: int | None = None
+    created_at: datetime
+
+
+class ExportUsageDay(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    date_utc: date
+    messages: conint(ge=0)
+    cost_usd: confloat(ge=0.0)
+
+
 class ProfileResponse(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -843,6 +910,21 @@ class SuggestTopicsArgs(BaseModel):
     items: list[TopicSuggestionItem] = Field(..., max_length=5, min_length=2)
 
 
+class ExportSession(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    id: str
+    topic: str
+    created_at: datetime
+    ended_at: datetime | None = None
+    pinned: bool
+    topic_profile: TopicProfile
+    messages: list[ExportMessage]
+    check_answers: list[ExportCheckAnswer]
+    documents: list[ExportDocument]
+
+
 class AggregateProfileResponse(BaseModel):
     """
     Cross-session aggregate view powering the top-level /profile dashboard.
@@ -865,3 +947,21 @@ class AggregateProfileResponse(BaseModel):
     recent_topics: list[RecentSessionSummary]
     concept_accuracy: list[ConceptAccuracy]
     weekly_mastery: list[WeeklyMasteryPoint]
+
+
+class DataExport(BaseModel):
+    """
+    Everything the server holds for one learner, oldest first.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+    )
+    format_version: int
+    """
+    Bumped when a field is removed or changes meaning.
+    """
+    exported_at: datetime
+    account: ExportAccount | None
+    sessions: list[ExportSession]
+    usage: list[ExportUsageDay]
