@@ -3,6 +3,55 @@
 Durable "why": decisions, findings, tradeoffs. Newest first. Technical
 how-it-works lookup belongs in `docs/reference.md` instead.
 
+## 2026-09-26 - One HTTP transport core under three thin wrappers (#401, #402, #403)
+
+Architecture review candidate F1. The JSON client (`apiClient.js`), the chat
+stream (`chatStreamService.js`) and upload (`uploadApi.js`) each call `fetch`
+directly and copy the same auth and error policy (Bearer header, 401
+refresh-and-retry, sign-out, `ApiError` mapping, cache invalidation). The
+copying already caused a bug: only the JSON path read `X-Cost-Warning`, so
+upload cost warnings never reached the user (#398). Replaced by
+`services/http.js` `send`, with `services/getCache.js` as a standalone cache
+module and the three files as wrappers.
+
+- **The core returns an OK `Response`; wrappers read the body.** Body
+  handling is the one thing that differs by kind (cached JSON, an SSE stream
+  with an idle timer, multipart JSON). A `responseType` switch would pull the
+  stream's parser and timers into the core. An interceptor chain would hide
+  the order of the 401 retry and the cache.
+- **An optional `prepare(token)` hook, not exported building blocks.** The GET
+  cache is keyed on the token to stop one account seeing another's cached data,
+  so its lookup must run after the token is known and again after a 401
+  refresh. With the hook, the core owns that order once. Exporting
+  `withAuth` and `fetchOnce` would make each wrapper assemble the order and
+  reintroduce the copying F1 removes. Dropping the token from the cache key
+  was rejected: it removes a deliberate guard.
+- **Transient retry is an opt-in core option.** The JSON wrapper passes
+  `retry: true` for GETs. It stays nested inside the 401 retry, as today;
+  putting it in the wrapper would flip the nesting and refresh tokens on
+  every network retry.
+- **Timeout scope is an option.** JSON and upload bound the whole request;
+  the stream bounds only time to headers, because a long answer is legitimate
+  (F-06) and its 60s idle timer covers the body. One fixed meaning would
+  either cut long streams or let a stalled body hang JSON forever. A caller's
+  own abort passes through as `AbortError`, never `ApiError(0)`.
+- **The core never toasts.** Only the JSON wrapper calls `reportApiError`
+  (unless `silent`). Stream and upload errors render inline today, and
+  several comments exist only to prevent double toasts, so toasting stays
+  opt-in. Unifying toast versus inline is a UX decision, split out as #404
+  together with the 19 `silent: true` sites. F1 changes nothing the user
+  sees.
+- **The 10 test files that stub `fetch` stay unchanged.** Passing unchanged
+  is the evidence the refactor kept behaviour. Moving them to fake `send`
+  would drop that net and stop view tests covering the core. Only the three
+  tests that call `_onAuthExpired` directly are rewritten, because it
+  becomes private to `http.js`.
+- **Small fixes land first.** #398 (upload cost warning) and #400 (dead
+  `getUploadStatus` and `uploadPdf` exports) merge before #401, so the
+  refactor's tests are final before it relies on them. Then one wrapper per
+  ticket (#401 core and JSON, #402 upload, #403 stream), so a red suite
+  points at one move.
+
 ## 2026-09-26 - Prompt state is one typed builder, shipped in three parts (#395, #396, #397)
 
 Architecture review candidate B2. The prompt state was an untyped dict built
