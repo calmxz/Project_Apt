@@ -60,6 +60,23 @@ describe('router', () => {
     expect(router.currentRoute.value.name).toBe('login')
   })
 
+  it('/profile renders the aggregate profile page instead of redirecting (#362)', async () => {
+    const user = useUserStore()
+    user.onboardingComplete = true
+    const rec = router.getRoutes().find((r) => r.name === 'profile-aggregate')
+    expect(rec.redirect).toBeUndefined()
+    expect(rec.components.default).toBeTruthy()
+    await router.push('/profile')
+    expect(router.currentRoute.value.name).toBe('profile-aggregate')
+  })
+
+  it('redirects unauthenticated user away from /profile to /login', async () => {
+    setAuth(false)
+    await router.push({ name: 'profile-aggregate' })
+    expect(router.currentRoute.value.name).toBe('login')
+    expect(router.currentRoute.value.query.redirect).toBe('/profile')
+  })
+
   it('redirects unauthenticated user away from /account to /login', async () => {
     setAuth(false)
     await router.push({ name: 'account' })

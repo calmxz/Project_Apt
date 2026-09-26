@@ -210,6 +210,11 @@ const showEmptyHint = computed(() => !loading.value && !searching.value && !sess
 
 const reviewTotal = ref(0)
 
+// The Profile glyph: a divider card with its tab up, the profile's own
+// furniture. Not a person silhouette -- the identity circle in the foot is the
+// only mark of a person the shell draws (DESIGN.md).
+const PROFILE_ICON_PATH = 'M3 7.5 H17 V16 H3 Z M4.5 7.5 V4 H10 V7.5 M6 11 H14 M6 13.5 H11'
+
 const showEmptyActiveHint = computed(
   () =>
     !loading.value &&
@@ -429,7 +434,7 @@ async function onSignOut() {
       </button>
     </div>
 
-    <!-- Folded rail: Search and Recall stay one click away without unfolding. -->
+    <!-- Folded rail: Search, Profile and Recall stay one click away without unfolding. -->
     <div v-if="isDesktop && !isExpanded" class="sb-rail-actions">
       <button
         type="button"
@@ -456,6 +461,29 @@ async function onSignOut() {
           <path d="M13 13 L17.5 17.5" />
         </svg>
       </button>
+      <RouterLink
+        :to="{ name: 'profile-aggregate' }"
+        class="sb-icon hit-44"
+        data-testid="sidebar-profile"
+        aria-label="Profile"
+        title="Profile"
+      >
+        <svg
+          class="sb-inline-icon"
+          viewBox="0 0 20 20"
+          width="16"
+          height="16"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.5"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path :d="PROFILE_ICON_PATH" />
+        </svg>
+      </RouterLink>
       <RouterLink
         v-if="reviewTotal > 0"
         to="/recall"
@@ -484,6 +512,32 @@ async function onSignOut() {
       </RouterLink>
     </div>
 
+    <!-- Profile is always shown (Recall hides at zero due); it sits first so
+         it never jumps when the idle-loaded Recall line appears under it. -->
+    <RouterLink
+      v-if="isExpanded"
+      :to="{ name: 'profile-aggregate' }"
+      class="sb-review"
+      data-testid="sidebar-profile"
+      @click="closeDrawer"
+    >
+      <svg
+        class="sb-inline-icon"
+        viewBox="0 0 20 20"
+        width="14"
+        height="14"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path :d="PROFILE_ICON_PATH" />
+      </svg>
+      <span>Profile</span>
+    </RouterLink>
     <RouterLink
       v-if="isExpanded && reviewTotal > 0"
       to="/recall"
@@ -877,7 +931,7 @@ async function onSignOut() {
   margin-left: 0;
 }
 
-/* Folded rail rows: Search and Recall, centred under New session. */
+/* Folded rail rows: Search, Profile and Recall, centred under New session. */
 .sb-rail-actions {
   display: flex;
   flex-direction: column;
