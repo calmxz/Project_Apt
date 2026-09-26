@@ -3,6 +3,26 @@
 Durable "why": decisions, findings, tradeoffs. Newest first. Technical
 how-it-works lookup belongs in `docs/reference.md` instead.
 
+## 2026-09-26 - Recall page order is weakest proof first, not most overdue (#363)
+
+The #351 resolution asks for "queue order preserved (most overdue group
+first, most overdue card first within it)". Those two halves agree only
+when every due concept has the same evidence: the review queue sorts by
+`(tested evidence last, due_at)` (R4.2 AC2, `review_queue_service.py`), so a
+not-tested concept due 2 hours ago leads a tested one due 9 days ago.
+
+- **Queue order wins** (owner call). The Recall page keeps the backend's
+  order for dividers, cards within a divider, and the concept "Check <topic>
+  now" starts with. A concept the learner never proved is the more useful
+  check, even when its due date is newer.
+- **The frontend does not re-sort by `due_at`.** Doing so would silently undo
+  R4.2 AC2 on this one page and disagree with every other queue consumer.
+  Due dates can therefore read out of order inside a divider; that is
+  expected.
+- **The 100-item cap stays for this PR.** The page fetches `limit=100` (the
+  route's max); anything past 100 is unreachable until pagination lands
+  (#385).
+
 ## 2026-09-25 - Topic card gating lives on the session row (#354)
 
 Builds the #341 resolution (a `suggest_topics` card under the first at-level
