@@ -517,7 +517,7 @@ async function onSignOut() {
     <RouterLink
       v-if="isExpanded"
       :to="{ name: 'profile-aggregate' }"
-      class="sb-review"
+      class="sb-navline"
       data-testid="sidebar-profile"
       @click="closeDrawer"
     >
@@ -541,7 +541,7 @@ async function onSignOut() {
     <RouterLink
       v-if="isExpanded && reviewTotal > 0"
       to="/recall"
-      class="sb-review"
+      class="sb-navline"
       data-testid="sidebar-recall"
       :aria-label="`Recall: ${reviewTotal} ${reviewTotal === 1 ? 'concept' : 'concepts'} due`"
       @click="closeDrawer"
@@ -563,7 +563,7 @@ async function onSignOut() {
         <path d="M10 6.5 L10 10.5 L13 12.5" />
       </svg>
       <span>Recall</span>
-      <span class="sb-review-count" aria-hidden="true">{{ reviewTotal }}</span>
+      <span class="sb-navline-count" aria-hidden="true">{{ reviewTotal }}</span>
     </RouterLink>
 
     <div v-if="isExpanded" class="sb-search">
@@ -1220,7 +1220,7 @@ async function onSignOut() {
   border-bottom-color: var(--ink);
 }
 
-.sb-review {
+.sb-navline {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -1234,18 +1234,18 @@ async function onSignOut() {
   text-decoration: none;
 }
 
-.sb-review:hover {
+.sb-navline:hover {
   color: var(--color-accent-hover);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
 
-.sb-review:focus-visible {
+.sb-navline:focus-visible {
   outline: 2px solid var(--ink-learner);
   outline-offset: 2px;
 }
 
-.sb-review-count {
+.sb-navline-count {
   margin-left: auto;
   font-size: var(--fs-label);
   font-weight: 400;
