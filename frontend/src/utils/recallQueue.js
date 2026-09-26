@@ -19,8 +19,7 @@ export function groupBySource(items) {
 
 // The streak in words, never tally strokes (#351 resolution).
 export function streakLabel(streak) {
-  if (!streak) return 'not yet held'
-  return streak === 1 ? '1 correct in a row' : `${streak} correct in a row`
+  return streak ? `${streak} correct in a row` : 'not yet held'
 }
 
 // A card's pencil head line: "due 3 days ago".

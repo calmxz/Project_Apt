@@ -297,7 +297,7 @@ A grey desk, white and blue card stock, three inks, a pencil, and four tab colou
 - **Deep Desk** (`desk-deep`): the sidebar, the mobile top strip, the profile panel column, the Settings page ground and its section cards, code fences and inline code. Aliased as `--color-surface-soft`.
 - **Card** (`card`): white stock. Aliased as `--color-surface`; PrimeVue inputs, dialogs and toasts move with it.
 - **Card Edge** (`card-edge`) and **Card Drop** (`card-drop`): the 1px border and the 1px hard drop under every card; the edge also rules the sidebar's right side, the panel's left side and the mobile strip's foot.
-- **Learner Stock** (`card-learner`, `card-learner-edge`): the learner card and the covered review answer.
+- **Learner Stock** (`card-learner`, `card-learner-edge`): the learner card and the recall concept card.
 - **Rules** (`rule`, `rule-strong`): painted option separators inside a check card, the sidebar's section rules, the head rule on the profile page, field lines at rest, table cells, scrollbar thumbs, skeleton bars.
 - **Raised Surface** (`surface-raised`): declared for overlays; dialogs and toasts now paint `card`.
 
@@ -320,14 +320,14 @@ A grey desk, white and blue card stock, three inks, a pencil, and four tab colou
 
 ### Hierarchy
 - **Display** (600, 2.25rem, 1.15, -0.01em): the not-found title only.
-- **Headline** (600, 1.75rem, 1.15): the one-line title of Home, Review, the library, Settings, the session profile, the auth cover.
+- **Headline** (600, 1.75rem, 1.15): the one-line title of Home, Recall, the library, Settings, the session profile, the auth cover.
 - **Session Topic** (600, 1.25rem, 1.15): the topic in the session head, a link that gains a 2px red underline on hover.
 - **Title** (600, 1.375rem): the recap score, the summary card's "Session ended" line, dialog headers.
 - **Subhead** (600, 1.125rem, 28px): headings inside a tutor card (all markdown h1-h4 collapse to this).
-- **Body** (400, 1.0625rem, 1.647): card text, cue words, options, the composer, review cues. Bold (700) for a check question, a verdict, the focus cue. Measure is `72ch + 2rem`.
+- **Body** (400, 1.0625rem, 1.647): card text, cue words, options, the composer, recall concepts. Bold (700) for a check question, a verdict, the focus cue. Measure is `72ch + 2rem`.
 - **Contents** (400, 0.9375rem, 28px): sidebar rows, search, new-session line, library topics, menu items; current row at 700.
 - **Caption** (400, 0.875rem): head meta, text buttons (700), filter toggles (700), Settings tabs (700), section titles (700), status banners, the level word (700), ledes on cards, the mark's wordmark.
-- **Label** (400, 0.8125rem): card head lines (role at 700, time at 400), divider tabs (700), counts, composer hints, citations, field labels, the lifted review aside.
+- **Label** (400, 0.8125rem): card head lines (role at 700, time at 400), divider tabs (700), counts, composer hints, citations, field labels, recall card head and streak lines.
 - **Mono** (400, 0.9375rem in fences, 0.9em inline, 28px): code only.
 
 ### Named Rules
@@ -341,9 +341,9 @@ The shell is a two-column grid: the sidebar (18rem expanded, 3rem collapsed, sti
 
 The session is a grid of `minmax(0, 1fr) / 17rem` under a head row spanning both columns. The head is now a 56px session action bar on the desk with a 1px `card-edge` rule under it (the thread visibly scrolls beneath): left, the topic (a link to the session profile page), the level stroke, its word, a pencil middot and "started ..."; right, 28px drawn icon buttons for Rename, Pin and End session (Resume in place of End once the session has ended), plus an 8px reference-file status dot when documents exist. The thread scrolls on the desk with `1rem clamp(1rem, 3vw, 2rem)` padding; turns stack 0.75rem apart inside a `72ch + 2rem` measure and grow to 1.5rem apart at a change of voice — the tutor's turn is flat on the desk (no card) at 78% max, the learner's card is right-aligned at 78%, check and recap cards at 84%, the summary card 84% (92% under 600px). The foot holds the status slot and the composer card under the same measure, 0.75rem apart. The panel column is `desk-deep` with a 1px `card-edge` left border, `0.9rem 0.9rem 0 1.4rem` padding (room for the half-tab), four dividers 0.9rem apart; collapsed it is 2.75rem wide and the three counted tabs stand on edge (`writing-mode: vertical-rl`, rotated 180deg) under the half-tab. This column and its half-tab are unchanged by the redesign.
 
-Settings spends its full 72rem: the title, one pitch, a tab rail (Learning / Usage / Appearance) 0.375rem apart, then the white sheet joined to the active tab with `1.5rem 2rem 2rem` padding. Inside, each tab lays its section cards in one column, two equal columns from 60rem. Account is no longer a Settings tab: it is its own route (`/account`) in the same sheet grammar (title, one white sheet, desk-deep section cards for Account, Security and Danger) but stacked as a single column top to bottom, not the two-column grid the other tabs use from 60rem. Home is a 44rem card centred vertically in the page. Review is a 44rem column of 3.5rem rows (`minmax(0, 20rem) / 1fr`) 0.75rem apart. The library is a 56rem column of card rows 0.75rem apart. The profile page is a 72rem stack of full-width cards 1.5rem apart. Auth covers are a 26rem card centred in the viewport.
+Settings spends its full 72rem: the title, one pitch, a tab rail (Learning / Usage / Appearance) 0.375rem apart, then the white sheet joined to the active tab with `1.5rem 2rem 2rem` padding. Inside, each tab lays its section cards in one column, two equal columns from 60rem. Account is no longer a Settings tab: it is its own route (`/account`) in the same sheet grammar (title, one white sheet, desk-deep section cards for Account, Security and Danger) but stacked as a single column top to bottom, not the two-column grid the other tabs use from 60rem. Home is a 44rem card centred vertically in the page. Recall is a 44rem column of dividers 1.5rem apart, one per source session; inside each sheet the concept cards fill a `repeat(auto-fill, minmax(13rem, 1fr))` grid 0.75rem apart. The library is a 56rem column of card rows 0.75rem apart. The profile page is a 72rem stack of full-width cards 1.5rem apart. Auth covers are a 26rem card centred in the viewport.
 
-Breakpoints: under 900px the panel becomes a sticky tab row under the head (focus word or "no focus cue yet", "N gaps", "N mastered", a disclosure chevron) and the dividers open as a 40vh card sheet over the thread; the check card moves from the foot into the thread; the foot goes sticky on the desk. Under 600px cards widen to 92%, the composer hint hides, review and library rows drop to one column. The sidebar becomes a 3rem `desk-deep` top strip and a fading 18rem drawer over a 45% graphite backdrop.
+Breakpoints: under 900px the panel becomes a sticky tab row under the head (focus word or "no focus cue yet", "N gaps", "N mastered", a disclosure chevron) and the dividers open as a 40vh card sheet over the thread; the check card moves from the foot into the thread; the foot goes sticky on the desk. Under 600px cards widen to 92%, the composer hint hides, recall cards and library rows drop to one column (the recall sheet tightens to 0.75rem padding). The sidebar becomes a 3rem `desk-deep` top strip and a fading 18rem drawer over a 45% graphite backdrop.
 
 Spacing is 4px multiples with cards on 8px where they can be: card padding `0.55rem 0.9rem 0.7rem`, card gap 0.75rem, divider gap 0.9rem, divider body `0.4rem 0.7rem`, section cards `1rem 1.25rem 1.25rem`, page sections 1.5-1.75rem, and 28px where MarkdownContent, the sidebar rows and the Settings head keep the pitch. The `--space-*` scale is declared and has no consumers.
 
@@ -352,7 +352,7 @@ Spacing is 4px multiples with cards on 8px where they can be: card padding `0.55
 Cards are physical: every card carries a 1px `card-edge` border and a 1px hard drop (`box-shadow: 0 1px 0 var(--card-drop)`), no blur, no spread. That is the whole depth vocabulary on the page; nothing hovers higher, nothing lifts on hover (a library row darkens its edge to `card-drop` instead). The tab rail and tab shapes carry the edge without the drop, since they are joined to a sheet that has one. `--shadow-lift` (`0 12px 24px -12px rgba(0,0,0,0.25)`, 0.7 alpha dark) belongs to surfaces pulled out of the box: dialogs and confirm, toasts, the row menu, the mobile drawer, the mobile profile sheet, and the auth cover card, which stacks the drop and the lift. `--shadow-paper` is declared as `none` and has no consumers.
 
 ### Shadow Vocabulary
-- **Hard Drop** (`box-shadow: 0 1px 0 var(--card-drop)`): every card at rest: turn, check, recap, composer, divider body, sidebar current row, settings sheet, library row, home card, profile section, lifted review aside.
+- **Hard Drop** (`box-shadow: 0 1px 0 var(--card-drop)`): every card at rest: turn, check, recap, composer, divider body, sidebar current row, settings sheet, library row, home card, profile section, recall divider sheet and concept card.
 - **Lift** (`box-shadow: var(--shadow-lift)`): teleported overlays, the mobile drawer, the mobile profile sheet, the auth cover.
 - **Filing lift** (keyframe only, `0 6px 10px -6px var(--card-drop)` at 4px up): a newly landed cue for the first third of its 360ms filing.
 
@@ -404,7 +404,7 @@ Collapsed (Ctrl+B, `crux.sidebar.expanded`): a 3rem icon rail, not a bare strip.
 Footer (both states): the identity row alone (Settings is reached through its account menu) — a 28px initial circle (`card` stock, 1px `card-edge`, blue initial at 700) plus the display name in contents size (folded: the circle alone). The name falls back to the sign-in email's local part (never the full address) when the display name is empty or the user store's unset placeholder. Folded, the circle's tooltip is the name. Clicking the row opens the account menu: a lifted card in the row-menu grammar with the sign-in email (pencil, caption) as its head, then Settings, Usage and Account as one-pitch items each led by a drawn 16px pencil icon, a rule, then Sign out with its own icon. It opens above the row, left-aligned with the avatar, in the same place folded or unfolded; it opens by mouse or keyboard, moves focus in, and closes on Escape, outside click or item choice, returning focus to the row.
 
 ### Buttons
-- **Text button** (the default): transparent, caption 700 in `ink-learner`, underline at 3px offset; hover shifts to `accent-hover`; disabled goes pencil with no underline. Skip, Next, Done, Resume, Review my gaps, View all, Continue, Lift, Cover, load earlier, See all topics.
+- **Text button** (the default): transparent, caption 700 in `ink-learner`, underline at 3px offset; hover shifts to `accent-hover`; disabled goes pencil with no underline. Skip, Next, Done, Resume, Review my gaps, View all, Continue, Check <topic> now, load earlier, See all topics.
 - **Page CTA** (Start, Begin, Sign in): the text button with a drawn 18px arrow (1.5px, round caps) 0.375rem after the word; only the word is underlined.
 - **Filled button** (`.btn-fill`): `accent-strong` fill, white caption 700, 4px, 28px tall, `0 1rem`; hover `btn-fill-hover`; disabled is transparent with a `rule-strong` outline and pencil label. Dialog footers, the skip link, Save name, Update password. Destructive confirm: `ink-marker-text` fill with white label.
 - **Icon button**: a drawn 20px stroke in `ink-learner` on a 28px square, 4px radius; disabled pencil.
@@ -418,8 +418,8 @@ Footer (both states): the identity row alone (Settings is reached through its ac
 - **Lettered lines** (LetteredLinesPicker, check options): a blue 700 letter, graphite text (700 when selected), a painted `rule` separator, a drawn blue tick when chosen.
 - **Auth status box**: `card` stock, 1px full border, 4px, `0.4rem 0.75rem`; the border is `tab-focus` for an alert (copy in text-safe red) or `tab-mastered` when done.
 
-### Review Row
-3.5rem tall in both states so lifting never reflows. Left, the cue word as a blue body text button. Right, covered: a `card-learner` card (`card-learner-edge`, 6px, drop, `0.8125rem 1rem`) with "Lift" in caption 700 blue. Lifted: the aside in a white card (`0.5rem 0.75rem`, label, pencil, 320ms clip-path reveal) with "Cover" as a plain blue line under it.
+### Recall Divider
+One per source session, queue order kept. The tab is the Settings rail's active tab (white stock, caption 700 topic, "N due" in pencil 400, `0.5rem 1rem`, overlapping the sheet by 1px); the sheet is white with the joined corner (`0 6px 6px 6px`), edge and drop, `1rem` padding. Each due concept is a `card-learner` card (`card-learner-edge`, 6px, drop, `0.625rem 0.75rem`, min 5.5rem): the pencil head line is the due-since ("due 3 days ago"), the concept in body 700 blue, and the streak in words ("2 correct in a row" / "not yet held") as a pencil label line under it -- the one card that carries a foot line, because the streak is what the check will change. The whole card is the control. Under the cards, "Check <topic> now" as a text button with a pencil aside "starts with <first concept>". Empty: one divider tabbed "Nothing due" with the copy and a blue Back home line.
 
 ### Library Row
 A white card per session (`0.875rem 1rem`, edge, drop, 6px), the edge darkening to `card-drop` on hover: the topic at contents size, the mastered count in pencil label with a blue tick at the right, the three-cell label (SessionChips), a two-line pencil description, a Continue text button in the right column.
@@ -440,7 +440,7 @@ The tabbed card. A 32 viewBox: a 25x19 rectangle (rx 2) stroked 2.5 in the curre
 - **Do** draw marks and icons as stroked SVG paths (1.5px round caps; 2px for red) and animate them with stroke-dashoffset over 240ms; the PrimeIcons font is loaded by no Vue file.
 - **Do** keep motion to opacity, clip-path, a stroke draw or the 4px filing lift; nothing slides across columns, and reduced motion declares its final state beside its keyframes.
 - **Do** add any new colour token to all three `base.css` blocks in 6-digit hex so tokenContrast.test.js asserts it, and add every new tab ink pair to the tab contrast case.
-- **Do** keep a two-state control the same height in both states (the review row is 3.5rem covered and lifted; the send square never changes size).
+- **Do** keep a two-state control the same height in both states (the send square never changes size).
 - **Do** keep test hooks (data-testid, aria attributes, asserted class names, copy strings) unchanged when extending a surface.
 
 ### Don't:

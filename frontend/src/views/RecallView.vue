@@ -47,7 +47,7 @@
                 :disabled="startBusy"
                 @click="startReview(item)"
               >
-                <span class="card-head">{{ dueSince(item.due_at) }}</span>
+                <span v-if="item.due_at" class="card-head">{{ dueSince(item.due_at) }}</span>
                 <span class="card-concept">{{ item.concept }}</span>
                 <span class="card-streak">{{ streakLabel(item.streak) }}</span>
               </button>
@@ -104,8 +104,8 @@ const startBusy = ref(false)
 const loading = ref(false)
 const error = ref(false)
 
-// Only the first load blanks the page; a retry keeps whatever rows it
-// already has on screen (same guard the library grid uses).
+// The skeleton shows only while nothing is on screen: a failed fetch clears
+// the queue, so a retry after an error blanks to the skeleton again.
 const showSkeleton = computed(() => loading.value && !queue.value.items.length)
 
 const groups = computed(() => groupBySource(queue.value.items))
