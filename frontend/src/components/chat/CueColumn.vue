@@ -4,7 +4,7 @@ import { computed, ref, watch } from 'vue'
 import { usePanel } from '@/composables/usePanel.js'
 import { NARROW_QUERY, useMediaQuery } from '@/composables/useMediaQuery.js'
 import { entryNames } from '@/utils/conceptEntry.js'
-import { LEVEL_MARK_PATH, levelStroke as levelStrokeFor } from './levelMark.js'
+import { LEVEL_MARK_PATH, TICK_PATH, levelStroke as levelStrokeFor } from './levelMark.js'
 
 const props = defineProps({
   // TopicProfile as served by the API: knowledge_level, subtopic_levels,
@@ -272,7 +272,7 @@ const isCollapsed = computed(() => panelCollapsed.value && !isNarrow.value)
                   aria-hidden="true"
                   focusable="false"
                 >
-                  <path d="M2 6.5 L4.8 9.2 L10 3.2" />
+                  <path :d="TICK_PATH" />
                 </svg>
                 <span class="cue-word">{{ m }}</span>
               </li>

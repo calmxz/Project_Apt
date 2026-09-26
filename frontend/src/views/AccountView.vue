@@ -46,7 +46,7 @@
               aria-hidden="true"
               focusable="false"
             >
-              <path d="M2 6.5 L4.8 9.2 L10 3.2" />
+              <path :d="TICK_PATH" />
             </svg>
             Saved.
           </span>
@@ -124,7 +124,7 @@
                 aria-hidden="true"
                 focusable="false"
               >
-                <path d="M2 6.5 L4.8 9.2 L10 3.2" />
+                <path :d="TICK_PATH" />
               </svg>
               Password updated.
             </span>
@@ -235,6 +235,7 @@ import { friendlyError } from '@/lib/errors.js'
 import { useUserStore } from '../stores/user.js'
 import { useAuthStore } from '../stores/auth.js'
 import { useToast } from '../composables/useToast.js'
+import { TICK_PATH } from '../components/chat/levelMark.js'
 import { downloadJson } from '@/lib/download.js'
 import { deleteAccount, exportData } from '../services/meApi.js'
 

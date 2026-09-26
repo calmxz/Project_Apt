@@ -1,5 +1,5 @@
 <template>
-  <section class="sprof" data-testid="session-profile">
+  <section class="sprof profile-page" data-testid="session-profile">
     <BackButton label="Back to session" :fallback="`/session/${id}`" />
 
     <header class="head">
@@ -275,7 +275,8 @@ import { deleteProfileItem, getSessionProfile, patchProfile } from '../services/
 import { useSessionStore } from '../stores/session.js'
 import { formatRelative } from '../utils/formatDate.js'
 import { stripAutoPrefix } from '../utils/sessionCard.js'
-import { LEVEL_MARK_PATH, levelStroke } from '../components/chat/levelMark.js'
+import { LEVEL_MARK_PATH, TICK_PATH, levelStroke } from '../components/chat/levelMark.js'
+import '@/assets/profile.css'
 
 const props = defineProps({ id: { type: String, required: true } })
 
@@ -310,7 +311,7 @@ const CUE_SECTIONS = [
     keyPrefix: 'm',
     empty: 'Nothing recorded yet.',
     markClass: 'cue-mark cue-mark--tick',
-    markPath: 'M2 6.5 L4.8 9.2 L10 3.2',
+    markPath: TICK_PATH,
     patchKey: 'add_mastered',
     inputTestid: 'add-mastered',
     placeholder: 'Add a concept',
@@ -495,7 +496,9 @@ watch(() => props.id, load)
 /* The session profile is a stack of full-width cards: what the tutor knows
    about this session, editable in place. The four coloured dividers (Level,
    Focus, Gaps, Mastered) carry the profile's law-bound colours; the rest
-   are plain white cards on the desk. */
+   are plain white cards on the desk. The dividers, cue marks, .sec/.sec-title,
+   .cue-none, .text-btn and the skeleton rule come from assets/profile.css
+   (shared with AggregateProfileView); only what differs is here. */
 .sprof {
   max-width: 72rem;
   margin: 0 auto;
@@ -551,80 +554,7 @@ watch(() => props.id, load)
 }
 
 .sec {
-  display: flex;
-  flex-direction: column;
   align-items: flex-start;
-  gap: 0.5rem;
-  padding: 1.25rem 1.5rem;
-  background: var(--card);
-  border: 1px solid var(--card-edge);
-  border-radius: var(--radius-card);
-  box-shadow: 0 1px 0 var(--card-drop);
-}
-
-.sec-title {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-size: var(--fs-caption);
-  font-weight: 700;
-  line-height: var(--lh-body);
-  color: var(--ink);
-}
-
-/* The four full-width dividers: a coloured tab (law: red only Focus, amber
-   only Gaps, green only Mastered; Level stays neutral) joined to a white
-   card body, same grammar as the Settings rail + sheet. */
-.divider {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-}
-
-.divider-tab {
-  align-self: flex-start;
-  margin: 0;
-  padding: 0.375rem 1rem;
-  border-radius: var(--radius-card) var(--radius-card) 0 0;
-  color: var(--tab-ink);
-  font-family: var(--font-sans);
-  font-size: var(--fs-caption);
-  font-weight: 700;
-  line-height: var(--lh-body);
-}
-
-.divider-tab--focus {
-  background: var(--tab-focus);
-}
-
-.divider-tab--gaps {
-  background: var(--tab-gaps);
-}
-
-.divider-tab--mastered {
-  background: var(--tab-mastered);
-}
-
-.divider-tab--level {
-  background: var(--tab-level);
-}
-
-.divider-body {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.5rem;
-  width: 100%;
-  padding: 1.25rem 1.5rem;
-  background: var(--card);
-  border: 1px solid var(--card-edge);
-  border-radius: 0 var(--radius-card) var(--radius-card) var(--radius-card);
-  box-shadow: 0 1px 0 var(--card-drop);
-}
-
-.cue-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
 }
 
 .chip,
@@ -654,35 +584,8 @@ watch(() => props.id, load)
 }
 
 .cue-mark {
-  flex: 0 0 auto;
   align-self: flex-start;
   margin-top: 0.35rem;
-  fill: none;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.5;
-}
-
-.cue-mark--focus {
-  stroke: var(--ink-marker);
-  stroke-width: 2;
-}
-
-.cue-mark--gap {
-  stroke: var(--pencil);
-}
-
-.cue-mark--tick {
-  /* Mastered tick is green everywhere (tab law); the word stays blue. */
-  stroke: var(--tab-mastered);
-}
-
-.cue-none {
-  margin: 0;
-  font-family: var(--font-sans);
-  font-size: var(--fs-body);
-  line-height: var(--lh-body);
-  color: var(--pencil);
 }
 
 .chip-badge {
@@ -692,30 +595,8 @@ watch(() => props.id, load)
   color: var(--pencil);
 }
 
-/* Controls: blue text, or a drawn stroke in an icon button. Nothing stamped. */
-.text-btn {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--ink-learner);
-  font-family: var(--font-sans);
-  font-size: var(--fs-caption);
-  font-weight: 700;
-  line-height: var(--lh-body);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  cursor: pointer;
-}
-
-.text-btn:hover:not(:disabled) {
-  color: var(--color-accent-hover);
-}
-
-.text-btn:focus-visible {
-  outline: 2px solid var(--color-accent-ring);
-  outline-offset: 2px;
-}
-
+/* Controls: blue text (.text-btn, from assets/profile.css), or a drawn stroke
+   in an icon button. Nothing stamped. */
 .icon-btn {
   display: inline-flex;
   align-items: center;
@@ -964,20 +845,7 @@ watch(() => props.id, load)
   color: var(--ink);
 }
 
-/* Skeleton: pencil-weight rules on the pitch, no shimmer. */
 .skel {
-  display: flex;
-  flex-direction: column;
   padding-top: 1.75rem;
-}
-
-.skel-block {
-  display: block;
-  height: 1.75rem;
-  border-bottom: 1px solid var(--rule-strong);
-}
-
-.skel-short {
-  width: 55%;
 }
 </style>

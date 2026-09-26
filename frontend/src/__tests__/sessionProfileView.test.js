@@ -4,6 +4,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 import ProfileView from '@/views/ProfileView.vue'
+import { TICK_PATH } from '@/components/chat/levelMark.js'
 import * as profileApi from '@/services/profileApi.js'
 
 const routerPushMock = vi.fn()
@@ -132,6 +133,7 @@ describe('SessionProfileView (per-session)', () => {
     const chips = wrapper.findAll('[data-testid="sprof-mastered"] .chip')
     expect(chips[0].text()).toContain('x')
     expect(chips[0].find('[data-testid="evidence-badge"]').text()).toBe('tested')
+    expect(chips[0].get('.cue-mark--tick path').attributes('d')).toBe(TICK_PATH)
     const gapChips = wrapper.findAll('[data-testid="sprof-gaps"] .chip')
     expect(gapChips[0].find('[data-testid="evidence-badge"]').exists()).toBe(false)
     expect(gapChips[1].find('[data-testid="evidence-badge"]').text()).toBe('declared')

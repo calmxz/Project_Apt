@@ -8,6 +8,7 @@ vi.mock('@/services/profileApi.js', () => ({
 }))
 
 import AggregateProfileView from '@/views/AggregateProfileView.vue'
+import { TICK_PATH } from '@/components/chat/levelMark.js'
 
 // Fixture copied from the #358 prototype (frontend/prototype/profile-page.html
 // on prototype/profile-page), shaped like AggregateProfileResponse.
@@ -377,6 +378,7 @@ describe('AggregateProfileView (/profile)', () => {
       expect(links[0]).toEqual({ text: 'separable equations', to: profileOf(S.ode) })
       expect(links[6]).toEqual({ text: 'Dijkstra', to: profileOf(S.graphs) })
       expect(mastered.findAll('[data-testid="aprof-cue-row"]')[0].text()).toContain('in 3 sessions')
+      expect(mastered.get('.cue-mark--tick path').attributes('d')).toBe(TICK_PATH)
     })
 
     it('writes "none open" / "none yet" when a divider list is empty', async () => {
