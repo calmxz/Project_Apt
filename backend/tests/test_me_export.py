@@ -87,7 +87,8 @@ def test_export_returns_the_whole_account_as_an_attachment(client, db_session):
 
     body = resp.json()
     assert body["format_version"] == 1
-    assert body["exported_at"]
+    # One clock: the filename day is exported_at's UTC day.
+    assert disposition == f'attachment; filename="crux-export-{body["exported_at"][:10]}.json"'
     assert body["account"] == {
         "user_id": ME,
         "created_at": "2026-09-01T08:00:00Z",

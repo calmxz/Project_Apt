@@ -2,7 +2,6 @@
 users row, not per-browser localStorage. A new device hydrates from here."""
 
 import logging
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.exc import IntegrityError
@@ -95,12 +94,14 @@ def export_me(
     db: Session = Depends(get_db),
 ):
     # #361: pure read -- unlike GET /me this never creates the users row; a
-    # caller without one gets a null account and empty lists.
-    stamp = datetime.now(timezone.utc).date().isoformat()
+    # caller without one gets a null account and empty lists. The filename
+    # takes exported_at's UTC day, the same value the frontend names it by.
+    export = build_export(db, user_id)
+    stamp = export.exported_at.date().isoformat()
     response.headers["Content-Disposition"] = (
         f'attachment; filename="crux-export-{stamp}.json"'
     )
-    return build_export(db, user_id)
+    return export
 
 
 @router.delete("/me", status_code=204)
