@@ -9,6 +9,7 @@ SQLite in unit tests) the query is never executed because tests patch this
 module.
 """
 
+import functools
 import logging
 from dataclasses import dataclass
 from typing import Sequence
@@ -25,8 +26,14 @@ from services.sql_dialect import dialect_insert
 
 log = logging.getLogger(__name__)
 
-# Warn at most once per process if the server rejects the HNSW GUCs.
-_hnsw_tuning_warned = False
+
+# Cached so it warns at most once per process if the server rejects the HNSW GUCs.
+@functools.cache
+def _warn_hnsw_tuning_rejected() -> None:
+    log.warning(
+        "hnsw search tuning rejected by the server; "
+        "falling back to pgvector defaults (needs pgvector >= 0.8)"
+    )
 
 
 @dataclass(frozen=True)
@@ -114,7 +121,6 @@ def _apply_hnsw_tuning(db: Session) -> None:
     profile/event rows potentially pending; forcing a flush here would
     surface an unrelated write error as a retrieval failure.
     """
-    global _hnsw_tuning_warned
     if db.get_bind().dialect.name != "postgresql":
         return
     ef_search = int(settings.hnsw_ef_search)
@@ -126,12 +132,7 @@ def _apply_hnsw_tuning(db: Session) -> None:
             )
             db.execute(text("SET LOCAL hnsw.iterative_scan = strict_order"))
     except ProgrammingError:
-        if not _hnsw_tuning_warned:
-            _hnsw_tuning_warned = True
-            log.warning(
-                "hnsw search tuning rejected by the server; "
-                "falling back to pgvector defaults (needs pgvector >= 0.8)"
-            )
+        _warn_hnsw_tuning_rejected()
 
 
 def query_chunks(

@@ -30,7 +30,7 @@ def _pg_bind(db_session, monkeypatch):
     monkeypatch.setattr(
         db_session,
         "connection",
-        lambda *a, **k: SimpleNamespace(begin_nested=lambda: nullcontext()),
+        lambda *a, **k: SimpleNamespace(begin_nested=nullcontext),
     )
 
 

@@ -181,13 +181,13 @@ def test_jwks_client_built_once_under_concurrent_refresh(monkeypatch):
     thread_count = 20
     barrier = threading.Barrier(thread_count)
     results: list[object] = []
-    errors: list[BaseException] = []
+    errors: list[Exception] = []
 
     def worker() -> None:
         try:
             barrier.wait()
             results.append(_REAL_GET_JWKS_CLIENT())
-        except BaseException as e:
+        except Exception as e:
             # Re-surfaced via the `assert not errors` below; a bare raise here
             # would die in the worker thread and leave the barrier deadlocked.
             errors.append(e)

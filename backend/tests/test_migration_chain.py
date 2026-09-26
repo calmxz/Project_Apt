@@ -8,7 +8,6 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.pool import StaticPool
 
-import db.models  # noqa: F401 -- registers every model on Base.metadata
 from db.database import Base
 from db.models import Session as SessionModel
 from db.models import User
