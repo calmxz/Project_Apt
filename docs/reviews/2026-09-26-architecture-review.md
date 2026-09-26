@@ -127,7 +127,7 @@ eval_c.py ─── dict(7 keys) ──┘
 
 **Benefits.** Leverage: `tutor`, `summary_service`, `retrieval_service` and `ingestion_service` stop knowing about `completion_cost` and `token_counter`. Locality: the cap check and the cancelled-cost estimate live once. Tests: one fake replaces 8 patch targets and 7 copies of stream helpers; `test_tutor_stream.py` drops from 85 inline patches toward a handful.
 
-**ADR conflict.** G-13 (2026-09-21) declined to extract seams from `run_streaming` because the payoff was readability only and the regression surface (streaming order, abort persistence, the cost double-count guard at `tutor.py:591-600`) was large. This candidate touches exactly that interleaved metering. It is worth reopening because the payoff is no longer readability: the follow-up SSE pump in `sessions.py` was copied without the shield or the reserve release, the test fixture is silently stale, and every new LLM-calling feature copies the block again. A codebase-wide refactor is the "feature that next touches it". The tests G-13 asked for are the characterisation tests this slice writes first.
+**ADR conflict.** G-13 (2026-09-21) declined to extract seams from `run_streaming` because the payoff was readability only and the regression surface (streaming order, abort persistence, the cost double-count guard at `tutor.py:591-600`) was large. This candidate touches exactly that interleaved metering. It is worth reopening because the payoff is no longer readability: the follow-up SSE pump in `sessions.py` was copied without the shield, the test fixture is silently stale, and every new LLM-calling feature copies the block again. A codebase-wide refactor is the "feature that next touches it". The tests G-13 asked for are the characterisation tests this slice writes first.
 
 ```mermaid
 flowchart LR
@@ -169,7 +169,7 @@ flowchart LR
 
 **Files:** `routes/sessions.py` (1002; 14 endpoints), `routes/chat.py:175-291` (`_prepare_turn_guards`), `routes/upload.py:115-324` (`upload_file`), `routes/profile.py:62-66` (`_owned_session_or_404`), `services/rate_limit.py`, `services/cost_meter.py`.
 
-**Problem.** The rule "load the session, check it belongs to this user, 404 otherwise" is inlined 16 times (11 in `sessions.py`). The `session_ended` 409 is built 6 times, `duplicate_topic` 7 times, the DAILY_CAP 429 payload twice, the X-Cost-Warning header 5 times. The cost gate has two implementations of one policy (inline subquery in `chat.py:192-220`; `cost_meter.assert_within_caps` in `upload.py`). The "guard order is load-bearing" contract (cost cap, then 404/409, then `ensure_user`, then reserve, then rate limit) is restated in three routes with comments, and differs slightly each time: `create_session` calls `ensure_user` before its 404, `chat_stream` after. `rate_limit.check_and_increment` commits internally and `chat.py:244-289` depends on that commit by comment. The F-11 threadpool split left business logic in `_claim`/`_finish`/`_prepare` helpers cut along thread boundaries, not domain ones. Tests import 10 of these private helpers as their de facto interface. The SSE pump is duplicated between `chat.py:511-570` and `sessions.py:962-1002`; the copy has no `CancelScope(shield=True)` and no reserve release (verified).
+**Problem.** The rule "load the session, check it belongs to this user, 404 otherwise" is inlined 16 times (11 in `sessions.py`). The `session_ended` 409 is built 6 times, `duplicate_topic` 7 times, the DAILY_CAP 429 payload twice, the X-Cost-Warning header 5 times. The cost gate has two implementations of one policy (inline subquery in `chat.py:192-220`; `cost_meter.assert_within_caps` in `upload.py`). The "guard order is load-bearing" contract (cost cap, then 404/409, then `ensure_user`, then reserve, then rate limit) is restated in three routes with comments, and differs slightly each time: `create_session` calls `ensure_user` before its 404, `chat_stream` after. `rate_limit.check_and_increment` commits internally and `chat.py:244-289` depends on that commit by comment. The F-11 threadpool split left business logic in `_claim`/`_finish`/`_prepare` helpers cut along thread boundaries, not domain ones. Tests import 10 of these private helpers as their de facto interface. The SSE pump is duplicated between `chat.py:511-570` and `sessions.py:962-1002`; the copy has no `CancelScope(shield=True)` (verified). It takes no cost reservation either, so nothing needs releasing there today; the moment it does, the copy is the one that will be forgotten.
 
 **Deletion test.** Delete the inline guards and each endpoint reinvents them. Concentrates, but the module is currently invisible: it is a convention, not code.
 
@@ -314,9 +314,9 @@ Before: 5 views x (loading, error, retry, seq guard, offset)   After: 1 composab
 
 RecallView        loading error moreLoading moreError nextOffset   RecallView ─────┐
 SessionsLibrary   loading error _loadSeq offset total IO           SessionsLibrary ┤
-ProfileView       loading error _applyWrite                        ProfileView ────┼─> [useAsyncPage(fetch)]
+ProfileView       loading error _applyWrite                        ProfileView ────┼─> [async page module]
 AggregateProfile  loading error                                    AggregateProf ──┤     loading, error, retry,
-Sidebar search    searchLoading searchTotal seq                    Sidebar search ─┘     stale guard, loadMore
+Sidebar search    searchLoading searchTotal seq                    Sidebar search ─┘     stale guard, load more
 ```
 
 ### F4. Session page held together by one view
@@ -366,7 +366,7 @@ Sidebar search    searchLoading searchTotal seq                    Sidebar searc
 ## Not proposed
 
 - **A repository layer over SQLAlchemy.** Services already accept `db: Session`; only three places open their own. Raw SQL is three `text()` calls. Nothing varies across a hypothetical repository seam, so it would be one adapter with a large interface: the shallow shape. `pgvector_store` and `object_store.get_store()` are the real store seams and already exist.
-- **Async-everywhere.** 60 sync routes and 9 async with threadpool hops is a deliberate F-11 choice with its own decision entry. Not friction this review found.
+- **Async-everywhere.** 60 sync routes and 9 async with threadpool hops is the deliberate F-11 choice (recorded only in route docstrings, `routes/chat.py:183,297,345`, not in `docs/decisions.md`). Not friction this review found.
 - **Splitting `routes/sessions.py` by file.** Moving 14 endpoints into three files changes nothing about depth. B1, B4 and B5 remove the logic that makes it 1002 lines; the file gets short as a side effect.
 
 ## Defects found in passing
@@ -374,7 +374,7 @@ Sidebar search    searchLoading searchTotal seq                    Sidebar searc
 Not architecture, but found while surveying. Each is a candidate GitHub Issue. None were fixed in this review.
 
 1. **Check follow-up turns render a degraded prompt.** `routes/sessions.py:876-888` omits `learner_prefs`, `rolling_summary`, `current_check`, `gap_accuracy` and `diagnostic_required`; follow-ups run with default preferences, no rolling summary, and `DIAGNOSTIC` off. Verified at 19c6dcd. Fixed structurally by B2; fixable today in one edit.
-2. **Follow-up SSE pump has no shield.** `routes/sessions.py:962-1002` copies the chat pump without `CancelScope(shield=True)`. On disconnect, persistence may be cut mid-write. Verified.
+2. **Follow-up SSE pump has no shield.** `routes/sessions.py:962-1002` copies the chat pump without `CancelScope(shield=True)`. Absence verified. Whether a disconnect can cut `_persist_assistant_message` mid-write on this path is untested; the chat pump's comment block says that is exactly what the shield prevents there.
 3. **`mock_litellm` fixture is stale for the tutor.** `tests/conftest.py:166-178` returns a non-streaming shape; `run_streaming` iterates `.delta` (`tutor.py:241`). It only works for `summary_service`. The `test_tutor_stream.py` docstring references `run()`, which no longer exists. Verified.
 4. **`profile_service.seed_from_prior` is dead code**; `_create_session_finish` duplicates it inline. Verified.
 5. **`SEED_MODE` is rendered but always `None`** (`prompts.py:481`; every builder). Reported, not re-read.
