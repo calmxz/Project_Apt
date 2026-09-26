@@ -293,7 +293,7 @@ A grey desk, white and blue card stock, three inks, a pencil, and four tab colou
 ### Neutral
 - **Graphite** (`ink`): tutor text, headings, the check card's 3px head rule, the level stroke, section titles, the active Settings tab and filter toggle.
 - **Pencil** (`pencil`): head lines (role, time, count), hints, placeholders, ledes, disabled text, the unset level stroke, the gap circle, inactive Settings tabs, the half-tab toggle glyph.
-- **Desk** (`desk`): the ground the cards sit on: the thread scroller, the session head, the auth cover, `html`/`body`. Aliased as `--color-background`.
+- **Desk** (`desk`): the ground the cards sit on: the session page behind the thread, the session head, the auth cover, `html`/`body`. Aliased as `--color-background`.
 - **Deep Desk** (`desk-deep`): the sidebar, the mobile top strip, the profile panel column, the Settings page ground and its section cards, code fences and inline code. Aliased as `--color-surface-soft`.
 - **Card** (`card`): white stock. Aliased as `--color-surface`; PrimeVue inputs, dialogs and toasts move with it.
 - **Card Edge** (`card-edge`) and **Card Drop** (`card-drop`): the 1px border and the 1px hard drop under every card; the edge also rules the sidebar's right side, the panel's left side and the mobile strip's foot.
