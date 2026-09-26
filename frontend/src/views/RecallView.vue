@@ -7,11 +7,11 @@
       <p class="lede">Each check that you get right extends the gap before the next one.</p>
     </header>
 
-    <p v-if="queue.total > 0" class="count" data-testid="review-count">
+    <p v-if="queue.total > 0" class="count" data-testid="recall-count">
       {{ queue.total }} concept{{ queue.total === 1 ? '' : 's' }} ready.
     </p>
 
-    <div v-if="showSkeleton" class="skel" data-testid="review-loading" aria-hidden="true">
+    <div v-if="showSkeleton" class="skel" data-testid="recall-loading" aria-hidden="true">
       <span class="skel-block" />
       <span class="skel-block" />
       <span class="skel-block skel-short" />
@@ -19,68 +19,66 @@
     <span v-if="showSkeleton" class="sr-only" role="status">Loading</span>
 
     <template v-else-if="error">
-      <p class="error" data-testid="review-error">Could not load your recall queue.</p>
-      <button type="button" class="review-more" data-testid="review-retry" @click="retry">
+      <p class="error" data-testid="recall-error">Could not load your recall queue.</p>
+      <button type="button" class="retry coarse-2x" data-testid="recall-retry" @click="load">
         Retry
       </button>
     </template>
 
-    <ul v-else-if="queue.items.length" class="review-list">
-      <li
-        v-for="(item, i) in queue.items"
-        :key="item.concept"
-        class="review-row"
-        data-testid="review-row"
+    <div v-else-if="groups.length" class="dividers">
+      <section
+        v-for="(group, g) in groups"
+        :key="group.id"
+        class="divider"
+        data-testid="recall-divider"
+        :aria-labelledby="tabId(g)"
       >
-        <button
-          type="button"
-          class="review-item"
-          data-testid="review-item"
-          :disabled="startBusy"
-          @click="startReview(item)"
-        >
-          <span class="review-concept">{{ item.concept }}</span>
-        </button>
-
-        <div class="review-answer" :class="{ lifted: isLifted(item) }">
-          <p v-show="isLifted(item)" :id="detailId(i)" class="review-detail">
-            {{ item.source_topic }} &middot;
-            {{ item.streak === 1 ? '1 correct in a row' : `${item.streak} correct in a row` }}
-          </p>
+        <h2 :id="tabId(g)" class="tab" data-testid="recall-tab">
+          <span class="tab-topic">{{ group.topic }}</span>
+          <span class="tab-count">{{ group.items.length }} due</span>
+        </h2>
+        <div class="sheet">
+          <ul class="cards">
+            <li v-for="item in group.items" :key="item.concept">
+              <button
+                type="button"
+                class="card"
+                data-testid="recall-card"
+                :disabled="startBusy"
+                @click="startReview(item)"
+              >
+                <span class="card-head">{{ dueSince(item.due_at) }}</span>
+                <span class="card-concept">{{ item.concept }}</span>
+                <span class="card-streak">{{ streakLabel(item.streak) }}</span>
+              </button>
+            </li>
+          </ul>
           <button
             type="button"
-            class="review-cover"
-            :class="{ 'review-cover--lifted': isLifted(item) }"
-            :data-testid="`review-cover-${i}`"
-            :aria-expanded="isLifted(item) ? 'true' : 'false'"
-            :aria-controls="detailId(i)"
-            :aria-label="
-              isLifted(item)
-                ? `Cover the answer for ${item.concept}`
-                : `Lift the cover on ${item.concept}`
-            "
-            @click="toggle(item)"
+            class="check-group coarse-2x"
+            data-testid="recall-check-group"
+            :disabled="startBusy"
+            @click="startReview(group.items[0])"
           >
-            {{ isLifted(item) ? 'Cover' : 'Lift' }}
+            <span class="check-group-label">Check {{ group.topic }} now</span>
+            <span class="check-group-first">starts with {{ group.items[0].concept }}</span>
           </button>
         </div>
-      </li>
-    </ul>
+      </section>
+    </div>
 
-    <p v-else-if="loaded" class="empty" data-testid="review-empty">
-      Nothing due right now. Keep learning &mdash; concepts you master come back here for a check.
-      <RouterLink to="/" class="empty-link">Back home</RouterLink>
-    </p>
-
-    <button
-      v-if="!expanded && queue.total > queue.items.length"
-      type="button"
-      class="review-more"
-      data-testid="review-more"
-      @click="expand"
-    >
-      View all {{ queue.total }}
-    </button>
+    <section v-else-if="loaded" class="divider" data-testid="recall-empty">
+      <h2 class="tab" data-testid="recall-tab">
+        <span class="tab-topic">Nothing due</span>
+      </h2>
+      <div class="sheet sheet-empty">
+        <p class="empty">
+          No divider has a concept due. Finish a session and its concepts file themselves here when
+          a check comes round.
+        </p>
+        <RouterLink to="/" class="empty-link coarse-2x">Back home</RouterLink>
+      </div>
+    </section>
   </section>
 </template>
 
@@ -90,57 +88,45 @@ import { RouterLink, useRouter } from 'vue-router'
 import BackButton from '../components/BackButton.vue'
 import { useSessionStore } from '../stores/session.js'
 import { getReviewQueue } from '../services/reviewApi.js'
+import { dueSince, groupBySource, streakLabel } from '../utils/recallQueue.js'
+
+// The whole queue on one page (#363): no 3-row preview, no "View all".
+const QUEUE_LIMIT = 100
 
 const router = useRouter()
 const store = useSessionStore()
 
 const queue = ref({ items: [], total: 0 })
 const loaded = ref(false)
-const expanded = ref(false)
 const startBusy = ref(false)
 // D-11: a failed fetch is not an empty queue. `loading` and `error` are held
 // apart from emptiness so the page can say which of the three it is.
 const loading = ref(false)
 const error = ref(false)
 
-// Only the first load blanks the page; a "View all" refetch keeps the rows it
+// Only the first load blanks the page; a retry keeps whatever rows it
 // already has on screen (same guard the library grid uses).
 const showSkeleton = computed(() => loading.value && !queue.value.items.length)
 
-// Cornell recitation: the cue stays readable, what sits beside it is covered
-// until the learner lifts that one cover. Keyed by concept (the queue's own
-// key) so a refetch keeps whatever the learner has already lifted.
-const lifted = ref(new Set())
+const groups = computed(() => groupBySource(queue.value.items))
 
-function isLifted(item) {
-  return lifted.value.has(item.concept)
-}
-
-function toggle(item) {
-  const next = new Set(lifted.value)
-  if (next.has(item.concept)) next.delete(item.concept)
-  else next.add(item.concept)
-  lifted.value = next
-}
-
-function detailId(i) {
-  return `review-detail-${i}`
+function tabId(g) {
+  return `recall-tab-${g}`
 }
 
 onMounted(() => {
-  load(3, { silent: true })
+  load()
 })
 
-async function load(limit = 3, { silent } = {}) {
+async function load() {
   loading.value = true
   error.value = false
   try {
-    // Only the mount call passes silent:true; the user-initiated "View all"
-    // refetch keeps the toast on a real failure.
-    const opts = silent ? [{ silent: true }] : []
-    queue.value = await getReviewQueue({ limit, offset: 0 }, ...opts)
+    // Silent: the inline error row is the surface on this page, so a toast on
+    // top of it would say the same thing twice. Retry goes through here too.
+    queue.value = await getReviewQueue({ limit: QUEUE_LIMIT, offset: 0 }, { silent: true })
   } catch {
-    // The review page must never block; it says it could not load and offers
+    // The recall page must never block; it says it could not load and offers
     // a retry instead of pretending nothing is due.
     queue.value = { items: [], total: 0 }
     error.value = true
@@ -148,12 +134,6 @@ async function load(limit = 3, { silent } = {}) {
     loading.value = false
     loaded.value = true
   }
-}
-
-// The inline error row is the surface, so the retry stays silent: a toast on
-// top of it would say the same thing twice.
-function retry() {
-  return load(expanded.value ? 100 : 3, { silent: true })
 }
 
 async function startReview(item) {
@@ -178,16 +158,11 @@ async function startReview(item) {
     startBusy.value = false
   }
 }
-
-async function expand() {
-  expanded.value = true
-  await load(100)
-}
 </script>
 
 <style scoped>
-/* A recitation page: cues down the left, each answer beside its cue under a
-   card the learner lifts. */
+/* The recall box: one tabbed divider per source session, the concepts due
+   from it filed behind the tab as blue cards. */
 .review {
   max-width: 44rem;
   margin: 0 auto;
@@ -228,157 +203,200 @@ async function expand() {
   color: var(--pencil);
 }
 
-/* Rows sit apart on the desk so stacked cards read as separate objects. */
-.review-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  row-gap: 0.75rem;
-}
-
-/* Every row is a fixed height in both states, so lifting a cover never
-   reflows the list. */
-.review-row {
-  display: grid;
-  grid-template-columns: minmax(0, 20rem) minmax(0, 1fr);
-  align-items: start;
-  column-gap: 1rem;
-  min-height: 3.5rem;
-}
-
-/* The cue itself: a blue cue word, and the control that starts the check.
-   Written, not stamped. */
-.review-item {
-  display: block;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--ink-learner);
-  font-family: var(--font-sans);
-  font-size: var(--fs-body);
-  line-height: var(--lh-body);
-  text-align: left;
-  cursor: pointer;
-}
-
-.review-item:hover:not(:disabled) .review-concept {
-  color: var(--color-accent-hover);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.review-item:disabled {
-  color: var(--pencil);
-  cursor: default;
-}
-
-.review-item:focus-visible {
-  outline: 2px solid var(--color-accent-ring);
-  outline-offset: 2px;
-}
-
-/* The cue takes its own width and wraps; a cue word is never truncated --
-   it is the thing the learner has to recall. */
-.review-concept {
-  display: block;
-  overflow-wrap: anywhere;
-}
-
-/* The answer area holds one card at a time: covered (blue stock) or lifted
-   (white stock, with the pencil aside above it). */
-.review-answer {
+.dividers {
   display: flex;
-  align-items: baseline;
-  gap: 0.75rem;
-  min-height: 3.5rem;
-}
-
-.review-answer.lifted {
   flex-direction: column;
-  align-items: flex-start;
-  gap: 0.375rem;
+  gap: 1.5rem;
 }
 
-/* Lifted, the revealed answer is a card in the tutor's white stock. */
-.review-detail {
-  flex: 0 0 auto;
-  width: 100%;
-  min-width: 0;
-  margin: 0;
-  padding: 0.5rem 0.75rem;
-  background: var(--card);
+.divider {
+  display: flex;
+  flex-direction: column;
+}
+
+/* The divider's tab: the Settings rail's active tab (white stock, lifted,
+   overlapping the sheet's top border by a pixel so tab and sheet read as one
+   joined object). */
+.tab {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.625rem;
+  align-self: flex-start;
+  max-width: 100%;
+  position: relative;
+  z-index: 1;
+  margin: 0 0 -1px;
+  padding: 0.5rem 1rem;
   border: 1px solid var(--card-edge);
-  border-radius: var(--radius-card);
-  box-shadow: 0 1px 0 var(--card-drop);
+  border-bottom: 0;
+  border-radius: var(--radius-card) var(--radius-card) 0 0;
+  background: var(--card);
+  color: var(--ink);
   font-family: var(--font-sans);
-  font-size: var(--fs-label);
-  line-height: var(--lh-body);
-  color: var(--pencil);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  line-height: calc(var(--line-pitch) - 1px);
+}
+
+.tab-topic {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* Lifted, the aside is written onto the rules left to right. v-show keeps the
-   copy in the DOM, so the animation restarts each time display returns. */
-.review-answer.lifted .review-detail {
-  animation: review-land var(--motion-ink) var(--motion-out-expo) both;
+.tab-count {
+  flex: 0 0 auto;
+  font-weight: 400;
+  color: var(--pencil);
 }
 
-@keyframes review-land {
-  from {
-    clip-path: inset(0 100% 0 0);
-  }
-  to {
-    clip-path: inset(0);
-  }
+/* The sheet joins the tab, square only at the top-left where the tab sits
+   (the Settings panel's corner). */
+.sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-radius: 0 var(--radius-card) var(--radius-card) var(--radius-card);
+  box-shadow: 0 1px 0 var(--card-drop);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .review-answer.lifted .review-detail {
-    animation: none;
-  }
+.cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: 0.75rem;
 }
 
-/* Covered, the answer cell is a card in the learner's blue stock: the way
-   in written inside it. */
-.review-cover {
-  flex: 1 1 auto;
-  padding: 0.8125rem 1rem;
+/* Each due concept is a card in the learner's blue stock: the pencil head
+   line (due-since), the concept, then the streak in words. The whole card is
+   the control that starts its check. */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  width: 100%;
+  height: 100%;
+  min-height: 5.5rem;
+  padding: 0.625rem 0.75rem;
   border: 1px solid var(--card-learner-edge);
   border-radius: var(--radius-card);
   background: var(--card-learner);
   box-shadow: 0 1px 0 var(--card-drop);
   color: var(--ink-learner);
   font-family: var(--font-sans);
-  font-size: var(--fs-caption);
-  font-weight: 700;
-  line-height: var(--lh-body);
   text-align: left;
   cursor: pointer;
 }
 
-/* Lifted, the card turns to white stock and shrinks to a text-sized
-   control: Cover reads as a plain blue line under the revealed aside. */
-.review-cover--lifted {
-  flex: 0 0 auto;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
+.card-head,
+.card-streak {
+  font-size: var(--fs-label);
+  line-height: var(--lh-body);
+  color: var(--pencil);
 }
 
-.review-cover:hover {
+/* A concept is never truncated -- it is the thing the learner has to
+   recall. */
+.card-concept {
+  font-size: var(--fs-body);
+  font-weight: 700;
+  line-height: var(--lh-body);
+  overflow-wrap: anywhere;
+}
+
+.card:hover:not(:disabled) .card-concept {
   color: var(--color-accent-hover);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
 
-.review-cover:focus-visible {
+.card:disabled {
+  color: var(--pencil);
+  cursor: default;
+}
+
+.card:focus-visible {
   outline: 2px solid var(--color-accent-ring);
   outline-offset: 2px;
+}
+
+/* Written, not stamped: the per-divider control is a blue line with its
+   pencil aside naming the card it starts. */
+.check-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.75rem;
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink-learner);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  line-height: var(--lh-body);
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+/* Only the written control is underlined; the pencil aside is a note. */
+.check-group-label {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.check-group-first {
+  font-weight: 400;
+  color: var(--pencil);
+}
+
+.check-group:hover:not(:disabled) {
+  color: var(--color-accent-hover);
+}
+
+.check-group:disabled {
+  color: var(--pencil);
+  cursor: default;
+}
+
+.check-group:focus-visible {
+  outline: 2px solid var(--color-accent-ring);
+  outline-offset: 2px;
+}
+
+.sheet-empty {
+  gap: 0.5rem;
+}
+
+.empty {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  color: var(--pencil);
+}
+
+.empty-link {
+  align-self: flex-start;
+  color: var(--ink-learner);
+  font-family: var(--font-sans);
+  font-size: var(--fs-caption);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.empty-link:hover {
+  color: var(--color-accent-hover);
 }
 
 /* Skeleton: pencil-weight rules on the pitch, no shimmer (same as the session
@@ -407,26 +425,7 @@ async function expand() {
   color: var(--ink-marker-text);
 }
 
-.empty {
-  margin: 0;
-  max-width: 42rem;
-  font-family: var(--font-sans);
-  font-size: var(--fs-body);
-  line-height: var(--lh-body);
-  color: var(--pencil);
-}
-
-.empty-link {
-  color: var(--ink-learner);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.empty-link:hover {
-  color: var(--color-accent-hover);
-}
-
-.review-more {
+.retry {
   align-self: flex-start;
   padding: 0;
   border: 0;
@@ -441,19 +440,27 @@ async function expand() {
   cursor: pointer;
 }
 
-.review-more:hover {
+.retry:hover {
   color: var(--color-accent-hover);
 }
 
-.review-more:focus-visible {
+.retry:focus-visible {
   outline: 2px solid var(--color-accent-ring);
   outline-offset: 2px;
 }
 
+/* Narrow: one card per line, the sheet tighter so cards run near its edge. */
 @media (max-width: 599px) {
-  .review-row {
+  .cards {
     grid-template-columns: minmax(0, 1fr);
-    column-gap: 0;
+  }
+
+  .card {
+    min-height: 0;
+  }
+
+  .sheet {
+    padding: 0.75rem;
   }
 }
 </style>
