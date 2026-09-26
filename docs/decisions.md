@@ -3,6 +3,30 @@
 Durable "why": decisions, findings, tradeoffs. Newest first. Technical
 how-it-works lookup belongs in `docs/reference.md` instead.
 
+## 2026-09-26 - Data export is one JSON file without the PDFs (#361)
+
+The issue allowed "JSON (or zip with uploaded PDFs)", streamed. Built as
+`GET /api/me/export`, a plain JSON response with `Content-Disposition:
+attachment`, and a "Download my data" section directly above Delete account.
+
+- **JSON only, uploads as metadata.** Filename, status, page count and date
+  per upload; the bytes stay out. The learner already has the PDFs they
+  uploaded, and a zip would mean reading every blob from the object store
+  inside one request. Revisit if a compliance driver appears.
+- **Not streamed.** One query per table, assembled in memory and validated
+  against the `DataExport` contract. A learner's text data is small next to
+  the 30s client timeout; switch to streaming only if real accounts get near
+  it.
+- **Same tables as delete, minus internal state.** Chunk embeddings, the
+  open-check pointers, `rolling_summary`, `kw_index_json` and the per-call
+  LLM log are left out: none of it is the learner's own content, and the
+  LLM log names internal models. Usage is exported per day (message count
+  plus cost, merged from `usage_counters` and `daily_cost_ledger`).
+- **Pure read.** Unlike `GET /me`, the export never creates the users row;
+  a caller without one gets `account: null` and empty lists.
+- **`format_version: 1`** is bumped when a field is removed or changes
+  meaning, so an old export stays interpretable.
+
 ## 2026-09-26 - Recall page order is weakest proof first, not most overdue (#363)
 
 The #351 resolution asks for "queue order preserved (most overdue group

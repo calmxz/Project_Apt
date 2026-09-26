@@ -339,6 +339,32 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/me/export:
+    get:
+      tags: [me]
+      summary: Download the caller's account, sessions, messages, check answers, uploads, and usage as one JSON file.
+      operationId: exportMe
+      description: >-
+        Pure read. Uploads are listed by metadata only; the PDF bytes are not
+        included. Internal state (embeddings, open-check pointers, per-call
+        LLM logs) is left out. A caller with no users row gets an export with
+        a null account and empty lists.
+      responses:
+        "200":
+          description: The full export, sent as an attachment.
+          headers:
+            Content-Disposition:
+              description: attachment; filename="crux-export-YYYY-MM-DD.json"
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataExport"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "503":
+          $ref: "#/components/responses/ServiceUnavailable"
+
   /api/sessions/{session_id}:
     get:
       tags: [sessions]
@@ -1760,6 +1786,127 @@ components:
         check_ins:           { $ref: "#/components/schemas/CheckIns" }
         reply_length:        { $ref: "#/components/schemas/ReplyLength" }
         onboarding_complete: { type: boolean }
+
+    # ---- Data export (#361) ----
+    DataExport:
+      type: object
+      additionalProperties: false
+      required: [format_version, exported_at, account, sessions, usage]
+      description: Everything the server holds for one learner, oldest first.
+      properties:
+        format_version:
+          type: integer
+          description: Bumped when a field is removed or changes meaning.
+        exported_at: { type: string, format: date-time }
+        account:
+          oneOf:
+            - $ref: "#/components/schemas/ExportAccount"
+            - type: "null"
+        sessions:
+          type: array
+          items: { $ref: "#/components/schemas/ExportSession" }
+        usage:
+          type: array
+          items: { $ref: "#/components/schemas/ExportUsageDay" }
+
+    ExportAccount:
+      type: object
+      additionalProperties: false
+      required: [user_id, created_at, feedback_pref, check_ins, reply_length, onboarding_complete]
+      properties:
+        user_id:             { type: string }
+        created_at:          { type: string, format: date-time }
+        display_name:        { type: [string, "null"], default: null }
+        feedback_pref:       { $ref: "#/components/schemas/FeedbackPref" }
+        check_ins:           { $ref: "#/components/schemas/CheckIns" }
+        reply_length:        { $ref: "#/components/schemas/ReplyLength" }
+        onboarding_complete: { type: boolean }
+        accepted_terms_at:
+          oneOf:
+            - { type: string, format: date-time }
+            - type: "null"
+          default: null
+        terms_version:       { type: [string, "null"], default: null }
+
+    ExportSession:
+      type: object
+      additionalProperties: false
+      required: [id, topic, created_at, pinned, topic_profile, messages, check_answers, documents]
+      properties:
+        id:         { type: string }
+        topic:      { type: string }
+        created_at: { type: string, format: date-time }
+        ended_at:
+          oneOf:
+            - { type: string, format: date-time }
+            - type: "null"
+          default: null
+        pinned:        { type: boolean }
+        topic_profile: { $ref: "#/components/schemas/TopicProfile" }
+        messages:
+          type: array
+          items: { $ref: "#/components/schemas/ExportMessage" }
+        check_answers:
+          type: array
+          items: { $ref: "#/components/schemas/ExportCheckAnswer" }
+        documents:
+          type: array
+          items: { $ref: "#/components/schemas/ExportDocument" }
+
+    ExportMessage:
+      type: object
+      additionalProperties: false
+      required: [id, role, content, created_at]
+      properties:
+        id:         { type: integer }
+        role:       { type: string }
+        content:    { type: string }
+        created_at: { type: string, format: date-time }
+        status:     { type: [string, "null"], default: null }
+        citations:
+          type: array
+          items: { $ref: "#/components/schemas/Citation" }
+          default: []
+
+    ExportCheckAnswer:
+      type: object
+      additionalProperties: false
+      required: [id, gap_tested, question, correct, created_at]
+      properties:
+        id:             { type: integer }
+        gap_tested:     { type: string }
+        question:       { type: string }
+        correct:        { type: boolean }
+        created_at:     { type: string, format: date-time }
+        options:
+          type: array
+          items: { type: string }
+          default: []
+        selected_index: { type: [integer, "null"], default: null }
+        correct_index:  { type: [integer, "null"], default: null }
+        purpose:        { type: [string, "null"], default: null }
+
+    ExportDocument:
+      type: object
+      additionalProperties: false
+      required: [id, filename, created_at]
+      description: Upload metadata only; the file itself is not in the export.
+      properties:
+        id:         { type: integer }
+        filename:   { type: string }
+        status:     { type: [string, "null"], default: null }
+        error:      { type: [string, "null"], default: null }
+        page_count: { type: [integer, "null"], default: null }
+        created_at: { type: string, format: date-time }
+
+    ExportUsageDay:
+      type: object
+      additionalProperties: false
+      required: [date_utc, messages, cost_usd]
+      properties:
+        date_utc: { type: string, format: date }
+        messages: { type: integer, minimum: 0 }
+        cost_usd: { type: number, minimum: 0 }
 
     ProfileResponse:
       type: object

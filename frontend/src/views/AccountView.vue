@@ -132,6 +132,27 @@
         </form>
       </section>
 
+      <section v-if="authStore.isAuthenticated" class="sec" data-testid="account-export">
+        <h2 class="sec-title">Export your data</h2>
+        <p class="export-copy">
+          Download your sessions, messages, check answers, topic profiles, upload list, and
+          preferences as one JSON file. Uploaded PDFs are not included.
+        </p>
+        <button
+          type="button"
+          class="btn-fill"
+          :class="{ 'btn-fill--busy': exportBusy }"
+          data-testid="account-export-btn"
+          :disabled="exportBusy"
+          @click="downloadExport"
+        >
+          {{ exportBusy ? 'Preparing…' : 'Download my data' }}
+        </button>
+        <p v-if="exportError" class="error" role="alert" data-testid="account-export-error">
+          {{ exportError }}
+        </p>
+      </section>
+
       <section v-if="authStore.isAuthenticated" class="sec sec-danger" data-testid="account-danger">
         <h2 class="sec-title">Delete account</h2>
         <p class="danger-copy">
@@ -212,7 +233,8 @@ import { friendlyError } from '@/lib/errors.js'
 import { useUserStore } from '../stores/user.js'
 import { useAuthStore } from '../stores/auth.js'
 import { useToast } from '../composables/useToast.js'
-import { deleteAccount } from '../services/meApi.js'
+import { downloadJson } from '@/lib/download.js'
+import { deleteAccount, exportData } from '../services/meApi.js'
 
 const user = useUserStore()
 const authStore = useAuthStore()
@@ -291,6 +313,27 @@ async function changePassword() {
     pwError.value = authErrorCopy(e, 'Could not update password. Try again.')
   } finally {
     pwSubmitting.value = false
+  }
+}
+
+const exportBusy = ref(false)
+const exportError = ref('')
+
+// #361: fixed copy rather than friendlyError -- its 503 line talks about the
+// tutor, which is wrong on this page.
+async function downloadExport() {
+  if (exportBusy.value) return
+  exportBusy.value = true
+  exportError.value = ''
+  try {
+    const data = await exportData()
+    const day = new Date().toLocaleDateString('en-CA') // YYYY-MM-DD, local day
+    downloadJson(data, `crux-export-${day}.json`)
+    showSuccess('Your data was downloaded.')
+  } catch {
+    exportError.value = 'Could not prepare your export. Try again.'
+  } finally {
+    exportBusy.value = false
   }
 }
 
@@ -492,6 +535,7 @@ async function submitDelete() {
   width: 100%;
 }
 
+.export-copy,
 .danger-copy {
   margin: 0;
   font-family: var(--font-sans);
