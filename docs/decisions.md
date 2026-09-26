@@ -3,6 +3,50 @@
 Durable "why": decisions, findings, tradeoffs. Newest first. Technical
 how-it-works lookup belongs in `docs/reference.md` instead.
 
+## 2026-09-26 - Prompt state is one typed builder, shipped in three parts (#395, #396, #397)
+
+Architecture review candidate B2. The prompt state was an untyped dict built
+in five places (chat, the check follow-up, and eval scripts) with different key
+sets, and the renderer's `.get()` defaults turned every missing key into a
+silent default. Replaced by `backend/services/prompt_state.py`: frozen
+dataclasses with required fields, `gather_session_inputs` (reads the DB) and
+a pure `assemble`. The renderer accepts only `PromptState`.
+
+- **Three parts, merged in order.** #395 is a pure refactor with a golden
+  test that pins the chat and follow-up prompts byte for byte. #396 changes
+  behaviour. #397 removes dead state. Splitting them keeps the risky step
+  small, and a golden-test diff in #396 shows exactly what the learner-facing
+  change is.
+- **Follow-ups change behaviour on purpose (#396).** The `/check/complete`
+  and `/check/stop` follow-up turns rendered default learner prefs, no rolling
+  summary, no gap accuracy, `DIAGNOSTIC` off and `PENDING_CHECK: none`. The
+  last one means a follow-up after set 1 of 3 never sees the `between_sets`
+  rules, and no test covered it. These were omissions, not choices, so the
+  follow-up gets full parity on session-derived state; only per-message
+  inputs (retrieval, prefetch, review target, `diagnostic_accepted`) differ
+  from a chat turn. Part 1 passes the omitted values as explicit blanks so
+  the refactor itself stays byte-identical.
+- **The follow-up's `ToolContext.diagnostic_required` moves in #396, not
+  #395.** In part 1 the follow-up's prompt state carries a blanked
+  `diagnostic_required = False` to keep the rendered prompt identical (the
+  renderer reads it). Pointing the tool context at that value would silently
+  turn the diagnostic off for the tool, a behaviour change inside the pure
+  refactor, so the live computation stays until #396 fills the real value.
+- **Eval scripts migrate in #395.** Removing the dict path breaks the five
+  eval scripts that build dicts or import the private
+  `routes.chat._build_prompt_state`. Leaving them for a later part would
+  break `dev` between merges. Eval prompts may change; the byte-identical
+  guarantee covers production paths only.
+- **`SEED_MODE` leaves the prompt only (#397).** It has rendered a constant
+  since `eac5b91`. The `seed_mode` field on the start-session request is live
+  (resume versus fresh start) and stays.
+- **`agent/_stub.py` is deferred to B3.** The stub regex-parses the rendered
+  `LAST_SESSION_SUMMARY:` line (`_SUMMARY_LINE`), coupling it to the prompt's
+  text. Fixing that means passing the summary to `run_streaming` directly: a
+  signature change across 14 test files and about 120 references, inside the
+  code G-13 (2026-09-21) declined to restructure without characterisation
+  tests. B3 (the LLM adapter) writes those tests and rewrites the stub anyway.
+
 ## 2026-09-26 - Review is relabelled Recall; the queue stays off Home (#338, #352)
 
 #338 asked whether to drop the Review page. Resolved: keep the queue and the
