@@ -3,6 +3,26 @@
 Durable "why": decisions, findings, tradeoffs. Newest first. Technical
 how-it-works lookup belongs in `docs/reference.md` instead.
 
+## 2026-09-26 - Review is relabelled Recall; the queue stays off Home (#338, #352)
+
+#338 asked whether to drop the Review page. Resolved: keep the queue and the
+page, rename it. Built in #352 (rename) and #363 (redesign).
+
+- **The page stays.** The review queue is the only mechanism that knows when
+  a concept is due (SM-2-lite over `LearningEvent`s, computed on read).
+  REVIEW-GAPS mode targets profile gaps from request flags and has no decay,
+  so it does not replace the queue. A due marker on session rows was
+  prototyped (`prototype/due-marker-on-session-rows`) and rejected: one page
+  listing everything due across sessions earns its place.
+- **"Recall", not "Review".** Review suggests re-reading; the page tests.
+  Route `/recall` (name `recall`), `/review` redirects to it, rail
+  aria-label "Recall: N concepts due".
+- **Frontend-only rename.** `GET /review/queue` keeps its path; no contract
+  or codegen churn.
+- **The queue stays off Home.** The 2026-07-23 UI polish spec (#158, removed
+  from `docs/superpowers/specs/` in 55998aa, recoverable from git) moved the
+  queue from a Home card to its own sidebar entry and page. That stands.
+
 ## 2026-09-26 - Data export is one JSON file without the PDFs (#361)
 
 The issue allowed "JSON (or zip with uploaded PDFs)", streamed. Built as
