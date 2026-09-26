@@ -179,6 +179,160 @@ describe('RecallView', () => {
     expect(wrapper.text()).not.toContain('View all')
   })
 
+  describe('load more (#385)', () => {
+    function pageOf(items, total, offset = 0) {
+      return { items, total, limit: 100, offset }
+    }
+
+    function cardConcepts(wrapper) {
+      return wrapper
+        .findAll('[data-testid="recall-card"]')
+        .map((c) => c.find('.card-concept').text())
+    }
+
+    it('shows no Load more control when the whole queue fits on one page', async () => {
+      apiReviewQueue.mockResolvedValue(queueOf([makeReviewItem('mitosis')]))
+      const wrapper = mountView()
+      await flushPromises()
+      expect(wrapper.find('[data-testid="recall-load-more"]').exists()).toBe(false)
+    })
+
+    it('fetches the next page by offset and appends it, count line staying the total', async () => {
+      apiReviewQueue.mockResolvedValueOnce(pageOf([makeReviewItem('a'), makeReviewItem('b')], 3))
+      const wrapper = mountView()
+      await flushPromises()
+      expect(wrapper.get('[data-testid="recall-count"]').text()).toContain('3 concepts')
+      expect(wrapper.get('[data-testid="recall-tab"]').text()).toContain('2 due')
+
+      apiReviewQueue.mockResolvedValueOnce(pageOf([makeReviewItem('c')], 3, 2))
+      await wrapper.get('[data-testid="recall-load-more"]').trigger('click')
+      await flushPromises()
+
+      expect(apiReviewQueue).toHaveBeenLastCalledWith({ limit: 100, offset: 2 }, { silent: true })
+      expect(cardConcepts(wrapper)).toEqual(['a', 'b', 'c'])
+      expect(wrapper.get('[data-testid="recall-count"]').text()).toContain('3 concepts')
+      expect(wrapper.get('[data-testid="recall-tab"]').text()).toContain('3 due')
+    })
+
+    it('merges a later page into an earlier divider and opens new ones at the end', async () => {
+      apiReviewQueue.mockResolvedValueOnce(
+        pageOf(
+          [
+            makeReviewItem('calvin cycle', {
+              source_session_id: 's1',
+              source_topic: 'Photosynthesis',
+            }),
+            makeReviewItem('squeeze theorem', { source_session_id: 's2', source_topic: 'Limits' }),
+          ],
+          4,
+        ),
+      )
+      const wrapper = mountView()
+      await flushPromises()
+
+      apiReviewQueue.mockResolvedValueOnce(
+        pageOf(
+          [
+            makeReviewItem('stomata', { source_session_id: 's1', source_topic: 'Photosynthesis' }),
+            makeReviewItem('meiosis', { source_session_id: 's3', source_topic: 'Cells' }),
+          ],
+          4,
+          2,
+        ),
+      )
+      await wrapper.get('[data-testid="recall-load-more"]').trigger('click')
+      await flushPromises()
+
+      const tabs = wrapper.findAll('[data-testid="recall-tab"]').map((t) => t.text())
+      expect(tabs).toHaveLength(3)
+      expect(tabs[0]).toContain('Photosynthesis')
+      expect(tabs[0]).toContain('2 due')
+      expect(tabs[1]).toContain('Limits')
+      expect(tabs[2]).toContain('Cells')
+      const first = wrapper.findAll('[data-testid="recall-divider"]')[0]
+      expect(cardConcepts(first)).toEqual(['calvin cycle', 'stomata'])
+    })
+
+    it('hides the control once every due concept is loaded', async () => {
+      apiReviewQueue.mockResolvedValueOnce(pageOf([makeReviewItem('a')], 2))
+      const wrapper = mountView()
+      await flushPromises()
+      expect(wrapper.find('[data-testid="recall-load-more"]').exists()).toBe(true)
+
+      apiReviewQueue.mockResolvedValueOnce(pageOf([makeReviewItem('b')], 2, 1))
+      await wrapper.get('[data-testid="recall-load-more"]').trigger('click')
+      await flushPromises()
+      expect(wrapper.find('[data-testid="recall-load-more"]').exists()).toBe(false)
+    })
+
+    // D-11: failure is not emptiness. A failed next page leaves page 1 on
+    // screen and offers a retry for that page alone.
+    it('a failed next page keeps page 1 and retries only the next page', async () => {
+      apiReviewQueue.mockResolvedValueOnce(pageOf([makeReviewItem('a')], 2))
+      const wrapper = mountView()
+      await flushPromises()
+
+      apiReviewQueue.mockRejectedValueOnce(new Error('boom'))
+      await wrapper.get('[data-testid="recall-load-more"]').trigger('click')
+      await flushPromises()
+
+      expect(cardConcepts(wrapper)).toEqual(['a'])
+      expect(wrapper.find('[data-testid="recall-error"]').exists()).toBe(false)
+      expect(wrapper.get('[data-testid="recall-more-error"]').text()).toContain(
+        'Could not load more',
+      )
+      expect(wrapper.find('[data-testid="recall-load-more"]').exists()).toBe(false)
+
+      apiReviewQueue.mockResolvedValueOnce(pageOf([makeReviewItem('b')], 2, 1))
+      await wrapper.get('[data-testid="recall-more-retry"]').trigger('click')
+      await flushPromises()
+
+      expect(apiReviewQueue).toHaveBeenLastCalledWith({ limit: 100, offset: 1 }, { silent: true })
+      expect(cardConcepts(wrapper)).toEqual(['a', 'b'])
+      expect(wrapper.find('[data-testid="recall-more-error"]').exists()).toBe(false)
+    })
+
+    it('drops a concept a shifted queue repeats on the next page', async () => {
+      apiReviewQueue.mockResolvedValueOnce(pageOf([makeReviewItem('a')], 4))
+      const wrapper = mountView()
+      await flushPromises()
+
+      apiReviewQueue.mockResolvedValueOnce(pageOf([makeReviewItem('a'), makeReviewItem('b')], 4, 1))
+      await wrapper.get('[data-testid="recall-load-more"]').trigger('click')
+      await flushPromises()
+      expect(cardConcepts(wrapper)).toEqual(['a', 'b'])
+
+      apiReviewQueue.mockResolvedValueOnce(pageOf([makeReviewItem('c')], 4, 3))
+      await wrapper.get('[data-testid="recall-load-more"]').trigger('click')
+      await flushPromises()
+      expect(apiReviewQueue).toHaveBeenLastCalledWith({ limit: 100, offset: 3 }, { silent: true })
+      expect(cardConcepts(wrapper)).toEqual(['a', 'b', 'c'])
+    })
+
+    it('ignores a second click while the next page is in flight', async () => {
+      apiReviewQueue.mockResolvedValueOnce(pageOf([makeReviewItem('a')], 2))
+      const wrapper = mountView()
+      await flushPromises()
+
+      let resolvePage
+      apiReviewQueue.mockImplementationOnce(
+        () =>
+          new Promise((res) => {
+            resolvePage = res
+          }),
+      )
+      const more = wrapper.get('[data-testid="recall-load-more"]')
+      await more.trigger('click')
+      expect(more.attributes('disabled')).toBeDefined()
+      await more.trigger('click')
+      resolvePage(pageOf([makeReviewItem('b')], 2, 1))
+      await flushPromises()
+
+      expect(apiReviewQueue).toHaveBeenCalledTimes(2)
+      expect(cardConcepts(wrapper)).toEqual(['a', 'b'])
+    })
+  })
+
   it('a card starts a review via continueTopic and navigates with review_gap', async () => {
     apiReviewQueue.mockResolvedValue(
       queueOf([makeReviewItem('mitosis', { source_session_id: 'src9', source_topic: 'cells' })]),
