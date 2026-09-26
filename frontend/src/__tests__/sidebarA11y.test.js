@@ -16,6 +16,11 @@ vi.mock('primevue/toast', () => ({
 vi.mock('@/composables/useToast.js', () => ({
   useToast: () => ({ showError: vi.fn(), showWarn: vi.fn(), showSuccess: vi.fn() }),
 }))
+// E-12: SidebarSessionRow asks PrimeVue's confirm service before ending a
+// session, and the service is not installed on a bare mount.
+vi.mock('primevue/useconfirm', () => ({
+  useConfirm: () => ({ require: (cfg) => cfg.accept?.() }),
+}))
 const apiReviewQueue = vi.fn()
 vi.mock('@/services/reviewApi.js', () => ({
   getReviewQueue: (...args) => apiReviewQueue(...args),
@@ -205,7 +210,7 @@ describe('Sidebar a11y — inert when closed (D-03)', () => {
   })
 })
 
-describe('Sidebar a11y — review badge unit', () => {
+describe('Sidebar a11y — recall badge unit', () => {
   let wrapper
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -219,10 +224,10 @@ describe('Sidebar a11y — review badge unit', () => {
     delete globalThis.cancelIdleCallback
   })
 
-  it('review link exposes the count with a unit', async () => {
+  it('recall link exposes the count with a unit', async () => {
     wrapper = await mountSidebarWithReview(20)
-    const link = wrapper.get('[data-testid="sidebar-review"]')
-    expect(link.attributes('aria-label')).toBe('Review: 20 concepts due')
+    const link = wrapper.get('[data-testid="sidebar-recall"]')
+    expect(link.attributes('aria-label')).toBe('Recall: 20 concepts due')
   })
 })
 

@@ -1,11 +1,13 @@
 <script setup>
 import { computed, useId } from 'vue'
 
-// Shared feedback-style control used by both Settings and Onboarding. Native
-// radios (not a PrimeVue SelectButton) so the two screens stay consistent and
-// accessible. Each option needs `value` + `label`; an optional `sub` renders
-// as a description line. Visually the options are lettered lines, the same
-// grammar as the check-question options on the sheet.
+import { TICK_PATH } from './chat/levelMark.js'
+
+// Single-choice control drawn as lettered lines, the same grammar as the
+// check-question options on the sheet. Used for every tutor preference in
+// Settings and for Feedback style in Onboarding. Native radios (not a PrimeVue
+// SelectButton) so the screens stay consistent and accessible. Each option
+// needs `value` + `label`; an optional `sub` renders as a description line.
 const props = defineProps({
   modelValue: { type: String, default: '' },
   options: { type: Array, required: true },
@@ -14,12 +16,17 @@ const props = defineProps({
   // "1 of N"). Defaults to a per-instance unique id so two pickers mounted on
   // different views never collide; callers may override.
   name: { type: String, default: '' },
+  // The group's accessible name and the stem of each radio's test id
+  // (`${testidPrefix}-${value}`). Required so no caller inherits another
+  // group's name.
+  legend: { type: String, required: true },
+  testidPrefix: { type: String, required: true },
 })
 
 const emit = defineEmits(['update:modelValue'])
 
 const generatedId = useId()
-const groupName = computed(() => props.name || `fsp-${generatedId}`)
+const groupName = computed(() => props.name || `llp-${generatedId}`)
 
 // A. / B. / C. -- the option letters used by every check on the sheet.
 function letter(i) {
@@ -33,7 +40,7 @@ function select(value) {
 
 <template>
   <fieldset class="radio-group">
-    <legend class="sr-only">Feedback style</legend>
+    <legend class="sr-only">{{ legend }}</legend>
     <label
       v-for="(opt, i) in options"
       :key="opt.value"
@@ -44,7 +51,7 @@ function select(value) {
         :name="groupName"
         :value="opt.value"
         :checked="modelValue === opt.value"
-        :data-testid="`feedback-style-${opt.value}`"
+        :data-testid="`${testidPrefix}-${opt.value}`"
         class="radio-input"
         @change="select(opt.value)"
       />
@@ -62,14 +69,14 @@ function select(value) {
         aria-hidden="true"
         focusable="false"
       >
-        <path d="M2 6.5 L4.8 9.2 L10 3.2" />
+        <path :d="TICK_PATH" />
       </svg>
     </label>
   </fieldset>
 </template>
 
 <style scoped>
-/* Two lettered lines, each on the pitch, separated by a painted feint rule so
+/* Lettered lines, each on the pitch, separated by a painted feint rule so
    the line stays 28px tall. No card, no dot, no fill. */
 .radio-group {
   border: 0;

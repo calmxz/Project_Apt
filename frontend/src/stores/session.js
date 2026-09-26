@@ -2,9 +2,15 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import * as sessionsApi from '../services/sessionsApi.js'
-import { streamChat, streamCheckComplete } from '../services/chatStreamService.js'
+import { streamChat, streamCheckComplete, streamCheckStop } from '../services/chatStreamService.js'
 import { reportCostWarning } from '../services/costBus.js'
-import { friendlyError, StreamAbortedError } from '../lib/errors.js'
+import {
+  friendlyError,
+  sseErrorCopy,
+  SESSION_ENDED_COPY,
+  StreamAbortedError,
+} from '../lib/errors.js'
+import { ERR_SESSION_ENDED } from '../lib/errorCodes.js'
 import { mapCapError } from '../lib/capErrors.js'
 import { createDeltaBatcher } from '../lib/deltaBatcher.js'
 
@@ -20,6 +26,9 @@ function toUiMessage(m) {
       ? {
           gap: m.check_batch.gap,
           total: m.check_batch.total,
+          // #340: 1-based set within the check; null for pre-set batches.
+          setIndex: m.check_batch.set_index ?? null,
+          setTotal: m.check_batch.set_total ?? null,
           items: (m.check_batch.items || []).map((it) => ({
             question: it.question,
             options: it.options || [],
@@ -31,6 +40,8 @@ function toUiMessage(m) {
           })),
         }
       : null,
+    // #354: the topic card this turn offered; same shape live and on reload.
+    topic_suggestions: m.topic_suggestions || null,
   }
 }
 
@@ -88,7 +99,6 @@ export const useSessionStore = defineStore('session', () => {
 
   // Library-scoped state — never touches sidebar sessions/loading/error
   const libraryLoading = ref(false)
-  const libraryError = ref(null)
 
   // In-flight-promise guard. Holds ONLY pending promises (deleted on settle),
   // never resolved results — so a reused promise is as fresh as a new request
@@ -100,14 +110,14 @@ export const useSessionStore = defineStore('session', () => {
   // session the user is actually viewing. Module-scoped (not reactive).
   let _latestRequestedId = null
 
+  // E-06: silent because the library page owns the failure copy (and its retry
+  // control) for its own first load. A raw store-held message was rendered
+  // nowhere, and a toast on top of the page's own empty/error state duplicates
+  // it. Rethrows, so the caller still sees the failure.
   async function fetchLibrary(params) {
     libraryLoading.value = true
-    libraryError.value = null
     try {
-      return await sessionsApi.getSessionLibrary(params)
-    } catch (e) {
-      libraryError.value = e?.message || 'Failed to load sessions'
-      throw e
+      return await sessionsApi.getSessionLibrary(params, { silent: true })
     } finally {
       libraryLoading.value = false
     }
@@ -143,10 +153,13 @@ export const useSessionStore = defineStore('session', () => {
 
   // Route a backend cap envelope (HTTP 429 detail or SSE error payload)
   // into the cap-banner refs. Unknown codes are a no-op.
+  // Returns true when the envelope WAS a cap code, so an SSE caller knows the
+  // cap banner already renders this failure and must not also write `error`.
   function _applyCapError(detail) {
     const { kind, info } = mapCapError(detail)
     if (kind === 'daily') dailyCapInfo.value = info
     else if (kind === 'cost') costCapInfo.value = info
+    return kind !== null
   }
 
   function _setError(e) {
@@ -262,7 +275,11 @@ export const useSessionStore = defineStore('session', () => {
               gap: s.pending_check.gap,
               total: s.pending_check.total,
               currentIndex: s.pending_check.current_index,
-              viewIndex: s.pending_check.current_index,
+              // A fully resolved batch reports current_index == total; view
+              // its last item so Done has a question to sit under.
+              viewIndex: Math.min(s.pending_check.current_index, s.pending_check.total - 1),
+              setIndex: s.pending_check.set_index ?? null,
+              setTotal: s.pending_check.set_total ?? null,
               items: (s.pending_check.items || []).map((it) => ({
                 question: it.question,
                 options: it.options || [],
@@ -296,9 +313,57 @@ export const useSessionStore = defineStore('session', () => {
     return p
   }
 
+  // F-16: an unbounded transcript grows for the life of the page - a long
+  // session streams hundreds of turns into one reactive array that MessageList
+  // renders in full. Cap what we RETAIN, on live append only (new user turn,
+  // finalize, cancel, mid-turn error). The manual loadEarlierMessages prepend
+  // below is deliberately exempt: the user just asked for that history, and
+  // evicting it would fight the request.
+  const MAX_RETAINED_MESSAGES = 200
+
+  // F-21: a local key for the optimistic user row. It is deliberately NOT
+  // written into message_id: _hasServerId below treats any non-null,
+  // non-'pending' message_id as a real server id and the oldest such id is the
+  // load-earlier cursor, so a client value there would page nothing. The SSE
+  // never emits the persisted user message id (only the assistant's, on
+  // `done`), so this stays the row's key for the life of the live transcript;
+  // a reload replaces it with the real row.
+  function _newClientId() {
+    const uuid = globalThis.crypto?.randomUUID?.()
+    if (uuid) return `c-${uuid}`
+    return `c-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  }
+
+  // A real server-assigned id, usable as the load-earlier `before:` cursor.
+  // Live-appended user bubbles carry none (the I-10 pop below matches them by
+  // client_id instead), a retained partial carries none, and a cancelled
+  // bubble carries the literal 'pending'.
+  function _hasServerId(m) {
+    return m?.message_id != null && m.message_id !== 'pending'
+  }
+
+  function _appendMessage(m) {
+    messages.value.push(m)
+    if (messages.value.length <= MAX_RETAINED_MESSAGES) return
+    let keep = messages.value.slice(messages.value.length - MAX_RETAINED_MESSAGES)
+    // The oldest retained message doubles as the pagination cursor, so trim a
+    // few extra off the top until it carries a server id; the next id-bearing
+    // message's `before:` page then returns exactly the turns we dropped, with
+    // no gap and no duplicates. If nothing retained has an id there is no
+    // cursor to protect, so keep the plain window.
+    let i = 0
+    while (i < keep.length && !_hasServerId(keep[i])) i += 1
+    if (i < keep.length) keep = keep.slice(i)
+    messages.value = keep
+    hasMoreMessages.value = true
+  }
+
   async function loadEarlierMessages() {
     if (loadingEarlier.value || !hasMoreMessages.value) return
-    const oldest = messages.value[0]?.message_id
+    // Oldest retained SERVER id, not simply messages[0]: after an eviction (or
+    // an in-flight turn at the head of the window) the first entry can be a
+    // local-only bubble, and `before: undefined` would silently page nothing.
+    const oldest = messages.value.find(_hasServerId)?.message_id
     const sid = currentSessionId.value
     if (oldest == null || !sid) return
     loadingEarlier.value = true
@@ -487,21 +552,24 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  // Batch shape: { gap, total, currentIndex, viewIndex, items: [
+  // Batch shape: { gap, total, currentIndex, viewIndex, setIndex, setTotal, items: [
   //   { question, options, status, selectedIndex, correctIndex, correct, explanation } ] }
+  // setIndex / setTotal (#340) are null for pre-set batches.
   const pendingCheck = ref(null)
-  // Typing mid-batch is allowed (spec section 3), so the composer never locks on
-  // an open check. Kept as a computed for the SessionView/Composer binding.
-  const checkLocked = computed(() => false)
+  // E-17: true while an answer/skip POST for the open batch is in flight. The
+  // card reads it so the options stop accepting clicks in that window instead
+  // of having the second click swallowed by the guard in answerCheck.
   const checkAnswering = ref(false)
   const checkCompleting = ref(false)
 
-  function handleCheckQuestion({ gap, items, total }) {
+  function handleCheckQuestion({ gap, items, total, set_index, set_total }) {
     pendingCheck.value = {
       gap,
       total: total ?? (items || []).length,
       currentIndex: 0,
       viewIndex: 0,
+      setIndex: set_index ?? null,
+      setTotal: set_total ?? null,
       items: (items || []).map((it) => ({
         question: it.question,
         options: it.options || [],
@@ -518,7 +586,8 @@ export const useSessionStore = defineStore('session', () => {
     const id = currentSessionId.value
     const pc = pendingCheck.value
     if (!id || !pc) return
-    const i = pc.currentIndex
+    // #348: free navigation -- grade the item on screen, in any order.
+    const i = pc.viewIndex
     const item = pc.items[i]
     if (!item || item.status !== 'pending') return
     if (checkAnswering.value) return
@@ -536,21 +605,37 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
+  // #348: Next and Back move the view one item either way, answered or not.
+  // currentIndex stays the server's first-unresolved pointer.
   function nextCheck() {
     const pc = pendingCheck.value
-    if (pc) pc.viewIndex = pc.currentIndex
+    if (pc) pc.viewIndex = Math.min(pc.viewIndex + 1, pc.total - 1)
+  }
+
+  function prevCheck() {
+    const pc = pendingCheck.value
+    if (pc) pc.viewIndex = Math.max(pc.viewIndex - 1, 0)
+  }
+
+  // The first unresolved item after `from`, wrapping; `from` itself if none.
+  function nextPendingIndex(pc, from) {
+    for (let k = 1; k <= pc.total; k++) {
+      const n = (from + k) % pc.total
+      if (pc.items[n]?.status === 'pending') return n
+    }
+    return from
   }
 
   async function skipCheck() {
     const id = currentSessionId.value
     const pc = pendingCheck.value
     if (!id || !pc) return
-    const i = pc.currentIndex
+    const i = pc.viewIndex
     const item = pc.items[i]
     if (!item || item.status !== 'pending') return
     // Same in-flight guard as answerCheck: a rapid double-skip would otherwise
-    // double-POST, and the second hits a 409 (out-of-order) since currentIndex
-    // already advanced.
+    // double-POST, and the second hits a 409 since the item is already
+    // resolved.
     if (checkAnswering.value) return
     checkAnswering.value = true
     let resp
@@ -564,11 +649,21 @@ export const useSessionStore = defineStore('session', () => {
     if (resp.done) {
       await completeCheck()
     } else {
-      pc.viewIndex = pc.currentIndex
+      pc.viewIndex = nextPendingIndex(pc, i)
     }
   }
 
-  async function completeCheck() {
+  function completeCheck() {
+    return _runCheckFollowup(streamCheckComplete)
+  }
+
+  // #340 Stop button: ends the check early (unanswered items count as
+  // skipped) and streams the tutor's reaction, exactly like completeCheck.
+  function stopCheck() {
+    return _runCheckFollowup(streamCheckStop)
+  }
+
+  async function _runCheckFollowup(streamFollowup) {
     const id = currentSessionId.value
     if (!id || !pendingCheck.value) return
     if (checkCompleting.value) return
@@ -593,7 +688,7 @@ export const useSessionStore = defineStore('session', () => {
     const deltaBatcher = createDeltaBatcher(appendAssistantDelta)
     let sawTerminal = false
     try {
-      await streamCheckComplete({
+      await streamFollowup({
         sessionId: id,
         signal: ctrl.signal,
         onEvent: ({ event, data }) => {
@@ -618,6 +713,9 @@ export const useSessionStore = defineStore('session', () => {
             case 'check_question':
               handleCheckQuestion(data)
               break
+            case 'topic_suggestions':
+              setTopicSuggestions(data)
+              break
             case 'done':
               sawTerminal = true
               finalizeMessage(data.message_id)
@@ -638,9 +736,7 @@ export const useSessionStore = defineStore('session', () => {
               break
             case 'error':
               sawTerminal = true
-              _applyCapError(data)
-              if (!_streamSuperseded()) error.value = data.message || data.code
-              handleAbortError(data.code)
+              _onSseError(data)
               break
           }
         },
@@ -733,13 +829,20 @@ export const useSessionStore = defineStore('session', () => {
     streamingMessage.value.citations = citations
   }
 
+  // #354: rides on the streaming message so finalizeMessage/handleCancelled
+  // carry it into the transcript, the same field a reload maps.
+  function setTopicSuggestions(card) {
+    if (!streamingMessage.value) return
+    streamingMessage.value.topic_suggestions = card
+  }
+
   function finalizeMessage(message_id) {
     if (_streamSuperseded()) {
       _clearStreamState()
       return
     }
     if (!streamingMessage.value) return
-    messages.value.push({ ...streamingMessage.value, message_id, status: 'complete' })
+    _appendMessage({ ...streamingMessage.value, message_id, status: 'complete' })
     streamingMessage.value = null
     streamState.value = 'idle'
     abortController.value = null
@@ -751,9 +854,14 @@ export const useSessionStore = defineStore('session', () => {
       return
     }
     if (!streamingMessage.value) return
-    messages.value.push({
+    _appendMessage({
       ...streamingMessage.value,
       message_id,
+      // Dup-key fix: the two local AbortError arms call this with the
+      // literal message_id 'pending', and MessageList's key falls back to
+      // client_id whenever message_id is 'pending' -- so this row needs one
+      // too, or two Stop clicks in one session would share a key.
+      client_id: _newClientId(),
       status: 'cancelled',
       partial_content_chars: partial_chars,
       estimated_cost_usd,
@@ -770,19 +878,35 @@ export const useSessionStore = defineStore('session', () => {
   // instead of discarding the text the learner already watched stream.
   const PARTIAL_ABORT_CODES = new Set(['daily_cost_cap_reached', 'max_iters_reached'])
 
+  // E-03: the single "retain whatever already streamed, then clear" step.
+  // Shared by the SSE `error` event (which carries a code) and the generic
+  // transport catch in sendMessageStreaming (which does not, so the retained
+  // bubble lands on 'error'). One helper so the two cannot drift: before this,
+  // a mid-stream network drop discarded text the learner had already watched
+  // stream, while the same text survived an SSE-reported failure.
+  function _settleWithError(code) {
+    if (streamingMessage.value?.content) {
+      const status = PARTIAL_ABORT_CODES.has(code) ? 'partial' : 'error'
+      _appendMessage({ ...streamingMessage.value, status })
+    }
+    _clearStreamState()
+  }
+
   function handleAbortError(code) {
     if (_streamSuperseded()) {
       _clearStreamState()
       return
     }
-    if (!streamingMessage.value) return
-    if (streamingMessage.value.content) {
-      const status = PARTIAL_ABORT_CODES.has(code) ? 'partial' : 'error'
-      messages.value.push({ ...streamingMessage.value, status })
-    }
-    streamingMessage.value = null
-    streamState.value = 'idle'
-    abortController.value = null
+    _settleWithError(code)
+  }
+
+  // E-04: the one handler for an SSE `error` event, shared by both stream
+  // loops. A cap code is already rendered by CapBanners, so claiming it here
+  // suppresses a second sentence saying the same thing.
+  function _onSseError(data) {
+    const claimedByCapBanner = _applyCapError(data)
+    if (!claimedByCapBanner && !_streamSuperseded()) error.value = sseErrorCopy(data)
+    handleAbortError(data?.code)
   }
 
   function stopStream() {
@@ -804,7 +928,8 @@ export const useSessionStore = defineStore('session', () => {
     // F-04 (defensive): same single-live-stream invariant as completeCheck.
     if (streamState.value !== 'idle') return null
     followupNotice.value = null
-    messages.value.push({ role: 'user', content: trimmed })
+    const clientId = _newClientId()
+    _appendMessage({ role: 'user', content: trimmed, client_id: clientId })
     streamingMessage.value = { role: 'assistant', content: '', tool_calls: [], citations: [] }
     streamState.value = 'streaming'
     _streamSid = currentSessionId.value
@@ -844,6 +969,9 @@ export const useSessionStore = defineStore('session', () => {
             case 'check_question':
               handleCheckQuestion(data)
               break
+            case 'topic_suggestions':
+              setTopicSuggestions(data)
+              break
             case 'done':
               sawTerminal = true
               finalizeMessage(data.message_id)
@@ -854,9 +982,7 @@ export const useSessionStore = defineStore('session', () => {
               break
             case 'error':
               sawTerminal = true
-              _applyCapError(data)
-              if (!_streamSuperseded()) error.value = data.message || data.code
-              handleAbortError(data.code)
+              _onSseError(data)
               break
           }
         },
@@ -887,8 +1013,11 @@ export const useSessionStore = defineStore('session', () => {
         // optimistic bubble instead of stranding it in the transcript.
         // Runs before the session_ended arm too: that 409 is itself a
         // pre-stream failure and must not strand the bubble either.
-        const last = messages.value[messages.value.length - 1]
-        if (last?.role === 'user' && last.message_id === undefined) messages.value.pop()
+        // F-21: matched by client_id rather than "the last id-less user row",
+        // so it always removes THIS send's row even if the array moved under
+        // it (an _appendMessage eviction reassigns messages.value).
+        const at = messages.value.findIndex((m) => m.client_id === clientId)
+        if (at !== -1) messages.value.splice(at, 1)
       }
       if (authExpired) {
         // E-05: the view must get a chance to stash the draft before the
@@ -896,8 +1025,8 @@ export const useSessionStore = defineStore('session', () => {
         _clearStreamState()
         throw new StreamAbortedError('auth_expired', e)
       }
-      if (e?.status === 409 && e?.body?.detail?.code === 'session_ended') {
-        error.value = 'This session was ended elsewhere. Reopen it to continue.'
+      if (e?.status === 409 && e?.body?.detail?.code === ERR_SESSION_ENDED) {
+        error.value = SESSION_ENDED_COPY
         if (currentSession.value) currentSession.value.ended_at = new Date().toISOString()
         _clearStreamState()
         // E-11: rethrow so the view restores the draft instead of running
@@ -905,7 +1034,9 @@ export const useSessionStore = defineStore('session', () => {
         throw new StreamAbortedError('session_ended', e)
       }
       if (e?.status === 429) _applyCapError(e?.body?.detail)
-      _clearStreamState()
+      // E-03: a transport failure mid-stream keeps the text already streamed
+      // (as status 'error'), matching what a reload of this session shows.
+      _settleWithError()
       _setError(e)
     }
   }
@@ -955,7 +1086,7 @@ export const useSessionStore = defineStore('session', () => {
     duplicateReopen,
     consumePendingSummary,
     pendingCheck,
-    checkLocked,
+    checkAnswering,
     streamingMessage,
     streamState,
     abortController,
@@ -977,8 +1108,10 @@ export const useSessionStore = defineStore('session', () => {
     handleCheckQuestion,
     answerCheck,
     nextCheck,
+    prevCheck,
     skipCheck,
     completeCheck,
+    stopCheck,
     appendAssistantDelta,
     recordToolCall,
     setCitations,
@@ -990,7 +1123,6 @@ export const useSessionStore = defineStore('session', () => {
     sendMessageStreaming,
     reset,
     libraryLoading,
-    libraryError,
     fetchLibrary,
   }
 })

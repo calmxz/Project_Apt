@@ -7,6 +7,17 @@ const viewport = ref(typeof window !== 'undefined' ? window.innerWidth : BREAKPO
 const desktopExpanded = ref(_readPersisted())
 const drawerOpen = ref(false)
 
+// One window listener for every consumer: each sidebar row and the session
+// actions composable call useSidebar(), so per-instance listeners multiplied
+// with the row count. Ref-counted so the listener lives while any consumer
+// is mounted and goes when the last one leaves.
+let _listeners = 0
+
+function _onResize() {
+  viewport.value = window.innerWidth
+  if (viewport.value >= BREAKPOINT) drawerOpen.value = false
+}
+
 function _readPersisted() {
   if (typeof window === 'undefined') return true
   try {
@@ -47,20 +58,19 @@ export function useSidebar() {
     drawerOpen.value = false
   }
 
-  function onResize() {
-    if (typeof window === 'undefined') return
-    viewport.value = window.innerWidth
-    if (isDesktop.value) drawerOpen.value = false
-  }
 
   onMounted(() => {
-    if (typeof window !== 'undefined') {
-      window.addEventListener('resize', onResize, { passive: true })
+    if (typeof window === 'undefined') return
+    if (_listeners === 0) {
+      window.addEventListener('resize', _onResize, { passive: true })
     }
+    _listeners += 1
   })
   onBeforeUnmount(() => {
-    if (typeof window !== 'undefined') {
-      window.removeEventListener('resize', onResize)
+    if (typeof window === 'undefined') return
+    _listeners = Math.max(0, _listeners - 1)
+    if (_listeners === 0) {
+      window.removeEventListener('resize', _onResize)
     }
   })
 

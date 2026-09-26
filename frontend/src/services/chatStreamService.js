@@ -1,5 +1,11 @@
 import { parseSSEStream } from '@/lib/sseParser.js'
-import { ApiError, _onAuthExpired, _refreshAccessToken, getFreshAccessToken } from './apiClient.js'
+import {
+  ApiError,
+  _onAuthExpired,
+  _refreshAccessToken,
+  getFreshAccessToken,
+  invalidateGetCache,
+} from './apiClient.js'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
 
@@ -102,7 +108,11 @@ async function _fetchSse(url, payload, { onEvent, signal, path }, _retried = fal
       const reason = ctrl.signal.reason
       throw reason?.name === 'AbortError' ? reason : new DOMException('aborted', 'AbortError')
     }
-    throw e
+    // E-02: a connection that dies mid-body rejects the read with a bare
+    // TypeError ("network error"). Normalize it the same way the header phase
+    // does (see :61) so callers get the status-0 ApiError contract instead of
+    // a raw TypeError that friendlyError can only render as its own message.
+    throw e instanceof TypeError ? new ApiError(0, { detail: e.message }, path) : e
   } finally {
     clearTimeout(idleTimer)
   }
@@ -120,13 +130,37 @@ export async function streamChat({
   const payload = { session_id: sessionId, message, review_gaps: reviewGaps }
   if (reviewGap) payload.review_gap = reviewGap
   if (diagnosticAccepted) payload.diagnostic_accepted = true
-  await _fetchSse(`${BASE_URL}/chat/stream`, payload, { onEvent, signal, path: '/chat/stream' })
+  try {
+    await _fetchSse(`${BASE_URL}/chat/stream`, payload, { onEvent, signal, path: '/chat/stream' })
+  } finally {
+    // Raw fetch bypasses request(), so the session tree (messages, profile,
+    // pending check) must be dropped from the GET cache here, success or not.
+    invalidateGetCache(`/sessions/${sessionId}`)
+  }
 }
 
 export async function streamCheckComplete({ sessionId, onEvent, signal }) {
-  await _fetchSse(
-    `${BASE_URL}/sessions/${sessionId}/check/complete`,
-    {},
-    { onEvent, signal, path: '/check/complete' },
-  )
+  try {
+    await _fetchSse(
+      `${BASE_URL}/sessions/${sessionId}/check/complete`,
+      {},
+      { onEvent, signal, path: '/check/complete' },
+    )
+  } finally {
+    invalidateGetCache(`/sessions/${sessionId}`)
+  }
+}
+
+// #340 Stop button: end the check early; streams the same follow-up
+// vocabulary as streamCheckComplete.
+export async function streamCheckStop({ sessionId, onEvent, signal }) {
+  try {
+    await _fetchSse(
+      `${BASE_URL}/sessions/${sessionId}/check/stop`,
+      {},
+      { onEvent, signal, path: '/check/stop' },
+    )
+  } finally {
+    invalidateGetCache(`/sessions/${sessionId}`)
+  }
 }

@@ -7,10 +7,10 @@ import pytest
 from agent.types import ToolContext
 from config import settings
 from contracts import AskCheckQuestionsArgs, TopicProfile
-from db.models import ChatMessage, Document, Session as SessionModel, UsageCounter, User
+from db.models import ChatMessage, Document, UsageCounter, User
+from db.models import Session as SessionModel
 from lib.error_codes import TOO_MANY_REQUESTS
 from services import check_question_service, summary_service, velocity_limit
-
 
 USER_ID = "u1"
 
@@ -224,6 +224,54 @@ def test_get_list_filters_by_user_desc(client, db_session, seeded_user):
     assert r.status_code == 200
     rows = r.json()
     assert [row["id"] for row in rows] == ["s_new", "s_old"]
+
+
+def _seed_n_sessions(db_session, n):
+    """n sessions with strictly decreasing created_at so ordering is
+    deterministic on sqlite (default timestamps can collide)."""
+    base = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    for i in range(n):
+        db_session.add(
+            SessionModel(
+                id=f"p{i}",
+                user_id=USER_ID,
+                topic=f"topic {i}",
+                topic_profile_json=TopicProfile().model_dump_json(),
+                created_at=base + timedelta(hours=i),
+            )
+        )
+    db_session.commit()
+    # newest first
+    return [f"p{i}" for i in reversed(range(n))]
+
+
+def test_list_rejects_limit_over_max(client, db_session, seeded_user):
+    r = client.get(f"/api/sessions?user_id={USER_ID}&limit=201")
+    assert r.status_code == 422, r.text
+
+
+def test_list_rejects_limit_zero(client, db_session, seeded_user):
+    r = client.get(f"/api/sessions?user_id={USER_ID}&limit=0")
+    assert r.status_code == 422, r.text
+
+
+def test_list_rejects_negative_offset(client, db_session, seeded_user):
+    r = client.get(f"/api/sessions?user_id={USER_ID}&offset=-1")
+    assert r.status_code == 422, r.text
+
+
+def test_list_limit_offset_slices_newest_first(client, db_session, seeded_user):
+    order = _seed_n_sessions(db_session, 5)
+    r = client.get(f"/api/sessions?user_id={USER_ID}&limit=2&offset=2")
+    assert r.status_code == 200, r.text
+    assert [row["id"] for row in r.json()] == order[2:4]
+
+
+def test_list_default_returns_up_to_100(client, db_session, seeded_user):
+    order = _seed_n_sessions(db_session, 5)
+    r = client.get(f"/api/sessions?user_id={USER_ID}")
+    assert r.status_code == 200, r.text
+    assert [row["id"] for row in r.json()] == order
 
 
 def test_list_returns_tz_aware_timestamps(client, db_session, seeded_user):
@@ -691,6 +739,7 @@ def _open_batch(db, session_id, user_id=USER_ID, n=2):
     return check_question_service.register(
         db, ctx,
         AskCheckQuestionsArgs(
+            set_index=1, set_total=1,
             session_id=session_id,
             gap="g",
             items=[
@@ -862,3 +911,61 @@ def test_post_fresh_without_declared_level_unchanged(client, seeded_user):
     assert r.status_code == 201, r.text
     profile = TopicProfile.model_validate(r.json()["topic_profile"])
     assert profile.knowledge_level is None
+
+
+# --- C-09: whitespace-only topics ---
+
+
+def test_post_sessions_whitespace_topic_is_422(client, seeded_user, db_session):
+    from db.models import Session as SessionModel
+
+    r = client.post(
+        "/api/sessions",
+        json={"user_id": USER_ID, "topic": "   ", "seed_mode": "fresh"},
+    )
+    assert r.status_code == 422, r.text
+    assert r.json()["detail"] == {"code": "empty_topic"}
+    assert db_session.query(SessionModel).count() == 0
+
+
+def test_post_sessions_empty_topic_is_422(client, seeded_user):
+    r = client.post(
+        "/api/sessions",
+        json={"user_id": USER_ID, "topic": "", "seed_mode": "fresh"},
+    )
+    assert r.status_code == 422, r.text
+
+
+def test_patch_session_whitespace_topic_is_422(client, seeded_user, db_session):
+    from db.models import Session as SessionModel
+
+    db_session.add(
+        SessionModel(
+            id="s-ws",
+            user_id=USER_ID,
+            topic="sql joins",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.commit()
+    r = client.patch("/api/sessions/s-ws", json={"topic": "  "})
+    assert r.status_code == 422, r.text
+    assert r.json()["detail"] == {"code": "empty_topic"}
+    db_session.expire_all()
+    assert db_session.get(SessionModel, "s-ws").topic == "sql joins"
+
+
+def test_patch_session_empty_topic_is_422(client, seeded_user, db_session):
+    from db.models import Session as SessionModel
+
+    db_session.add(
+        SessionModel(
+            id="s-ws2",
+            user_id=USER_ID,
+            topic="sql joins",
+            topic_profile_json=TopicProfile().model_dump_json(),
+        )
+    )
+    db_session.commit()
+    r = client.patch("/api/sessions/s-ws2", json={"topic": ""})
+    assert r.status_code == 422, r.text

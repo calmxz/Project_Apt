@@ -6,6 +6,7 @@ import { friendlyError } from '@/lib/errors.js'
 import { cardStory, cardChips, cardMeta } from '@/utils/sessionCard.js'
 import EmptyState from '@/components/EmptyState.vue'
 import SessionChips from '@/components/SessionChips.vue'
+import { TICK_PATH } from '@/components/chat/levelMark.js'
 import LibrarySkeletonGrid from '@/components/LibrarySkeletonGrid.vue'
 
 const router = useRouter()
@@ -72,8 +73,11 @@ const VALID_STATUSES = ['all', 'active', 'ended']
 function statusFromQuery(query) {
   return VALID_STATUSES.includes(query.status) ? query.status : 'all'
 }
+// Clamped to the backend's 200-char cap on `q` (C-17) so a long bookmarked
+// ?q= cannot turn the first load into a 422.
+const Q_MAX = 200
 function qFromQuery(query) {
-  return typeof query.q === 'string' ? query.q : ''
+  return typeof query.q === 'string' ? query.q.slice(0, Q_MAX) : ''
 }
 const status = ref(statusFromQuery(route.query))
 const q = ref(qFromQuery(route.query))
@@ -178,6 +182,14 @@ function retryLoad() {
   loadMore()
 }
 
+// E-06: the first-load failure needs its own retry. retryLoad() above resumes
+// an append, and loadMore() bails while items.length >= total (0 >= 0), so it
+// would never re-issue the first page.
+function retryFirstLoad() {
+  offset.value = 0
+  load()
+}
+
 const sentinelEl = ref(null)
 let observer = null
 
@@ -245,6 +257,7 @@ onUnmounted(() => {
         type="search"
         class="library-search coarse-2x"
         data-testid="library-search"
+        maxlength="200"
         placeholder="Search topics..."
         aria-label="Search sessions by topic"
         @input="onSearchInput"
@@ -276,9 +289,17 @@ onUnmounted(() => {
     </div>
 
     <LibrarySkeletonGrid v-if="loading && !items.length" :count="6" />
-    <p v-else-if="error && !items.length" class="error" data-testid="library-error">
-      {{ error }}
-    </p>
+    <template v-else-if="error && !items.length">
+      <p class="error" data-testid="library-error">{{ error }}</p>
+      <button
+        type="button"
+        class="library-pg-btn"
+        data-testid="library-error-retry"
+        @click="retryFirstLoad"
+      >
+        Retry
+      </button>
+    </template>
 
     <EmptyState
       v-else-if="!items.length"
@@ -310,7 +331,7 @@ onUnmounted(() => {
                 stroke-linejoin="round"
                 focusable="false"
               >
-                <path d="M2 6.5 L4.8 9.2 L10 3.2" />
+                <path :d="TICK_PATH" />
               </svg>
               {{ mastered }}
             </span>

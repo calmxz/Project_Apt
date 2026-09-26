@@ -4,10 +4,20 @@ import {
   ERR_GLOBAL_COST_CAP_REACHED,
   ERR_CHUNK_LIMIT_EXCEEDED,
   ERR_TOO_MANY_REQUESTS,
+  ERR_PAGE_LIMIT_EXCEEDED,
+  ERR_EMPTY_MESSAGE,
+  ERR_EMPTY_TOPIC,
+  ERR_BODY_TOO_LARGE,
+  ERR_SESSION_ENDED,
+  ERR_TOOL_FAILED,
 } from './errorCodes.js'
 
 const DAILY_LIMIT_COPY = "You've hit the daily limit. Try again tomorrow."
 const THROTTLED_COPY = 'Too many requests - wait a moment and retry.'
+// Shared with the session store's own 409 handling so the two cannot drift.
+export const SESSION_ENDED_COPY = 'This session was ended elsewhere. Reopen it to continue.'
+// Last resort for an SSE `error` event with neither a known code nor a message.
+export const GENERIC_STREAM_ERROR_COPY = 'The tutor hit a problem. Please try again.'
 
 // Code-first copy. Any backend detail.code listed here wins over the
 // status-based fallback below, so a new code only needs one entry.
@@ -19,6 +29,24 @@ const CODE_COPY = {
   [ERR_CHUNK_LIMIT_EXCEEDED]:
     'This document is too large to ingest. Try splitting it into smaller files.',
   [ERR_TOO_MANY_REQUESTS]: THROTTLED_COPY,
+  [ERR_PAGE_LIMIT_EXCEEDED]:
+    'This document has too many pages to ingest. Try splitting it into smaller files.',
+  [ERR_EMPTY_MESSAGE]: 'Type a message before sending.',
+  [ERR_EMPTY_TOPIC]: 'Enter a topic to continue.',
+  [ERR_BODY_TOO_LARGE]: 'That is too much text to send at once. Shorten it and try again.',
+  [ERR_SESSION_ENDED]: SESSION_ENDED_COPY,
+  [ERR_TOOL_FAILED]: 'The tutor could not finish that step. Try again.',
+}
+
+// Copy for an SSE `error` event payload ({ code, message }). Code-first so the
+// two stream loops in stores/session.js render the same sentence for the same
+// code; `message` is backend prose and only a fallback for an unknown code.
+export function sseErrorCopy(data) {
+  const code = data && typeof data === 'object' ? data.code : null
+  if (typeof code === 'string' && Object.hasOwn(CODE_COPY, code)) return CODE_COPY[code]
+  const message = data && typeof data === 'object' ? data.message : null
+  if (typeof message === 'string' && message) return message
+  return GENERIC_STREAM_ERROR_COPY
 }
 
 // Maps ApiError instances (and plain Errors) to user-facing copy.
