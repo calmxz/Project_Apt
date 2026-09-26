@@ -5,8 +5,9 @@
    Plain (non-scoped) CSS, namespaced under .profile-page so nothing leaks
    onto Settings/Account (assets/sheet.css owns .sec there). Each page keeps
    only what actually differs locally (e.g. its own .sec align-items and
-   .cue-mark alignment); the two never declare the same property, so the
-   result does not depend on stylesheet order. */
+   .cue-mark alignment). A local rule either declares a property this file
+   does not, or outranks it on specificity (ProfileView's .text-btn:disabled),
+   so the result does not depend on stylesheet order. */
 
 /* Dividers: a coloured tab joined to a white card body (tab law: red only
    Focus, amber only Gaps, green only Mastered; Level stays neutral), same
