@@ -490,6 +490,12 @@ async function startReview(item) {
   color: var(--ink-marker-text);
 }
 
+.more {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
 .retry {
   align-self: flex-start;
   padding: 0;
@@ -511,13 +517,8 @@ async function startReview(item) {
 
 .retry:disabled {
   color: var(--pencil);
+  text-decoration: none;
   cursor: default;
-}
-
-.more {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
 }
 
 .retry:focus-visible {

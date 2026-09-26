@@ -250,9 +250,7 @@ describe('RecallView', () => {
       expect(tabs[1]).toContain('Limits')
       expect(tabs[2]).toContain('Cells')
       const first = wrapper.findAll('[data-testid="recall-divider"]')[0]
-      expect(
-        first.findAll('[data-testid="recall-card"]').map((c) => c.find('.card-concept').text()),
-      ).toEqual(['calvin cycle', 'stomata'])
+      expect(cardConcepts(first)).toEqual(['calvin cycle', 'stomata'])
     })
 
     it('hides the control once every due concept is loaded', async () => {
